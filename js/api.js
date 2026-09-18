@@ -1165,8 +1165,12 @@
       /* subject/section: optional, mirroring server.js's endpoint — omitted,
          a file imports exactly as it always has; given, core.importCSV
          refuses any row that doesn't match instead of trusting the file, and
-         the target folds into the duplicate check and the log the same way
-         it does server-side. */
+         the target folds into the log the same way it does server-side.
+         Re-importing the same file (or content) is never refused: a bank a
+         teacher keeps re-uploading (say, after adding a couple of rows, or
+         just to be safe) always publishes. confirmDuplicate/findDuplicateImport
+         are kept only so importHistory can still show "seen before", not to
+         gate anything. */
       importQuestions: function (csv, filename, confirmDuplicate, subject, section) {
         var e = requireUnlocked(); if (e) return e;
         var fname = filename ? String(filename).slice(0, 200) : null;
@@ -1175,8 +1179,6 @@
         var target = (tSubject || tSection) ? { subject: tSubject, section: tSection } : null;
         var targetKey = target ? (target.subject + '/' + target.section) : null;
         var fingerprint = core.csvFingerprint(csv);
-        var dup = findDuplicateImport('questions', fname, fingerprint, targetKey);
-        if (dup && !confirmDuplicate) return ok({ duplicate: dup });
         var r = core.importCSV('questions', csv, target);
         if (r.error) return fail(r.error);
         var added = [];
@@ -1190,12 +1192,14 @@
                     skipped: r.errors.length, errors: r.errors, total: questions.length });
       },
 
+      /* Re-importing the same file is never refused — same as importQuestions
+         above. findDuplicateImport/confirmDuplicate are kept only so
+         importHistory can still show a note was seen before, not to gate
+         anything. */
       importNotes: function (csv, filename, confirmDuplicate) {
         var e = requireUnlocked(); if (e) return e;
         var fname = filename ? String(filename).slice(0, 200) : null;
         var fingerprint = core.csvFingerprint(csv);
-        var dup = findDuplicateImport('notes', fname, fingerprint);
-        if (dup && !confirmDuplicate) return ok({ duplicate: dup });
         var r = core.importCSV('notes', csv);
         if (r.error) return fail(r.error);
         var added = [];

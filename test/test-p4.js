@@ -927,7 +927,7 @@ async function main() {
   run("admImSetSection('')");
   ok('the picker can be put back to "Any", restoring the old file-decides-everything import',
      markup('admImTarget').indexOf('take it from the file') > -1, markup('admImTarget'));
-  head('import duplicate detection — the same file name and the same content, re-run');
+  head('re-importing a file is never refused — the same file, run again, publishes again');
   run("admImFileName = 'weekly-batch.csv'");
   var DUPCSV = run('GOC.api.rules.CSV_QUESTION_HEADER') + '\n'
     + 'Physics,objective,Waves,Which of these is a transverse wave?,Light,Sound,Both,Neither,,A,,,easy,,yes\n';
@@ -945,31 +945,34 @@ async function main() {
   run('admImRun')();
   await flush();
   await flush();
-  ok('the exact same file name and content is recognised, not silently re-run',
-     text('admImOut').indexOf('already imported') > -1, text('admImOut'));
-  ok('nothing new was published on the flagged run',
-     (await api('listQuestions')({ subject: 'Physics' })).questions.length === afterFirstDup.questions.length);
-  run('admImRun')(true);
-  await flush();
-  await flush();
-  ok('"Import anyway" imports it unconditionally',
+  ok('running the exact same file name and content again is not refused',
      text('toast') === '1 of 1 row imported', text('toast'));
-  ok('the duplicate is now published too, once confirmed',
-     (await api('listQuestions')({ subject: 'Physics' })).questions.length === afterFirstDup.questions.length + 1);
+  var afterSecondDup = await api('listQuestions')({ subject: 'Physics' });
+  ok('the row was published again rather than blocked',
+     afterSecondDup.questions.length === afterFirstDup.questions.length + 1,
+     afterFirstDup.questions.length + ' → ' + afterSecondDup.questions.length);
+  set('admImCsv', DUPCSV);
+  run('admImRun')();
+  await flush();
+  await flush();
+  ok('a third run in a row still publishes, not just a second',
+     text('toast') === '1 of 1 row imported', text('toast'));
+  ok('and adds another row on top of the first two re-runs',
+     (await api('listQuestions')({ subject: 'Physics' })).questions.length === afterSecondDup.questions.length + 1);
   var DUPCSV2 = DUPCSV + 'Physics,objective,Waves,A second question so the content differs,Light,Sound,Both,Neither,,B,,,easy,,yes\n';
   set('admImCsv', DUPCSV2);
   run('admImRun')();
   await flush();
   await flush();
-  ok('the same file name with different content is not treated as a duplicate',
+  ok('the same file name with different content also just imports',
      text('toast') === '2 of 2 rows imported', text('toast'));
   run("admImFileName = null");
   set('admImCsv', DUPCSV);
   run('admImRun')();
   await flush();
   await flush();
-  ok('a paste with no file name is never flagged as a duplicate, even with identical content',
-     text('admImOut').indexOf('already imported') === -1, text('admImOut'));
+  ok('a paste with no file name imports too, same as any other re-run',
+     text('toast') === '1 of 1 row imported', text('toast'));
 
   head('a file that cannot be read is refused whole, and nothing is guessed');
   var held = (await api('listQuestions')({ subject: 'Physics' })).questions.length;

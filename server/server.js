@@ -2828,16 +2828,14 @@ const ROUTES = [
      Good rows are written; bad rows come back by line number. Every run — not
      just the good rows inside it — is also logged (see logImport below), so
      the console can show what was imported earlier, not only the run just
-     finished in this browser tab. */
+     finished in this browser tab.
+     Re-running the same file is never refused, same as questions import above
+     — findDuplicateImport is kept only to label a repeat in the history. */
   { method: 'POST', path: /^\/api\/notes\/import$/, need: 'console', handler: (req, res, body, sess) => {
       const csvText = body && body.csv;
       const filename = body && body.filename ? String(body.filename).slice(0, 200) : null;
       const fingerprint = core.csvFingerprint(csvText);
       const db = readData();
-      const dup = findDuplicateImport(db, 'notes', filename, fingerprint);
-      if (dup && !(body && body.confirmDuplicate)) {
-        return okJson(res, { duplicate: dup });
-      }
       const r = core.importCSV('notes', csvText);
       if (r.error) return errJson(res, 400, r.error);
       const ids = [];
@@ -3181,9 +3179,12 @@ const ROUTES = [
      caller that predates the subject/section pickers (including this file's
      own tests) keeps working. Sent, core.importCSV refuses any row that
      doesn't match rather than importing it under the file's own claim, and
-     the target rides along into the duplicate check and the log so a second,
-     legitimate run of the same file against a different target is never
-     mistaken for a re-run of the same import. */
+     the target rides along into the log so it's clear what a past import
+     covered.
+     Re-running the same file (same name, same content, same target) is never
+     refused — every valid row is published again on every run. findDuplicateImport
+     is kept only to label a repeat in the import history the admin can look
+     back at; it no longer blocks anything. */
   { method: 'POST', path: /^\/api\/questions\/import$/, need: 'console', handler: (req, res, body, sess) => {
       const csvText = body && body.csv;
       const filename = body && body.filename ? String(body.filename).slice(0, 200) : null;
@@ -3193,10 +3194,6 @@ const ROUTES = [
       const targetKey = target ? (target.subject + '/' + target.section) : null;
       const fingerprint = core.csvFingerprint(csvText);
       const db = readData();
-      const dup = findDuplicateImport(db, 'questions', filename, fingerprint, targetKey);
-      if (dup && !(body && body.confirmDuplicate)) {
-        return okJson(res, { duplicate: dup });
-      }
       const r = core.importCSV('questions', csvText, target);
       if (r.error) return errJson(res, 400, r.error);
       const ids = [];
