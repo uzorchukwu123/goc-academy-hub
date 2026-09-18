@@ -461,6 +461,29 @@ waitForBoot(20).then(function (h) {
   var anonImp = await call('POST', '/api/notes/import', { csv: 'x' });
   ok('and neither can a caller with no token at all', anonImp.status >= 400, anonImp.status);
 
+  head('4.7c — stampSection: importing the same file into Practice, separately from the Web Test');
+  var stampCsv = core.CSV_QUESTION_HEADER + '\n'
+    + 'Physics,objective,Waves,A wave question reused for practice via stampSection,Energy,Matter,Mass,Charge,,A,,,easy,,yes\n';
+  var beforePrac = (await call('GET', '/api/questions?subject=Physics&section=practice', undefined, adm)).body.questions.length;
+  var stampImp = await call('POST', '/api/questions/import',
+    { csv: stampCsv, section: 'practice', stampSection: true }, adm);
+  ok('the row (filed as objective in the file) is accepted and stamped as practice',
+     stampImp.status === 200 && stampImp.body.added === 1, stampImp.status + ' ' + stampImp.raw.slice(0, 160));
+  var afterPrac = await call('GET', '/api/questions?subject=Physics&section=practice', undefined, adm);
+  ok('the bank grew by exactly the one stamped row',
+     afterPrac.body.questions.length === beforePrac + 1, beforePrac + ' → ' + afterPrac.body.questions.length);
+  var stampedQ = afterPrac.body.questions.filter(function (q) { return q.id === stampImp.body.ids[0]; })[0];
+  ok('the published question is filed under practice, not the objective session the file named',
+     stampedQ && stampedQ.section === 'practice', stampedQ && stampedQ.section);
+  var afterObj = await call('GET', '/api/questions?subject=Physics&section=objective', undefined, adm);
+  ok('it was not also published (or left) under objective',
+     !afterObj.body.questions.some(function (q) { return q.id === stampImp.body.ids[0]; }));
+  var stampMismatch = await call('POST', '/api/questions/import',
+    { csv: stampCsv, subject: 'Chemistry', section: 'practice', stampSection: true }, adm);
+  ok('stamp mode still rejects a row under a subject it was not chosen for',
+     stampMismatch.status === 200 && stampMismatch.body.added === 0 && stampMismatch.body.skipped === 1,
+     stampMismatch.status + ' ' + stampMismatch.raw.slice(0, 200));
+
   head('4.7b — bulk-deleting a slice of the bank by subject/section');
   /* A dedicated subject/topic (not touched by any earlier block in this
      file) so the counts below are exact rather than "whatever the bank

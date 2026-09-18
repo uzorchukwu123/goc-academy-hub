@@ -596,5 +596,79 @@ ok('the older form differs only where a separator was written',
    core.legacySignupCode('goc 2027') === 'GOC2027' &&
    core.legacySignupCode('GOC2027') === core.normalizeSignupCode('GOC2027'));
 
+head('CSV import target — "any subject into a section" (subject and section are checked independently)');
+var ANYSUBJ = core.CSV_QUESTION_HEADER + '\n'
+  + 'Physics,objective,Waves,A Physics objective row,A,B,C,D,,A,,,easy,,yes\n'
+  + 'Chemistry,theory,Bonding,A Chemistry theory row,,,,,,,Expected answer here,10,easy,,yes\n'
+  + 'Physics,theory,Waves,A Physics theory row,,,,,,,Expected answer here,10,easy,,yes\n';
+var anySubjImp = core.importCSV('questions', ANYSUBJ, { subject: '', section: 'objective' });
+ok('choosing only a section (subject left on "Any") is accepted, not refused for lacking a subject',
+   !anySubjImp.error, anySubjImp.error);
+ok('every subject\'s row already filed under that section is imported',
+   anySubjImp.records.length === 1 && anySubjImp.records[0].subject === 'Physics',
+   JSON.stringify(anySubjImp.records));
+ok('a row under a different section is skipped and reported, not silently dropped',
+   anySubjImp.errors.length === 2, JSON.stringify(anySubjImp.errors));
+var onlySubjImp = core.importCSV('questions', ANYSUBJ, { subject: 'Physics', section: '' });
+ok('symmetrically, choosing only a subject (section left on "Any") still works',
+   !onlySubjImp.error && onlySubjImp.records.length === 2 &&
+   onlySubjImp.records.every(function (r) { return r.subject === 'Physics'; }),
+   JSON.stringify(onlySubjImp));
+
+head('CSV import — duplicate questions and notes are identified and skipped, unique rows still import');
+var DUPQ = core.CSV_QUESTION_HEADER + '\n'
+  + 'Physics,objective,Waves,Which of these is a transverse wave?,Light,Sound,Both,Neither,,A,,,easy,,yes\n'
+  + 'Physics,objective,Waves,Which of these is a transverse wave?,Light,Sound,Both,Neither,,A,,,easy,,yes\n'
+  + 'Physics,objective,Waves,A completely different question,Light,Sound,Both,Neither,,B,,,easy,,yes\n';
+var dupQImp = core.importCSV('questions', DUPQ);
+ok('a row repeated within the same file is imported once, the repeat is skipped as a duplicate',
+   dupQImp.records.length === 2, JSON.stringify(dupQImp.records.map(function (r) { return r.text; })));
+ok('the skipped repeat is reported and named as a duplicate, by line number',
+   dupQImp.errors.length === 1 && dupQImp.errors[0].line === 3 && /duplicate/i.test(dupQImp.errors[0].error),
+   JSON.stringify(dupQImp.errors));
+var dupQAgainstBank = core.importCSV('questions', DUPQ, null, [
+  { subject: 'Physics', section: 'objective', text: 'Which of these is a transverse wave?' }
+]);
+ok('a row matching a question already in the bank is skipped too, even the very first time it is seen in this file',
+   dupQAgainstBank.records.length === 1 && dupQAgainstBank.records[0].text === 'A completely different question',
+   JSON.stringify(dupQAgainstBank.records.map(function (r) { return r.text; })));
+ok('the same wording stamped into a different section is not treated as a duplicate — that is deliberate reuse',
+   core.importCSV('questions', DUPQ, null, [
+     { subject: 'Physics', section: 'practice', text: 'Which of these is a transverse wave?' }
+   ]).records.length === 2);
+var DUPN = core.CSV_NOTE_HEADER + '\n'
+  + 'Physics,Motion,Speed and Velocity,"Speed is distance over time; velocity is speed in a stated direction.",2,yes\n'
+  + 'Physics,Motion,Speed and Velocity,"Speed is distance over time; velocity is speed in a stated direction.",2,yes\n';
+var dupNImp = core.importCSV('notes', DUPN);
+ok('the same protection applies to notes, keyed on the body a student actually reads',
+   dupNImp.records.length === 1 && dupNImp.errors.length === 1 && /duplicate/i.test(dupNImp.errors[0].error),
+   JSON.stringify(dupNImp));
+ok('a note that only shares a title/topic with an existing one, but says something different, is not a duplicate',
+   core.importCSV('notes', DUPN, null, [
+     { subject: 'Physics', topic: 'Motion', title: 'Speed and Velocity', body: 'An earlier, differently-worded note on the same topic.' }
+   ]).records.length === 1);
+
+head('CSV import — bare LaTeX in a Physics question is auto-formatted into a real formula');
+var BARELATEX = core.CSV_QUESTION_HEADER + '\n'
+  + 'Physics,objective,Motion,"A car obeys v^2=u^2+2as. Which term is the initial speed?",u,v,a,s,,A,,,easy,"Compare with v^2=u^2+2as.",yes\n'
+  + 'Mathematics,objective,Algebra,"Simplify v^2=u^2+2as as written.",A,B,C,D,,A,,,easy,,yes\n';
+var latexImp = core.importCSV('questions', BARELATEX);
+ok('the Physics row\'s bare LaTeX is wrapped so the renderer sets it as a formula',
+   latexImp.records[0].text.indexOf('$v^2=u^2+2as$') > -1, latexImp.records[0].text);
+ok('a Physics explanation is auto-formatted the same way as the question text',
+   latexImp.records[0].explanation.indexOf('$v^2=u^2+2as$') > -1, latexImp.records[0].explanation);
+ok('the same bare LaTeX in a non-Physics subject is left exactly as typed',
+   latexImp.records[1].text.indexOf('v^2=u^2+2as') > -1 && latexImp.records[1].text.indexOf('$') === -1,
+   latexImp.records[1].text);
+ok('a plain hyphenated range some Physics row happens to mention is never mistaken for a formula',
+   core.importCSV('questions', core.CSV_QUESTION_HEADER + '\n'
+     + 'Physics,objective,Motion,"The lesson covers questions 1-5 over 10-15 minutes.",A,B,C,D,,A,,,easy,,yes\n'
+   ).records[0].text.indexOf('$') === -1);
+ok('formulas already wrapped in $ ... $ by the author are left untouched, not double-wrapped',
+   core.importCSV('questions', core.CSV_QUESTION_HEADER + '\n'
+     + 'Physics,objective,Motion,"Already formatted: $v^2=u^2+2as$.",A,B,C,D,,A,,,easy,,yes\n'
+   ).records[0].text.indexOf('$$') === -1);
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
+

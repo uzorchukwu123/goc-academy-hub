@@ -643,14 +643,28 @@
     var r = row || {};
     var opts = csvOptions(r);
     var text = r.text !== undefined ? r.text : (r.question !== undefined ? r.question : '');
+    var subject = r.subject || '';
+    var explanation = r.explanation || r.why || '';
+    var expected = r.expected || r.reference || r.answer || '';
+    /* Bare, un-delimited LaTeX (no $ ... $ around it) only gets auto-formatted
+       for Physics — that is where the academy's raw pastes from a solutions
+       manual or Word's equation editor turn up; see autoFormatBareLatex just
+       above renderMath. Every other subject's text passes through exactly as
+       typed, the same as before this existed. */
+    if (String(subject).trim().toLowerCase() === 'physics') {
+      text = autoFormatBareLatex(text);
+      explanation = autoFormatBareLatex(explanation);
+      expected = autoFormatBareLatex(expected);
+      opts = opts.map(autoFormatBareLatex);
+    }
     return {
-      subject: r.subject || '', section: csvSection(r.section || r.session),
+      subject: subject, section: csvSection(r.section || r.session),
       topic: r.topic || 'General', text: text, options: opts,
       answer: csvAnswerIndex(r.answer !== undefined ? r.answer : r.correct, opts),
-      expected: r.expected || r.reference || r.answer || '',
+      expected: expected,
       maxMark: r.maxmark !== undefined ? r.maxmark : r.marks,
       difficulty: String(r.difficulty || 'medium').trim().toLowerCase(),
-      explanation: r.explanation || r.why || '',
+      explanation: explanation,
       active: csvFlag(r.active, true)
     };
   }
@@ -685,17 +699,40 @@
     return ('00000000' + h.toString(16)).slice(-8);
   }
 
-  /* target (questions only, optional): { subject, section } the admin chose
-     on the import screen before picking a file. When given, a row whose own
-     subject/section (read from the CSV the same way csvQuestion always has)
-     doesn't match is refused and reported by line number rather than
-     imported under the file's own claim — "reject", not "stamp", was the
-     behaviour picked in REMAINING-TASKS-AFTER-TASK-5-CSV-TARGET.txt, on the
-     reasoning that silently overwriting what a row says is easier to miss
-     than a refusal called out by line number. Omitted (or notes) means
-     unchanged, file-decides-everything behaviour, so every caller that
-     predates the subject/section pickers keeps working exactly as before. */
-  function importCSV(kind, text, target) {
+  /* target (questions only, optional): { subject, section, stampSection } the
+     admin chose on the import screen before picking a file.
+
+     existing (optional): the records already published for this kind (the
+     server's db.questions/db.notes, or the offline mock's own arrays), used
+     only for duplicate detection — see dupKey below. Omitted, duplicate
+     detection still runs within the file itself, just with nothing to check
+     it against from before this run.
+
+     Two modes, chosen by stampSection:
+       - reject (stampSection falsy, the original and still the default):
+         subject and section are each checked independently, and a row whose
+         own subject/section (read from the CSV the same way csvQuestion
+         always has) doesn't match whichever of the two was chosen is refused
+         and reported by line number rather than imported under the file's
+         own claim — "reject", not "stamp", was the behaviour picked in
+         REMAINING-TASKS-AFTER-TASK-5-CSV-TARGET.txt, on the reasoning that
+         silently overwriting what a row says is easier to miss than a
+         refusal called out by line number. Choosing only a section (subject
+         left on "Any") is how every subject's rows already filed under that
+         section get imported in one run, rather than one subject at a time.
+       - stamp (stampSection true, section required, subject optional): this
+         is how the same question set gets imported once for the Web Test and
+         again for Practice without hand-editing the file's section column
+         for every row — every row that is kept (all of them, or only the
+         rows matching an optionally-chosen subject) has its section
+         overwritten to the one chosen here, whatever the file said. Subject
+         is never stamped, only rejected when given, since a mixed-subject
+         file importing into one target subject would otherwise mislabel a
+         question's actual subject.
+     Omitted (or notes) means unchanged, file-decides-everything behaviour, so
+     every caller that predates the subject/section pickers keeps working
+     exactly as before. */
+  function importCSV(kind, text, target, existing) {
     var notesFile = String(kind) === 'notes';
     var parsed = csvRows(text);
     if (parsed.error) return { error: parsed.error };
@@ -709,27 +746,100 @@
       return { error: 'The file is missing a column: ' + missing.join(', ') + '. Expected ' +
                       (notesFile ? CSV_NOTE_HEADER : CSV_QUESTION_HEADER) + '.' };
     }
-    var tSubject = null, tSection = null;
-    if (!notesFile && target && (target.subject || target.section)) {
-      tSubject = String(target.subject || '').trim();
-      tSection = csvSection(target.section || '');
-      if (ALL_SUBJECTS.indexOf(tSubject) === -1) return { error: 'Choose one of the academy’s subjects to import into.' };
+    var tSubject = null, tSection = null, stamp = false;
+    if (!notesFile && target && target.stampSection) {
+      if (!target.section) return { error: 'Choose a section to import into: theory, objective, JAMB-oriented or practice-only.' };
+      tSection = csvSection(target.section);
       if (SECTIONS.indexOf(tSection) === -1) return { error: 'Choose a section to import into: theory, objective, JAMB-oriented or practice-only.' };
+      stamp = true;
+      if (target.subject) {
+        tSubject = String(target.subject).trim();
+        if (ALL_SUBJECTS.indexOf(tSubject) === -1) return { error: 'Choose one of the academy’s subjects to import into.' };
+      }
+    } else if (!notesFile && target && (target.subject || target.section)) {
+      /* Non-stamp mode, on purpose independent per field: a subject on its own
+         restricts every row to that subject regardless of section, a section
+         on its own restricts every row to that section regardless of
+         subject (this is "all subjects into a section" — the CSV import
+         screen's "Any subject" option paired with a specific section), and
+         both together restrict to that exact pairing. Previously this branch
+         demanded both be chosen together, which silently refused the
+         subject-left-on-"Any" case with "Choose one of the academy's
+         subjects to import into" even though the screen's own note says
+         picking just a section is a supported way to import a file. */
+      if (target.subject) {
+        tSubject = String(target.subject).trim();
+        if (ALL_SUBJECTS.indexOf(tSubject) === -1) return { error: 'Choose one of the academy’s subjects to import into.' };
+      }
+      if (target.section) {
+        tSection = csvSection(target.section);
+        if (SECTIONS.indexOf(tSection) === -1) return { error: 'Choose a section to import into: theory, objective, JAMB-oriented or practice-only.' };
+      }
     }
+    /* Duplicate detection, questions and notes alike: a row is a duplicate
+       when it matches either a record already published (existing, passed by
+       the caller — the server's own bank, or the offline mock's) or an
+       earlier row in this very file, so a file that repeats itself doesn't
+       publish the same record twice in one run either. A duplicate is
+       reported and skipped exactly like any other row that fails a check —
+       the rows around it that are genuinely unique still import normally.
+       Matching is on subject + topic/section + the question text or note
+       title, case- and whitespace-insensitive, never on the generated id, so
+       the same wording pasted twice (or re-pasted after the id changed) is
+       still caught. Section is part of a question's key on purpose: the same
+       question stamped once into objective and again into practice (see
+       "stamp" above) is a deliberate, legitimate reuse, not a duplicate. */
+    function dupNorm(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
+    /* A note's key is its body, not its title: two notes can legitimately share
+       a subject/topic/title — a starter note and a later, better-written
+       replacement on the very same topic, say — and are only truly the same
+       note when what the student actually reads is the same. */
+    function dupKey(rec) {
+      return notesFile
+        ? dupNorm(rec.subject) + '|' + dupNorm(rec.topic) + '|' + dupNorm(rec.body)
+        : dupNorm(rec.subject) + '|' + dupNorm(rec.section) + '|' + dupNorm(rec.text);
+    }
+    var seenExisting = {};
+    (existing || []).forEach(function (rec) { seenExisting[dupKey(rec)] = true; });
+    var seenInFile = {};
     var records = [], errors = [];
     parsed.rows.forEach(function (row) {
       var draft = notesFile ? csvNote(row) : csvQuestion(row);
-      if (tSubject !== null) {
+      if (stamp) {
+        if (tSubject !== null) {
+          var stampRowSubject = String(draft.subject || '').trim();
+          if (stampRowSubject.toLowerCase() !== tSubject.toLowerCase()) {
+            errors.push({ line: row.line, error: 'Row is filed under ' + (stampRowSubject || 'no subject') +
+                          ', not the chosen ' + tSubject + ' — skipped.' });
+            return;
+          }
+        }
+        draft.section = tSection;
+      } else if (tSubject !== null || tSection !== null) {
         var rowSubject = String(draft.subject || '').trim();
-        if (rowSubject.toLowerCase() !== tSubject.toLowerCase() || draft.section !== tSection) {
-          errors.push({ line: row.line, error: 'Row is ' + (rowSubject || 'no subject') + ' / ' + draft.section +
-                        ', not the chosen ' + tSubject + ' / ' + tSection + ' — skipped.' });
+        var subjOk = tSubject === null || rowSubject.toLowerCase() === tSubject.toLowerCase();
+        var secOk = tSection === null || draft.section === tSection;
+        if (!subjOk || !secOk) {
+          errors.push({ line: row.line, error: 'Row is ' + (rowSubject || 'no subject') + ' / ' + (draft.section || 'no section') +
+                        ', not the chosen ' + (tSubject !== null ? tSubject : 'any subject') + ' / ' +
+                        (tSection !== null ? tSection : 'any section') + ' — skipped.' });
           return;
         }
       }
       var v = notesFile ? validateNote(draft) : validateQuestion(draft);
-      if (v.error) errors.push({ line: row.line, error: v.error });
-      else records.push(v.rec);
+      if (v.error) { errors.push({ line: row.line, error: v.error }); return; }
+      var key = dupKey(v.rec);
+      if (seenExisting[key]) {
+        errors.push({ line: row.line, error: 'Skipped as a duplicate — an identical ' + (notesFile ? 'note' : 'question') + ' is already in the bank.' });
+        return;
+      }
+      if (seenInFile[key]) {
+        errors.push({ line: row.line, error: 'Skipped as a duplicate — this file already carries the same ' +
+                      (notesFile ? 'note' : 'question') + ' on line ' + seenInFile[key] + '.' });
+        return;
+      }
+      seenInFile[key] = row.line;
+      records.push(v.rec);
     });
     return { records: records, errors: errors, read: parsed.rows.length };
   }
@@ -1879,6 +1989,52 @@
         esc = mathEscape(parts[i].src);
         out += o.breaks ? esc.replace(/\n/g, '<br>') : esc;
       }
+    }
+    return out;
+  }
+
+  /* PHYSICS CSV IMPORT — bare LaTeX auto-formatting.
+     A row pasted from a solutions manual or Word's own equation editor often
+     carries a formula with no $ ... $ around it — "v^2=u^2+2as", not
+     "$v^2=u^2+2as$" — so mathSpans just above never recognises it as
+     mathematics and it reaches the student as raw carets and underscores,
+     instead of the normal, typeset formula every other question gets. This
+     looks for a stretch of text that can only be a formula — a backslash
+     command such as \frac or \Delta, or a short token carrying a genuine ^
+     or _ superscript/subscript — optionally continued through =, +, -, *, /
+     into further short variable-or-number terms — and wraps the whole
+     stretch in $ ... $, so it is set exactly as if the author had typed the
+     dollar signs themselves.
+
+     Deliberately narrow, on purpose: every trigger (a literal backslash, or
+     a letter glued to a caret/underscore) is something ordinary English
+     prose never produces on its own, and every extension term is capped at
+     a handful of characters, so a real dash or equals sign sitting inside a
+     sentence — "10-15 minutes", "the answer is B" — can never be swallowed
+     into a formula alongside it. Text already inside a recognised $...$,
+     \(...\) or \[...\] pair is left exactly as it was — this only rewrites
+     the prose around such pairs, never their contents. */
+  var LATEX_TERM_SRC = '(?:\\\\[A-Za-z]+(?:\\s*\\{[^{}]*\\})*|\\d+(?:\\.\\d+)?(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)*|[A-Za-z]{1,3}(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)*)';
+  var LATEX_TRIGGER_SRC = '(?:\\\\[A-Za-z]+(?:\\s*\\{[^{}]*\\})*|\\b[A-Za-z0-9]{1,4}(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)+)';
+  var LATEX_CLUSTER = new RegExp(LATEX_TRIGGER_SRC +
+    '(?:(?:\\s*[=+\\-*/±×÷≤≥≠≈]\\s*|(?=[A-Za-z0-9\\\\]))' + LATEX_TERM_SRC + ')*', 'g');
+  function autoFormatBareLatex(text) {
+    var s = String(text == null ? '' : text);
+    if (!s || (s.indexOf('\\') === -1 && s.indexOf('^') === -1 && s.indexOf('_') === -1)) return s;
+    var parts = mathSpans(s), out = '', i;
+    for (i = 0; i < parts.length; i++) {
+      if (parts[i].math) {
+        out += (parts[i].display ? '$$' : '$') + parts[i].src + (parts[i].display ? '$$' : '$');
+        continue;
+      }
+      out += parts[i].src.replace(LATEX_CLUSTER, function (m) {
+        /* The trigger already requires a backslash or a real ^ / _, but a
+           run made only of the loop's own extension (no trigger at all)
+           cannot occur given how the pattern is built — this check is kept
+           anyway so the function can never wrap plain prose by accident if
+           the pattern above is ever changed. */
+        return (/\\[A-Za-z]|[A-Za-z0-9][\^_]/.test(m)) ? '$' + m + '$' : m;
+      });
     }
     return out;
   }

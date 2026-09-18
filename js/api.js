@@ -1166,20 +1166,25 @@
          a file imports exactly as it always has; given, core.importCSV
          refuses any row that doesn't match instead of trusting the file, and
          the target folds into the log the same way it does server-side.
+         stampSection: when true, every row kept (all of them, or only the
+         rows matching subject, if given) is filed under the chosen section
+         regardless of what the file's own section column says — this is how
+         the same question set is imported once for the Web Test and again
+         for Practice, without hand-editing the file. See core.importCSV.
          Re-importing the same file (or content) is never refused: a bank a
          teacher keeps re-uploading (say, after adding a couple of rows, or
          just to be safe) always publishes. confirmDuplicate/findDuplicateImport
          are kept only so importHistory can still show "seen before", not to
          gate anything. */
-      importQuestions: function (csv, filename, confirmDuplicate, subject, section) {
+      importQuestions: function (csv, filename, confirmDuplicate, subject, section, stampSection) {
         var e = requireUnlocked(); if (e) return e;
         var fname = filename ? String(filename).slice(0, 200) : null;
         var tSubject = subject ? String(subject).trim() : '';
         var tSection = section ? String(section).trim().toLowerCase() : '';
-        var target = (tSubject || tSection) ? { subject: tSubject, section: tSection } : null;
-        var targetKey = target ? (target.subject + '/' + target.section) : null;
+        var target = (tSubject || tSection) ? { subject: tSubject, section: tSection, stampSection: !!stampSection } : null;
+        var targetKey = target ? (target.subject + '/' + target.section + (stampSection ? ' (stamped)' : '')) : null;
         var fingerprint = core.csvFingerprint(csv);
-        var r = core.importCSV('questions', csv, target);
+        var r = core.importCSV('questions', csv, target, questions);
         if (r.error) return fail(r.error);
         var added = [];
         r.records.forEach(function (rec) {
@@ -1200,7 +1205,7 @@
         var e = requireUnlocked(); if (e) return e;
         var fname = filename ? String(filename).slice(0, 200) : null;
         var fingerprint = core.csvFingerprint(csv);
-        var r = core.importCSV('notes', csv);
+        var r = core.importCSV('notes', csv, null, notes);
         if (r.error) return fail(r.error);
         var added = [];
         r.records.forEach(function (rec) {
@@ -1817,7 +1822,7 @@
       /* Bulk import. The CSV is posted as text and parsed on the server by the
          very same core helper the browser would have used, so the file is
          accepted or refused identically in both modes. */
-      importQuestions: function (csv, filename, confirmDuplicate, subject, section) { return req('POST', '/questions/import', { csv: String(csv == null ? '' : csv), filename: filename ? String(filename) : undefined, confirmDuplicate: !!confirmDuplicate, subject: subject ? String(subject) : undefined, section: section ? String(section) : undefined }); },
+      importQuestions: function (csv, filename, confirmDuplicate, subject, section, stampSection) { return req('POST', '/questions/import', { csv: String(csv == null ? '' : csv), filename: filename ? String(filename) : undefined, confirmDuplicate: !!confirmDuplicate, subject: subject ? String(subject) : undefined, section: section ? String(section) : undefined, stampSection: !!stampSection }); },
       importNotes:    function (csv, filename, confirmDuplicate) { return req('POST', '/notes/import', { csv: String(csv == null ? '' : csv), filename: filename ? String(filename) : undefined, confirmDuplicate: !!confirmDuplicate }); },
       importHistory:  function ()      { return req('GET', '/import/history'); },
 
@@ -2042,7 +2047,7 @@ listPublishedVideos: function () {
 
     /* Priority 4 — a spreadsheet of questions or notes, parsed by the shared
        core helper so a file cannot publish anything the form would refuse. */
-    importQuestions: function (csv, filename, confirmDuplicate, subject, section) { return active.importQuestions(csv, filename, confirmDuplicate, subject, section); },
+    importQuestions: function (csv, filename, confirmDuplicate, subject, section, stampSection) { return active.importQuestions(csv, filename, confirmDuplicate, subject, section, stampSection); },
     importNotes:    function (csv, filename, confirmDuplicate)  { return active.importNotes(csv, filename, confirmDuplicate); },
     importHistory:  function ()       { return active.importHistory(); },
 

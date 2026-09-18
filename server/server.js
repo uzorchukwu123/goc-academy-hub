@@ -2836,7 +2836,7 @@ const ROUTES = [
       const filename = body && body.filename ? String(body.filename).slice(0, 200) : null;
       const fingerprint = core.csvFingerprint(csvText);
       const db = readData();
-      const r = core.importCSV('notes', csvText);
+      const r = core.importCSV('notes', csvText, null, db.notes);
       if (r.error) return errJson(res, 400, r.error);
       const ids = [];
       r.records.forEach(rec => {
@@ -3181,6 +3181,10 @@ const ROUTES = [
      doesn't match rather than importing it under the file's own claim, and
      the target rides along into the log so it's clear what a past import
      covered.
+     stampSection: when true, every kept row is filed under the chosen
+     section regardless of what the file's own section column says, instead
+     of being refused for not matching — how the same question set gets
+     imported once for the Web Test and again for Practice. See core.importCSV.
      Re-running the same file (same name, same content, same target) is never
      refused — every valid row is published again on every run. findDuplicateImport
      is kept only to label a repeat in the import history the admin can look
@@ -3190,11 +3194,12 @@ const ROUTES = [
       const filename = body && body.filename ? String(body.filename).slice(0, 200) : null;
       const subject = body && body.subject ? String(body.subject).trim() : '';
       const section = body && body.section ? String(body.section).trim().toLowerCase() : '';
-      const target = (subject || section) ? { subject, section } : null;
-      const targetKey = target ? (target.subject + '/' + target.section) : null;
+      const stampSection = !!(body && body.stampSection);
+      const target = (subject || section) ? { subject, section, stampSection } : null;
+      const targetKey = target ? (target.subject + '/' + target.section + (stampSection ? ' (stamped)' : '')) : null;
       const fingerprint = core.csvFingerprint(csvText);
       const db = readData();
-      const r = core.importCSV('questions', csvText, target);
+      const r = core.importCSV('questions', csvText, target, db.questions);
       if (r.error) return errJson(res, 400, r.error);
       const ids = [];
       r.records.forEach(rec => {

@@ -927,7 +927,67 @@ async function main() {
   run("admImSetSection('')");
   ok('the picker can be put back to "Any", restoring the old file-decides-everything import',
      markup('admImTarget').indexOf('take it from the file') > -1, markup('admImTarget'));
-  head('re-importing a file is never refused — the same file, run again, publishes again');
+
+  head('CSV import can also be stamped into a section — reusing the same file for Web Test and Practice');
+  run("admImSetSection('practice')");
+  ok('picking a section (no subject) shows the stamp choice',
+     markup('admImTarget').indexOf('admImStampSel') > -1, markup('admImTarget'));
+  ok('left on the default, the note still says rows are only imported if they already match',
+     markup('admImTarget').indexOf('skipped and reported below') > -1, markup('admImTarget'));
+  run("admImSetStamp('yes')");
+  ok('switching to stamp mode changes the note to say every row is filed under the chosen section',
+     markup('admImTarget').indexOf('regardless of what its own section column says') > -1, markup('admImTarget'));
+  /* Both rows are written objective-style (options + a letter answer) — a
+     theory-shaped row (no options, just a reference answer) is correctly
+     refused when stamped into practice, since practice is always auto-marked
+     multiple choice, the same as a theory-shaped row would be refused if
+     typed into the objective form. That is validateQuestion doing its normal
+     job, not something the stamp feature needs to work around. */
+  var STAMP_SRC = run('GOC.api.rules.CSV_QUESTION_HEADER') + '\n'
+    + 'Physics,objective,Waves,Which wave needs a medium to travel through?,Sound,Light,X-ray,Radio,,A,,,easy,,yes\n'
+    + 'Physics,theory,Waves,A second Physics objective row written under the theory section by mistake,Light,Sound,Both,Neither,,A,,,easy,,yes\n'
+    + 'Chemistry,objective,Bonding,Which bond involves a shared electron pair?,Ionic,Covalent,Metallic,None,,B,,,easy,,yes\n';
+  var beforeStampPhy = (await api('listQuestions')({ subject: 'Physics' })).questions.length;
+  var beforeStampChem = (await api('listQuestions')({ subject: 'Chemistry' })).questions.length;
+  set('admImCsv', STAMP_SRC);
+  run("admImFileName = null");
+  run('admImRun')();
+  await flush();
+  await flush();
+  ok('with no subject chosen, every row in the file is imported, stamped as practice',
+     text('toast') === '3 of 3 rows imported', text('toast'));
+  var afterStampPhy = await api('listQuestions')({ subject: 'Physics', section: 'practice' });
+  var afterStampChem = await api('listQuestions')({ subject: 'Chemistry', section: 'practice' });
+  ok('the Physics objective row was filed as practice, not objective',
+     afterStampPhy.questions.some(function (q) { return q.text.indexOf('needs a medium') > -1 && q.section === 'practice'; }));
+  ok('the row filed under theory in the CSV was also filed as practice, not theory',
+     afterStampPhy.questions.some(function (q) { return q.text.indexOf('theory section by mistake') > -1 && q.section === 'practice'; }));
+  ok('the Chemistry row was filed as practice too — subject was left as-is, only section was stamped',
+     afterStampChem.questions.some(function (q) { return q.text.indexOf('shared electron pair') > -1 && q.section === 'practice'; }));
+  ok('nothing was refused or skipped for a section mismatch in stamp mode',
+     text('admImOut').indexOf('skipped') === -1, text('admImOut'));
+  run("admImSetSubject('Physics')");
+  var STAMP_SRC2 = run('GOC.api.rules.CSV_QUESTION_HEADER') + '\n'
+    + 'Physics,objective,Waves,A second wave question for the subject-limited stamp test?,Sound,Light,X-ray,Radio,,A,,,easy,,yes\n'
+    + 'Chemistry,objective,Bonding,A row that should be skipped for the wrong subject,Ionic,Covalent,Metallic,None,,B,,,easy,,yes\n';
+  set('admImCsv', STAMP_SRC2);
+  run('admImRun')();
+  await flush();
+  await flush();
+  ok('with a subject also chosen, stamp mode still rejects rows under a different subject',
+     text('toast') === '1 of 2 rows imported', text('toast'));
+  ok('the mismatched-subject row is reported, not stamped in under the wrong subject',
+     text('admImOut').indexOf('not the chosen Physics') > -1, text('admImOut'));
+  var afterStampPhy2 = await api('listQuestions')({ subject: 'Physics', section: 'practice' });
+  ok('the Physics row from this second file was added as practice too',
+     afterStampPhy2.questions.some(function (q) { return q.text.indexOf('subject-limited stamp test') > -1 && q.section === 'practice'; }));
+  run("admImSetSubject('')");
+  run("admImSetStamp('no')");
+  run("admImSetSection('')");
+  ok('the picker returns cleanly to "Any" after using the stamp mode',
+     markup('admImTarget').indexOf('take it from the file') > -1, markup('admImTarget'));
+
+  head('re-importing a file publishes only what is genuinely new — a question already in the bank is a duplicate, skipped, not republished');
   run("admImFileName = 'weekly-batch.csv'");
   var DUPCSV = run('GOC.api.rules.CSV_QUESTION_HEADER') + '\n'
     + 'Physics,objective,Waves,Which of these is a transverse wave?,Light,Sound,Both,Neither,,A,,,easy,,yes\n';
@@ -945,34 +1005,36 @@ async function main() {
   run('admImRun')();
   await flush();
   await flush();
-  ok('running the exact same file name and content again is not refused',
-     text('toast') === '1 of 1 row imported', text('toast'));
+  ok('running the exact same file name and content again is not refused, but nothing new is published',
+     text('toast') === '0 of 1 row imported', text('toast'));
+  ok('the row is reported as a duplicate rather than silently dropped',
+     text('admImOut').toLowerCase().indexOf('duplicate') > -1, text('admImOut'));
   var afterSecondDup = await api('listQuestions')({ subject: 'Physics' });
-  ok('the row was published again rather than blocked',
-     afterSecondDup.questions.length === afterFirstDup.questions.length + 1,
+  ok('no second copy of the same question was added',
+     afterSecondDup.questions.length === afterFirstDup.questions.length,
      afterFirstDup.questions.length + ' → ' + afterSecondDup.questions.length);
   set('admImCsv', DUPCSV);
   run('admImRun')();
   await flush();
   await flush();
-  ok('a third run in a row still publishes, not just a second',
-     text('toast') === '1 of 1 row imported', text('toast'));
-  ok('and adds another row on top of the first two re-runs',
-     (await api('listQuestions')({ subject: 'Physics' })).questions.length === afterSecondDup.questions.length + 1);
+  ok('a third run in a row is caught as a duplicate too, not just the second',
+     text('toast') === '0 of 1 row imported', text('toast'));
+  ok('still no extra row on top of the first two re-runs',
+     (await api('listQuestions')({ subject: 'Physics' })).questions.length === afterSecondDup.questions.length);
   var DUPCSV2 = DUPCSV + 'Physics,objective,Waves,A second question so the content differs,Light,Sound,Both,Neither,,B,,,easy,,yes\n';
   set('admImCsv', DUPCSV2);
   run('admImRun')();
   await flush();
   await flush();
-  ok('the same file name with different content also just imports',
-     text('toast') === '2 of 2 rows imported', text('toast'));
+  ok('with a genuinely new row alongside a duplicate, only the new one is imported',
+     text('toast') === '1 of 2 rows imported', text('toast'));
   run("admImFileName = null");
   set('admImCsv', DUPCSV);
   run('admImRun')();
   await flush();
   await flush();
-  ok('a paste with no file name imports too, same as any other re-run',
-     text('toast') === '1 of 1 row imported', text('toast'));
+  ok('a paste with no file name is still caught as a duplicate on content alone',
+     text('toast') === '0 of 1 row imported', text('toast'));
 
   head('a file that cannot be read is refused whole, and nothing is guessed');
   var held = (await api('listQuestions')({ subject: 'Physics' })).questions.length;

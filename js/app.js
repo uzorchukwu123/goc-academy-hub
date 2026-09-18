@@ -3842,19 +3842,26 @@ var admImLast = null;
 var admImFileName = null;   /* the name of the last file opened via admImPick, if any */
 
 /* subject + section the file is being imported into — the target the row-level
-   check in core.importCSV rejects mismatches against. Both default to "" (no
-   restriction, the Session filter at admRSection just above uses the same
-   "All ..." first option for the same reason): a blank subject/section keeps
-   importing exactly as it always did, one file free to carry several
-   subjects/sections, which is what the existing single-file, mixed-section
-   imports below rely on. Choosing a specific subject and section is how an
-   admin answers "I want to import a CSV file for [this subject] [this
-   section]" — every row that doesn't match what was chosen is then skipped
-   and reported, rather than trusted. Notes have no such target — notes
-   import has no section at all — so this only shows for kind 'questions';
-   see admImTargetHTML/admImKindSet. */
+   check in core.importCSV rejects mismatches against (or, with admImStamp,
+   overwrites). Both default to "" (no restriction, the Session filter at
+   admRSection just above uses the same "All ..." first option for the same
+   reason): a blank subject/section keeps importing exactly as it always did,
+   one file free to carry several subjects/sections, which is what the
+   existing single-file, mixed-section imports below rely on. Choosing a
+   specific subject and section is how an admin answers "I want to import a
+   CSV file for [this subject] [this section]" — every row that doesn't match
+   what was chosen is then skipped and reported, rather than trusted. Notes
+   have no such target — notes import has no section at all — so this only
+   shows for kind 'questions'; see admImTargetHTML/admImKindSet.
+
+   admImStamp (questions + a section chosen, only): flips the section check
+   from "reject rows that don't already say this section" to "file every kept
+   row under this section, whatever it said" — how the very same bank of
+   questions gets imported once for the Web Test and again for Practice,
+   without hand-editing the section column of the CSV in between. */
 var admImSubject = '';
 var admImSection = '';
+var admImStamp = false;
 
 function admImCols(){
   return admImKind === 'notes' ? GOC.api.rules.CSV_NOTE_HEADER : GOC.api.rules.CSV_QUESTION_HEADER;
@@ -3868,7 +3875,7 @@ function admImCols(){
    for the columns line just below it. */
 function admImTargetHTML(){
   if(admImKind === 'notes') return '';
-  return '<div class="ad-field"><label>Subject to import into</label><select id="admImSubjSel" onchange="admImSetSubject(this.value)">'
+  var h = '<div class="ad-field"><label>Subject to import into</label><select id="admImSubjSel" onchange="admImSetSubject(this.value)">'
     + admQOpts([['', 'Any subject — take it from the file']].concat(
         ['Use of English','Physics','Chemistry','Biology','Mathematics'].map(function(s){ return [s, s]; })), admImSubject)
     + '</select></div>'
@@ -3876,13 +3883,26 @@ function admImTargetHTML(){
     + admQOpts([['', 'Any section — take it from the file'],
                 ['objective','Objective session'],['theory','Theory session'],
                 ['jamb','JAMB-oriented session'],['practice','Practice only']], admImSection)
-    + '</select></div>'
-    + (admImSubject || admImSection
-        ? '<p class="ad-note">Only rows in the file filed under this exact subject and section are imported — a row filed under anything else is skipped and reported below, the same as a row that fails any other check.</p>'
-        : '<p class="ad-note">Left on "Any", each row is imported under whatever subject and section that row itself names — pick a specific subject and section here to restrict the whole file to just that one.</p>');
+    + '</select></div>';
+  if(admImSection){
+    h += '<div class="ad-field"><label>How the section applies</label><select id="admImStampSel" onchange="admImSetStamp(this.value)">'
+      + admQOpts([['no', 'Only import rows already filed under this section'],
+                  ['yes', 'Import every matching row AS this section, whatever the file says']], admImStamp ? 'yes' : 'no')
+      + '</select></div>'
+      + (admImStamp
+          ? '<p class="ad-note">Every row that passes the subject check (if any) is filed under <b>' + esc(wtSectionLabel(admImSection)) +
+            '</b> regardless of what its own section column says — this is how to reuse the same file for the Web Test and, separately, for Practice.</p>'
+          : '<p class="ad-note">Only rows in the file filed under this exact subject and section are imported — a row filed under anything else is skipped and reported below, the same as a row that fails any other check.</p>');
+  } else if(admImSubject){
+    h += '<p class="ad-note">Only rows in the file filed under this exact subject are imported — a row filed under a different subject is skipped and reported below.</p>';
+  } else {
+    h += '<p class="ad-note">Left on "Any", each row is imported under whatever subject and section that row itself names — pick a specific subject and/or section here to restrict the whole file, or pick a section and choose to import every row as that section (useful for reusing a Web Test file for Practice).</p>';
+  }
+  return h;
 }
 function admImSetSubject(s){ admImSubject = s; admImPaintTarget(); }
-function admImSetSection(s){ admImSection = s; admImPaintTarget(); }
+function admImSetSection(s){ admImSection = s; if(!s) admImStamp = false; admImPaintTarget(); }
+function admImSetStamp(v){ admImStamp = v === 'yes'; admImPaintTarget(); }
 function admImPaintTarget(){
   var host = document.getElementById('admImTarget');
   if(host) host.innerHTML = admImTargetHTML();
@@ -3964,7 +3984,7 @@ function admImRun(confirmDuplicate){
     if(out) out.innerHTML = '<p class="ad-warn">' + esc(err.message || 'That file was not accepted.') + '</p>';
   };
   if(admImKind === 'notes') GOC.api.importNotes(csv, admImFileName, !!confirmDuplicate).then(done, failed);
-  else GOC.api.importQuestions(csv, admImFileName, !!confirmDuplicate, admImSubject, admImSection).then(done, failed);
+  else GOC.api.importQuestions(csv, admImFileName, !!confirmDuplicate, admImSubject, admImSection, admImStamp).then(done, failed);
 }
 /* Shown instead of a result when the file (same name, same content) already
    appears in the import history — nothing was published on this call.
