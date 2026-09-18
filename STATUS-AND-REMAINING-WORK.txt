@@ -1,0 +1,240 @@
+G.O.C Academy Hub — Status: What's Done, What Remains
+========================================================
+Written at a pause point after finishing Phase 5's sandbox-doable work.
+Read this before continuing — it's the current source of truth,
+superseding the version of this file uploaded alongside the previous zip
+(that one paused mid-Phase-5; this one picks up exactly where it left off
+and closes the phase out).
+
+Updated again this session to close out Phase 7 and Phase 2's item #9 —
+see PHASE7-NOTES.md for the former and the "Phase 2" line below and
+PHASE2-AUDIT-NOTES.md for the latter. Phase 5's own content below is
+otherwise unchanged from the version this replaces.
+
+Full suite re-verified 15/15 green just before this document was written.
+This session's sandbox had real npm-registry access — the first one in
+this project's history to — so this run used a real `npm install` and
+real `busboy`, not the network-less stub trick every prior session's
+notes describe. The stub trick is no longer needed going forward in any
+sandbox that also has registry access; keep it as a fallback for one that
+doesn't.
+
+WHERE THINGS ACTUALLY STAND
+----------------------------
+Phase 0: done.
+Phase 1: done, 14/14 suites green originally (baseline never moved).
+Phase 2: done. Item #9 (npm audit) is now also genuinely closed — this
+  session's sandbox had real npm-registry access for the first time in
+  this project's history, so `npm install`/`npm audit` were run for real
+  instead of stubbed or skipped. 0 vulnerabilities. See PHASE2-AUDIT-NOTES.md
+  and PHASE7-NOTES.md for detail.
+Phase 3: DONE. See PHASE3-COMPLETION-NOTES.md for detail. Unchanged this
+  session; its "manual accessibility and responsive QA" placeholder in
+  DEPLOYMENT.md has now been filled in with what was actually found (see
+  Phase 5 notes below — that was one of Phase 5's own remaining items).
+Phase 4: DONE. Unchanged this session. See the earlier session's work —
+  formulas re-derived and verified against README, a real migrate() bug
+  found and fixed, legacy-fallback comments given removal conditions.
+Phase 5: DONE — closed out this session. Full detail below.
+Phase 6: done (PHASE6-NOTES.md) — driver-parity test + CI workflow.
+  Unchanged this session.
+Phase 7: DONE — closed out this session. See PHASE7-NOTES.md. Fresh-eyes
+  pass on readme.md's example values found and fixed two real issues (a
+  passcode example that looked like a suggested real value rather than a
+  placeholder, and a stale test-suite count). The LAUNCH-CHECKLIST.md
+  question is resolved: folded into DEPLOYMENT.md's existing "Go-live
+  checks" section rather than split into a new file, so there's one
+  document to keep in sync, not two.
+Phase 8: NOT STARTED. Cannot fully complete regardless of how much more
+  work happens in Phase 7 — see "HARD BLOCKERS" below. (Phase 7 is now
+  done, so every non-hard-blocked precondition Phase 8 needed is clear;
+  what's left is genuinely the four items below, not disguised sandbox
+  work.)
+
+PHASE 5 — DONE THIS SESSION
+--------------------------------------------------------------
+Carried over from before this session, unchanged: render.yaml's
+GOC_TRUST_PROXY and NODE_VERSION=20 fix, the Railway-schema research
+(no inline env-var slot the way render.yaml has one), and the partial
+default-secret-warning discovery in server.js's seed().
+
+Done this session:
+  - Closed the "refuses to boot (OR logs an impossible-to-miss warning)"
+    item for real, in a way that resolves the ambiguity rather than
+    picking one arbitrarily: the server now checks the ACTUAL STORED
+    Founder/Academic Director passwords, console passcode, and signup
+    code against the published demo defaults on EVERY boot — not just at
+    first seed, using the same constant-time verifyPassword() real logins
+    use, so an old data.json that was seeded long ago and never rotated
+    is caught too, not just a fresh install. In a production-like run
+    (NODE_ENV=production or GOC_NO_DEMO_SEED=1 — the same signal that
+    already gates demo-account seeding) it refuses to start and exits
+    with a boxed list of exactly which secrets are still default.
+    Otherwise (local dev) it prints the same boxed warning to the console
+    and keeps running. Also closed the "not yet confirmed" gap noted last
+    session: GOC_PASSCODE now gets the same treatment as the two admin
+    passwords and the signup code — all four are checked, not just the
+    signup code.
+  - Manually verified both branches in an isolated copy of the server
+    (not the shipped data.json): confirmed exit code 1 with the warning
+    banner when defaults are live in a simulated production boot, and
+    confirmed a clean boot that stays up once real values are supplied
+    via GOC_FOUNDER_PW/GOC_ACADDIR_PW/GOC_PASSCODE/GOC_SIGNUP_CODE.
+  - Found and fixed a real bug while wiring the check in, the same way
+    the Phase 4 migrate() bug was found — by reading the actual startup
+    code path rather than assuming it was already handled: the
+    Appwrite-success startup branch (hasAppwriteConfig() true, Appwrite
+    init succeeds) never called seed() if data.json didn't exist yet,
+    unlike the other two startup paths (bare local run, and the
+    Appwrite-init-failed fallback). A fresh Appwrite deploy with no
+    data.json on disk would have thrown ENOENT on the first read that
+    needed staff/settings. Fixed with the same guard the other two paths
+    already had.
+  - Built the rotating local backup of server/data.json from scratch —
+    nothing like this existed in the codebase before this session. Every
+    boot takes one immediately (so a restart doesn't leave a long gap),
+    then on an interval (GOC_BACKUP_INTERVAL_MIN, default 360 = 6h),
+    writing timestamped copies into server/backups/ and pruning down to
+    the most recent GOC_BACKUP_KEEP (default 28). A failed backup logs
+    and continues rather than taking the server down. server/backups/ is
+    covered by the same /server/ HTTP-serving denylist that already
+    blocks server/data.json (confirmed via the existing test, not just
+    assumed). This only covers the LOCAL-FILE data (staff, settings,
+    questions, notes, attempts, and — on a non-Appwrite install —
+    students). Made the explicit decision the prior session's notes
+    flagged as open: on an Appwrite-Database install, student records
+    never touch data.json, so this rotation does not reach them; that
+    needs a separate Appwrite-side export/snapshot strategy using real
+    Appwrite credentials this sandbox has never had access to — written
+    up as an operator decision in DEPLOYMENT.md rather than guessed at
+    or silently left uncovered.
+  - Audited server-side logging for secrets or stack traces reaching the
+    logs (distinct from the Phase 2 client-facing safeClientMessage fix,
+    which only covers what the CLIENT sees). Read every console.error/
+    console.warn/console.log call site and every throw new Error(...) in
+    server.js. Found no case of a password, request body, or API key
+    being interpolated into a log line or an error message — every
+    error-path log uses err.message (which comes from static, non-secret
+    strings this codebase itself throws) or, for uncaught
+    exceptions/unhandled rejections only, the full err.stack, which is
+    expected/standard practice for server-side debugging and never
+    reaches the client. One line does print the literal default console
+    passcode ('2027') to the log when GOC_PASSCODE isn't set — left as-is
+    since it's the already-public demo default (documented in the
+    readme), not a real secret, and the new boot-time check above means
+    it can no longer stay '2027' in production anyway.
+  - Wrote the full env-var checklist into DEPLOYMENT.md: the two new
+    backup env vars, the default-secret boot behavior (what triggers
+    refuse-vs-warn), Railway's NIXPACKS_NODE_VERSION=20 dashboard
+    variable (railway.json's schema has no inline slot for this, unlike
+    render.yaml's Blueprint spec — confirmed last session, documented
+    this one), and confirmation that render.yaml already carries
+    NODE_VERSION=20 and GOC_TRUST_PROXY so nothing further is needed
+    there.
+  - Documented that Render and Railway both terminate TLS at their own
+    edge and proxy to this process over plain HTTP — this is also *why*
+    GOC_TRUST_PROXY matters, so the two facts are now written next to
+    each other in DEPLOYMENT.md instead of GOC_TRUST_PROXY's reasoning
+    living on its own with no explanation of the underlying TLS setup.
+  - Filled in DEPLOYMENT.md's old placeholder comment ("Manual
+    accessibility and responsive QA checklist (Phase 3) will be appended
+    here once that phase runs") with what Phase 3 actually found: the
+    accessibility/contrast/reduced-motion work, the one real responsive
+    bug found and fixed, the PWA install path built from scratch, and
+    the "static analysis, not a real browser" caveat carried through
+    explicitly rather than dropped.
+  - Recreated .gitignore. Like PHASE6-NOTES.md's CI workflow file, this
+    dotfile did not survive whatever export produced the zip this
+    session started from (confirmed — no dotfiles or dot-folders of any
+    kind were present at all, same as every other dotfile in this
+    project's history). SECURITY-FIXES-2026-09-04.md documented that a
+    .gitignore had existed and *why* (keep server/data.json and secrets
+    out of any repo) but not its exact contents, so it was rebuilt from
+    that stated intent: excludes server/data.json, the new
+    server/backups/ directory, .env and .env.*, node_modules, and normal
+    OS/editor noise. Worth a real diff against whatever the actual repo's
+    .gitignore contains, if one still exists there, rather than trusting
+    this reconstruction blindly — same caution this file has urged about
+    every other reconstructed-from-spec artifact.
+
+Full suite re-run after every code change above (not just once at the
+end) — stayed 15/15 green throughout, including after the seed()/start()
+restructuring and the new startBackupSchedule()/auditDefaultSecrets()
+wiring.
+
+Phase 5 is now genuinely complete — every item in the original roadmap's
+Phase 5 section (render.yaml/railway.json validation, the env-var
+checklist, the default-secret boot behavior, the TLS documentation, the
+rotating backup, and the server-side-logging audit) has been done and
+verified, not just claimed.
+
+PHASE 7 — DONE THIS SESSION
+--------------------------
+  - readme.md given the fresh-eyes pass: found and fixed a `GOC_PASSCODE`
+    example (`"863104"`) that read like a suggested real value rather than
+    a placeholder, unlike its three neighbouring example lines, and a
+    stale "Thirteen suites, about 2,090 checks" line (real count as of
+    this session: 15 suites, 2,122 checks — see Phase 2 addendum below).
+    Everything else in the file re-checked against the same question and
+    found fine — see PHASE7-NOTES.md for the full pass.
+  - LAUNCH-CHECKLIST.md decision made and executed: folded, not split.
+    DEPLOYMENT.md's existing "Go-live checks" section stays where it is,
+    right after the deployment steps it depends on, rather than forking
+    into a second document that would need to be kept in sync by hand.
+
+PHASE 8 — NOT STARTED, AND PARTLY CANNOT BE COMPLETED FROM HERE
+---------------------------------------------------------------------
+Nothing here can start for real until 3, 5, and 7 are actually done, not
+just claimed — all three are now done.
+
+On the "two full manual smoke tests" item specifically: the automated
+suite already programmatically drives sign-up (with and without a valid
+code), login as student and both admin titles, an objective sitting
+end-to-end (opened, submitted, server-marked), a theory paper (submitted,
+console-marked), a student's own results view, account closure/reopening,
+and console access — all over real HTTP against a real running server,
+the same proxy for a manual demo-mode click-through the original roadmap
+item asked for. That's not a substitute for a human actually tapping
+through the PWA install flow, the session-expiry banner, and the visual
+polish a screen reads fine to a test but not to an eye — those still need
+a person. But the functional walk-through half of that item is, in
+substance, already continuously covered by `node test/run.js`, not an
+outstanding gap waiting on sandbox time.
+
+HARD BLOCKERS — these need YOUR action, not more sandbox time:
+  - Rotating the real Appwrite key (and every other real production
+    secret) immediately before real students are invited. I have no
+    access to your actual Appwrite account or any real secret value — I
+    can build the rotation checklist, I cannot perform the rotation.
+  - The human-eyes half of the manual smoke test — actually tapping
+    through the PWA install flow, the session-expiry banner, and general
+    look-and-feel on a real device — plus the "real deployed server" half
+    entirely, since there is no live deployment to test against from this
+    sandbox.
+  - Tagging the release commit: this zip has no .git directory at all
+    (confirmed again this session — no dotfiles or dot-folders of any
+    kind survived whatever export produced it, same finding as every
+    prior session), so there is no git history to tag from here. This
+    has to happen in your real repository.
+  - Setting up the Appwrite-side backup/export for student data (Phase
+    5's local-file backup rotation explicitly does not reach Appwrite —
+    see above). This needs real Appwrite credentials and a decision only
+    you can make about how that snapshot should run.
+
+WHY THE ORIGINAL HANDOFF FILE WAS ALREADY STALE
+-----------------------------------------------------
+(Unchanged from the previous version of this document — still the
+reason the very first handoff file needed replacing, kept here for
+continuity.) When "Remaining-Phases-3-to-8-Handoff.txt" was first
+uploaded, the zip already contained PHASE3-PROGRESS-AND-REMAINING.txt
+and PHASE6-NOTES.md — both written AFTER that handoff, describing work
+(Phase 6 entirely, Phase 3 partially) the handoff didn't know about.
+This was caught by reading the actual files in the zip rather than
+trusting the uploaded document's claims at face value, and by
+independently verifying claims against the real code (e.g. running the
+test suite rather than trusting "15/15 green" as written, which is how
+the missing CI workflow file was originally caught). Worth continuing
+that habit: trust this document's "done" claims less than you'd trust
+re-running `node test/run.js` yourself — which is exactly how this
+session's own Appwrite-seed() bug was found, by reading the startup
+code directly instead of assuming it was already handled.

@@ -1,0 +1,88 @@
+GOC ACADEMY HUB — REMAINING TASKS (after this Task 6 pass)
+================================================================
+Tasks 1 and 3 are DONE, test-verified / fully done at the code level.
+Task 2 — code-level audit complete; only real-device/browser visual
+confirmation remains, and that cannot be done from this sandbox.
+Task 4 — essentially closed out at the code level (regression test
+written; Appwrite-credentials question still needs your input).
+Task 5 — toast sweep in progress (4 of 173 converted; 169 remain,
+unchanged this pass).
+
+=========================================
+6 — Dashboard refresh must not log the student out; full admin QA pass
+=========================================
+(worked this pass — see exactly what changed and what's still open)
+
+REFRESH-LOGOUT FIX — DONE THIS PASS (per your confirmed decision:
+sessionStorage, students only):
+  - js/api.js: a student's session token is now mirrored into
+    sessionStorage on login and self-signup, and cleared on logout.
+    Staff are untouched — still memory-only, still lost on refresh,
+    on purpose. Never written to localStorage (dies with the tab).
+  - js/app.js: the boot sequence now checks for a leftover student
+    token before showing the landing page. If found, it validates the
+    session, re-reads /me (so a still-pending forced password change
+    is honoured exactly as at a fresh login), and lands the student
+    back on the dashboard instead of the login screen. Any failure
+    (expired/invalid token, profile re-read fails) falls back to the
+    ordinary landing screen — nothing silently breaks.
+  - Both files verified with node --check.
+  - NOT verified in a real browser — this sandbox has no browser
+    tooling, same limitation as Task 2. Please click through: log in
+    as a student, refresh, confirm you land on the dashboard, not
+    the login screen; confirm staff refresh behaviour is unchanged.
+
+ONE-SIT-RULE TEST BUG — FIXED THIS PASS (per your confirmed decision:
+one real sitting + practice grinds):
+  - test/test-server.js's "activity must not beat achievement" scenario
+    was illegally re-sitting the one-sit web test 8 times, which the
+    server correctly 403s from the 2nd attempt — a test bug, not a
+    server bug. It now sits the objective web test once (badly), then
+    grinds 7 rounds of practice mode (also deliberately wrong) — the
+    same effect (lots of low-quality activity that must not outrank
+    one excellent paper) without breaking the one-sit rule.
+  - XP math traced by hand to confirm the existing rG.xp >= 80
+    assertion still holds (10 XP from the bad objective sitting + up
+    to the 120/day practice cap).
+  - NOT actually run — this sandbox has no network, so npm install
+    fails (no node_modules, and server.js requires busboy
+    unconditionally). Run `npm install && node test/run.js` wherever
+    this is deployed to confirm it passes and nothing else regressed.
+
+FULL ADMIN QA PASS — PARTIAL:
+  - Grepped all of js/app.js for TODO/FIXME/stub/"not implemented"/
+    "not supported" markers — none found; no obviously broken or
+    placeholder admin function turned up at the code level.
+  - A genuine function-by-function click-through pass needs a browser,
+    which this sandbox does not have (same constraint as Task 2). Not
+    attempted, to avoid claiming a walkthrough that didn't happen.
+
+-------------------------------------------------------------------------
+Suggested order:
+  1. npm install + node test/run.js wherever this is deployed — confirm
+     the one-sit-rule fix and test-persist.js both pass.
+  2. Real-device click-through: student refresh (Task 6), admin console
+     sideways-scroll (Task 2), tier icons (Tasks 3/5).
+  3. Confirm the Appwrite-credentials question (Task 4).
+  4. Continue Task 5's toast sweep (169 calls remain) using the
+     formMsg() pattern already established.
+  5. A full manual admin-console QA pass once a browser is available —
+     go through every function and fix anything broken, incomplete, or
+     placeholder-looking.
+
+HOUSEKEEPING NOTE (not a task, still unresolved): server/ still
+contains a leftover backup file,
+server/server.js.before-topic-fix-20260917-112249, alongside
+server.js. Left untouched again — flagging so it isn't shipped by
+accident.
+
+FILES CHANGED THIS PASS
+------------------------
+js/api.js — student token mirrored to sessionStorage on login/signup,
+cleared on logout; hasPendingStudentSession() added for the boot check.
+js/app.js — boot sequence restores a student's session from a leftover
+sessionStorage token instead of unconditionally showing the landing
+screen.
+test/test-server.js — grinder scenario reworked to respect the one-sit
+rule (one bad web-test sitting + 7 practice grinds) instead of
+illegally re-sitting the same web test 8 times.

@@ -1,0 +1,133 @@
+G.O.C Academy Hub — "Uploaded video doesn't show on the student dashboard"
+==========================================================
+Diagnosis + fix, done directly in this codebase (js/app.js, index.html,
+sw.js, test/test-p6.js, test/test-launch.js). Written up the way every
+other fix in this project is, so the reasoning is on record.
+
+----------------------------------------------------------------------
+Two separate causes — both mattered, only one was a bug
+----------------------------------------------------------------------
+
+1. THE BUG: the student Classes/Live screen never asked the server for
+   real videos at all. `var videos = [...]` in js/app.js was a fixed list
+   of ten made-up rows (the "Live Class: Comprehension & Lexical
+   Structure", "Quadratic Equations Deep-Dive" placeholders you asked me
+   to clear). renderClasses() only ever read that fixed array — nothing
+   in the whole file called GOC.api.listPublishedVideos(), so a video
+   uploaded and published in the admin console had no path to the
+   student's screen no matter what you did on the admin side. This is
+   the actual reason your upload "wasn't showing at all": the screen was
+   incapable of showing anything real, placeholder or not.
+
+2. NOT A BUG, BUT WORTH CHECKING: a freshly uploaded video is a draft
+   (`published: false`) until someone explicitly publishes it. Open the
+   admin console's **Videos** panel, find the one you uploaded, and press
+   **Publish** if you haven't already — admUploadVideo() never sets it
+   live on its own, by the same deliberate rule resources and every other
+   piece of content in this console already follow (nothing reaches a
+   student until a person says so). Now that cause #1 is fixed, an
+   unpublished video still correctly won't appear — that's intentional,
+   not the bug you were seeing.
+
+----------------------------------------------------------------------
+What was changed
+----------------------------------------------------------------------
+
+js/app.js
+  - Placeholder rows removed. `var videos = [...]` (ten hardcoded entries)
+    is now `var videos = [];` — the screen starts empty and honest,
+    not empty because a real fetch failed.
+  - Added `loadPublishedVideos()`, calling
+    GOC.api.listPublishedVideos() and mapping each returned Appwrite
+    record onto the `{type, subj, title, tutor, dur, date, c1, c2,
+    videoId, storageFileId, externalUrl}` shape renderClasses() /
+    videoCard() already expect. Unlike resources (which keep the demo
+    data as a fallback if the server returns nothing), videos now always
+    reflects exactly what the server says — you asked for the
+    placeholders cleared, so there is deliberately no fallback dataset
+    left for it to fall back to.
+  - Added `VIDEO_GRADIENTS` — real video records don't carry their own
+    thumbnail colours, so each canonical subject gets a two-stop
+    gradient built from the same brand colour already used in
+    `SUBJECT_META`; anything unrecognised gets a neutral grey pair.
+  - Wired `loadPublishedVideos` into the one existing post-login
+    hydration list, right next to `loadPublishedResources`, so it runs
+    on every login the same way every other dashboard widget does.
+  - `playVideo(v)` now actually plays something instead of opening a
+    decorative screen:
+      - a link (Zoom cloud / unlisted YouTube) opens in a new tab —
+        never embedded inline;
+      - an uploaded file streams through `GOC.api.getVideoFile(v.videoId)`
+        and plays in the same overlay viewer already used for
+        video-type resources (`openResourceMediaViewer`) — no new
+        player UI needed;
+      - a malformed record with neither just says so in a toast, which
+        should never happen in practice since the upload route already
+        requires one or the other.
+  - Removed the now-dead entry for the old mock player from the
+    screen-parent lookup (`videoplay:'classes'` in the `map` object used
+    by `go()`), since that screen no longer exists (next section).
+
+index.html
+  - Deleted the `#videoplay` "VIDEO PLAYER (mock)" screen outright —
+    fake progress bar, hardcoded chapter list, the "In the complete app…"
+    placeholder copy, all of it. `playVideo()` no longer routes to it
+    under any circumstance, so keeping it around would just be dead
+    markup nobody could ever see.
+
+test/test-p6.js
+  - This file loads the real js/app.js into a test sandbox and checks
+    that the subject-combination filtering logic correctly narrows the
+    Classes screen (Priority 6). It had been quietly relying on the
+    hardcoded placeholder videos as its test data — "does the Mathematics
+    video still show when the student studies Mathematics" only worked
+    because a fake Mathematics video happened to be sitting in production
+    code. Clearing the placeholders broke that test, correctly — it
+    should never have depended on demo content in the first place.
+    Fixed by giving the test its own five-line fixture (one video per
+    subject) injected directly into the sandbox before the filtering
+    assertions run, so the test now verifies the filtering logic on data
+    it controls, completely independent of whatever the app ships with.
+    This is a better test than before, not just a patched one.
+
+test/test-launch.js
+  - Unrelated pre-existing issue, fixed while re-verifying the suite:
+    the "loads nothing from another origin" check was matching the
+    landing page's legitimate WhatsApp contact link
+    (`<a href="https://wa.me/...">`) as if it were an externally-loaded
+    resource. Narrowed the check to actual resource-loading tags
+    (script/link/img/iframe) so outbound navigation links aren't
+    flagged. Same fix already applied once before on a separate copy of
+    this project — carried over here since this zip is a different
+    checkout that still had the old, over-broad version of the check.
+
+sw.js
+  - Cache version bumped `goc-v24` → `goc-v25` for this round of
+    js/app.js / index.html / test changes.
+
+----------------------------------------------------------------------
+How to confirm it's fixed
+----------------------------------------------------------------------
+  1. Admin console → Videos → upload one (file or link) if you haven't
+     already, then press **Publish** on it — it must show "Published"
+     before a student can see it.
+  2. Log in as a student who studies that video's subject (or use
+     "View as student" from the console, which stays logged in as
+     staff underneath).
+  3. Open Classes → the Live or Lesson tab matching the video's type.
+     It should now appear, with a thumbnail in that subject's colour.
+  4. Tap it: a link opens a new tab; an uploaded file opens the same
+     full-screen player already used for video resources, with real
+     controls and fullscreen.
+
+----------------------------------------------------------------------
+Verification run here
+----------------------------------------------------------------------
+  - `node -c js/app.js`, `node -c test/test-p6.js`,
+    `node -c test/test-launch.js` — all syntax-clean.
+  - `node test/run.js` — 12/14 suites pass, including test-p6.js (now
+    70/70, was failing 2 before the fixture fix) and test-launch.js (now
+    passing after the wa.me fix). `test-server.js` / `test-security.js`
+    fail only for this sandbox's pre-existing lack of network access to
+    `npm install busboy` — unrelated to anything above, same caveat
+    every prior round of work on this project has flagged.

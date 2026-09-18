@@ -1,0 +1,208 @@
+G.O.C Academy Hub — Phase 3 Progress + What's Still Open
+==========================================================
+Written mid-Phase-3, at the point this session paused. Covers what's done,
+what's left in Phase 3, and the full status of every phase after it.
+
+WHERE THINGS ACTUALLY STAND
+----------------------------
+Phase 0: done.
+Phase 1: done, 14/14 suites green (baseline hasn't moved).
+Phase 2: done (see PHASE2-AUDIT-NOTES.md). Item #9 (npm audit) still not
+  run for real anywhere except CI now (see Phase 6 below).
+Phase 6: done (see PHASE6-NOTES.md) — pulled forward out of order because
+  the original handoff flagged it as small, standalone, cheap insurance.
+  Driver-parity regression test + GitHub Actions CI workflow, both in
+  place, 15/15 suites green.
+Phase 3: IN PROGRESS — this document is the handoff for it.
+Phases 4, 5, 7, 8: NOT STARTED. Untouched since the original handoff.
+
+Full suite status as of this handoff: 15/15 green, verified locally with
+the same network-less busboy-stub trick documented in the original
+handoff (stub created, `node test/run.js` run, stub deleted immediately
+after — never left in the zip).
+
+PHASE 3 — WHAT'S DONE
+-----------------------
+Accessibility pass, partial (carried over from before this session,
+unchanged):
+
+  - 13 icon-only buttons got specific aria-labels.
+  - 3 clickable divs/spans (logo-as-home-link x2, video-thumbnail play
+    overlay) got role, tabindex="0", aria-label, and an Enter/Space
+    handler.
+  - #tabbar got aria-label="Main" + aria-current="page" kept in sync in
+    go(); decorative tab icon SVGs marked aria-hidden.
+  - The three filter-chip groups got aria-pressed, kept in sync in both
+    directions across static HTML and the two dynamic renderers.
+  - Audited, no changes needed: all 17 form inputs (labels correct), no
+    <img> tags anywhere (SVG/emoji only), manifest.webmanifest paths all
+    resolve.
+  - One regression from that pass was caught and fixed: aria-current
+    sync in go() used removeAttribute(), which test/minidom.js doesn't
+    implement. Switched to always setting aria-current to "page" or the
+    literal "false".
+
+Reduced motion — NOW COMPLETE (finished this session):
+
+  - Closed out the item flagged as half-done: `.screen.active` (was line
+    ~40) and `.overlay.show` (was line ~89) both used the shared `fade`
+    keyframe with no `prefers-reduced-motion` guard — the only two
+    unguarded `animation:` declarations left in the file. Every other
+    animation usage was already correctly guarded (the `.ss-bar` block
+    and the whole "PRIORITY 1 — PREMIUM MOTION" block covering the
+    landing-page reveals and screen hand-off animations).
+  - Fix pattern: kept `display:flex` unconditional so content still
+    appears with reduced motion on; moved the `animation:` declaration
+    itself inside `@media (prefers-reduced-motion: no-preference)`,
+    matching the existing `.ss-bar` convention exactly. No JS changes
+    needed — `go()` and the overlay-show code only ever toggle the
+    `.active`/`.show` classes, never touch animation directly.
+  - Re-checked every other @keyframes/@media in the file after the fix —
+    nothing else in css/styles.css is unguarded. This item is done, not
+    just the two lines flagged last time.
+  - Full suite re-verified 15/15 green after the fix.
+
+WCAG AA contrast pass — NOW DONE (finished this session, was "not
+started at all"):
+
+  - Method: extracted every same-rule background+color pair in
+    css/styles.css (resolving CSS custom properties), computed WCAG
+    contrast ratios, and checked each flagged pair against context
+    (real body text needs 4.5:1; bold text under ~18.7px doesn't count
+    as "large text" so still needs 4.5:1; SVG icons using
+    stroke="currentColor" only need the 3:1 non-text-contrast bar, not
+    4.5:1).
+  - Real failures found and fixed (all fixes reuse a color already
+    established elsewhere in the file for the identical background, so
+    nothing here introduces a new palette value):
+      - `.focus-tag` (signature focus-ring chip): red-on-#FDECEC was
+        4.23:1. Changed to var(--red-deep), same swap already used by
+        `.chip.red` and `.up-tag.admission` on the same background
+        family. Now 5.66:1.
+      - `.up-tag.news`: green-on-#E6F4EC was 4.42:1 (color was
+        var(--green) instead of the darker literal already used for
+        this exact chip elsewhere). Changed color to #106b34 — the same
+        value `.chip.green` and `.wt-rev .verdict.ok` already use on
+        this identical background. Now 5.83:1.
+      - `.tabbar .tab.on` (desktop sidebar active-tab state, 14.5px
+        bold — not large text by WCAG's definition): red-on-#FEECEC was
+        4.24:1. Same red-deep swap as above. Now 5.68:1.
+      - `--mute` token (#9AA3AF): the real systemic issue. It's used as
+        actual secondary-text color in ~13 real spots (empty states,
+        field hints, legal copy, unselected tab labels, "done" list
+        items, etc.), all sitting at 2.2-2.6:1 against white/bg/card —
+        nowhere close to AA. Every one of its usages is a `color:`
+        declaration (verified none are used as a background or border),
+        so fixing the single token fixes all ~13 spots at once with no
+        other side effects. Darkened to #616D7E, same hue family,
+        checked at 4.6-5.7:1 against all three backgrounds it actually
+        appears on (white, --bg, --card).
+  - Checked and confirmed NOT a real issue (left as-is, documented so
+    it isn't re-flagged and re-investigated next session):
+      - `.lp-crow .ci` (contact-icon circles): 4.24:1 looked like a
+        failure at the token level, but it wraps an inline SVG with
+        stroke="currentColor" — a graphical UI component, not text, so
+        the applicable bar is 3:1 (non-text contrast), which it clears.
+      - `.badge.lock .b`: color:var(--mute) on var(--card) was 2.23:1
+        before the --mute fix, but the element only ever contains a lock
+        emoji glyph (confirmed in index.html) — emoji ignore the CSS
+        `color` property, so this declaration has no visible effect.
+        Not touched; flagging so it isn't mistaken for a live bug later.
+      - `body`'s own `color:var(--ink)` against its `#0e0f12` backdrop
+        background: never actually rendered — `.phone` sits on top of
+        it with its own opaque background, and body has no direct text
+        children.
+  - NOT exhaustively checked: this was a same-rule-pair scan plus a
+    full check of every color token against the three main ambient
+    backgrounds (white/--bg/--card). It does NOT verify every
+    color-only declaration against whatever background actually ends up
+    behind it in the live DOM (that needs a real browser/computed-style
+    pass, which this environment doesn't have). `--gray` (#6B7280)
+    borderline-fails against --card specifically (4.22:1) at the token
+    level, but no rule in the file actually pairs `color:var(--gray)`
+    with `background:var(--card)` in the same declaration, so this is
+    left as a flag rather than a fix — worth a real-browser spot-check
+    before calling contrast fully closed.
+  - Full suite re-verified 15/15 green after all of the above.
+
+PHASE 3 — WHAT'S LEFT
+------------------------
+  - Contrast: the one open flag above (--gray vs --card, no confirmed
+    real occurrence — likely fine, worth a real-browser sanity check
+    rather than more static analysis).
+
+  - Responsive QA at 320px, 1280/1440/1920px, and 200% zoom — not done.
+    Worth flagging again: this is a genuinely manual visual pass (the
+    roadmap says so explicitly) and I have no real browser/screenshot
+    tool in this environment, only static code review — I can check for
+    hard-coded pixel widths, missing media queries, and viewport meta
+    correctness, but that's a different (weaker) kind of check than
+    actually looking at the layout. Worth deciding how you want this
+    item handled before I claim it "done."
+
+  - iOS PWA install path — not started, and worth a flag before I build
+    it: I checked, and there is currently NO install-prompt UI at all
+    in this app, for either Android or iOS — no beforeinstallprompt
+    handling, no onboarding copy, nothing in index.html, app.js, or
+    readme.md. The original roadmap item ("confirm onboarding copy
+    covers the manual Share-sheet flow, not just Android's") assumes
+    Android's flow already exists and iOS's needs adding alongside it.
+    That assumption doesn't hold — this needs building from scratch for
+    both platforms, which is new UI, not a fix to existing UI. Wanted
+    to confirm you want that before adding it.
+
+  - sw.js cache version bump (currently goc-v18, untouched) — deliberately
+    NOT done yet, per the original handoff's own instruction that this
+    must be the very last edit of the whole phase, after every other
+    file change lands. Still correct advice; still waiting on the rest
+    of the above.
+
+PHASES 4, 5, 7, 8 — UNTOUCHED
+---------------------------------
+Nothing below has been started. Reproducing the original handoff's
+description of each, since it's still accurate:
+
+PHASE 4 — Business-logic / data-integrity review
+  - Re-derive the XP / performance-weighting / league-ranking formulas in
+    js/goc-core.js from the README's stated rules. Edge cases required:
+    zero attempts, exact ties, a deactivated student excluded from the
+    league table, no division-by-zero in the performance calc.
+  - Confirm migrate() upgrades every historical data.json shape correctly.
+  - Confirm legacyPeriod and legacySignupCode fallback code both have a
+    clear removal condition noted in comments.
+
+PHASE 5 — DevOps & deployment readiness
+  - Validate render.yaml / railway.json against actual server behaviour,
+    including the Phase 2 bind-address fix and GOC_TRUST_PROXY.
+  - Write the full environment-variable checklist into DEPLOYMENT.md
+    (most already exists — check before rewriting).
+  - Confirm the server refuses to boot (or warns loudly) on a shipped
+    default secret value in production.
+  - Document that Render/Railway terminate TLS by default.
+  - Add a scheduled, rotating backup of server/data.json.
+  - Confirm no secret or stack trace reaches SERVER-SIDE logs (separate
+    question from the Phase 2 client-facing safeClientMessage fix).
+
+PHASE 7 — Documentation & handover cleanup
+  - Update readme.md so no example password/code could be mistaken for a
+    real one in a public copy of the repo.
+  - Keep DEPLOYMENT.md current (already the canonical doc, Phase 0).
+  - Write LAUNCH-CHECKLIST.md — doesn't exist yet as its own document.
+
+PHASE 8 — Final QA & go-live
+  - Two full manual smoke tests (demo + real deployed server).
+  - node test/run.js one last time, all green, as the go/no-go gate.
+  - Rotate EVERY password/code/key immediately before real students are
+    invited — including the Appwrite key in .env, which has now passed
+    through multiple zips and chat sessions.
+  - Tag the release commit, snapshot the day-zero empty data.json schema.
+  Nothing here can start until 3 through 7 are real, not just claimed.
+
+SUGGESTED NEXT STEP
+----------------------
+Reduced-motion and contrast are both closed out now. What's left in
+Phase 3 is genuinely manual/product-decision work: (1) decide on the
+responsive-QA approach given the no-real-browser constraint, (2) decide
+on and build the iOS/Android install-onboarding UI, (3) bump sw.js LAST
+once 1 and 2 land. Phase 4 can start in parallel any time — it touches
+goc-core.js only, disjoint from everything above.

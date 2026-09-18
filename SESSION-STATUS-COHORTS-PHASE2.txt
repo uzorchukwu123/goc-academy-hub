@@ -1,0 +1,107 @@
+G.O.C Academy Hub — Cohorts, Phase 2 — session status (COMPLETE)
+==================================================================
+This supersedes the previous SESSION-STATUS-COHORTS-PHASE2.txt in
+this zip. Both open items from that file are done: the test-p9.js
+regression is fixed, and the Leaderboard now has the cohort-scoping
+Results already had. node test/run.js is clean end-to-end, including
+test-server.js and test-security.js (verified with node_modules
+installed — see VERIFIED below).
+
+1) THE test-p9.js REGRESSION — FIXED
+-------------------------------------
+Not a timing/race issue — the pass-alone/fail-in-suite framing in
+the original note was a red herring; it reproduced identically
+standalone once isolated.
+
+Root cause: last round's change to loadSettings() (js/app.js) made
+it branch on the client-side `role` global — GOC.api.getMySettings()
+for a student, GOC.api.getSettings() for staff. In real usage `role`
+is always set by applyIdentity(), which runs inside the UI's login()
+/signup() functions before loadSettings() is ever called, so this is
+safe in production.
+
+test-p9.js's founder-login block calls GOC.api.login() directly (the
+raw driver), bypassing applyIdentity(). So `role` stayed at its
+default 'student' value through the whole "management finds the
+setting in the console" section. When the test restored the session/
+warning minutes to 120/5 and reopened the window panel, loadSettings()
+called getMySettings() for a founder session — the mock driver
+correctly refuses that. The rejection was swallowed by loadSettings()'s
+existing .catch(), so the panel kept showing the stale pre-restore
+figures (135 min / 6 min) instead of repainting to 120/5.
+
+Fix: test/test-p9.js only — one line, right after the founder logs in
+and before the console is unlocked: run('role = "admin"'); — matching
+the pattern test-p10.js already uses elsewhere for admin-only sections
+reached via the raw API. No app or server code changed.
+
+2) LEADERBOARD COHORT-SCOPING — BUILT
+---------------------------------------
+Server (server/server.js), GET /api/league:
+  - A signed-in student now ranks only against their own cohort —
+    every student sharing their exact `cohort` value, or, if they
+    carry no cohort, every other uncohorted student. An academy that
+    has never created a cohort (every student's `cohort` is null)
+    behaves exactly as before: everyone ranks against everyone.
+  - Staff still see the whole, unscoped academy table, same as
+    before — the admin console narrows it with its own filter (below),
+    client-side, same convention as Results.
+  - Every row now carries cohortId/cohortName (resolved the same way
+    effectiveSettingsFor already resolves a cohort's name), and the
+    response carries a top-level `scope` object (cohortId/cohortName)
+    when a student's view was actually narrowed — null otherwise.
+  - New helper listAllCohorts() (near cohortFromDoc/getCohortOrNull):
+    every cohort in one call, for labelling a whole roster at once.
+    Same "Appwrite only, no flat-file fallback" convention as the rest
+    of cohorts — returns [] rather than throwing when Appwrite isn't
+    configured, so the league still renders, just unlabelled.
+
+Demo driver (js/api.js) mirrors the same scoping/shape for parity —
+though demo cohorts still don't persist (same as createCohort /
+setStudentCohort already documented), so it's a no-op there today and
+becomes correct automatically if that ever changes.
+
+Client (js/app.js):
+  - paintLeague() (the student-facing screen) appends "· <cohort>
+    cohort" to the existing subtitle when the server's `scope` says the
+    student's view was narrowed; unchanged otherwise.
+  - Admin Leaderboard panel: added a Cohort filter dropdown (admLgCohort),
+    built from the league response's own rows (not admCohortsCache), so
+    it works even if the Students/Cohorts panels haven't been opened
+    yet this session. admLgLoad() now fetches once into admLgData;
+    admLgRender() (new) narrows the already-fetched rows by the filter
+    and repaints — same "fetch once, filter client-side" shape Results
+    uses. Ranks shown are the server's academy-wide ranks, not renumbered
+    per cohort, so a scholar's rank reads the same everywhere it appears.
+
+VERIFIED
+--------
+  - node test/run.js against the mock driver only (no node_modules):
+    every suite passes except test-server.js / test-security.js, which
+    need a real server process and fail only for the pre-existing
+    sandbox reason (no node_modules here).
+  - Re-ran node test/run.js with `npm install` done (busboy etc. present):
+    ALL 15 suites pass, including test-server.js and test-security.js —
+    this exercises the live /api/league endpoint end-to-end, including
+    the existing "what the league route may and may not disclose" checks,
+    with the cohort-scoping change in place. node_modules was removed
+    again before this zip was written (it isn't part of the deliverable).
+  - test-driver-parity.js: 8/8.
+  - No cohort-specific server test existed before; none was skipped by
+    this change — the new behaviour is additive and every existing
+    league assertion (row shape, order, disclosure, basis text, rank
+    contiguity) still holds because no cohort is ever created or
+    assigned in the current test suite, so scoping is a no-op there —
+    exactly the same reasoning that made the Results filter safe to add
+    without touching /api/results.
+
+NOT STARTED
+-----------
+  - No new Appwrite setup needed beyond the two items from two rounds
+    ago (the `cohorts` collection's 8 attributes, and `students`' new
+    `cohort` attribute) — nothing new to create in Appwrite for this
+    round either; only code changed.
+
+ORDER OF WORK FROM HERE
+-------------------------
+Both items from the prior status file are done. Ready to deploy.

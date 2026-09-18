@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: goc-academy-hub
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node server/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        # package.json's engines field ("node": ">=18") is an unbounded range —
+        # per Render's own docs, an unbounded range always resolves to
+        # whatever the latest Node release is at deploy time, which drifts
+        # over time and isn't really "pinned" at all. This pins an actual
+        # version explicitly. Bump deliberately (and re-run the test suite)
+        # rather than letting it silently follow Node's latest release.
+        value: "20"
+      - key: HOST
+        value: 0.0.0.0
+      # Render terminates TLS at its edge and proxies over plain HTTP to this
+      # process, so req.socket.remoteAddress is Render's own proxy address for
+      # every visitor, not the real client's. Without this, getClientIp()
+      # falls back to that shared address — the login/signup/unlock rate
+      # limiter would then either never trip (looks like one address making
+      # all requests) or trip once and lock out every visitor at once. See
+      # the TRUST_PROXY comment in server/server.js for the full reasoning.
+      - key: GOC_TRUST_PROXY
+        value: "true"
+      - key: APPWRITE_ENDPOINT
+        sync: false
+      - key: APPWRITE_PROJECT_ID
+        sync: false
+      - key: APPWRITE_API_KEY
+        sync: false
+      - key: APPWRITE_BUCKET_ID
+        value: goc-data
+      - key: APPWRITE_FILE_ID
+        value: academy-data-json
+      - key: GOC_FOUNDER_PW
+        sync: false
+      - key: GOC_ACADDIR_PW
+        sync: false
+      - key: GOC_PASSCODE
+        sync: false
+      - key: GOC_SIGNUP_CODE
+        sync: false

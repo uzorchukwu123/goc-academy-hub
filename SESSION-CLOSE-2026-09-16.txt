@@ -1,0 +1,59 @@
+G.O.C Academy Hub — Session Close, 2026-09-16
+================================================
+
+Picked up from REMAINING-WORK-THIS-SESSION.txt. Only outstanding item was
+confirming the full test suite with real npm registry access.
+
+WHAT HAPPENED
+--------------
+1) Telegram / Instagram links — left untouched, per instruction. They
+   still point at href="#" with the TODO comment above them in
+   index.html, inside <div class="lp-social">, in the "Get in touch"
+   section. Paste the real profile URLs into those two href="#"
+   attributes whenever you have them.
+
+2) Ran `npm install` — this sandbox had registry access this time, so
+   `busboy` and the rest of the dependencies installed cleanly (8
+   packages, 0 vulnerabilities).
+
+3) Ran `node test/run.js` with dependencies present. 14 of 15 suites
+   passed outright; test-server.js failed 1 of 381 checks the first
+   time (it couldn't run at all in the prior session, so this is the
+   first time it's actually been exercised end-to-end).
+
+4) Root-caused and fixed that 1 failure — a real bug in
+   server/server.js, unrelated to badges/streak/social-icon work:
+   - The signup-code environment-migration check compared
+     process.env.GOC_SIGNUP_CODE against core.SIGNUP_CODE_DEFAULT
+     ('GOC-2027') as raw strings, instead of normalizing both sides
+     first (core.normalizeSignupCode strips separators and
+     uppercases). A configured code that's identical to the default
+     but written without the dash (e.g. 'GOC2027', which is exactly
+     what the test harness — and potentially a real deployment env
+     var — passes) was wrongly treated as "management configured a
+     different code," which stamped signupCodeChangedAt /
+     signupCodeChangedBy as if the signup code had been changed, when
+     it hadn't.
+   - Fix: both sides of that comparison now go through
+     core.normalizeSignupCode() before comparing (server.js, ~line
+     240-241).
+   - Re-ran the full suite after the fix: all 15 suites pass, 0
+     failures.
+
+CURRENT STATUS
+--------------
+- All 15 test suites pass with dependencies installed
+  (`npm install && node test/run.js`).
+- No other server-side behavior was touched — this was a single
+  two-line comparison fix.
+- Everything else from REMAINING-WORK-THIS-SESSION.txt (streak,
+  badges, practice-by-topic) stands as documented there — unchanged
+  this pass.
+- Still outstanding: Telegram + Instagram URLs (your call), and
+  everything already logged in STATUS-AND-REMAINING-WORK.txt from
+  earlier sessions (Phase 8 blockers, Appwrite backup question, etc.)
+
+FILES CHANGED THIS PASS
+------------------------
+- server/server.js — one comparison fixed to normalize before
+  comparing signup codes (see #4 above).

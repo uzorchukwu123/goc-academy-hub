@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#DC2626">
+<!-- PWA: installable, home-screen, offline (active when hosted over http/https) -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GOC Hub">
+<meta name="application-name" content="GOC Hub">
+<title>G.O.C Academy Hub</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="phone is-login" id="phone">
+  <div class="notch"></div>
+
+  <!-- reusable brand mark: rising star over an open book -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="goc-mark" viewBox="0 0 100 100"><path d="M50,17 L53.889,30.111 L67,34 L53.889,37.889 L50,51 L46.111,37.889 L33,34 L46.111,30.111 Z" fill="currentColor"/><path d="M48.5,62 L15,54 L15,68 L48.5,80 Z" fill="currentColor"/><path d="M51.5,62 L85,54 L85,68 L51.5,80 Z" fill="currentColor"/></symbol></svg>
+
+  <div class="screens" id="screens">
+
+    <!-- ============ LANDING (public homepage) ============ -->
+    <section class="screen" id="landing">
+      <nav class="lp-nav">
+        <button class="lp-burger" onclick="openDrawer()" aria-label="Open menu" aria-controls="lpDrawer" aria-expanded="false" id="lpBurger">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="go('updates')">Updates</button>
+          <button class="lp-link" onclick="go('login-v2')">Log in</button>
+          <button class="lp-cta" onclick="go('signup')">Get started</button>
+        </div>
+      </nav>
+
+
+      <div class="lp-hero">
+        <div class="lp-inner">
+          <div class="hero-copy">
+            <span class="kick">JAMB · WAEC · NECO · Post-UTME</span>
+            <h1>Building Purpose-Driven Independent Scholars</h1>
+            <p class="sub">G.O.C Academy Hub blends expert tutoring, AI literacy and a gamified study app — so Nigerian students don't just pass exams, they learn to think and study on their own.</p>
+            <div class="hero-btns">
+              <button class="lp-btn-light" onclick="go('signup')">Start free UTME Bootcamp</button>
+              <button class="lp-btn-ghost" onclick="go('login-v2')">I already have an account</button>
+            </div>
+            <div class="lp-trust">
+              <span>✓ No card required</span>
+              <span>✓ Works offline</span>
+              <span>✓ Built for Nigerian exams</span>
+            </div>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="mini">
+              <div class="mrow"><span class="av"></span><span><b>Your progress</b><span>Physics · Motion</span></span></div>
+              <div class="bar"><i style="width:78%"></i></div>
+              <div class="bar"><i style="width:54%"></i></div>
+              <div class="bar"><i style="width:88%"></i></div>
+              <div class="chips"><em>🔥 12-day streak</em><em>⭐ 2,480 XP</em></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lp-logos">
+        <div class="cap">Learning delivered across</div>
+        <div class="row"><b>💻 Web App</b><b>🎥 Zoom classes</b><b>💬 Telegram</b><b>📢 WhatsApp</b></div>
+      </div>
+
+      <div class="lp-stats">
+        <div class="lp-stat"><b>4</b><span>Science subjects</span></div>
+        <div class="lp-stat"><b>2027</b><span>UTME cohort focus</span></div>
+        <div class="lp-stat"><b>3-in-1</b><span>Learn · Practise · Test</span></div>
+      </div>
+
+      <div class="lp-sec" id="lpFeatures">
+        <div class="lp-eyebrow">One connected ecosystem</div>
+        <h2>Three parts working as one</h2>
+        <p class="lead">Tutoring teaches. AI literacy builds understanding. The web app gives every student a structured place to learn, practise and track real progress.</p>
+        <div class="lp-grid">
+          <div class="lp-feat">
+            <div class="fi" style="background:#FEECEC"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 12h.01M15 12h.01M9 15h6"/></svg></div>
+            <h3>AI Literacy</h3>
+            <p>A structured program that teaches students to understand and use AI responsibly — building independent thinking, not dependence.</p>
+            <!-- Priority 1.1 — the thread to the next part of the ecosystem. Two
+                 paths, one per orientation: the column stacks on a phone and runs
+                 across at 900px, and CSS shows whichever one matches. Decorative,
+                 so it is hidden from screen readers; with no scripts it simply
+                 stands still as a diagram. -->
+            <span class="lp-thread" aria-hidden="true"><svg class="lt-svg" viewBox="0 0 100 100" preserveAspectRatio="none" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round"><path class="lt-v" d="M50 0V100" vector-effect="non-scaling-stroke"/><path class="lt-h" d="M0 50H100" vector-effect="non-scaling-stroke"/></svg><span class="lt-dot"></span></span>
+          </div>
+          <div class="lp-feat">
+            <div class="fi" style="background:#E6F4EC"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 4a3 3 0 010 6M18.5 20c0-2.4-1-4-2.5-4.6"/></svg></div>
+            <h3>Tutoring &amp; Community</h3>
+            <p>Live interactive classes and a learning community delivered through Zoom, Telegram and WhatsApp — real teachers, real support.</p>
+            <span class="lp-thread" aria-hidden="true"><svg class="lt-svg" viewBox="0 0 100 100" preserveAspectRatio="none" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round"><path class="lt-v" d="M50 0V100" vector-effect="non-scaling-stroke"/><path class="lt-h" d="M0 50H100" vector-effect="non-scaling-stroke"/></svg><span class="lt-dot"></span></span>
+          </div>
+          <div class="lp-feat">
+            <div class="fi" style="background:#E7F1F4"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E7490" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/><path d="M7 12l2.5-2.5L12 12l4-4" stroke-linejoin="round"/></svg></div>
+            <h3>Academy Hub Web App</h3>
+            <p>Dashboard, lessons, practice, timed CBT mocks, progress tracking, XP, leaderboards and AI learning — the digital home of it all.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="lp-sec alt" id="lpSubjects">
+        <div class="lp-eyebrow">What you'll master</div>
+        <h2>Every JAMB subject, covered</h2>
+        <p class="lead">Topic-by-topic lessons, practice and mock CBTs across Use of English and the full science track.</p>
+        <div class="lp-subj">
+          <div class="sj"><div class="si" style="background:#EEF2FF">📖</div><h4>Use of English</h4><p>Comprehension, lexis &amp; structure</p></div>
+          <div class="sj"><div class="si" style="background:#FEECEC">⚛️</div><h4>Physics</h4><p>Motion, electricity, waves &amp; more</p></div>
+          <div class="sj"><div class="si" style="background:#E6F4EC">🧪</div><h4>Chemistry</h4><p>Organic, physical &amp; inorganic</p></div>
+          <div class="sj"><div class="si" style="background:#E7F1F4">🧬</div><h4>Biology</h4><p>Cells, genetics, ecology</p></div>
+          <div class="sj"><div class="si" style="background:#FDECC8">➗</div><h4>Mathematics</h4><p>Algebra, calculus, statistics</p></div>
+        </div>
+      </div>
+
+      <div class="lp-sec" id="lpHow">
+        <div class="lp-eyebrow">How it works</div>
+        <h2>From learner to independent scholar</h2>
+        <div style="max-width:640px;margin:22px auto 0">
+          <div class="lp-step"><div class="sn">1</div><div><h4>Learn the concept</h4><p>Short, focused lessons with inline checks — understand before you move on.</p></div></div>
+          <div class="lp-step"><div class="sn">2</div><div><h4>Practise without pressure</h4><p>Untimed questions with hints and instant explanations that show why an answer is right.</p></div></div>
+          <div class="lp-step"><div class="sn">3</div><div><h4>Test under exam conditions</h4><p>Timed CBT mocks scored exactly like the real thing, with a full performance breakdown.</p></div></div>
+          <div class="lp-step"><div class="sn">4</div><div><h4>Target your weak topics</h4><p>The hub flags weak areas and steers your practice there — so every session counts.</p></div></div>
+        </div>
+      </div>
+
+      <div class="lp-sec">
+        <div class="lp-quote">
+          <div class="q">"We don't simply prepare students to pass exams. We help build learners who can think, learn and progress independently."</div>
+          <div class="who">— The G.O.C Academy promise</div>
+        </div>
+      </div>
+
+      <div class="lp-sec alt" id="contact">
+        <div class="lp-eyebrow">Get in touch</div>
+        <h2>Talk to G.O.C Academy</h2>
+        <p class="lead">Questions about the bootcamp, classes or enrolment? Send us a message — we usually reply within a day.</p>
+        <div class="lp-contact">
+          <div class="lp-cinfo">
+            <div class="lp-crow"><span class="ci"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><span><span class="cl">Email</span><a class="cv" href="mailto:godsowncenterinfo@gmail.com">godsowncenterinfo@gmail.com</a></span></div>
+            <div class="lp-crow"><span class="ci"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h4l2 5-3 2a12 12 0 005 5l2-3 5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg></span><span><span class="cl">Phone / WhatsApp</span><a class="cv" href="tel:+2348157215942">0815 721 5942</a></span></div>
+            <div class="lp-crow"><span class="ci"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1116 0z"/><circle cx="12" cy="10" r="2.5"/></svg></span><span><span class="cl">Location</span><span class="cv">Nigeria · Online &amp; Zoom classes</span></span></div>
+            <div class="lp-social">
+              <!-- TODO: swap these three href values for the academy's real profile links.
+                   WhatsApp already points at the real number above; Telegram and Instagram
+                   are placeholders (#) until the real handles are supplied. -->
+              <a href="https://wa.me/2348157215942" target="_blank" rel="noopener" title="WhatsApp" aria-label="WhatsApp"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.868-2.03-.967-.273-.099-.471-.148-.67.15-.198.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.626.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.004 2C6.478 2 2 6.477 2 12c0 1.86.5 3.61 1.393 5.12L2 22l4.965-1.354A9.943 9.943 0 0012.004 22C17.53 22 22 17.523 22 12S17.53 2 12.004 2zm0 18.06c-1.696 0-3.29-.485-4.634-1.32l-.332-.197-3.156.862.85-3.08-.216-.323A8.02 8.02 0 013.94 12c0-4.44 3.62-8.06 8.064-8.06 4.443 0 8.06 3.62 8.06 8.06 0 4.44-3.617 8.06-8.06 8.06z"/></svg></a>
+              <a href="#" target="_blank" rel="noopener" title="Telegram" aria-label="Telegram"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.94 4.36a1.5 1.5 0 00-1.6-.24L2.98 11.1a1.34 1.34 0 00.12 2.5l4.62 1.5 1.78 5.53a1.35 1.35 0 002.36.42l2.52-2.9 4.6 3.44a1.5 1.5 0 002.37-.9l2.5-14.05a1.5 1.5 0 00-.91-1.28zM9.4 14.4l-1.13-3.7 9.72-6.03-8.6 9.73zm.94 4.63l-.94-2.93 1.98-1.78 1.9 1.42-2.94 3.3zm3.53-3.98l-2.4-1.8 6.6-7.47-4.2 9.27z"/></svg></a>
+              <a href="#" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg></a>
+            </div>
+          </div>
+          <form class="lp-cform" onsubmit="sendContact();return false">
+            <label for="cName">Your name</label>
+            <input id="cName" type="text" placeholder="e.g. Ada Obi" required>
+            <label for="cEmail">Email</label>
+            <input id="cEmail" type="email" placeholder="you@example.com" required>
+            <label for="cMsg">Message</label>
+            <textarea id="cMsg" placeholder="How can we help?" required></textarea>
+            <button type="submit" id="cSendBtn">Send message</button>
+            <p class="lp-cstatus" id="cStatus" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+
+      <div class="lp-band">
+        <h2>Ready to study with purpose?</h2>
+        <button class="lp-btn-light" style="min-width:220px" onclick="go('signup')">Create your free account</button>
+      </div>
+
+      <footer class="lp-foot">
+        <div class="fb">
+          <span class="lp-brand"><span class="bm" style="width:30px;height:30px"><svg viewBox="0 0 100 100" style="width:18px;height:18px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><span class="bt" style="font-size:14px">G.O.C Academy Hub</span></span>
+        </div>
+        <div class="lp-qcols">
+          <div class="lp-qcol">
+            <b>Explore</b>
+            <button type="button" onclick="go('landing')">Home</button>
+            <button type="button" onclick="go('updates')">Updates &amp; News</button>
+            <button type="button" onclick="scrollToContact()">Contact</button>
+          </div>
+          <div class="lp-qcol">
+            <b>Get started</b>
+            <button type="button" onclick="go('signup')">Sign up free</button>
+            <button type="button" onclick="go('login-v2')">Log in</button>
+            <button type="button" onclick="go('signup')">UTME Bootcamp</button>
+          </div>
+          <div class="lp-qcol">
+            <b>Legal</b>
+            <button type="button" onclick="go('legal')">Terms</button>
+            <button type="button" onclick="go('legal')">Privacy Policy</button>
+            <a href="mailto:godsowncenterinfo@gmail.com">Email us</a>
+          </div>
+        </div>
+        <p>Building Purpose-Driven Independent Scholars.<br>© 2026 G.O.C Academy Hub.</p>
+      </footer>
+    </section>
+
+    <!-- ============ TERMS & PRIVACY ============ -->
+    <section class="screen legal-screen" id="legal">
+      <nav class="lp-nav">
+        <div class="lp-brand" onclick="go('landing')" style="cursor:pointer" role="link" tabindex="0" aria-label="G.O.C Academy Hub — go to homepage" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('landing');}">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="go('landing')">Home</button>
+          <button class="lp-cta" onclick="go('signup')">Get started</button>
+        </div>
+      </nav>
+      <div class="legal-wrap">
+        <div class="legal-card">
+          <div class="lp-eyebrow">Legal</div>
+          <h1>Terms of Use &amp; Privacy Policy</h1>
+          <p class="meta">Effective date: 4 September 2026</p>
+
+          <h2>1. About the service</h2>
+          <p>G.O.C Academy Hub is an educational platform operated by G.O.C Academy for students preparing for academic study, especially JAMB/UTME-focused learning. The app provides lessons, revision practice, quizzes, mock CBT exams, progress tracking and academy updates.</p>
+
+          <h2>2. Terms of use</h2>
+          <p>By creating an account and using the Hub, you agree to use the service only for lawful educational purposes. You must not:</p>
+          <ul>
+            <li>Use the platform for cheating, impersonation, unauthorised sharing or exam misconduct.</li>
+            <li>Attempt to access or alter another student's data, admin systems or course content.</li>
+            <li>Upload harmful code, malware or content designed to disrupt the service.</li>
+            <li>Use the app to harass, threaten or abuse any student, coach or staff member.</li>
+          </ul>
+          <p>We may suspend or deactivate accounts that violate these conditions or that compromise the safety and integrity of the learning environment.</p>
+
+          <h2>3. Account and student information</h2>
+          <p>Students are responsible for keeping their login details secure and for using only their own personal account. Each account is intended for the individual student and should not be shared with another person. Progress records, subject choices and study history are personal academic data.</p>
+
+          <h2>4. Privacy policy</h2>
+          <p><strong>Information we collect:</strong> We may collect name, email address, phone number, password data, examination goal, subject combination, study progress, scores, quiz attempts, lesson completion data and support messages.</p>
+          <p><strong>How we use it:</strong> This information is used to provide account access, personalise learning paths, track progress, improve academic support, verify eligibility for enrolled programmes and communicate important updates, reminders and support responses.</p>
+          <p><strong>How we protect it:</strong> We use reasonable technical and organisational safeguards, including secure access controls, encrypted transmission where available, role-based account restrictions and limited access to data. No system is completely risk-free, so we ask users to protect their own login information and report any suspicious access immediately.</p>
+          <p><strong>Data storage:</strong> Some information may be stored in local browser storage, server-side app data or third-party hosting and database services used to run the platform. We keep data only for as long as needed to provide the service or to satisfy legal, academic or support requirements.</p>
+
+          <h2>5. Cookies and local storage</h2>
+          <p>The app may use browser storage to remember your session, preferences, study progress and local settings. This helps the platform work reliably and remember your recent activity. You can clear local browser data at any time, but doing so may log you out or reset some saved preferences.</p>
+
+          <h2>6. Third-party services</h2>
+          <p>We may rely on hosting providers, messaging tools, email delivery services and analytics or support infrastructure to operate the platform. These providers are used only to support the service and are expected to handle data lawfully and responsibly under their own privacy obligations.</p>
+
+          <h2>7. Student support and contact</h2>
+          <p>If you have questions about this policy, your account information, academic records or a data request, you can contact the academy by email at <a href="mailto:godsowncenterinfo@gmail.com">godsowncenterinfo@gmail.com</a> or by phone at <a href="tel:+2348157215942">0815 721 5942</a>.</p>
+
+          <h2>8. Changes to the policy</h2>
+          <p>We may update these terms and this privacy policy from time to time to reflect changes in the app, academic operations or applicable law. When updates are made, the revised policy will be published in the platform and the effective date will be updated.</p>
+
+          <h2>9. Disclaimer</h2>
+          <p>The content and study materials in the app are for educational support and are not a guarantee of exam success, results or admission. Students remain responsible for their own learning, preparation and academic decisions.</p>
+
+          <div class="legal-actions">
+            <button class="btn btn-red" type="button" onclick="go('landing')">Back to home</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ UPDATES / NEWS ============ -->
+    <section class="screen" id="updates">
+      <nav class="lp-nav">
+        <div class="lp-brand" onclick="go('landing')" style="cursor:pointer" role="link" tabindex="0" aria-label="G.O.C Academy Hub — go to homepage" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('landing');}">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="go('landing')">Home</button>
+          <button class="lp-cta" onclick="go('signup')">Get started</button>
+        </div>
+      </nav>
+      <div class="up-head">
+        <h1>Updates &amp; News</h1>
+        <p>Admission alerts, UTME timelines, scholarships and academy announcements — all in one place.</p>
+      </div>
+      <!-- The wrapper owns the sticky position so the chip row parks directly
+           under the nav instead of sliding beneath it. The chips scroll inside
+           it, and .up-more on the wrapper shows the right-edge fade when there
+           is more to reach. -->
+      <div class="up-filterwrap" id="upFilterWrap">
+        <div class="up-filters" id="upFilters">
+          <button class="up-chip on" data-f="all" onclick="filterUpdates('all',this)" aria-pressed="true">All</button>
+          <button class="up-chip" data-f="admission" onclick="filterUpdates('admission',this)" aria-pressed="false">Admission</button>
+          <button class="up-chip" data-f="utme" onclick="filterUpdates('utme',this)" aria-pressed="false">UTME</button>
+          <button class="up-chip" data-f="scholarship" onclick="filterUpdates('scholarship',this)" aria-pressed="false">Scholarship</button>
+          <button class="up-chip" data-f="news" onclick="filterUpdates('news',this)" aria-pressed="false">News</button>
+        </div>
+      </div>
+      <div class="up-list" id="upList"></div>
+      <div class="lp-band">
+        <h2>Don't miss the next update</h2>
+        <button class="lp-btn-light" style="min-width:220px" onclick="go('signup')">Create your free account</button>
+      </div>
+    </section>
+    <!-- ============ LOG IN ============ -->
+    <section class="screen auth" id="login-v2">
+      <div class="auth-brandbar">
+        <div class="lp-brand"><span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><span class="bt">G.O.C Academy Hub</span></div>
+        <button class="lp-link" onclick="go('landing')">← Home</button>
+      </div>
+      <div class="auth-scroll">
+        <aside class="auth-side">
+          <div class="as-top"><span class="bm" style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><b>G.O.C Academy Hub</b></div>
+          <h2>Welcome back, Scholar.</h2>
+          <p>Pick up right where you left off — your streak, missions and progress are waiting.</p>
+          <div class="as-points">
+            <div class="as-pt"><span class="ck">✓</span> Your daily focus streak is saved</div>
+            <div class="as-pt"><span class="ck">✓</span> Continue your last lesson instantly</div>
+            <div class="as-pt"><span class="ck">✓</span> One secure session per scholar</div>
+          </div>
+        </aside>
+        <div class="auth-formwrap">
+          <div class="auth-card">
+            <button class="auth-back" onclick="go('landing')">← Back to homepage</button>
+            <h1>Log in</h1>
+            <p class="tagline">Welcome back. Enter your details to continue.</p>
+            <!-- Why the student is back here, when they did not click Log out
+                 (Priority 9). Filled in and shown by js/app.js. -->
+            <div class="auth-notice" id="loginNotice" style="display:none"></div>
+            <div class="auth-social" style="margin-top:24px">
+              <button class="auth-oauth"><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 01-2.3 3.5v2.9h3.7C21.8 18.9 23 15.9 23 12.3z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.8H1.8v3C3.7 21.4 7.6 24 12 24z"/><path fill="#FBBC05" d="M5.6 14.6a7.2 7.2 0 010-4.6v-3H1.8a12 12 0 000 10.6l3.8-3z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.3 15.1 0 12 0 7.6 0 3.7 2.6 1.8 6.4l3.8 3C6.5 6.7 9 4.8 12 4.8z"/></svg> Continue with Google</button>
+            </div>
+            <div class="auth-or">or continue with email</div>
+            <form onsubmit="login();return false">
+              <div class="field">
+                <label for="loginId">Scholar ID</label>
+                <input type="text" id="loginId" placeholder="GOC-S-…" value="">
+                <p class="field-hint">Log in with the Scholar ID you were issued when your account was created (GOC-S-…). The ID and password must both match a registered account.</p>
+              </div>
+              <div class="field">
+                <label for="loginPw">Password</label>
+                <div class="pw-wrap">
+                  <input type="password" id="loginPw" placeholder="Enter your password" value="">
+                  <button type="button" class="pw-toggle" onclick="togglePw('loginPw',this)">Show</button>
+                </div>
+              </div>
+              <div class="auth-opts">
+                <label class="check-lbl"><input type="checkbox" checked> Remember me</label>
+                <button type="button" class="auth-link">Forgot password?</button>
+              </div>
+              <button class="btn btn-red btn-block" type="submit" id="loginBtn">Log in</button>
+            </form>
+            <div class="auth-swap">New to G.O.C Academy Hub? <button class="auth-link" onclick="go('signup')">Create an account</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SIGN UP ============ -->
+    <section class="screen auth" id="signup">
+      <div class="auth-brandbar">
+        <div class="lp-brand"><span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><span class="bt">G.O.C Academy Hub</span></div>
+        <button class="lp-link" onclick="go('landing')">← Home</button>
+      </div>
+      <div class="auth-scroll">
+        <aside class="auth-side">
+          <div class="as-top"><span class="bm" style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><b>G.O.C Academy Hub</b></div>
+          <h2>Start building your future today.</h2>
+          <p>Join the free UTME Bootcamp and get a structured path from your first lesson to exam day.</p>
+          <div class="as-points">
+            <div class="as-pt"><span class="ck">✓</span> Free to start — no card needed</div>
+            <div class="as-pt"><span class="ck">✓</span> Personalised daily missions</div>
+            <div class="as-pt"><span class="ck">✓</span> Track progress across Use of English &amp; all 4 sciences</div>
+          </div>
+        </aside>
+        <div class="auth-formwrap">
+          <div class="auth-card">
+            <button class="auth-back" onclick="go('landing')">← Back to homepage</button>
+            <h1>Create your account</h1>
+            <p class="tagline">For admitted G.O.C scholars. Takes less than a minute.</p>
+            <form onsubmit="signupSubmit();return false">
+              <!-- ===== Create-account firewall =====
+                   The academy's roll is not open to the public. A candidate is
+                   given this code when they are admitted; without it the form
+                   is refused by the data layer, not merely by this screen. -->
+              <div class="field signup-gate">
+                <label for="signCode">Academy access code</label>
+                <input type="text" id="signCode" autocomplete="off" spellcheck="false" placeholder="Enter your code">
+                <p class="field-hint">Given to you by G.O.C Academy when you were admitted. An account can only be created with a valid code — capitals, spaces and dashes don't matter. Don't have one? <b>Speak to the academy first.</b></p>
+              </div>
+              <div class="field">
+                <label for="signName">Full name</label>
+                <input type="text" id="signName" placeholder="e.g. Ada Obi">
+                <p class="field-hint">You'll be issued a unique <b>Scholar ID</b> (GOC-S-…) to log in with. Use the name your results should be recorded under.</p>
+              </div>
+              <div class="auth-row">
+                <div class="field">
+                  <label for="signEmail">Email</label>
+                  <input type="email" id="signEmail" inputmode="email" placeholder="you@example.com">
+                </div>
+                <div class="field">
+                  <label for="signPhone">Phone</label>
+                  <input type="tel" id="signPhone" inputmode="tel" placeholder="0801 234 5678">
+                </div>
+              </div>
+              <div class="field">
+                <label for="signGoal">I'm preparing for</label>
+                <select class="auth-select" id="signGoal" onchange="examPicked()">
+                  <option>JAMB / UTME 2027</option>
+                  <option>WAEC</option>
+                  <option>NECO</option>
+                  <option>Post-UTME</option>
+                </select>
+                <!-- This academy registers UTME candidates only. The other exams
+                     stay listed on purpose: choosing one explains the rule
+                     instead of silently failing. -->
+                <div class="exam-note" id="examNote" role="status" aria-live="polite" hidden>
+                  <b>G.O.C Academy Hub prepares UTME candidates only.</b>
+                  <span id="examNoteBody">Please choose <b>JAMB / UTME 2027</b> to continue. We don't run WAEC, NECO or Post-UTME programmes, so an account can't be created for them.</span>
+                </div>
+              </div>
+
+              <!-- ===== JAMB subject combination ===== -->
+              <div class="field subj-pick" id="subjPick">
+                <label id="subjLabel">Your JAMB subject combination</label>
+                <p class="field-hint" style="margin-top:0;margin-bottom:10px">Use of English is compulsory. Choose <b>exactly three</b> of the four sciences — four papers in all, the same four you'll sit.</p>
+                <div class="subj-opt locked">
+                  <span class="so-box on" aria-hidden="true">✓</span>
+                  <span class="so-name">Use of English</span>
+                  <span class="so-tag">Compulsory</span>
+                </div>
+                <div class="subj-grid" id="subjGrid" role="group" aria-labelledby="subjLabel">
+                  <label class="subj-opt"><input type="checkbox" data-subject="Physics" onchange="subjToggle(this)"><span class="so-box" aria-hidden="true">✓</span><span class="so-name">Physics</span></label>
+                  <label class="subj-opt"><input type="checkbox" data-subject="Chemistry" onchange="subjToggle(this)"><span class="so-box" aria-hidden="true">✓</span><span class="so-name">Chemistry</span></label>
+                  <label class="subj-opt"><input type="checkbox" data-subject="Biology" onchange="subjToggle(this)"><span class="so-box" aria-hidden="true">✓</span><span class="so-name">Biology</span></label>
+                  <label class="subj-opt"><input type="checkbox" data-subject="Mathematics" onchange="subjToggle(this)"><span class="so-box" aria-hidden="true">✓</span><span class="so-name">Mathematics</span></label>
+                </div>
+                <div class="subj-foot">
+                  <span class="subj-count" id="subjCount">0 of 3 sciences chosen</span>
+                  <span class="subj-msg" id="subjMsg" role="status" aria-live="polite"></span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="signPw">Password</label>
+                <div class="pw-wrap">
+                  <input type="password" id="signPw" placeholder="Create a password">
+                  <button type="button" class="pw-toggle" onclick="togglePw('signPw',this)">Show</button>
+                </div>
+                <div class="field-hint">Use at least 8 characters with a number.</div>
+              </div>
+              <label class="check-lbl" style="margin-bottom:18px"><input type="checkbox" checked> I agree to the <button type="button" class="inline-legal-btn" onclick="go('legal')">Terms &amp; Privacy Policy</button></label>
+              <button class="btn btn-red btn-block" type="submit" id="signupBtn">Create free account</button>
+            </form>
+            <p class="auth-legal">Your account is personal to you — one active session per scholar keeps your progress secure.</p>
+            <div class="auth-swap">Already have an account? <button class="auth-link" onclick="go('login-v2')">Log in</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="screen pad" id="home">
+      <div class="dash-hero">
+        <div class="statusbar"><span class="brandline"><svg class="gmark" style="width:22px;height:22px;color:#fff" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg><b>G.O.C Academy Hub</b></span><span>JAMB 2027 · Science</span></div>
+        <div class="row between">
+          <div>
+            <div class="hello" id="dashHello">Good afternoon,</div>
+            <div class="name" id="dashName">Amara 👋</div>
+          </div>
+          <div class="row gap8">
+            <span class="chip" style="background:rgba(255,255,255,.16);color:#fff" id="dashStreakChip">🔥 12</span>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <div class="hstat"><div class="v" id="dashLevel">Lv 8</div><div class="l">Scholar</div></div>
+          <div class="hstat"><div class="v gold" id="dashXp">1,240</div><div class="l">Academy XP</div></div>
+          <div class="hstat"><div class="v gold" id="dashStreak">12 🔥</div><div class="l">Day streak</div></div>
+        </div>
+      </div>
+
+      <!-- Scholar ID: the student's permanent key back into this dashboard -->
+      <div class="id-strip" id="idStrip">
+        <div class="s-l"><span>Your Scholar ID</span><code id="dashId">—</code></div>
+        <button onclick="copyId()">Copy</button>
+      </div>
+
+      <!-- SIGNATURE: daily study window (limit set by management) -->
+      <div class="focus-card">
+        <div class="ring" id="focusRing">
+          <svg width="96" height="96" viewBox="0 0 96 96">
+            <circle class="rc" cx="48" cy="48" r="40" stroke="#EEF0F3"/>
+            <circle class="rc" id="focusArc" cx="48" cy="48" r="40" stroke="#DC2626"/>
+          </svg>
+          <div class="rt"><b id="focusMin">—</b><s>min left</s></div>
+        </div>
+        <div class="focus-info">
+          <span class="focus-tag">Set by your academy</span>
+          <h4>Daily study window</h4>
+          <p id="focusText">Learn here, then read on your own, apply it, and bring questions to your tutor.</p>
+        </div>
+      </div>
+
+      <!-- Everything below is drawn by js/app.js from this account's own record:
+           the papers the academy has actually published for this combination,
+           this scholar's place in the league, and their most recent result. No
+           panel here invents a number — an empty record says so plainly. -->
+      <div class="wrap">
+        <div class="sec-head"><div class="section-t">Waiting for you</div><button class="ss-link" onclick="openWebTest()">Open Web Test</button></div>
+        <div class="card wrap dash-card"><div id="dashNext"><div class="wt-none">Checking your papers…</div></div></div>
+
+        <div class="sec-head"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
+        <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
+
+        <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
+        <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
+
+        <div class="sec-head"><div class="section-t">Carry on</div></div>
+        <div class="dash-jump">
+          <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
+          <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
+          <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
+          <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
+        </div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ TIMETABLE ============ -->
+    <section class="screen pad" id="timetable">
+      <div class="hdr">
+        <div class="eyebrow">My week</div>
+        <div class="row between"><div class="h-title">Weekly Timetable</div><span class="chip green">On track</span></div>
+      </div>
+      <div class="wrap">
+        <div class="week-strip" id="weekStrip"></div>
+        <div class="card" style="padding:13px 15px;margin:12px 0;display:flex;align-items:center;gap:12px">
+          <div class="dot" style="background:var(--red);width:40px;height:40px">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </div>
+          <div style="flex:1"><div style="font-weight:800;font-size:14px" id="ttDayLabel">Monday</div><div class="muted" style="font-size:12.5px" id="ttDaySummary">2 study blocks · 1h 25m planned</div></div>
+        </div>
+        <div id="ttBlocks"></div>
+        <button class="btn btn-outline btn-block" style="margin-top:4px" onclick="toggleAddBlock()" id="ttAddBtn">+ Add study block</button>
+        <div class="card wrap" id="ttAddForm" style="display:none;margin-top:10px;padding:14px 15px">
+          <div class="field">
+            <label for="ttNewTime">Time</label>
+            <input type="time" id="ttNewTime">
+          </div>
+          <div class="field">
+            <label for="ttNewDuration">Duration (minutes)</label>
+            <input type="number" id="ttNewDuration" min="5" max="240" step="5" value="30">
+          </div>
+          <div class="field">
+            <label for="ttNewSubject">Subject</label>
+            <select id="ttNewSubject"></select>
+          </div>
+          <div class="field">
+            <label for="ttNewTopic">Topic</label>
+            <input type="text" id="ttNewTopic" placeholder="e.g. Revise past questions">
+          </div>
+          <div class="row gap12">
+            <button class="btn btn-outline" style="flex:1" onclick="toggleAddBlock()">Cancel</button>
+            <button class="btn btn-red" style="flex:1" onclick="submitStudyBlock()">Add block</button>
+          </div>
+        </div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ STUDY HUB ============ -->
+    <section class="screen pad" id="study">
+      <div class="hdr">
+        <div class="eyebrow">Study</div>
+        <div class="h-title">Learn, practise, test</div>
+      </div>
+      <div class="wrap">
+        <button class="tile" onclick="openReading()">
+          <div class="ti" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg></div>
+          <div style="flex:1"><h4>Read / Learn</h4><p>Notes on your own subjects and topics, written by the academy</p></div>
+          <svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="tile" onclick="openPractice()">
+          <div class="ti" style="background:#DC2626"><svg class="icon" viewBox="0 0 24 24" fill="#fff"><rect x="2.5" y="9" width="3.5" height="6" rx="1.2"/><rect x="18" y="9" width="3.5" height="6" rx="1.2"/><rect x="6" y="10.6" width="12" height="2.8"/></svg></div>
+          <div style="flex:1"><h4>Practice</h4><p>Your topics, untimed, scored as you answer, earns XP</p></div>
+          <svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="tile" onclick="openWebTest()">
+          <div class="ti" style="background:#141821"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/></svg></div>
+          <div style="flex:1"><h4>Web Test</h4><p>Your assessed Test — a theory paper per subject, one objective sitting</p></div>
+          <svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="tile" onclick="openResults()">
+          <div class="ti" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 4v16h16"/><path d="M7 15l3-4 3 2 5-7"/></svg></div>
+          <div style="flex:1"><h4>Results &amp; Review</h4><p>Scores, weak areas, explanations</p></div>
+          <svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="tile" onclick="go('resources')">
+          <div class="ti" style="background:#E08600"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></div>
+          <div style="flex:1"><h4>Resources</h4><p>Past questions, notes, formulas &amp; syllabus</p></div>
+          <svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ STUDY SET-UP (CBT &amp; practice) ============
+         One screen serves both self-directed modes: the student picks the
+         paper, the topics, how many questions and — for CBT only — how long.
+         Everything in it is drawn from the live question bank by
+         renderStudySet(), so a topic is never offered unless questions have
+         actually been published for it. -->
+    <section class="screen pad" id="studySet">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px" id="suTitle">Set up your CBT</div><div class="muted" style="font-size:12px" id="suSub">Choose a subject and topics</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="sec-head"><div class="section-t">Subject</div></div>
+        <div id="suSubjectChipsWrap"><div class="filter-strip" id="suSubjects"></div></div>
+        <div id="suSubjectDDWrap" hidden>
+          <div class="field"><select class="auth-select" id="suSubjectDD" aria-label="Choose a subject" onchange="suSetSubject(this.value)"></select></div>
+        </div>
+        <div id="suTopicsSection">
+          <div class="sec-head"><div class="section-t">Topics</div><button class="ss-link" id="suAll" onclick="suToggleAll()">Select all</button></div>
+          <div class="card wrap" style="padding:4px 16px"><div id="suTopics"></div></div>
+        </div>
+        <div class="sec-head"><div class="section-t">Questions</div></div>
+        <div id="suCountChipsWrap"><div class="wt-seg" id="suCounts"></div></div>
+        <div id="suCountInputWrap" hidden>
+          <div class="field">
+            <input type="number" id="suCountInput" inputmode="numeric" min="1" step="1" placeholder="Number of questions" aria-label="Number of questions" oninput="suCountTyped(this)" onchange="suCountCommit(this)" onblur="suCountCommit(this)">
+            <div class="field-hint" id="suCountHint"></div>
+          </div>
+        </div>
+        <div id="suTimeWrap">
+          <div class="sec-head"><div class="section-t">Time allowed</div></div>
+          <div class="wt-seg" id="suMinutes"></div>
+        </div>
+        <p class="wt-foot" id="suNote">Practice and CBT set-ups are study tools: they are scored for you but are not part of your academic record and do not change your league position. Your Web Test is the assessed paper.</p>
+        <div class="spacer"></div>
+      </div>
+      <div class="bottom-bar">
+        <button class="btn btn-ghost" onclick="go('study')" style="flex:0 0 auto">Cancel</button>
+        <button class="btn btn-red btn-block" id="suStart" onclick="suStart()">Start</button>
+      </div>
+    </section>
+
+    <!-- ============ READING MODE — PICKER ============
+         Subject, then topic, then note: the same three steps as the set-up
+         screen, drawn from the notes management has published for the papers
+         this student actually sits. -->
+    <section class="screen pad" id="reading">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px">Read / Learn</div><div class="muted" style="font-size:12px" id="rdSub">Choose a subject and topic</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="filter-strip" id="rdSubjects"></div>
+        <div id="rdTopics"><div class="wt-none">Loading your notes…</div></div>
+        <p class="wt-foot">Notes are written and published by the academy. If a topic you sit is not here yet, it has not been published — your practice questions for that topic are still available.</p>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ STUDY RESULT (self-directed CBT &amp; practice) ============ -->
+    <section class="screen pad" id="studyRes">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px" id="srTitle">Practice complete</div><div class="muted" style="font-size:12px" id="srSub">Study run · not assessed</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="card wrap" style="padding:6px 16px"><div id="srStats"></div></div>
+        <div class="sec-head"><div class="section-t">By topic</div></div>
+        <div class="card wrap" style="padding:6px 16px"><div id="srBrk"></div></div>
+        <div class="sec-head"><div class="section-t">Review</div></div>
+        <div id="srReview"></div>
+        <div class="spacer"></div>
+      </div>
+      <div class="bottom-bar">
+        <button class="btn btn-ghost" onclick="go('study')" style="flex:0 0 auto">Done</button>
+        <button class="btn btn-red btn-block" onclick="srAgain()">Another run →</button>
+      </div>
+    </section>
+
+    <!-- ============ LESSON ============ -->
+    <section class="screen" id="lesson">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to Read / Learn" onclick="go('reading')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px" id="lessonTitle">Lesson</div><div class="muted" style="font-size:12px" id="lessonSub">Your combination</div></div></div></div>
+      <div class="scroll protected">
+        <div class="wm" id="wmLesson"></div>
+        <!-- Reading mode is built by renderLesson() from the student's own
+             papers: the strip below offers only the subjects they sit. -->
+        <div class="filter-strip" id="lessonSubj" style="padding:10px 16px 0"></div>
+        <div class="lesson-body" id="lessonBody"></div>
+      </div>
+      <div class="bottom-bar"><button class="btn btn-ghost" onclick="go('reading')" style="flex:0 0 auto">Back</button><button class="btn btn-red btn-block" onclick="practiseThisNote()">Practise this topic →</button></div>
+    </section>
+
+    <!-- ============ PRACTICE ============ -->
+    <section class="screen" id="practice">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">Practice</div><div class="muted" style="font-size:12px" id="pracSub">Your combination · no pressure</div></div><span class="chip gold" style="margin-left:auto">+5 XP</span></div></div>
+      <div class="q-prog" id="pracProg"></div>
+      <div class="scroll">
+        <div class="q-card">
+          <div class="q-num" id="pracNum">Question 1 of 5</div>
+          <div class="q-text" id="pracQ"></div>
+          <div id="pracOpts"></div>
+          <div id="pracFb"></div>
+        </div>
+      </div>
+      <div class="bottom-bar"><button class="btn btn-red btn-block" id="pracBtn" onclick="pracNext()" disabled>Select an answer</button></div>
+    </section>
+
+    <!-- ============ CBT ============ -->
+    <section class="screen" id="cbt">
+      <div class="cbt-top">
+        <div class="row gap12"><button class="back" style="background:rgba(255,255,255,.14)" aria-label="Exit mock exam" onclick="confirmExit()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:14px" id="cbtTitle">Mock</div><div style="font-size:11.5px;color:#cbd2dc" id="cbtMeta">Loading your papers…</div></div></div>
+        <div class="timer" id="cbtTimer"><svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="cbtTime">29:58</span></div>
+      </div>
+      <div class="q-card scroll">
+        <div class="q-num" id="cbtNum">Question 1 of 40</div>
+        <div class="q-text" id="cbtQ"></div>
+        <div id="cbtOpts"></div>
+      </div>
+      <div class="qnav" id="cbtNav" style="border-top:1px solid var(--line);max-height:120px;overflow-y:auto"></div>
+      <div class="bottom-bar">
+        <button class="btn btn-ghost" onclick="cbtMove(-1)" style="flex:0 0 auto">Prev</button>
+        <button class="btn btn-outline" onclick="cbtMove(1)" style="flex:1">Next</button>
+        <button class="btn btn-red" onclick="submitCBT()" style="flex:0 0 auto">Submit</button>
+      </div>
+    </section>
+
+    <!-- ============ WEB TEST — HUB (Priority 3) ============ -->
+    <section class="screen pad" id="webtest">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px">Web Test</div><div class="muted" style="font-size:12px" id="wtLead">Your assessed papers</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <p class="sub-lead">Two sessions make up the Test: a written theory paper for each of your subjects, and one objective sitting covering your whole combination.</p>
+        <div id="wtSections"></div>
+        <div class="sec-head"><div class="section-t">Your test record</div></div>
+        <div class="card wrap" style="padding:6px 16px"><div id="wtHistory"></div></div>
+        <p class="wt-foot">Every paper you submit is stored by the academy against your Scholar ID. A written paper's score appears here once the academy has released it.</p>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ WEB TEST — RUNNER (theory &amp; objective) ============ -->
+    <section class="screen" id="wtRun">
+      <div class="cbt-top">
+        <div class="row gap12">
+          <button class="back" style="background:rgba(255,255,255,.14)" aria-label="Exit test" onclick="wtExit()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:14px" id="wtRunTitle">Web Test</div><div style="font-size:11.5px;color:#cbd2dc" id="wtRunSub">&nbsp;</div></div>
+        </div>
+        <div class="timer" id="wtTimer"><svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="wtTime">--:--</span></div>
+      </div>
+      <!-- One objective sitting covers the whole combination, so the papers
+           inside it are switchable. Drawn by js/app.js from the order the
+           backend served the paper in; hidden for a single-subject paper. -->
+      <div class="wt-subs" id="wtSubjects" hidden></div>
+      <div class="q-prog" id="wtProg"></div>
+      <div class="q-card scroll">
+        <div class="q-num" id="wtNum">Question 1 of 1</div>
+        <div class="q-text" id="wtQ"></div>
+        <div id="wtOpts"></div>
+        <div id="wtTheory" hidden>
+          <label class="wt-lab" for="wtAnswer">Your written answer</label>
+          <textarea class="wt-area" id="wtAnswer" rows="8" placeholder="Write your full answer here…" oninput="wtTyped()"></textarea>
+          <div class="wt-hint" id="wtMarkHint">&nbsp;</div>
+        </div>
+      </div>
+      <div class="qnav" id="wtNav" style="border-top:1px solid var(--line);max-height:120px;overflow-y:auto"></div>
+      <div class="bottom-bar">
+        <button class="btn btn-ghost" onclick="wtMove(-1)" style="flex:0 0 auto">Prev</button>
+        <button class="btn btn-outline" onclick="wtMove(1)" style="flex:1">Next</button>
+        <button class="btn btn-red" id="wtSubmitBtn" onclick="wtSubmit()" style="flex:0 0 auto">Submit</button>
+      </div>
+    </section>
+
+    <!-- ============ WEB TEST — RESULT ============ -->
+    <section class="screen pad" id="wtResult">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Web Test" onclick="go('webtest')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px" id="wtrTitle">Test result</div><div class="muted" style="font-size:12px" id="wtrSub">&nbsp;</div></div>
+        </div>
+      </div>
+      <div class="wrap" style="text-align:center;padding-top:8px">
+        <div class="result-ring" id="wtrRing"></div>
+        <div class="chip gold" id="wtrXp" style="margin:6px auto">&nbsp;</div>
+      </div>
+      <div class="wrap">
+        <div class="callout" id="wtrPending" hidden>🖋️ <b>Result on the way.</b> Your written answers have been submitted and stored against your Scholar ID. Your score will appear here as soon as the academy releases it.</div>
+        <div class="sec-head"><div class="section-t">Result summary</div></div>
+        <div class="card wrap" style="padding:6px 16px"><div id="wtrStats"></div></div>
+        <div id="wtrBrkWrap" hidden>
+          <div class="sec-head"><div class="section-t">Topic breakdown</div></div>
+          <div class="card wrap" style="padding:6px 16px"><div id="wtrBrk"></div></div>
+        </div>
+        <div id="wtrReviewWrap" hidden>
+          <div class="sec-head"><div class="section-t">Question review</div></div>
+          <div id="wtrReview"></div>
+        </div>
+        <button class="btn btn-red btn-block" onclick="go('webtest')" style="margin-top:16px">Back to Web Test</button>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ RESULTS ============ -->
+    <section class="screen pad" id="results">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div class="h-title" style="font-size:18px">Results &amp; Review</div><div class="muted" style="font-size:12px" id="rsSub">Your Web Test record</div></div></div></div>
+      <!-- Everything below is drawn by js/app.js from the student's own marked
+           papers. Nothing on this screen is a fixed figure: an account with no
+           sittings sees that plainly rather than somebody else's 78%. -->
+      <div class="wrap" style="text-align:center;padding-top:8px">
+        <div class="result-ring" id="rsRing"></div>
+        <div class="chip gold" style="margin:6px auto" id="rsXp">Sit a paper to earn Academy XP</div>
+      </div>
+      <div class="wrap">
+        <div class="sec-head"><div class="section-t">By session</div></div>
+        <div id="rsSections"></div>
+        <div class="sec-head"><div class="section-t">Your papers</div></div>
+        <div class="filter-strip" id="rsFilter"></div>
+        <div id="rsList"></div>
+        <div class="sec-head"><div class="section-t">Topic breakdown</div></div>
+        <div class="card wrap" style="padding:6px 16px" id="rsBrk"></div>
+        <div class="callout" style="margin-top:14px" id="rsFocus" hidden></div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ LEADERBOARD ============ -->
+    <section class="screen pad" id="league">
+      <div class="lead-hero">
+        <div class="eyebrow" style="color:#FFEAC7">Weekly Scholar League</div>
+        <h2 id="lgTier">Scholar League</h2>
+        <p id="lgSub">Ranked by academic performance · XP only breaks a tie</p>
+        <!-- Top three, drawn from the live standings by js/app.js (Priority 12). -->
+        <div class="podium" id="lgPodium"></div>
+      </div>
+      <div class="wrap">
+        <!-- The student's own standing, always shown even when they are far down
+             the table, so their position is never something they have to hunt for. -->
+        <div class="card wrap" style="padding:14px 18px;margin-top:14px" id="lgMineCard">
+          <div class="lg-mine">
+            <div class="lg-mine-rank"><span class="tier" id="lgMineTierIcon" aria-hidden="true"></span><b id="lgMineRank">—</b><span>of <span id="lgMineSize">—</span></span></div>
+            <div class="lg-mine-body">
+              <h4 id="lgMineName">Your standing</h4>
+              <p id="lgMineNote">Sit a test to enter the standings.</p>
+            </div>
+          </div>
+          <div class="lg-mine-stats">
+            <div class="lg-stat"><div class="v" id="lgMinePerf">—</div><div class="l">Performance</div></div>
+            <div class="lg-stat"><div class="v" id="lgMineXp">—</div><div class="l">Academy XP</div></div>
+            <div class="lg-stat"><div class="v" id="lgMineStreak">—</div><div class="l">Day streak</div></div>
+            <div class="lg-stat"><div class="v" id="lgMineLvl">—</div><div class="l">Level</div></div>
+          </div>
+        </div>
+        <div class="sec-head"><div class="section-t">Standings</div><span class="chip gray" id="lgCount">—</span></div>
+        <div class="card wrap" style="padding:6px 18px" id="lgTable"></div>
+        <p class="lg-basis" id="lgBasis">Position is decided by overall academic performance across your scored objective, theory and JAMB-oriented papers. Academy XP is only used to separate two scholars on the same performance, so XP alone can never lift anyone above stronger results.</p>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ PROFILE ============ -->
+    <section class="screen pad" id="profile">
+      <div class="prof-hero">
+        <div class="avatar" id="profAva">ST</div>
+        <h2 id="profName">Student Name</h2>
+        <div class="id" id="profId">Scholar ID · —</div>
+        <div class="hero-stats" style="margin-top:16px">
+          <div class="hstat"><div class="v" id="profLevel">Lv —</div><div class="l">Scholar</div></div>
+          <div class="hstat"><div class="v" id="profStreakStat">—</div><div class="l">Day streak</div></div>
+          <div class="hstat"><div class="v" id="profBadgeCount">—</div><div class="l">Badges</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="sec-head"><div class="section-t">Badges</div></div>
+        <!-- Filled in by js/app.js (renderProfileBadges) from this account's own
+             streak, XP, results and league standing — nothing here is hardcoded. -->
+        <div class="badges" id="profBadges">
+          <div class="badge lock"><div class="b">🔒</div><span>Loading…</span></div>
+        </div>
+
+        <div class="sec-head"><div class="section-t">Settings</div></div>
+        <div class="card wrap" style="padding:2px 16px">
+          <div class="set-row">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+            <div class="lbl"><h4>Daily study window</h4><p>Set by your academy · <b id="limitVal">90 min</b></p></div>
+            <span class="chip">Managed</span>
+          </div>
+          <div class="set-row">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#E08600" stroke-width="2"><path d="M12 3a6 6 0 016 6c0 4-3 5-3 8H9c0-3-3-4-3-8a6 6 0 016-6z"/><path d="M9 21h6"/></svg></div>
+            <div class="lbl"><h4>Daily affirmation</h4><p>Show a motivation card at login</p></div>
+            <button class="mini-link" onclick="openFlyer()">Preview</button>
+          </div>
+          <div class="set-row">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#0E7490" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="8" cy="12" r="2"/><path d="M14 10.5h4M14 13.5h4"/></svg></div>
+            <div class="lbl"><h4>Scholar ID &amp; devices</h4><p>1 active session · this device</p></div>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#cbd2dc" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </div>
+          <div class="set-row">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#7F1D1D" stroke-width="2"><path d="M12 2.5l8 3v6c0 5-3.5 8.8-8 10.9C7.5 20.3 4 16.5 4 11.5v-6l8-3z"/></svg></div>
+            <div class="lbl"><h4>Content protection</h4><p>Watermark &amp; copy-guard: on</p></div>
+            <span class="chip green">On</span>
+          </div>
+          <div class="set-row">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 18h6"/></svg></div>
+            <div class="lbl"><h4>Install this app</h4><p>Add G.O.C Academy Hub to your home screen for one-tap access</p></div>
+            <span id="installAction"></span>
+          </div>
+        </div>
+        <div class="ios-install-help" id="iosInstallHelp" style="display:none">
+          <p>iPhone/iPad don't let an app trigger this automatically — a few taps do it:</p>
+          <ol>
+            <li>Tap the <b>Share</b> icon in Safari's toolbar (a square with an arrow pointing up).</li>
+            <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
+            <li>Tap <b>Add</b> in the top-right corner.</li>
+          </ol>
+          <p>This only works from Safari itself — opening the link inside another app's built-in browser (Instagram, WhatsApp, etc.) hides that option.</p>
+        </div>
+        <div class="sec-head"><div class="section-t">Account identity</div><span class="chip">Verified</span></div>
+        <div class="id-card">
+          <div class="id-top">
+            <div class="id-ava" id="idAva">ST</div>
+            <div class="id-who"><b id="idName">Student Name</b><span id="idRole">Student</span></div>
+          </div>
+          <div class="id-idbox">
+            <div class="id-idlab" id="idLabel">Scholar ID</div>
+            <div class="id-idrow"><code id="idCode">—</code><button class="id-copy" onclick="copyId()">Copy</button></div>
+          </div>
+          <p class="id-note" id="idNote">Your Scholar ID identifies you across lessons, practice, CBT and the league — keep it safe, you log in with it.</p>
+        </div>
+        <button class="btn btn-red btn-block" id="adminEntry" onclick="go('admin')" style="margin-top:12px;display:none">Open management console →</button>
+
+        <button class="btn btn-outline btn-block" onclick="logout()" style="margin-top:12px;color:var(--red)">Log out</button>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ ADMIN ACCESS PORTAL (firewall) ============ -->
+    <section class="screen" id="admin-gate">
+      <div class="gate-wrap">
+        <div class="gate-card">
+          <div class="gate-lock"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+          <div class="gate-t">Secure Access Portal</div>
+          <div class="gate-p">Management Console is firewalled. Enter your administrator passcode to continue.</div>
+          <div class="gate-pins" id="gatePins"><span></span><span></span><span></span><span></span></div>
+          <div class="gate-err" id="gateErr"></div>
+          <div class="gate-pad">
+            <button onclick="gateKey('1')">1</button><button onclick="gateKey('2')">2</button><button onclick="gateKey('3')">3</button>
+            <button onclick="gateKey('4')">4</button><button onclick="gateKey('5')">5</button><button onclick="gateKey('6')">6</button>
+            <button onclick="gateKey('7')">7</button><button onclick="gateKey('8')">8</button><button onclick="gateKey('9')">9</button>
+            <button class="ghost" onclick="gateClear()">C</button><button onclick="gateKey('0')">0</button><button class="ghost" onclick="gateDel()">⌫</button>
+          </div>
+          <div class="gate-hint">Session is single-device and logged.</div>
+          <button class="btn btn-outline btn-block" style="margin-top:14px;color:var(--red)" onclick="go('profile')">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ADMIN / MANAGEMENT (mock) ============ -->
+    <section class="screen" id="admin">
+      <div class="adm-top">
+        <button class="adm-back" aria-label="Lock console" onclick="admLock()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <div class="adm-top-t"><div class="adm-brand">Management Console</div><div class="adm-sub"><span id="admWho">Ernest Uzorchukwu · Founder</span> · <span style="color:#22C55E">● secure session</span></div></div>
+      </div>
+      <div class="scroll">
+        <!-- KPI strip -->
+        <div class="adm-kpis">
+          <div class="adm-kpi"><div class="k-v" id="admKpiStudents">—</div><div class="k-l">Students</div></div>
+          <div class="adm-kpi"><div class="k-v" id="admKpiActive">—</div><div class="k-l">Active today</div></div>
+          <div class="adm-kpi"><div class="k-v" id="admKpiAvg">—</div><div class="k-l">Avg. mock</div></div>
+          <div class="adm-kpi"><div class="k-v" id="admKpiCohorts">—</div><div class="k-l">Cohorts</div></div>
+        </div>
+        <!-- Section selector -->
+        <div class="adm-select-wrap">
+          <label for="admSelect">Section</label>
+          <div class="adm-select">
+            <select id="admSelect" onchange="admOpen(this.value)">
+              <option value="overview">Overview</option>
+              <option value="students">Students</option>
+              <option value="cohorts">Cohorts</option>
+              <option value="questions">Question bank</option>
+              <option value="notes">Reading notes</option>
+              <option value="import">Import (CSV)</option>
+              <option value="videos">Videos</option>
+              <option value="resources">Resources</option>
+              <option value="classes">Live classes</option>
+              <option value="homepage">Homepage updates</option>
+              <option value="affirmations">Daily affirmations</option>
+              <option value="results">Results</option>
+              <option value="theorymark">Mark theory papers</option>
+              <option value="league">Leaderboard</option>
+              <option value="objective">Objective sitting</option>
+              <option value="window">Study window</option>
+              <option value="access">Access &amp; firewall</option>
+            </select>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </div>
+        <!-- Detail panel -->
+        <div class="adm-panel" id="admPanel"></div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ CLASSES / VIDEOS ============ -->
+    <section class="screen pad" id="classes">
+      <div class="hdr">
+        <div class="eyebrow">Classes</div>
+        <div class="row between"><div class="h-title">Live classes &amp; videos</div><span class="chip red">4 new</span></div>
+      </div>
+      <div class="wrap">
+        <!-- One chip only: renderClassFilters() replaces this strip with the
+             student's own papers as soon as an account is signed in, so a fixed
+             list here would briefly offer subjects they do not sit. -->
+        <div class="filter-strip" id="classFilters">
+          <button class="fchip on" data-f="all" onclick="setClassFilter('all')" aria-pressed="true">All</button>
+        </div>
+
+        <div class="sec-head" style="margin-top:6px"><div class="section-t">🔴 Recorded live classes</div></div>
+        <div class="sub-lead">Full replays of your tutor's live sessions — watch what you missed.</div>
+        <div id="liveList"></div>
+        <div class="rest" id="liveEmpty" style="display:none">No live classes for this subject yet.</div>
+
+        <div class="sec-head" style="margin-top:18px"><div class="section-t">🎬 Lesson videos</div></div>
+        <div class="sub-lead">Short topic walk-throughs you can watch any time.</div>
+        <div id="lessonList"></div>
+        <div class="rest" id="lessonEmpty" style="display:none">No lesson videos for this subject yet.</div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+
+    <!-- ============ RESOURCES ============ -->
+    <section class="screen" id="resources">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div class="h-title" style="font-size:18px">Resources</div></div></div>
+      <div class="wrap">
+        <div class="sub-lead" style="margin-top:14px">Past questions, notes, formula sheets and syllabus — open or download to study offline.</div>
+        <div class="filter-strip" id="resFilters">
+          <button class="fchip on" data-f="all" onclick="setResFilter('all')" aria-pressed="true">All</button>
+          <button class="fchip" data-f="past" onclick="setResFilter('past')" aria-pressed="false">Past questions</button>
+          <button class="fchip" data-f="notes" onclick="setResFilter('notes')" aria-pressed="false">Notes</button>
+          <button class="fchip" data-f="formula" onclick="setResFilter('formula')" aria-pressed="false">Formulas</button>
+          <button class="fchip" data-f="syllabus" onclick="setResFilter('syllabus')" aria-pressed="false">Syllabus</button>
+          <button class="fchip brand" data-f="materials" onclick="setResFilter('materials')" aria-pressed="false"><svg class="fchip-mark" viewBox="0 0 100 100" aria-hidden="true"><use href="#goc-mark" xlink:href="#goc-mark"/></svg>GOC Materials</button>
+        </div>
+        <div id="resList"></div>
+        <div class="rest" id="resEmpty" style="display:none">Nothing in this category yet.</div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+
+  <!-- ============ FORCE PASSWORD CHANGE ============ -->
+  <section class="screen auth" id="change-password">
+    <div class="auth-brandbar">
+      <div class="lp-brand">
+        <span class="bm">
+          <svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff">
+            <use href="#goc-mark" xlink:href="#goc-mark"/>
+          </svg>
+        </span>
+        <span class="bt">G.O.C Academy Hub</span>
+      </div>
+    </div>
+
+    <div class="auth-scroll">
+      <aside class="auth-side">
+        <div class="as-top">
+          <span class="bm" style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center">
+            <svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff">
+              <use href="#goc-mark" xlink:href="#goc-mark"/>
+            </svg>
+          </span>
+          <b>G.O.C Academy Hub</b>
+        </div>
+        <h2>One more step, Scholar.</h2>
+        <p>Your temporary password has been accepted. Set a new password before continuing to your Academy Hub.</p>
+        <div class="as-points">
+          <div class="as-pt"><span class="ck">✓</span> Choose a password only you know</div>
+          <div class="as-pt"><span class="ck">✓</span> Use at least 8 characters</div>
+          <div class="as-pt"><span class="ck">✓</span> Keep your new password safe</div>
+        </div>
+      </aside>
+
+      <div class="auth-formwrap">
+        <div class="auth-card">
+          <h1>Create a new password</h1>
+          <p class="tagline">Your temporary password must be replaced before you continue.</p>
+
+          <div class="auth-notice" style="display:block">
+            <b>Important:</b> Choose a password you will remember. Your temporary password will no longer work after this change.
+          </div>
+
+          <form onsubmit="changeStudentPassword();return false">
+            <div class="field">
+              <label for="newStudentPassword">New password</label>
+              <div class="pw-wrap">
+                <input type="password" id="newStudentPassword" placeholder="Enter your new password" autocomplete="new-password">
+                <button type="button" class="pw-toggle" onclick="togglePw('newStudentPassword',this)">Show</button>
+              </div>
+              <div class="field-hint">Use at least 8 characters with a number.</div>
+            </div>
+
+            <div class="field">
+              <label for="confirmStudentPassword">Confirm new password</label>
+              <div class="pw-wrap">
+                <input type="password" id="confirmStudentPassword" placeholder="Re-enter your new password" autocomplete="new-password">
+                <button type="button" class="pw-toggle" onclick="togglePw('confirmStudentPassword',this)">Show</button>
+              </div>
+            </div>
+
+            <div class="form-msg" id="changePwMsg"></div>
+
+            <button class="btn btn-red btn-block" type="submit" id="changePasswordBtn">
+              Save new password
+            </button>
+          </form>
+
+          <p class="auth-legal">For your security, you must complete this step before accessing your Scholar dashboard.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- /screens -->
+
+  <!-- ============ TABBAR ============ -->
+  <!-- Mobile-only slide-out menu for the public homepage.
+       Hidden entirely at >=900px, where the inline nav links are used. -->
+      <div class="lp-scrim" id="lpScrim" onclick="closeDrawer()"></div>
+      <aside class="lp-drawer" id="lpDrawer" aria-hidden="true">
+        <div class="dw-head">
+          <div class="lp-brand">
+            <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+            <span class="bt">G.O.C Academy Hub</span>
+          </div>
+          <button class="dw-x" onclick="closeDrawer()" aria-label="Close menu">×</button>
+        </div>
+        <p class="dw-motto">Building Purpose-Driven Independent Scholars</p>
+        <nav class="dw-nav">
+          <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>The ecosystem</button>
+          <button onclick="dwGoTo('lpSubjects')"><span class="dwi">◇</span>Subjects offered</button>
+          <button onclick="dwGoTo('lpHow')"><span class="dwi">◇</span>How it works</button>
+          <button onclick="dwGoTo('contact')"><span class="dwi">◇</span>Contact us</button>
+          <button onclick="dwGo('updates')"><span class="dwi">◇</span>Updates &amp; news</button>
+        </nav>
+        <div class="dw-btns">
+          <button class="btn btn-red btn-block" onclick="dwGo('signup')">Create free account</button>
+          <button class="btn btn-outline btn-block" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
+        </div>
+        <div class="dw-foot">
+          <a href="mailto:godsowncenterinfo@gmail.com">godsowncenterinfo@gmail.com</a>
+          <a href="tel:+2348157215942">0815 721 5942</a>
+        </div>
+      </aside>
+
+  <!-- Preview banner: shown when management is viewing the student experience -->
+  <div class="pv-bar" id="pvBar" style="display:none">
+    <span><b>Preview mode</b> · you're seeing the student dashboard</span>
+    <button onclick="exitPreview()">Back to console</button>
+  </div>
+  <!-- Session expiry warning (Priority 9). The countdown is the server's own
+       remaining time, polled by js/app.js — this bar only displays it. -->
+  <div class="ss-bar" id="ssBar" role="status" aria-live="polite" style="display:none">
+    <svg class="ss-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    <span class="ss-txt">
+      <b>Your session is about to expire.</b> You will be automatically logged out soon.
+      <span class="ss-count" id="ssCount">Automatic logout in 05:00</span>
+    </span>
+  </div>
+  <nav class="tabbar" id="tabbar" style="display:none" aria-label="Main">
+    <div class="side-brand">
+      <span class="bmk"><svg viewBox="0 0 100 100" style="width:22px;height:22px" aria-hidden="true" focusable="false"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+      <span class="bwrap"><span class="bt">G.O.C Academy Hub</span><span class="bs">Independent Scholars</span></span>
+    </div>
+    <button class="tab on" data-t="home" onclick="go('home')" aria-current="page">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
+    <button class="tab" data-t="classes" onclick="go('classes')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z" stroke-linejoin="round"/></svg>Classes</button>
+    <button class="tab" data-t="study" onclick="go('study')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg>Study</button>
+    <button class="tab" data-t="league" onclick="go('league')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M17 5h3v1.5a3 3 0 01-3 3M7 5H4v1.5a3 3 0 003 3"/><path d="M9 18h6M12 13v5"/></svg>League</button>
+    <button class="tab" data-t="profile" onclick="go('profile')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>Profile</button>
+  </nav>
+
+  <!-- ============ AFFIRMATION FLYER ============ -->
+  <div class="overlay" id="flyerOverlay">
+    <div class="flyer">
+      <div class="flyer-top">
+        <div class="mark">"</div>
+        <div class="date" id="flyerDate">Wednesday · 26 August</div>
+        <div class="quote" id="flyerQuote">I am a purpose-driven scholar. Today I study with focus.</div>
+      </div>
+      <div class="flyer-body">
+        <div class="sun">☀️</div>
+        <p>Your daily affirmation, from the G.O.C Academy. Read it, breathe, and begin.</p>
+        <button class="btn btn-red btn-block" onclick="closeFlyer()">Let's begin →</button>
+        <button class="mini-link" style="margin-top:12px" onclick="nextAffirmation()">Show another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CELEBRATE (streak-up / badge-earned pop-up) ============
+       One reusable overlay for both triggers (Task 3). celebrateStreak()
+       and celebrateBadge() in js/app.js fill it in and show it; it never
+       has its own content baked in here. -->
+  <div class="overlay celebrate-overlay" id="celebrateOverlay" onclick="if(event.target===this) closeCelebrate()">
+    <div class="celebrate-card" id="celebrateCard">
+      <div class="celebrate-burst" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="celebrate-icon" id="celebrateIcon">🔥</div>
+      <div class="celebrate-title" id="celebrateTitle">7-day streak!</div>
+      <div class="celebrate-sub" id="celebrateSub">You're on fire. Keep it going.</div>
+      <button class="btn btn-red btn-block" onclick="closeCelebrate()">Nice!</button>
+    </div>
+  </div>
+
+  <!-- ============ WIND-DOWN (time limit reached) ============ -->
+  <div class="overlay" id="windOverlay">
+    <div class="winddown">
+      <div class="big"><svg class="icon" style="width:32px;height:32px" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+      <h3>That's your focus for today</h3>
+      <p id="windMsg">You've reached your daily limit. Great work — rest lets what you learned settle. Come back tomorrow to keep your streak. 🔥</p>
+      <div class="field" id="windExtendWrap" style="display:none;text-align:left">
+        <label for="windPinInput">Guardian PIN</label>
+        <input type="text" inputmode="numeric" autocomplete="off" id="windPinInput" placeholder="Enter guardian PIN" maxlength="8">
+        <div class="gate-err" id="windPinErr"></div>
+        <button class="btn btn-outline btn-block" onclick="swExtend()">Add 15 min</button>
+      </div>
+      <button class="btn btn-red btn-block" onclick="hideWinddown()">Okay, I'll rest</button>
+    </div>
+  </div>
+
+  <!-- ============ PRE-TEST INSTRUCTIONS (before Practice/CBT/Web Test start) ============ -->
+  <div class="overlay" id="testInfoOverlay">
+    <div class="test-info">
+      <h3 id="tiTitle">Before you start</h3>
+      <p id="tiAbout"></p>
+      <ul id="tiRules"></ul>
+      <div class="ti-actions">
+        <button class="btn btn-outline" onclick="hideTestInfo()">Cancel</button>
+        <button class="btn btn-red" id="tiStartBtn" onclick="confirmTestInfo()">I understand — Start</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-back" id="sheetBack" onclick="closeSheet()"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="js/goc-core.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/pwa.js"></script>
+</body>
+</html>
