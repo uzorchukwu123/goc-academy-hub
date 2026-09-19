@@ -763,6 +763,33 @@ const openStudy = new Map();
    in the wild and nothing in the request asked to stop it — but the student
    is on the practice screen already for one subject, so switching subjects
    mid-run is refused rather than silently letting two run at once. */
+/* What a student was served last time they practiced a subject, so a resit
+   draws a fresh set instead of the same questions again. Keyed by
+   "scholarId|subject", holding just an id list — in memory only, same as
+   openStudy above, so it resets on a restart rather than needing a schema
+   change to every student record (file-based or Appwrite). Losing this on
+   restart only means the next resit after a restart isn't guaranteed fresh,
+   which is a fair trade for not persisting it. */
+const practiceRecent = new Map();
+function practiceRecentKey(scholarId, subject) { return scholarId + '|' + subject; }
+function practiceRecentIds(scholarId, subject) {
+  return practiceRecent.get(practiceRecentKey(scholarId, subject)) || [];
+}
+/* Remembers this run's questions, kept alongside what was already
+   remembered so a student cycling through several short resits in a row
+   keeps seeing new material rather than the last run's set looping back in
+   after just one repeat — capped to the size of the pool so old entries
+   fall off once the bank has been fully cycled through. */
+function practiceRecentRemember(scholarId, subject, ids, poolSize) {
+  const key = practiceRecentKey(scholarId, subject);
+  const seen = {};
+  const merged = [];
+  ids.concat(practiceRecent.get(key) || []).forEach((id) => {
+    if (!seen[id]) { seen[id] = true; merged.push(id); }
+  });
+  practiceRecent.set(key, merged.slice(0, Math.max(ids.length, poolSize)));
+}
+
 function openPracticeElsewhere(scholarId, subject) {
   let found = null;
   openStudy.forEach((v) => {
@@ -2628,7 +2655,11 @@ const ROUTES = [
           ? 'No questions have been published for ' + subject + ' yet.'
           : 'No questions have been published for the topics you chose yet.');
       }
-      const picked = core.pickStudy(pool, core.clampStudyCount(body.count, pool.length));
+      const count = core.clampStudyCount(body.count, pool.length);
+      const picked = mode === 'practice'
+        ? core.pickPractice(pool, count, practiceRecentIds(s.id, subject))
+        : core.pickStudy(pool, count);
+      if (mode === 'practice') practiceRecentRemember(s.id, subject, picked.map(q => q.id), pool.length);
 
       const minutes = mode === 'cbt' ? core.clampStudyMinutes(body.minutes) : 0;
       const paper = {
@@ -2820,6 +2851,45 @@ const ROUTES = [
       cur.active = !!body.active;
       writeData(db);
       okJson(res, cur);
+    } },
+
+  { method: 'GET', path: /^\/api\/notes\/counts$/, need: 'console', handler: (req, res) => {
+      const db = readData();
+      const bySubject = {}, totals = { live: 0, held: 0 };
+      db.notes.forEach(n => {
+        const sub = n.subject || 'Unknown';
+        if (!bySubject[sub]) bySubject[sub] = { live: 0, held: 0 };
+        const k = n.active ? 'live' : 'held';
+        bySubject[sub][k]++; totals[k]++;
+      });
+      okJson(res, { bySubject, totals });
+    } },
+
+  /* Same rule as questions: a live note is held back before it is deleted. */
+  { method: 'DELETE', path: /^\/api\/notes\/(\d+)$/, need: 'console', handler: (req, res, body, sess, params) => {
+      const db = readData();
+      const cur = db.notes.find(n => String(n.id) === params[0]);
+      if (!cur) return okJson(res, { ok: true, deleted: Number(params[0]), alreadyGone: true });
+      if (cur.active) return errJson(res, 400, 'Hold this note back before deleting it.');
+      db.notes.splice(db.notes.indexOf(cur), 1);
+      writeData(db);
+      okJson(res, { ok: true, deleted: cur.id });
+    } },
+
+  /* Bulk delete by subject; "all" must be typed explicitly, blank is refused. */
+  { method: 'DELETE', path: /^\/api\/notes\/bulk$/, need: 'console', handler: (req, res, body) => {
+      const raw = body && body.subject !== undefined && body.subject !== null ? String(body.subject).trim() : '';
+      if (!raw) return errJson(res, 400, 'Choose a subject (or "all") before deleting.');
+      const all = raw.toLowerCase() === 'all';
+      if (!all && core.ALL_SUBJECTS.indexOf(raw) === -1) {
+        return errJson(res, 400, 'Choose one of the academy\u2019s subjects, or "all".');
+      }
+      const db = readData();
+      const before = db.notes.length;
+      db.notes = db.notes.filter(n => !all && n.subject !== raw);
+      const deleted = before - db.notes.length;
+      if (deleted > 0) writeData(db);
+      okJson(res, { ok: true, deleted, remaining: db.notes.length, subject: all ? 'all' : raw });
     } },
 
   /* Bulk import of notes from a CSV. The parsing and every per-row decision is

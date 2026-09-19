@@ -391,6 +391,10 @@ function go(id){
   }
   /* Priority 1.1 — the landing page reveals its sections as they are reached. */
   if(id === 'landing' && typeof animInit === 'function') animInit();
+  /* Priority 2 — the film strip and the stage quote measure themselves from here. */
+  if(id === 'landing' && typeof filmInit === 'function') filmInit();
+  /* Priority 3 — the contact card, the footer and the feature cards respond to the pointer. */
+  if(id === 'landing' && typeof fxInit === 'function') fxInit();
   if(id === 'admin'){ admOpen('overview'); admKpiLoad(); }
   /* Priority 12 — the standings are re-read on the way in, so they are current
      whenever the student looks rather than only just after logging in. */
@@ -1161,7 +1165,7 @@ function animWanted(){
    section is one decision rather than one per card. */
 function animSections(){
   var out = [], i;
-  var sel = ['#lpFeatures .lp-grid', '#lpSubjects .lp-subj'];
+  var sel = ['#lpFeatures .lp-grid', '#lpSubjects .lp-subj', '#lpHow .hw', '#lpStage', '.lp-foot'];
   for(i = 0; i < sel.length; i++){
     var el = document.querySelector(sel[i]);
     if(el) out.push(el);
@@ -1186,6 +1190,7 @@ function animInit(){
         animObserver.unobserve(e.target);   /* a reveal happens once, not on every pass */
       }
     }
+    if(typeof stageSync === 'function') stageSync();
   }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
 
   for(var j = 0; j < sections.length; j++) animObserver.observe(sections[j]);
@@ -1211,6 +1216,287 @@ function animSweep(){
       if(animObserver) animObserver.unobserve(el);
     }
   }
+}
+
+/* ================= PRIORITY 2 — FILM STRIP AND STAGE QUOTE =================
+   The landing page's "How it works" strip and pull-quote are driven by two
+   numbers each, written to CSS custom properties as the page scrolls. The CSS
+   decides what those numbers look like; this only measures.
+
+   Two rules keep this safe. First, nothing here can hide content: the hiding
+   rules are gated on html.anim-on in the stylesheet, so if any of this throws
+   the page is simply plain. Second, the strip's own progress (the side rail and
+   the step dots) is information rather than decoration, so it keeps working
+   when the student has asked for reduced motion; only the movement is dropped,
+   and that is the stylesheet's job. */
+
+var film = { bound: false, strip: null, wrap: null, slides: [], nodes: [], raf: 0, stageBound: false, stageRaf: 0 };
+
+function filmClamp(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
+function filmVar(el, name, val){
+  if(el && el.style && typeof el.style.setProperty === 'function') el.style.setProperty(name, String(val));
+}
+function filmReduced(){
+  if(!window.matchMedia) return false;
+  var q = window.matchMedia('(prefers-reduced-motion: reduce)');
+  return !!(q && q.matches);
+}
+
+/* Measures the strip and writes: --p (0..1 along the whole strip) on the
+   wrapper for the rail, --o / --c on each slide for the parallax, the .on class
+   on a slide once it is centred (the icon draws then), and .done / .cur on the
+   rail's dots. */
+function filmSync(){
+  try{
+    var strip = film.strip; if(!strip) return;
+    var n = film.slides.length; if(!n) return;
+    var w = strip.clientWidth || 0, i;
+    if(!(w > 0)){
+      /* Not laid out yet (the landing is hidden, or a test has no layout).
+         Slide one is where anyone starts, so let it be the one that is on. */
+      if(film.slides[0].classList) film.slides[0].classList.add('on');
+      return;
+    }
+    var x = strip.scrollLeft || 0;
+    /* Progress is measured in whole slides, not in scrollWidth, so it reads 1 on
+       the last step however much (or little) the browser counts as scrollable. */
+    var p = n > 1 ? filmClamp(x / ((n - 1) * w), 0, 1) : 0;
+    filmVar(film.wrap, '--p', p.toFixed(4));
+    var cur = filmClamp(Math.round(x / w), 0, n - 1);
+    for(i = 0; i < n; i++){
+      var o = filmClamp((i * w - x) / w, -1, 1);
+      var c = 1 - Math.abs(o);
+      filmVar(film.slides[i], '--o', o.toFixed(3));
+      filmVar(film.slides[i], '--c', c.toFixed(3));
+      if(c >= 0.55 && film.slides[i].classList) film.slides[i].classList.add('on');
+      var node = film.nodes[i];
+      if(node && node.classList){
+        if(p >= i / (n - 1) - 0.02 && n > 1) node.classList.add('done'); else node.classList.remove('done');
+        if(i === cur){ node.classList.add('cur'); node.setAttribute('aria-current', 'step'); }
+        else { node.classList.remove('cur'); node.removeAttribute && node.removeAttribute('aria-current'); }
+      }
+    }
+  }catch(err){ /* a measuring failure must never reach the student */ }
+}
+
+function filmSchedule(){
+  if(film.raf) return;
+  var run = function(){ film.raf = 0; filmSync(); };
+  film.raf = window.requestAnimationFrame ? window.requestAnimationFrame(run) : (run(), 0);
+}
+
+function filmGo(i){
+  var strip = film.strip; if(!strip) return;
+  var left = i * (strip.clientWidth || 0);
+  if(typeof strip.scrollTo === 'function') strip.scrollTo({ left: left, behavior: filmReduced() ? 'auto' : 'smooth' });
+  else strip.scrollLeft = left;
+}
+
+/* Signed distance of the quote section from the middle of the landing page's
+   scroll area (--qo, -1..1) and how centred it is, eased (--qc, 0..1). */
+function stageSync(){
+  try{
+    var sec = document.getElementById('lpStage'), sc = document.getElementById('landing');
+    if(!sec || !sc || !animOn) return;
+    var vh = sc.clientHeight || 0; if(!(vh > 0)) return;
+    var sr = sec.getBoundingClientRect(), cr = sc.getBoundingClientRect();
+    var mid = (sr.top + sr.height / 2) - (cr.top + vh / 2);
+    var o = filmClamp(mid / (vh * 0.8), -1, 1);
+    var c = 1 - Math.abs(o);
+    filmVar(sec, '--qo', o.toFixed(3));
+    filmVar(sec, '--qc', (c * c * (3 - 2 * c)).toFixed(3));
+  }catch(err){ }
+}
+function stageSchedule(){
+  if(film.stageRaf) return;
+  var run = function(){ film.stageRaf = 0; stageSync(); };
+  film.stageRaf = window.requestAnimationFrame ? window.requestAnimationFrame(run) : (run(), 0);
+}
+
+function filmInit(){
+  try{
+    if(film.bound){ filmSync(); stageSync(); return; }
+    var strip = document.getElementById('hwStrip'), wrap = document.getElementById('hw');
+    if(!strip || !wrap) return;
+    film.strip = strip; film.wrap = wrap;
+    film.slides = [].slice.call(strip.querySelectorAll('.hw-slide'));
+    film.nodes = [].slice.call(wrap.querySelectorAll('.hw-node'));
+    if(!film.slides.length) return;
+    film.bound = true;
+
+    if(strip.addEventListener) strip.addEventListener('scroll', filmSchedule, { passive: true });
+    film.nodes.forEach(function(node, idx){
+      if(node.addEventListener) node.addEventListener('click', function(){ filmGo(idx); });
+    });
+    var sc = document.getElementById('landing');
+    if(sc && sc.addEventListener) sc.addEventListener('scroll', stageSchedule, { passive: true });
+    if(window.addEventListener) window.addEventListener('resize', function(){ filmSchedule(); stageSchedule(); });
+
+    filmSync(); stageSync();
+    /* One more pass after the first layout, in case the screen was only just
+       made visible when this ran. */
+    if(window.requestAnimationFrame) window.requestAnimationFrame(function(){ filmSync(); stageSync(); });
+  }catch(err){ }
+}
+
+/* ================= PRIORITY 3 — CONTACT, FOOTER AND CARDS =================
+   Four small behaviours that the stylesheet cannot do for itself because they
+   depend on where the pointer is: the cursor-follow tilt on the three
+   ecosystem cards, the magnetic pull on the contact fields, the ripple on the
+   send button, and switching the looping decoration (the aurora, the twinkling
+   stars) off whenever it is not on screen.
+
+   The same two rules as above hold. Nothing here can hide content: the
+   stylesheet gates every hiding rule on html.anim-on, and all of this is a
+   no-op unless animOn is true, so with reduced motion or no IntersectionObserver
+   the page is plain. The handlers only write CSS variables (plus the ripple's
+   own throwaway span): they write numbers, the stylesheet decides what they mean. */
+
+var fx = { bound: false, card: null, cardRect: null, field: null, fieldRect: null, io: null };
+
+/* A mouse or a pen. A finger has no hover, so it gets no tilt and no pull. */
+function fxFine(e){
+  var t = e && e.pointerType;
+  return !t || t === 'mouse' || t === 'pen';
+}
+function fxRound(v){ return Math.round(v * 100) / 100; }
+
+/* rect is the card's box when the pointer arrived. It is measured once and
+   reused, because the tilt itself would otherwise move the box under the
+   pointer and make the card shiver at its edges. */
+function tiltSet(card, x, y, rect){
+  if(!card || !rect || !(rect.width > 0) || !(rect.height > 0)) return;
+  var nx = filmClamp((x - rect.left) / rect.width, 0, 1) - 0.5;    /* -.5 left .. +.5 right */
+  var ny = filmClamp((y - rect.top) / rect.height, 0, 1) - 0.5;    /* -.5 top  .. +.5 bottom */
+  filmVar(card, '--ty', fxRound(nx * 12) + 'deg');                 /* at most 6deg either way */
+  filmVar(card, '--tx', fxRound(-ny * 10) + 'deg');                /* at most 5deg either way */
+  if(card.classList) card.classList.add('is-tilting');
+}
+function tiltClear(card){
+  if(!card) return;
+  filmVar(card, '--tx', '0deg');
+  filmVar(card, '--ty', '0deg');
+  if(card.classList) card.classList.remove('is-tilting');
+}
+
+/* The field under the pointer leans a few px toward it. */
+function magnetSet(field, x, y, rect){
+  if(!field || !rect || !(rect.width > 0) || !(rect.height > 0)) return;
+  var dx = filmClamp((x - (rect.left + rect.width / 2)) / (rect.width / 2), -1, 1);
+  var dy = filmClamp((y - (rect.top + rect.height / 2)) / (rect.height / 2), -1, 1);
+  filmVar(field, '--mx', fxRound(dx * 4) + 'px');
+  filmVar(field, '--my', fxRound(dy * 3) + 'px');
+}
+function magnetClear(field){
+  if(!field) return;
+  filmVar(field, '--mx', '0px');
+  filmVar(field, '--my', '0px');
+}
+
+/* A ripple from the point of the press (or from the middle, for a key press).
+   Its diameter is twice the distance to the farthest corner, so it always
+   finishes covering the whole button. */
+function rippleAt(btn, x, y, rect){
+  if(!animOn || !btn || btn.disabled || !btn.appendChild) return null;
+  var r = rect || (btn.getBoundingClientRect ? btn.getBoundingClientRect() : null);
+  if(!r || !(r.width > 0) || !(r.height > 0)) return null;
+  var live = btn.querySelectorAll ? btn.querySelectorAll('.cf-rip') : [];
+  if(live.length >= 4) return null;
+  var px = (typeof x === 'number') ? x - r.left : r.width / 2;
+  var py = (typeof y === 'number') ? y - r.top : r.height / 2;
+  var fx2 = Math.max(px, r.width - px), fy2 = Math.max(py, r.height - py);
+  var d = Math.ceil(2 * Math.sqrt(fx2 * fx2 + fy2 * fy2));
+  var s = document.createElement('span');
+  s.className = 'cf-rip';
+  s.setAttribute('aria-hidden', 'true');
+  if(s.style){
+    s.style.left = fxRound(px) + 'px'; s.style.top = fxRound(py) + 'px';
+    s.style.width = d + 'px'; s.style.height = d + 'px';
+  }
+  btn.appendChild(s);
+  var gone = function(){ if(s.parentNode && s.parentNode.removeChild) s.parentNode.removeChild(s); };
+  if(s.addEventListener) s.addEventListener('animationend', gone);
+  setTimeout(gone, 900);       /* the safety net, in case the animation never runs */
+  return s;
+}
+
+/* The aurora and the stars loop, so they only run while their section is on
+   screen. The landing screen being hidden counts as off screen. */
+function ambientInit(){
+  if(!animOn || fx.io || typeof window.IntersectionObserver !== 'function') return;
+  var els = document.querySelectorAll('.lp-contact, .lp-foot'), i;
+  fx.io = new window.IntersectionObserver(function(entries){
+    for(var k = 0; k < entries.length; k++){
+      var t = entries[k].target;
+      if(!t || !t.classList) continue;
+      if(entries[k].isIntersecting) t.classList.add('live'); else t.classList.remove('live');
+    }
+  }, { threshold: 0 });
+  for(i = 0; i < els.length; i++) fx.io.observe(els[i]);
+}
+
+function fxInit(){
+  try{
+    if(!animOn) return;
+    ambientInit();
+    if(fx.bound) return;
+    fx.bound = true;
+
+    /* Tilt: one listener on the grid, not one per card. */
+    var grid = document.querySelector('#lpFeatures .lp-grid');
+    if(grid && grid.addEventListener){
+      grid.addEventListener('pointermove', function(e){
+        if(!animOn || !fxFine(e)) return;
+        var card = e.target && e.target.closest ? e.target.closest('.lp-feat') : null;
+        if(card !== fx.card){
+          tiltClear(fx.card);
+          fx.card = card;
+          fx.cardRect = card && card.getBoundingClientRect ? card.getBoundingClientRect() : null;
+        }
+        if(card) tiltSet(card, e.clientX, e.clientY, fx.cardRect);
+      });
+      grid.addEventListener('pointerleave', function(){ tiltClear(fx.card); fx.card = null; fx.cardRect = null; });
+    }
+
+    /* Contact: the pull, the aurora waking, and the ripple. */
+    var form = document.querySelector('.lp-cform'), box = document.querySelector('.lp-contact');
+    if(form && form.addEventListener){
+      form.addEventListener('pointermove', function(e){
+        if(!animOn || !fxFine(e)) return;
+        var f = e.target && e.target.closest ? e.target.closest('.cf-in') : null;
+        if(f !== fx.field){
+          magnetClear(fx.field);
+          fx.field = f;
+          fx.fieldRect = f && f.getBoundingClientRect ? f.getBoundingClientRect() : null;
+        }
+        if(f) magnetSet(f, e.clientX, e.clientY, fx.fieldRect);
+      });
+      form.addEventListener('pointerleave', function(){ magnetClear(fx.field); fx.field = null; fx.fieldRect = null; });
+      form.addEventListener('focusin', function(){ if(box && box.classList) box.classList.add('engaged'); });
+      form.addEventListener('focusout', function(e){
+        var to = e && e.relatedTarget;
+        if(to && form.contains && form.contains(to)) return;    /* focus is only moving between fields */
+        if(box && box.classList) box.classList.remove('engaged');
+      });
+      var send = document.getElementById('cSendBtn');
+      if(send && send.addEventListener){
+        send.addEventListener('pointerdown', function(e){
+          if(e.button) return;                                 /* left button, touch or pen only */
+          rippleAt(send, e.clientX, e.clientY);
+        });
+        send.addEventListener('click', function(e){
+          if(e.detail === 0) rippleAt(send);                   /* a key press: from the middle */
+        });
+      }
+    }
+
+    /* A scroll moves the cards and fields out from under a cached box. */
+    var sc = document.getElementById('landing');
+    if(sc && sc.addEventListener) sc.addEventListener('scroll', function(){
+      if(fx.card){ tiltClear(fx.card); fx.card = null; fx.cardRect = null; }
+      if(fx.field){ magnetClear(fx.field); fx.field = null; fx.fieldRect = null; }
+    }, { passive: true });
+  }catch(err){ /* decoration must never reach the student */ }
 }
 
 /* --- 1.2 and 1.3: the hand-off into the app ---------------------------
@@ -2071,14 +2357,23 @@ function admOpen(section){
        every word a student reads there is written in this panel. */
     notes: function(){ return (
       '<div class="ad-card"><div class="ad-h">Reading notes</div><p class="ad-p">What a student reads in Read / Learn. File a note under the topic the questions use. A note held back is not served.</p>'+
+      '<div class="ad-metric" id="admNTotals"><span>Note totals</span><b>counting…</b></div></div>'+
+      '<div class="ad-card"><div class="ad-h">Add / edit a note</div>'+
       subjSeg()+
       '<div class="ad-metric"><span>Notes held</span><b id="admNCount">counting…</b></div>'+
       '<div id="admNForm">'+admNFormHTML()+'</div></div>'+
       '<div class="ad-card"><div class="ad-h">Published notes</div>'+
-      '<p class="ad-p">Everything in '+esc(admSubj)+', grouped by topic — the same grouping the student sees. Correct the wording, change the reading time, or hold a note back.</p>'+
+      '<p class="ad-p">Everything in '+esc(admSubj)+', grouped by topic — the same grouping the student sees. Correct the wording, change the reading time, hold a note back or delete it.</p>'+
       '<div class="ad-seg" id="admNTabs">'+admNTabsHTML()+'</div>'+
+      '<div id="admNBulkBar">'+admNBulkBarHTML()+'</div>'+
       '<div id="admNList"><div class="ad-loading">Loading the notes…</div></div>'+
-      '<div class="ad-actions"><button class="ad-btn" onclick="admNLoad()">Refresh</button><button class="ad-btn pri" onclick="admOpen(\'import\')">Import from a spreadsheet</button></div></div>'
+      '<div class="ad-actions"><button class="ad-btn" onclick="admNLoad()">Refresh</button><button class="ad-btn pri" onclick="admOpen(\'import\')">Import from a spreadsheet</button></div></div>'+
+      '<div class="ad-card"><div class="ad-h">Bulk delete by subject</div>'+
+      '<p class="ad-p">Delete every note in a subject at once. "All" widens the match to the entire set of notes.</p>'+
+      '<div class="ad-field"><label>Subject</label><select id="admNBulkSubj">'+admQBulkFilterOptsHTML(mySubjectList(), 'All subjects')+'</select></div>'+
+      '<div class="ad-actions"><button class="ad-btn danger" id="admNBulkFilterBtn" onclick="admNBulkDeleteByFilter()">Delete matching notes</button></div>'+
+      '<p class="ad-note">Applies across every subject, not just '+esc(admSubj)+' above.</p></div>'+
+      admNRefCardHTML()
     ); },
     /* Bulk import. Typing a bank one question at a time is the slowest part of
        running the academy, so a spreadsheet may be pasted or opened instead. */
@@ -3503,7 +3798,7 @@ function admNRepaint(){
    cannot check by eye. */
 function admNPrevHTML(){
   var d = admNNeeds();
-  return mathPrev([{ label:'Title', src:d.title }, { label:'', src:d.body }]);
+  return mathPrev([{ label:'Title', src:d.title, bare:true }, { label:'', src:d.body, bare:true }]);
 }
 function admNPrev(){
   admNRead();
@@ -3738,6 +4033,141 @@ function admUploadVideo(){
   });
 }
 
+var admNSelected = {};   // ids checked in the notes list, for bulk delete
+
+/* Same two-step rule as the question bank: a live note is held back first, then
+   deleted, so one click finishes the job whatever state the note is in. */
+function admNForceDelete(id){
+  var n = null;
+  admNCache.forEach(function(r){ if(String(r.id) === String(id)) n = r; });
+  var doDelete = function(){ return GOC.api.deleteNote(id); };
+  if(n && n.active !== false) return GOC.api.setNoteActive(id, false).then(doDelete);
+  return doDelete();
+}
+function admNDelete(id){
+  if(!confirm('Permanently delete note #' + id + '?\n\nThis cannot be undone.')) return;
+  admNForceDelete(id).then(function(){
+    toast('Note #' + id + ' deleted');
+    delete admNSelected[id];
+    if(admNDraft && String(admNDraft.id) === String(id)){ admNDraft = admNBlank(); admNRepaint(); }
+    admNLoad();
+  }, function(err){ toast(err.message || 'Could not delete that note'); });
+}
+function admNToggleSelect(id, on){
+  if(on) admNSelected[id] = true; else delete admNSelected[id];
+  var bar = document.getElementById('admNBulkBar');
+  if(bar) bar.innerHTML = admNBulkBarHTML();
+}
+function admNClearSelection(){ admNSelected = {}; admNRender(); }
+function admNBulkBarHTML(){
+  var ids = Object.keys(admNSelected);
+  if(!ids.length) return '';
+  return '<div class="ad-actions ad-bulkbar">'
+    + '<span>' + ids.length + ' note' + (ids.length !== 1 ? 's' : '') + ' selected</span>'
+    + '<button class="ad-btn danger" id="admNBulkDelBtn" onclick="admNBulkDelete()">Delete selected</button>'
+    + '<button class="ad-btn" onclick="admNClearSelection()">Clear</button>'
+    + '</div>';
+}
+function admNBulkDelete(){
+  var ids = Object.keys(admNSelected);
+  if(!ids.length) return;
+  if(!confirm('Permanently delete ' + ids.length + ' note' + (ids.length !== 1 ? 's' : '') + '?\n\nThis cannot be undone.')) return;
+  var btn = document.getElementById('admNBulkDelBtn');
+  busy(btn, true);
+  var okCount = 0, failCount = 0, chain = Promise.resolve();
+  ids.forEach(function(id){
+    chain = chain.then(function(){
+      return admNForceDelete(id).then(function(){ okCount++; }, function(){ failCount++; });
+    });
+  });
+  chain.then(function(){
+    admNSelected = {};
+    busy(btn, false);
+    toast(okCount + ' note' + (okCount !== 1 ? 's' : '') + ' deleted'
+      + (failCount ? ', ' + failCount + ' could not be deleted' : ''));
+    admNLoad();
+  });
+}
+function admNBulkDeleteByFilter(){
+  var sel = document.getElementById('admNBulkSubj');
+  if(!sel) return;
+  var subject = sel.value;
+  var label = subject === 'all' ? 'all subjects' : subject;
+  var btn = document.getElementById('admNBulkFilterBtn');
+  busy(btn, true);
+  GOC.api.listAllNotes(subject === 'all' ? {} : { subject: subject }).then(function(r){
+    var count = (r && r.notes && r.notes.length) || 0;
+    if(!count){ busy(btn, false); toast('No matching notes to delete.'); return; }
+    var msg = subject === 'all'
+      ? 'Delete ALL ' + count + ' reading notes permanently?'
+      : 'Delete all ' + count + ' ' + label + ' notes permanently?';
+    if(!confirm(msg + '\n\nThis cannot be undone.')){ busy(btn, false); return; }
+    return GOC.api.bulkDeleteNotes(subject).then(function(res){
+      busy(btn, false);
+      toast((res && res.deleted || 0) + ' note' + ((res && res.deleted) === 1 ? '' : 's') + ' deleted');
+      admNSelected = {};
+      admNLoad();
+    });
+  }).catch(function(err){
+    busy(btn, false);
+    toast((err && err.message) || 'Could not delete those notes.');
+  });
+}
+/* Count summary across every subject, shown at the top whichever subject is open. */
+function admNTotalsLoad(){
+  var host = document.getElementById('admNTotals');
+  if(!host) return;
+  GOC.api.noteCounts().then(function(r){
+    var h = document.getElementById('admNTotals');
+    if(!h) return;
+    var t = (r && r.totals) || { live:0, held:0 };
+    h.innerHTML = '<span>Note totals</span><b>Readable ' + t.live + ' · Held back ' + t.held + '</b>';
+  }, function(err){
+    var h = document.getElementById('admNTotals');
+    if(h) h.innerHTML = '<span>Note totals</span><b>'+esc(err.message || 'not available')+'</b>';
+  });
+}
+/* The Read / Learn reflection: what a student actually meets, per paper and per
+   topic. Only readable notes count — a held-back note is not served. */
+function admNRefCardHTML(){
+  return '<div class="ad-card"><div class="ad-h">How this lands in Read / Learn</div>'+
+    '<p class="ad-p">What a student reads after you publish. Only readable notes are counted — a note held back is not served, so it is not counted here.</p>'+
+    '<div id="admNRef"><div class="ad-loading">Reading the notes…</div></div></div>';
+}
+function admNRefLoad(){
+  var host = document.getElementById('admNRef');
+  if(!host) return;
+  GOC.api.listAllNotes({ activeOnly: true }).then(function(r){
+    var h = document.getElementById('admNRef');
+    if(h) h.innerHTML = admNRefHTML((r && r.notes) || []);
+  }, function(err){
+    var h = document.getElementById('admNRef');
+    if(h) h.innerHTML = '<div class="ad-empty">'+esc(err.message || 'The notes are not available.')+'</div>';
+  });
+}
+function admNRefHTML(rows){
+  var subs = ['Use of English','Physics','Chemistry','Biology','Mathematics'];
+  var out = '', gaps = [];
+  subs.forEach(function(s){
+    var mine = rows.filter(function(n){ return canonSubject(n.subject) === s; });
+    var topics = {};
+    mine.forEach(function(n){ var t = n.topic || 'General'; topics[t] = (topics[t] || 0) + 1; });
+    var tk = Object.keys(topics);
+    out += '<div class="ad-sub">' + esc(s) + ' · ' + mine.length + ' readable note' + (mine.length !== 1 ? 's' : '') + '</div>';
+    if(!mine.length){
+      gaps.push(s);
+      out += '<div class="ad-empty">No readable note in ' + esc(s) + ' — a student who opens this paper in Read / Learn is told nothing has been published.</div>';
+      return;
+    }
+    out += '<div class="ad-metric"><span>' + esc(tk.map(function(t){ return t + ' ' + topics[t]; }).join(' · ')) +
+           '</span><b>' + tk.length + ' topic' + (tk.length !== 1 ? 's' : '') + '</b></div>';
+  });
+  out += gaps.length
+    ? '<p class="ad-warn">' + gaps.length + ' paper' + (gaps.length !== 1 ? 's have' : ' has') + ' nothing readable: ' + esc(gaps.join(', ')) + '.</p>'
+    : '<p class="ad-note">Every paper has readable notes. A student sees only the papers in their own combination.</p>';
+  return out;
+}
+
 function admNEdit(id){
   var n = null;
   admNCache.forEach(function(r){ if(String(r.id) === String(id)) n = r; });
@@ -3768,9 +4198,12 @@ function admNLoad(){
     admNCache = (r && r.notes) || [];
     admNRender();
   }, function(err){
+    admNCache = [];
     var h = document.getElementById('admNList');
     if(h) h.innerHTML = '<div class="ad-empty">'+esc(err.message || 'The notes are not available.')+'</div>';
   });
+  admNTotalsLoad();
+  admNRefLoad();
 }
 function admNRender(){
   var host = document.getElementById('admNList');
@@ -3780,6 +4213,11 @@ function admNRender(){
   var count = document.getElementById('admNCount');
   var live = admNCache.filter(function(n){ return n.active !== false; }).length;
   if(count) count.textContent = admNCache.length + ' in ' + admSubj + ' · ' + live + ' readable';
+  var stillHere = {};
+  admNCache.forEach(function(n){ stillHere[n.id] = true; });
+  Object.keys(admNSelected).forEach(function(id){ if(!stillHere[id]) delete admNSelected[id]; });
+  var bar = document.getElementById('admNBulkBar');
+  if(bar) bar.innerHTML = admNBulkBarHTML();
   var rows = admNCache.filter(function(n){
     if(admNFilter === 'live') return n.active !== false;
     if(admNFilter === 'held') return n.active === false;
@@ -3819,15 +4257,18 @@ function admNCardHTML(n){
   var body = String(n.body || '');
   var peek = admPeek(body, 220);
   return '<div class="ad-q' + (live ? '' : ' off') + '">'
-    + '<div class="qh"><code>#' + esc(n.id) + '</code>'
+    + '<div class="qh"><input type="checkbox" class="ad-chk" title="Select for bulk delete"'
+    + ' onchange="admNToggleSelect(' + esc(n.id) + ', this.checked)"' + (admNSelected[n.id] ? ' checked' : '') + '>'
+    + '<code>#' + esc(n.id) + '</code>'
     + '<span class="ad-tag ' + (live ? 'g' : 'r') + '">' + (live ? 'Readable' : 'Held back') + '</span>'
     + '<code>' + esc(n.minutes) + ' min read</code>'
     + '<code>' + esc(n.topic) + '</code></div>'
-    + '<div class="qt">' + mth(n.title) + '</div>'
-    + '<div class="qm">' + mth(peek, {breaks:true}) + '</div>'
+    + '<div class="qt">' + mth(n.title, {bare:true}) + '</div>'
+    + '<div class="qm">' + mth(peek, NOTE_MTH) + '</div>'
     + '<div class="ad-actions"><button class="ad-btn" onclick="admNEdit(' + esc(n.id) + ')">Edit note</button>'
     + '<button class="ad-btn" onclick="admNToggle(' + esc(n.id) + ',' + (live ? 'false' : 'true') + ')">'
-    + (live ? 'Hold back' : 'Publish') + '</button></div></div>';
+    + (live ? 'Deactivate' : 'Activate') + '</button>'
+    + '<button class="ad-btn danger" onclick="admNDelete(' + esc(n.id) + ')">Delete</button></div></div>';
 }
 
 /* ================= CONSOLE: IMPORT FROM A SPREADSHEET =================
@@ -4472,6 +4913,8 @@ function mth(s, opts){
   var out = esc(s);
   return opts && opts.breaks ? out.replace(/\n/g,'<br>') : out;
 }
+/* Notes accept LaTeX with or without dollar signs, in every subject. */
+var NOTE_MTH = { breaks:true, bare:true };
 /* And the one-line reading of it, for a place that can hold no markup at all. */
 function mthPlain(s){
   var r = rulebook();
@@ -4494,9 +4937,9 @@ function mathPrev(parts){
   for(i = 0; i < parts.length; i++){
     s = String(parts[i].src == null ? '' : parts[i].src);
     if(!s) continue;
-    if(r.hasMath && r.hasMath(s)) any = true;
+    if(r.hasMath && r.hasMath(s, parts[i].bare ? {bare:true} : null)) any = true;
     if(r.mathIssues){
-      got = r.mathIssues(s);
+      got = r.mathIssues(parts[i].bare && r.autoFormatBareLatex ? r.autoFormatBareLatex(s) : s);
       for(j = 0; j < got.length; j++){ if(!seen[got[j]]){ seen[got[j]] = 1; issues.push(got[j]); } }
     }
   }
@@ -4507,7 +4950,7 @@ function mathPrev(parts){
       if(!s) continue;
       out += '<div class="mprev">'
         + (parts[i].label ? '<b>' + esc(parts[i].label) + '</b>' : '')
-        + mth(s, {breaks:true}) + '</div>';
+        + mth(s, parts[i].bare ? {breaks:true, bare:true} : {breaks:true}) + '</div>';
     }
   }
   if(issues.length){
@@ -5299,7 +5742,7 @@ function renderReadingTopics(){
   host.innerHTML = order.map(function(tp){
     return '<div class="rd-tp">' + esc(tp) + '</div>' + byTopic[tp].map(function(n){
       return '<button class="rd-note" onclick="openNote(' + n.id + ')">' +
-             '<span class="nm"><b>' + esc(n.title) + '</b><span>' + esc(n.subject) + ' · ' + esc(n.topic) + '</span></span>' +
+             '<span class="nm"><b>' + mth(n.title, NOTE_MTH) + '</b><span>' + esc(n.subject) + ' · ' + esc(n.topic) + '</span></span>' +
              '<span class="mins">' + n.minutes + ' min</span></button>';
     }).join('');
   }).join('');
@@ -5330,7 +5773,7 @@ function renderLesson(){
   var n = rdNote;
   if(!n) return;
   var t = document.getElementById('lessonTitle'), sub = document.getElementById('lessonSub');
-  if(t) t.textContent = n.title;
+  if(t) t.innerHTML = mth(n.title, NOTE_MTH);
   if(sub) sub.textContent = n.subject + ' · ' + n.topic + ' · ' + n.minutes + ' min read';
   /* Notes are stored as plain text, never as markup: a paragraph break is a
      blank line. Rendering them by paragraph means a note typed or imported by
@@ -5342,9 +5785,9 @@ function renderLesson(){
   var siblings = rdNotes.filter(function(x){ return x.topic === n.topic && x.id !== n.id; });
   body.innerHTML =
     '<div class="kb">' + esc(n.topic) + '</div>' +
-    paras.map(function(x){ return '<p>' + mth(x.trim(), {breaks:true}) + '</p>'; }).join('') +
+    paras.map(function(x){ return '<p>' + mth(x.trim(), NOTE_MTH) + '</p>'; }).join('') +
     (siblings.length ? '<div class="rd-tp">More on this topic</div>' + siblings.map(function(x){
-      return '<button class="rd-note" onclick="openNote(' + x.id + ')"><span class="nm"><b>' + esc(x.title) +
+      return '<button class="rd-note" onclick="openNote(' + x.id + ')"><span class="nm"><b>' + mth(x.title, NOTE_MTH) +
              '</b><span>' + x.minutes + ' min read</span></span></button>';
     }).join('') : '') +
     '<div class="spacer"></div>';

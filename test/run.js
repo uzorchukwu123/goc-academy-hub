@@ -6,7 +6,8 @@ var spawnSync = require('child_process').spawnSync;
 
 var suites = ['test-rules.js', 'test-p1.js', 'test-p2.js', 'test-p6.js', 'test-p3.js', 'test-p4.js', 'test-p78.js',
               'test-p9.js', 'test-p10.js', 'test-study.js', 'test-study-window.js', 'test-math.js', 'test-launch.js',
-              'test-server.js', 'test-persist.js', 'test-security.js', 'test-driver-parity.js', 'test-contact.js'];
+              'test-server.js', 'test-persist.js', 'test-security.js', 'test-driver-parity.js', 'test-contact.js',
+              'test-landing-motion.js', 'test-landing-motion-3.js'];
 var failed = [];
 
 suites.forEach(function (s) {

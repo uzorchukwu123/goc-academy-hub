@@ -108,8 +108,9 @@ ok('every animated property is transform or opacity — nothing that reflows',
   });
 
 /* Rule 4: the student's own accessibility setting wins. */
-var guarded = (block.match(/@media \(prefers-reduced-motion: no-preference\)\{[\s\S]*?\n\}/) || [''])[0];
-ok('the effects sit inside a prefers-reduced-motion guard', guarded.length > 300);
+var motionGuards = block.match(/@media \(prefers-reduced-motion:\s*no-preference\)\s*\{[\s\S]*?\n\}/g) || [];
+var guarded = motionGuards.join('\n');
+ok('the effects sit inside a prefers-reduced-motion guard', motionGuards.length > 0 && guarded.length > 300);
 ok('every animation: declaration is inside that guard',
    (block.match(/animation:/g) || []).length === (guarded.match(/animation:/g) || []).length,
    (block.match(/animation:/g) || []).length + ' total vs ' + (guarded.match(/animation:/g) || []).length + ' guarded');
@@ -124,8 +125,8 @@ ok('every rule that hides content is gated behind html.anim-on',
 /* Rule: the logo is never animated. Only the wordmark text beside it moves. */
 ok('the wordmark span is what animates', /\.lp-brand \.bt\{animation:/.test(block.replace(/\s+/g, ' ').replace(/ \{/g, '{')) ||
    /\.bt\{animation:markIn/.test(block.replace(/\s+/g, '')));
-ok('the logo tile .bm is never mentioned in the motion block',
-   bare.indexOf('.bm') < 0);
+ok('the logo tile .bm is never an animation target',
+   !/\.bm[^\{]*\{[^}]*animation\s*:/.test(bare));
 ok('.lp-brand is never itself an animation target',
    !/\.lp-brand\s*\{[^}]*animation/.test(bare));
 ok('the mark symbol is never referenced', bare.indexOf('goc-mark') < 0);

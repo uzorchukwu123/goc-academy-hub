@@ -673,10 +673,10 @@
     var body = r.body !== undefined ? r.body : (r.note !== undefined ? r.note : (r.content || ''));
     return {
       subject: r.subject || '', topic: r.topic || '',
-      title: r.title || r.heading || '',
+      title: autoFormatBareLatex(r.title || r.heading || ''),
       /* A spreadsheet cell usually carries the paragraph break as the two
          characters \n rather than a real line break. Both are accepted. */
-      body: String(body).replace(/\\n/g, '\n'),
+      body: autoFormatBareLatex(String(body).replace(/\\n/g, '\n')),
       minutes: r.minutes !== undefined ? r.minutes : r.mins,
       active: csvFlag(r.active, true)
     };
@@ -1088,6 +1088,28 @@
         if (row) { picked.push(row); more = true; }
       }
       i++;
+    }
+    return picked;
+  }
+  /* A practice resit should feel like a fresh set, not the same paper again —
+     so the pool is split into "not recently served" and "recently served"
+     before the ordinary spread-across-topics draw in pickStudy() runs. The
+     fresh half is drawn from first; the recent half is only touched once the
+     fresh half cannot fill the run, which is exactly the case where the bank
+     is too small to avoid repeats at all. `recentIds` is whatever the caller
+     remembers serving last — this function does not track anything itself,
+     so two callers with different memories of "recent" naturally get
+     different fresh/stale splits. */
+  function pickPractice(pool, count, recentIds, rnd) {
+    var recent = {};
+    (recentIds || []).forEach(function (id) { recent[String(id)] = true; });
+    var fresh = [], stale = [];
+    (pool || []).forEach(function (r) {
+      (recent[String(r.id)] ? stale : fresh).push(r);
+    });
+    var picked = pickStudy(fresh, Math.min(count, fresh.length), rnd);
+    if (picked.length < count) {
+      picked = picked.concat(pickStudy(stale, count - picked.length, rnd));
     }
     return picked;
   }
@@ -1982,7 +2004,12 @@
      and a question with no mathematics in it comes back exactly as escaping
      alone would have left it — so nothing about the ordinary case changes. */
   function renderMath(text, opts) {
-    var o = opts || {}, parts = mathSpans(text), out = '', i, esc;
+    var o = opts || {}, parts, out = '', i, esc;
+    /* opts.bare: the text may carry LaTeX with no dollar signs around it (a note
+       pasted from Word's equation editor or a solutions manual). Wrap those
+       stretches first, exactly as the Physics CSV import does. */
+    if (o.bare) text = autoFormatBareLatex(text);
+    parts = mathSpans(text);
     for (i = 0; i < parts.length; i++) {
       if (parts[i].math) out += renderTexSafe(parts[i].src, parts[i].display);
       else {
@@ -2014,9 +2041,9 @@
      into a formula alongside it. Text already inside a recognised $...$,
      \(...\) or \[...\] pair is left exactly as it was — this only rewrites
      the prose around such pairs, never their contents. */
-  var LATEX_TERM_SRC = '(?:\\\\[A-Za-z]+(?:\\s*\\{[^{}]*\\})*|\\d+(?:\\.\\d+)?(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)*|[A-Za-z]{1,3}(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)*)';
-  var LATEX_TRIGGER_SRC = '(?:\\\\[A-Za-z]+(?:\\s*\\{[^{}]*\\})*|\\b[A-Za-z0-9]{1,4}(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)+)';
-  var LATEX_CLUSTER = new RegExp(LATEX_TRIGGER_SRC +
+  var LATEX_TERM_SRC = '(?:\\\\[A-Za-z]+(?:\\s*[\\^_]\\s*(?:\\{[^{}]{1,24}\\}|[A-Za-z0-9+\\-]{1,6}))*(?:\\s*\\{(?:[^{}]|\\{(?:[^{}]|\\{[^{}]*\\})*\\})*\\})*|\\d+(?:\\.\\d+)?(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)*|[A-Za-z]{1,3}(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)*)';
+  var LATEX_TRIGGER_SRC = '(?:\\\\[A-Za-z]+(?:\\s*[\\^_]\\s*(?:\\{[^{}]{1,24}\\}|[A-Za-z0-9+\\-]{1,6}))*(?:\\s*\\{(?:[^{}]|\\{(?:[^{}]|\\{[^{}]*\\})*\\})*\\})*|\\b[A-Za-z0-9]{1,4}(?:\\s*[\\^_]\\s*\\{?[A-Za-z0-9+\\-]{1,6}\\}?)+)';
+  var LATEX_CLUSTER = new RegExp('(?:\\b[A-Za-z]{1,2}\\s*[=<>≤≥≠≈]\\s*)?' + LATEX_TRIGGER_SRC +
     '(?:(?:\\s*[=+\\-*/±×÷≤≥≠≈]\\s*|(?=[A-Za-z0-9\\\\]))' + LATEX_TERM_SRC + ')*', 'g');
   function autoFormatBareLatex(text) {
     var s = String(text == null ? '' : text);
@@ -2033,13 +2060,14 @@
            cannot occur given how the pattern is built — this check is kept
            anyway so the function can never wrap plain prose by accident if
            the pattern above is ever changed. */
-        return (/\\[A-Za-z]|[A-Za-z0-9][\^_]/.test(m)) ? '$' + m + '$' : m;
-      });
+        return (/\\[A-Za-z]|[A-Za-z0-9][\^_]/.test(m)) ? '\u0001' + m + '\u0002' : m;
+      }).replace(/\u0002 \u0001/g, ' ').replace(/\u0001/g, '$').replace(/\u0002/g, '$');
     }
     return out;
   }
 
-  function hasMath(text) {
+  function hasMath(text, opts) {
+    if (opts && opts.bare) text = autoFormatBareLatex(text);
     var p = mathSpans(text), i;
     for (i = 0; i < p.length; i++) if (p[i].math) return true;
     return false;
@@ -2266,6 +2294,7 @@
     clampStudyCount: clampStudyCount,
     clampStudyMinutes: clampStudyMinutes,
     studyPool: studyPool,
+    pickPractice: pickPractice,
     PRACTICE_ALL_SUBJECTS: PRACTICE_ALL_SUBJECTS,
     studyTopics: studyTopics,
     pickStudy: pickStudy,
@@ -2311,6 +2340,7 @@
     round1: round1,
     mathEscape: mathEscape,
     renderMath: renderMath,
+    autoFormatBareLatex: autoFormatBareLatex,
     renderTex: renderTex,
     mathSpans: mathSpans,
     hasMath: hasMath,

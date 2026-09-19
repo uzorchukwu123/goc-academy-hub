@@ -1040,6 +1040,279 @@ a.cv:hover{color:var(--red)}
 }
 
 /* ==========================================================================
+   LANDING MOTION, PART 3 — contact split-screen, footer constellation, card tilt
+   --------------------------------------------------------------------------
+   The same rules as part 2 (and the Priority 1 section below it) apply:
+   nothing is hidden unless html.anim-on is set, every animation, transition
+   and will-change sits inside prefers-reduced-motion: no-preference, the logo
+   is never touched, and only transform and opacity ever move. This part adds
+   no exception: stroke-dashoffset stays confined to the .hw-ico paths in part
+   2, so the footer lines draw by scaling out from their first star instead.
+
+   The contact card, the footer and the three ecosystem cards are laid out and
+   readable with no motion at all; the motion below only decorates them. It is
+   kept ahead of the part 2 block, so the Priority 1 section is still the last
+   thing in the file that test-p1.js reads. test-landing-motion-3.js polices it.
+   ======================================================================== */
+
+/* ---- Contact: one card, two halves -------------------------------------
+   The details sit on an ink panel with the aurora behind them, the form on
+   white beside it (below it on a phone). The card clips both, so the blobs can
+   drift past the panel edge without ever adding scrollable width. */
+#landing .lp-contact{gap:0;align-items:stretch;background:#fff;border:1px solid var(--line);border-radius:26px;overflow:hidden;box-shadow:var(--sh-md)}
+.lp-cinfo{position:relative;isolation:isolate;overflow:hidden;align-content:start;padding:26px 20px 24px;
+  background:radial-gradient(70% 45% at 100% 100%,rgba(240,165,0,.16),rgba(240,165,0,0) 70%),var(--ink)}
+.lp-cinfo::before,.lp-cinfo::after{content:"";position:absolute;z-index:-1;border-radius:50%;pointer-events:none}
+.lp-cinfo::before{width:300px;height:300px;left:-110px;top:-120px;
+  background:radial-gradient(closest-side,rgba(220,38,38,.62),rgba(220,38,38,0))}
+.lp-cinfo::after{width:280px;height:280px;right:-110px;bottom:-120px;
+  background:radial-gradient(closest-side,rgba(14,116,144,.66),rgba(14,116,144,0))}
+.lp-cinfo .lp-crow{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);box-shadow:none}
+.lp-cinfo .lp-crow .ci{background:rgba(255,255,255,.1);color:var(--gold-lt)}
+.lp-cinfo .lp-crow .cl{color:#b8c0cd}
+.lp-cinfo .lp-crow .cv{color:#fff}
+.lp-cinfo a.cv:hover{color:var(--gold-lt)}
+.lp-cinfo .lp-social{margin-top:6px}
+.lp-cinfo .lp-social a{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:#e8ecf3}
+.lp-cform{border:0;border-radius:0;box-shadow:none;padding:26px 20px}
+.cf-field{margin-bottom:14px}
+.lp-cform .cf-in{position:relative;display:block}
+.lp-cform .cf-in input,.lp-cform .cf-in textarea{margin-bottom:0}
+.lp-cform input:focus,.lp-cform textarea:focus{box-shadow:0 0 0 3px rgba(220,38,38,.16)}
+.lp-cform button{position:relative;overflow:hidden}
+.lp-cform button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+/* The ripple is made by js/app.js at the point of the press. At rest it is a
+   dot of no size, so a stray one can never show. */
+.cf-rip{position:absolute;border-radius:50%;background:rgba(255,255,255,.4);pointer-events:none;transform:translate(-50%,-50%) scale(0)}
+@media (min-width:900px){
+  .lp-cinfo{padding:34px 30px}
+  .lp-cform{padding:34px 34px}
+}
+
+/* ---- Footer: the constellation ------------------------------------------
+   Behind the columns and never in front of them. The lines keep a 1px stroke
+   however the picture is scaled to fit the footer. */
+/* flex-shrink:0 because the landing screen is a flex column, and a clipping box in it
+   would otherwise be allowed to shrink below its own content. */
+.lp-foot{position:relative;isolation:isolate;overflow:hidden;flex-shrink:0}
+.lp-foot>.fb,.lp-foot>.lp-qcols,.lp-foot>p{position:relative;z-index:1}
+.lp-const{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.lp-const.cn-w{display:none}
+@media (min-width:900px){.lp-const.cn-n{display:none}.lp-const.cn-w{display:block}}
+.lp-const line{stroke:rgba(254,240,138,.28);stroke-width:1;vector-effect:non-scaling-stroke}
+.lp-const .st{fill:var(--gold-lt);opacity:.7}
+
+@media (prefers-reduced-motion: no-preference){
+
+  /* Aurora. The two blobs drift while the card is on screen (.live is set and
+     cleared by an IntersectionObserver, so nothing loops off-screen), and
+     brighten while a field has focus (.engaged): the form wakes the panel. */
+  html.anim-on .lp-cinfo::before,html.anim-on .lp-cinfo::after{opacity:.7;transition:opacity .6s ease}
+  html.anim-on .lp-contact.engaged .lp-cinfo::before,html.anim-on .lp-contact.engaged .lp-cinfo::after{opacity:1}
+  html.anim-on .lp-contact.live .lp-cinfo::before{animation:auroraA 15s ease-in-out infinite alternate;will-change:transform,opacity}
+  html.anim-on .lp-contact.live .lp-cinfo::after{animation:auroraB 19s ease-in-out infinite alternate;will-change:transform,opacity}
+
+  /* Magnetic focus. js/app.js writes --mx / --my (a few px, toward the
+     pointer) on the field under a mouse; a focused field also swells a touch. */
+  html.anim-on .lp-cform .cf-in{transform:translate(var(--mx,0px),var(--my,0px));transition:transform .3s cubic-bezier(.2,.7,.3,1)}
+  html.anim-on .lp-cform .cf-in:focus-within{transform:translate(var(--mx,0px),var(--my,0px)) scale(1.012)}
+
+  /* Send-button ripple. */
+  html.anim-on .cf-rip{animation:cfRipple .7s cubic-bezier(.2,.6,.3,1) both}
+  html.anim-on .lp-cform button:active{transform:scale(.985)}
+
+  /* Constellation. The lines scale out from their first star (transform, so no
+     stroke-dashoffset), the stars pop in behind them, and once the footer is
+     live the stars twinkle each at its own pace. */
+  html.anim-on .lp-const line{opacity:0;transform:scale(0);transform-box:view-box;transform-origin:var(--ox,0px) var(--oy,0px)}
+  html.anim-on .lp-foot.rv .lp-const line{animation:cnLine .9s cubic-bezier(.4,.1,.3,1) var(--d,0s) both}
+  html.anim-on .lp-const .st{opacity:0;transform:scale(.3);transform-box:fill-box;transform-origin:center}
+  html.anim-on .lp-foot.rv .lp-const .st{animation:cnStar .6s cubic-bezier(.34,1.4,.5,1) var(--d,0s) both}
+  html.anim-on .lp-foot.rv.live .lp-const .st{animation:cnStar .6s cubic-bezier(.34,1.4,.5,1) var(--d,0s) both,
+    cnTwinkle var(--tw,3.8s) ease-in-out calc(var(--d,0s) + 1.1s) infinite}
+
+  /* Feature cards: dealt onto the table, then they follow the cursor. The
+     rest pose (rotation and lift, per card) lives in --rot and --lift so the
+     reveal, the hover and the tilt all compose from the same numbers. The
+     older reveal ended on transform:none, which flattened the skewed deck the
+     moment it landed; these end on the rest pose instead (fill-mode backwards,
+     so the element's own style takes over when the animation is done). */
+  html.anim-on #landing #lpFeatures .lp-feat{--rot:-1.6deg;--lift:0px;--tx:0deg;--ty:0deg;
+    transform:perspective(900px) rotateX(var(--tx)) rotateY(var(--ty)) rotate(var(--rot)) translateY(var(--lift)) scale(1);
+    transition:transform .5s cubic-bezier(.2,.7,.3,1)}
+  html.anim-on #landing #lpFeatures .lp-feat:nth-child(2){--rot:1.5deg}
+  html.anim-on #landing #lpFeatures .lp-feat:nth-child(3){--rot:-1deg}
+  html.anim-on #landing #lpFeatures .lp-feat.is-tilting{transition:transform .1s ease-out;will-change:transform}
+  html.anim-on #landing #lpFeatures .lp-grid.rv .lp-feat{opacity:1;animation:featDeal .75s cubic-bezier(.22,.9,.3,1) backwards}
+  html.anim-on #landing #lpFeatures .lp-grid.rv .lp-feat:nth-child(2){animation-delay:.14s}
+  html.anim-on #landing #lpFeatures .lp-grid.rv .lp-feat:nth-child(3){animation-delay:.28s}
+  /* The number tile keeps its lean; only its arrival is animated. */
+  html.anim-on #landing #lpFeatures .lp-feat .fi{transform:rotate(-5deg)}
+  html.anim-on #landing #lpFeatures .lp-grid.rv .lp-feat .fi{animation:featIcon .65s cubic-bezier(.34,1.4,.5,1) .3s backwards}
+  html.anim-on #landing #lpFeatures .lp-grid.rv .lp-feat:nth-child(2) .fi{animation-delay:.44s}
+  html.anim-on #landing #lpFeatures .lp-grid.rv .lp-feat:nth-child(3) .fi{animation-delay:.58s}
+  @media (min-width:900px){
+    html.anim-on #landing #lpFeatures .lp-feat{--rot:-1.4deg;--lift:-6px}
+    html.anim-on #landing #lpFeatures .lp-feat:nth-child(2){--rot:1.2deg;--lift:6px}
+    html.anim-on #landing #lpFeatures .lp-feat:nth-child(3){--rot:-.8deg;--lift:-3px}
+  }
+  @media (hover:hover) and (pointer:fine){
+    html.anim-on #landing #lpFeatures .lp-feat:hover{--rot:0deg;--lift:-3px}
+  }
+
+  /* Subject tiles: same fault, same repair. They keep the lean the stylesheet
+     gives them (and its hover) once they have landed. */
+  html.anim-on #landing .lp-subj.rv .sj{opacity:1;animation:sjDeal .55s cubic-bezier(.22,.9,.3,1) backwards}
+  html.anim-on #landing .lp-subj.rv .sj:nth-child(2){animation-delay:.07s}
+  html.anim-on #landing .lp-subj.rv .sj:nth-child(3){animation-delay:.14s}
+  html.anim-on #landing .lp-subj.rv .sj:nth-child(4){animation-delay:.21s}
+  html.anim-on #landing .lp-subj.rv .sj:nth-child(5){animation-delay:.28s}
+}
+@keyframes auroraA{from{transform:translate(0,0) scale(1)}to{transform:translate(70px,50px) scale(1.25)}}
+@keyframes auroraB{from{transform:translate(0,0) scale(1.1)}to{transform:translate(-80px,-40px) scale(.9)}}
+@keyframes cfRipple{from{transform:translate(-50%,-50%) scale(0);opacity:.55}to{transform:translate(-50%,-50%) scale(1);opacity:0}}
+@keyframes cnLine{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+@keyframes cnStar{from{opacity:0;transform:scale(.3)}to{opacity:.7;transform:scale(1)}}
+@keyframes cnTwinkle{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
+@keyframes featDeal{
+  from{opacity:0;transform:perspective(900px) rotateX(16deg) rotateY(0deg) rotate(calc(var(--rot) * 2.6)) translateY(calc(var(--lift) + 34px)) scale(.95)}
+  to{opacity:1;transform:perspective(900px) rotateX(var(--tx)) rotateY(var(--ty)) rotate(var(--rot)) translateY(var(--lift)) scale(1)}}
+@keyframes featIcon{from{opacity:0;transform:rotate(-24deg) scale(.6)}to{opacity:1;transform:rotate(-5deg) scale(1)}}
+@keyframes sjDeal{from{opacity:0;transform:translateY(22px) rotate(0deg) scale(.96)}}
+
+/* ==========================================================================
+   LANDING MOTION, PART 2 — the film strip and the stage quote
+   --------------------------------------------------------------------------
+   The Priority 1 rules (the section just below) still hold: nothing is hidden unless html.anim-on
+   is set, every effect sits inside prefers-reduced-motion: no-preference, the
+   logo is never touched, and scroll-driven movement is transform and opacity
+   only. There is exactly one deliberate exception, agreed for this section:
+   the four step icons draw themselves with stroke-dashoffset. It is confined
+   to .hw-ico paths (a few dozen units of stroke, painted once on arrival) and
+   is never used for anything that carries text.
+
+   This block is kept ahead of the Priority 1 section on purpose: that section
+   is policed by test-p1.js, which reads to the end of the file. The rules for
+   this one are policed by test-landing-motion.js.
+   ======================================================================== */
+
+/* ---- How it works: the film strip -------------------------------------
+   Scroll-snap does the snapping, so swiping works with no script at all. The
+   strip is full-bleed: it pulls itself out to the edges of the section's own
+   20px side padding, so the heading above keeps its usual margins. */
+.hw-sec{padding-bottom:36px}
+.hw-hint{font-size:12.5px;font-weight:600;color:var(--gray);text-align:center;margin:0 auto 18px}
+.hw{position:relative}
+#landing .hw-sec>.hw{max-width:none;margin-left:-20px;margin-right:-20px}
+.hw-strip{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.hw-strip::-webkit-scrollbar{display:none}
+.hw-strip:focus-visible{outline:3px solid var(--red);outline-offset:-3px}
+.hw-slide{--pn:#DC2626;--fg:#fff;--o:0;--c:1;
+  position:relative;flex:0 0 100%;min-width:0;min-height:410px;display:flex;align-items:center;justify-content:center;
+  padding:38px 22px 38px 62px;scroll-snap-align:center;scroll-snap-stop:always;color:var(--fg);overflow:hidden}
+.hw-slide[data-step="2"]{--pn:#F0A500;--fg:#20242C}
+.hw-slide[data-step="3"]{--pn:#0E7490}
+.hw-slide[data-step="4"]{--pn:#15803D}
+/* The colour panel is wider than the slide and tilted, a different way for each
+   step, so the four read as four separate sheets of a film. The slide clips it,
+   so the tilt shows as a diagonal band and never spills into its neighbour or
+   adds scrollable width past the last step. */
+.hw-panel{position:absolute;inset:22px -4%;background:var(--pn);border-radius:6px;transform:rotate(-2.4deg)}
+.hw-slide[data-step="2"] .hw-panel{transform:rotate(1.9deg)}
+.hw-slide[data-step="3"] .hw-panel{transform:rotate(-1.5deg)}
+.hw-slide[data-step="4"] .hw-panel{transform:rotate(2.6deg)}
+.hw-num{position:absolute;right:5%;top:50%;transform:translateY(-50%);font-size:min(64vw,300px);line-height:1;
+  font-weight:900;letter-spacing:-.04em;color:var(--fg);opacity:.12;pointer-events:none;user-select:none}
+.hw-body{position:relative;width:100%;max-width:560px}
+.hw-ico{display:block;width:58px;height:58px;margin-bottom:14px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.hw-kick{display:block;font-size:11.5px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;opacity:.85;margin-bottom:6px}
+.hw-body h4{font-size:26px;font-weight:900;line-height:1.14;letter-spacing:-.02em;margin-bottom:10px;max-width:16ch}
+.hw-body p{font-size:15.5px;line-height:1.55;max-width:34ch}
+/* The side rail: a pill of its own, because the slides behind it change colour
+   and a rail drawn straight onto them would vanish on one of the four. */
+.hw-rail{position:absolute;left:9px;top:50%;transform:translateY(-50%);z-index:3;width:38px;height:228px;
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:7px 0;
+  background:rgba(255,255,255,.94);border-radius:999px;box-shadow:0 6px 18px rgba(17,24,39,.22)}
+.hw-line{position:absolute;left:50%;top:22px;bottom:22px;width:3px;margin-left:-1.5px;border-radius:3px;background:#E6E0D6;overflow:hidden}
+.hw-fill{position:absolute;inset:0;background:var(--red);transform-origin:top center;transform:scaleY(var(--p,0))}
+.hw-node{position:relative;z-index:1;width:26px;height:26px;border-radius:50%;border:2px solid #D9D3C8;background:#fff;
+  color:var(--slate);font-family:var(--font);font-size:11.5px;font-weight:800;line-height:1;cursor:pointer;padding:0}
+.hw-node.done{background:var(--red);border-color:var(--red);color:#fff}
+.hw-node.cur{box-shadow:0 0 0 3px rgba(220,38,38,.22)}
+.hw-node:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+@media (min-width:900px){
+  .hw-slide{min-height:460px;padding:44px 40px 44px 110px}
+  /* The same tilt is a far bigger vertical swing across a wide slide, so the
+     angles are gentler and the panel sits further in from the top and bottom. */
+  .hw-panel{inset:38px -2%;transform:rotate(-1.2deg)}
+  .hw-slide[data-step="2"] .hw-panel{transform:rotate(1deg)}
+  .hw-slide[data-step="3"] .hw-panel{transform:rotate(-.8deg)}
+  .hw-slide[data-step="4"] .hw-panel{transform:rotate(1.3deg)}
+  .hw-num{right:12%}
+  .hw-body h4{font-size:34px}
+  .hw-body p{font-size:17px}
+  .hw-rail{left:22px}
+}
+
+/* ---- Pull-quote: the stage --------------------------------------------
+   The wash to ink is an overlay whose opacity is driven from scroll, so the
+   section itself never repaints its background. The card is ink with white
+   text throughout, which is why the shift can be smooth without ever putting
+   light text on a light ground. */
+.lp-stage{position:relative;isolation:isolate;padding:66px 20px}
+.lp-stage::before{content:"";position:absolute;inset:0;z-index:-1;opacity:0;pointer-events:none;
+  background:radial-gradient(60% 55% at 50% 42%,rgba(220,38,38,.26),rgba(220,38,38,0) 72%),var(--ink)}
+.lp-quote{position:relative}
+.lq-mark{position:absolute;left:10px;top:-40px;z-index:0;font:900 200px/1 Georgia,"Times New Roman",serif;color:var(--red);
+  opacity:.22;transform:rotate(-8deg);transform-origin:0 100%;pointer-events:none;user-select:none}
+.lp-quote .qw,.lp-quote .who{position:relative;z-index:1}
+
+@media (prefers-reduced-motion: no-preference){
+
+  /* Film strip. --o is how far a slide sits from the middle of the strip
+     (-1 left, +1 right), --c how centred it is (1 at rest). js/app.js writes
+     both as the strip scrolls; each layer reads them at a different rate, which
+     is the parallax: the numeral drifts and swells behind, the paragraph lags
+     furthest behind the heading. */
+  html.anim-on .hw-num{opacity:calc(.05 + .13 * var(--c,1));
+    transform:translateY(-50%) translateX(calc(var(--o,0) * -90px)) scale(calc(.7 + .5 * var(--c,1)));will-change:transform,opacity}
+  html.anim-on .hw-body{opacity:calc(.3 + .7 * var(--c,1))}
+  html.anim-on .hw-kick{transform:translateX(calc(var(--o,0) * 10px))}
+  html.anim-on .hw-body h4{transform:translateX(calc(var(--o,0) * 34px))}
+  html.anim-on .hw-body p{transform:translateX(calc(var(--o,0) * 66px))}
+  html.anim-on .hw-node{transition:background-color .25s ease,border-color .25s ease,box-shadow .25s ease}
+
+  /* The icon is drawn once, when its slide is centred AND the strip has been
+     scrolled into view: both classes are needed, so nothing plays off-screen. */
+  html.anim-on .hw-ico path{stroke-dasharray:1 2;stroke-dashoffset:1}
+  html.anim-on .hw.rv .hw-slide.on .hw-ico{animation:hwPop .7s cubic-bezier(.34,1.4,.5,1) both}
+  html.anim-on .hw.rv .hw-slide.on .hw-ico path{animation:hwDraw .85s cubic-bezier(.4,.1,.3,1) .12s both}
+  html.anim-on .hw.rv .hw-slide.on .hw-ico path:nth-child(2){animation-delay:.42s}
+  html.anim-on .hw.rv .hw-slide.on .hw-ico path:nth-child(3){animation-delay:.68s}
+
+  /* Stage quote. --qc is 1 when the section is centred, --qo is signed distance
+     from centre. The wash, the tilt and the parallax all follow scroll; the
+     mark and the words arrive once, in sequence: mark, quote, attribution. */
+  html.anim-on .lp-stage::before{opacity:var(--qc,0)}
+  html.anim-on .lp-stage .qw{transform:perspective(900px) rotateX(calc(var(--qo,0) * 16deg)) translateY(calc(var(--qo,0) * 22px));
+    transform-origin:50% 60%;will-change:transform}
+  html.anim-on .lp-stage .who{transform:translateY(calc(var(--qo,0) * 42px))}
+  html.anim-on .lq-mark{opacity:0;transform:rotate(-46deg) scale(.5) translate(-30px,50px)}
+  html.anim-on .lp-stage.rv .lq-mark{animation:lqMark 1.05s cubic-bezier(.22,.9,.3,1) both}
+  html.anim-on .lp-stage .q{opacity:0;transform:translateY(22px) scale(.965)}
+  html.anim-on .lp-stage.rv .q{animation:lqText .85s cubic-bezier(.22,.68,.36,1) .3s both}
+  html.anim-on .lp-stage .who{opacity:0}
+  html.anim-on .lp-stage.rv .who{animation:lqFade .7s ease .7s both}
+}
+@keyframes hwPop{from{transform:scale(.7) rotate(-14deg)}to{transform:none}}
+@keyframes hwDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes lqMark{from{opacity:0;transform:rotate(-46deg) scale(.5) translate(-30px,50px)}to{opacity:.22;transform:rotate(-8deg)}}
+@keyframes lqText{from{opacity:0;transform:translateY(22px) scale(.965)}to{opacity:1;transform:none}}
+@keyframes lqFade{from{opacity:0}to{opacity:1}}
+
+/* ==========================================================================
    PRIORITY 1 — PREMIUM MOTION
    --------------------------------------------------------------------------
    Four rules govern everything in this section, and breaking any one of them
@@ -1452,3 +1725,166 @@ a.cv:hover{color:var(--red)}
   .lp-qcols{grid-template-columns:1fr;max-width:280px;gap:22px;text-align:left}
 }
 
+
+/* =====================================================================
+   HOMEPAGE — BESPOKE ARCHITECTURE (PASS 1 of 2)
+   ---------------------------------------------------------------------
+   Restyles the top of the public landing page — nav, hero, the "delivered
+   across" strip, the stat row, the three-pillar ecosystem and the subject
+   mosaic — into an asymmetric, hand-built composition instead of a
+   stacked-card template. Nothing above is deleted or renamed: every id
+   and class the reveal-on-scroll script and desktop grid rely on
+   (#lpFeatures, #lpSubjects, .lp-grid, .lp-subj, .lp-thread…) is kept
+   exactly as it was, so this is pure re-skinning, appended last so it
+   wins the cascade. Pass 2 will carry the same language into "How it
+   works", the quote, contact and footer.
+   ===================================================================== */
+
+#landing{ overflow-x:hidden; }
+
+/* ---------- NAV : quietly upgraded, scoped to the homepage only ---------- */
+#landing .lp-nav{
+  background:linear-gradient(180deg,rgba(250,247,242,.94),rgba(250,247,242,.86));
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid rgba(220,38,38,.14);
+}
+#landing .lp-brand .bm{ transform:rotate(-8deg); border-radius:12px 6px 12px 6px; }
+
+/* ---------- HERO : torn-canvas diagonal + orbiting proof card ---------- */
+#landing .lp-hero{
+  position:relative; isolation:isolate; overflow:hidden;
+  padding:52px 20px 96px;
+  background:
+    radial-gradient(760px 420px at 88% -12%, rgba(240,165,0,.38), transparent 62%),
+    radial-gradient(620px 380px at -12% 108%, rgba(255,255,255,.14), transparent 58%),
+    linear-gradient(155deg,var(--red-dk) 0%, var(--red) 48%, var(--red-deep) 100%);
+  clip-path:polygon(0 0,100% 0,100% 100%,0 92%);
+}
+#landing .lp-hero::before{
+  content:"SCHOLAR"; position:absolute; z-index:0; pointer-events:none;
+  left:-14px; bottom:-38px; line-height:.8;
+  font-size:clamp(76px,24vw,168px); font-weight:900; letter-spacing:-.03em;
+  color:rgba(255,255,255,.055); transform:rotate(-5deg);
+}
+#landing .lp-hero::after{
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);
+  background-size:36px 36px;
+  -webkit-mask-image:radial-gradient(circle at 26% 18%,#000 0%,transparent 68%);
+  mask-image:radial-gradient(circle at 26% 18%,#000 0%,transparent 68%);
+}
+#landing .lp-hero .lp-inner{ position:relative; z-index:2; }
+#landing .lp-hero .kick{
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28);
+  padding:6px 13px; border-radius:999px; color:#fff; transform:rotate(-1.2deg);
+}
+#landing .lp-hero h1{ text-shadow:0 10px 30px rgba(0,0,0,.18); }
+#landing .lp-hero .hero-art{ position:relative; }
+#landing .lp-hero .hero-art::before{
+  content:""; position:absolute; inset:-24px; z-index:-1; border-radius:34px;
+  border:1.5px dashed rgba(255,255,255,.36); transform:rotate(-4deg);
+}
+#landing .lp-hero .hero-art .mini{ transform:rotate(-2.2deg); position:relative; }
+#landing .lp-hero .hero-art::after{
+  content:"✦"; position:absolute; top:-20px; right:2px; z-index:3;
+  width:42px; height:42px; border-radius:50%; color:#fff; font-size:17px;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg,var(--gold),var(--gold-deep));
+  box-shadow:0 10px 22px rgba(0,0,0,.32);
+}
+@media (prefers-reduced-motion:no-preference){
+  #landing .lp-hero .hero-art{ animation:gocFloat 5.5s ease-in-out infinite; }
+  #landing .lp-hero .hero-art::after{ animation:gocSpin 8s linear infinite; }
+}
+@keyframes gocFloat{ 0%,100%{ transform:translateY(0) rotate(1.1deg); } 50%{ transform:translateY(-9px) rotate(-1deg); } }
+@keyframes gocSpin{ to{ transform:rotate(360deg); } }
+
+/* ---------- "DELIVERED ACROSS" : infinite marquee, not a static row ---------- */
+#landing .lp-logos{ position:relative; overflow:hidden; }
+#landing .lp-marquee{
+  overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);
+}
+#landing .lp-mtrack{ display:flex; gap:10px; width:max-content; }
+#landing .lp-mtrack b{
+  font-size:12.5px; font-weight:800; color:var(--slate); background:var(--bg);
+  border:1px solid var(--line); border-radius:999px; padding:7px 14px; white-space:nowrap;
+}
+@media (prefers-reduced-motion:no-preference){
+  #landing .lp-mtrack{ animation:gocMarquee 18s linear infinite; }
+  #landing .lp-mtrack:hover{ animation-play-state:paused; }
+}
+@keyframes gocMarquee{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+
+/* ---------- STATS : dark ribbon of tilted medallions, not a flat table ---------- */
+#landing .lp-stats{
+  display:flex; flex-wrap:wrap; justify-content:center; gap:14px;
+  background:var(--ink); padding:38px 20px 44px; position:relative; z-index:1;
+  border-bottom:none;
+}
+#landing .lp-stat{
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.14);
+  border-radius:18px 6px 18px 6px; padding:18px 22px; min-width:118px; flex:1 1 140px;
+  max-width:190px; text-align:center; transition:transform .2s ease;
+}
+#landing .lp-stat:nth-child(1){ transform:rotate(-3deg); }
+#landing .lp-stat:nth-child(2){ transform:translateY(-9px); }
+#landing .lp-stat:nth-child(3){ transform:rotate(3deg); }
+#landing .lp-stat:hover{ transform:translateY(-4px) rotate(0deg); }
+#landing .lp-stat b{ color:var(--gold-lt); }
+#landing .lp-stat span{ color:#c7cedb; }
+
+/* ---------- ECOSYSTEM (lpFeatures) : a slightly-skewed stacked deck ---------- */
+#landing #lpFeatures{ position:relative; }
+#landing #lpFeatures::before{
+  content:""; position:absolute; left:50%; top:26px; width:1px; height:46px;
+  background:repeating-linear-gradient(180deg,var(--red) 0 6px,transparent 6px 12px);
+  opacity:.5; z-index:0;
+}
+#landing #lpFeatures .lp-grid{ display:flex; flex-direction:column; gap:30px; position:relative; }
+#landing #lpFeatures .lp-feat{
+  margin-bottom:0; border-radius:24px 24px 24px 6px; position:relative; overflow:visible;
+}
+#landing #lpFeatures .lp-feat:nth-child(1){ transform:rotate(-1.6deg); margin-right:16px; }
+#landing #lpFeatures .lp-feat:nth-child(2){ transform:rotate(1.5deg); margin-left:16px; }
+#landing #lpFeatures .lp-feat:nth-child(3){ transform:rotate(-1deg); margin-right:8px; }
+#landing #lpFeatures .lp-feat:hover{ transform:rotate(0deg) translateY(-3px); }
+#landing #lpFeatures .lp-feat::before{
+  content:attr(data-n); position:absolute; top:-12px; left:-12px; z-index:2;
+  width:30px; height:30px; border-radius:50%; background:var(--ink); color:#fff;
+  font-size:12.5px; font-weight:900; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 6px 14px rgba(0,0,0,.22);
+}
+#landing #lpFeatures .fi{ border-radius:16px 6px 16px 6px; transform:rotate(-5deg); }
+#landing #lpFeatures .lp-thread .lt-dot{ box-shadow:0 0 8px 2px rgba(220,38,38,.55); }
+
+/* ---------- SUBJECTS (lpSubjects) : asymmetric bento mosaic ---------- */
+#landing .lp-subj{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+#landing .lp-subj .sj{
+  position:relative; overflow:hidden; border-radius:18px 18px 18px 4px; transition:transform .2s ease;
+}
+#landing .lp-subj .sj::after{
+  content:""; position:absolute; right:-20px; top:-20px; width:52px; height:52px;
+  border-radius:50%; background:linear-gradient(135deg,var(--red),var(--gold)); opacity:.13;
+}
+#landing .lp-subj .sj:nth-child(odd){ transform:rotate(-1.1deg); }
+#landing .lp-subj .sj:nth-child(even){ transform:rotate(1.1deg); }
+#landing .lp-subj .sj:hover{ transform:rotate(0deg) translateY(-3px); }
+#landing .lp-subj .sj:nth-child(1){ grid-column:1/3; }
+#landing .lp-subj .sj:nth-child(1) .si{ width:50px; height:50px; font-size:24px; }
+
+@media (min-width:900px){
+  #landing .lp-hero{ clip-path:polygon(0 0,100% 0,100% 100%,0 96%); }
+  #landing #lpFeatures .lp-grid{ flex-direction:row; align-items:stretch; gap:22px; }
+  #landing #lpFeatures .lp-feat{ flex:1; }
+  #landing #lpFeatures .lp-feat:nth-child(1){ margin-right:0; transform:rotate(-1.4deg) translateY(-6px); }
+  #landing #lpFeatures .lp-feat:nth-child(2){ margin-left:0; transform:rotate(1.2deg) translateY(6px); }
+  #landing #lpFeatures .lp-feat:nth-child(3){ transform:rotate(-.8deg) translateY(-3px); }
+  #landing .lp-subj{ grid-template-columns:repeat(4,1fr); }
+  #landing .lp-subj .sj:nth-child(1){ grid-column:span 2; }
+  #landing .lp-subj .sj:nth-child(4){ grid-column:span 2; }
+  #landing .lp-subj .sj:nth-child(5){ grid-column:span 2; }
+}

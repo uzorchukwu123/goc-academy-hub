@@ -367,7 +367,7 @@ head('every screen a student reads a question on goes through the renderer');
  ['the practice explanation', /mth\(d\.explanation/],
  ['the web-test stem', /txt\.innerHTML = mth\(q\.text/],
  ['the CBT stem', /cbtQ'\)\.innerHTML = mth\(/],
- ['the reading-mode note body', /mth\(x\.trim\(\), \{breaks:true\}\)/],
+ ['the reading-mode note body', /mth\(x\.trim\(\), NOTE_MTH\)/],
  ['the console question card', /mth\(r\.text, \{breaks:true\}\)|mth\(q\.text, \{breaks:true\}\)/],
  ['the theory marking card', /mth\(.*expected|mth\(.*answer/]
 ].forEach(function (c) {

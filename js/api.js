@@ -178,6 +178,23 @@
     var declaredTopics = [];
     var openStudy = {};                    /* self-directed CBT runs in progress */
     var sSeq = 0;
+    /* Mirrors server.js's practiceRecent: what a student was served last time
+       they practiced a subject, in memory only, so a resit here behaves the
+       same as against the live server — a fresh draw, not the same set back
+       to back. Keyed the same way: "scholarId|subject" -> id list. */
+    var practiceRecent = {};
+    function practiceRecentKey(scholarId, subject){ return scholarId + '|' + subject; }
+    function practiceRecentIds(scholarId, subject){
+      return practiceRecent[practiceRecentKey(scholarId, subject)] || [];
+    }
+    function practiceRecentRemember(scholarId, subject, ids, poolSize){
+      var key = practiceRecentKey(scholarId, subject);
+      var seen = {}, merged = [];
+      ids.concat(practiceRecent[key] || []).forEach(function(id){
+        if(!seen[id]){ seen[id] = true; merged.push(id); }
+      });
+      practiceRecent[key] = merged.slice(0, Math.max(ids.length, poolSize));
+    }
 
 
     /* No seeded attempt history: this is a real deployment with no demo
@@ -898,7 +915,10 @@
             : 'No questions have been published for the topics you chose yet.');
         }
         var count = core.clampStudyCount(r.count, pool.length);
-        var picked = core.pickStudy(pool, count);
+        var picked = mode === 'practice'
+          ? core.pickPractice(pool, count, practiceRecentIds(s.id, subject))
+          : core.pickStudy(pool, count);
+        if(mode === 'practice') practiceRecentRemember(s.id, subject, picked.map(function(q){ return q.id; }), pool.length);
         var minutes = mode === 'cbt' ? core.clampStudyMinutes(r.minutes) : 0;
         var rec = {
           id: 'S' + (++sSeq) + '-' + Date.now().toString(36),
@@ -1030,6 +1050,43 @@
         if (!cur) return fail('That note no longer exists.');
         cur.active = !!on;
         return ok(clone(cur));
+      },
+
+      /* Same contract as the question bank: only a held-back note may be
+         deleted, so a note a student may be reading is never pulled away. */
+      deleteNote: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var cur = find(notes, Number(id));
+        if (!cur) return ok({ ok: true, deleted: Number(id), alreadyGone: true });
+        if (cur.active) return fail('Hold this note back before deleting it.');
+        notes.splice(notes.indexOf(cur), 1);
+        return ok({ ok: true, deleted: cur.id });
+      },
+
+      /* Bulk delete by subject — \"all\" must be explicit, blank is refused. */
+      bulkDeleteNotes: function (subject) {
+        var e = requireUnlocked(); if (e) return e;
+        var raw = String(subject == null ? '' : subject).trim();
+        if (!raw) return fail('Choose a subject (or \"all\") before deleting.');
+        var all = raw.toLowerCase() === 'all';
+        if (!all && core.ALL_SUBJECTS.indexOf(raw) === -1) return fail('Choose one of the academy\u2019s subjects, or \"all\".');
+        var before = notes.length;
+        var keep = notes.filter(function (n) { return !all && n.subject !== raw; });
+        var deleted = before - keep.length;
+        if (deleted > 0) { notes.length = 0; keep.forEach(function (n) { notes.push(n); }); }
+        return ok({ ok: true, deleted: deleted, remaining: notes.length, subject: all ? 'all' : raw });
+      },
+
+      noteCounts: function () {
+        var e = requireUnlocked(); if (e) return e;
+        var bySubject = {}, totals = { live: 0, held: 0 };
+        notes.forEach(function (n) {
+          var sub = n.subject || 'Unknown';
+          if (!bySubject[sub]) bySubject[sub] = { live: 0, held: 0 };
+          var k = n.active ? 'live' : 'held';
+          bySubject[sub][k]++; totals[k]++;
+        });
+        return ok({ bySubject: bySubject, totals: totals });
       },
 
       myResults: function () {
@@ -1801,6 +1858,9 @@
       createNote:     function (d)     { return req('POST', '/notes', d); },
       updateNote:     function (id, d) { return req('PUT', '/notes/' + encodeURIComponent(id), d); },
       setNoteActive:  function (id, on) { return req('PUT', '/notes/' + encodeURIComponent(id) + '/active', { active: !!on }); },
+      deleteNote:     function (id)     { return req('DELETE', '/notes/' + encodeURIComponent(id)); },
+      bulkDeleteNotes: function (subject) { return req('DELETE', '/notes/bulk', { subject: String(subject == null ? '' : subject) }); },
+      noteCounts:     function ()       { return req('GET', '/notes/counts'); },
       myAttempt:      function (id)    { return req('GET', '/me/results/' + encodeURIComponent(id)); },
       league:         function ()      { return req('GET', '/league'); },
 
@@ -2033,6 +2093,9 @@ listPublishedVideos: function () {
     createNote:     function (d)      { return active.createNote(d); },
     updateNote:     function (id, d)  { return active.updateNote(id, d); },
     setNoteActive:  function (id, on) { return active.setNoteActive(id, on); },
+    deleteNote:     function (id)     { return active.deleteNote(id); },
+    bulkDeleteNotes: function (subject) { return active.bulkDeleteNotes(subject); },
+    noteCounts:     function ()       { return active.noteCounts(); },
     myAttempt:      function (id)     { return active.myAttempt(id); },
     league:         function ()       { return active.league(); },
 
