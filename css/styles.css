@@ -1951,7 +1951,15 @@ a.cv:hover{color:var(--red)}
 #home .dj:hover .dj-i{ transform:scale(1.08) rotate(-4deg); }
 #home .id-strip{ box-shadow:0 10px 26px rgba(20,24,33,.2); }
 
-.screen.auth{ position:relative; overflow:hidden; }
+/* position:absolute (not relative) is deliberate: the base .screen rule is
+   `position:absolute; inset:0`, which is what gives every screen the phone's
+   full height. Overriding to position:relative here dropped that height
+   constraint, so the sign-up screen collapsed to content height, the flex
+   scroll container had no bounded height to scroll within, and the tall form
+   was clipped by .phone{overflow:hidden} with no way to scroll — the
+   create-account scroll bug. absolute still contains the .auth-aura and keeps
+   the z-index layering below. */
+.screen.auth{ position:absolute; overflow:hidden; }
 .auth-aura{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
 .auth-aura .au{ position:absolute; border-radius:50%; filter:blur(66px); opacity:.42; }
 .auth-aura .au.a{ width:360px; height:360px; top:-140px; right:-120px; background:radial-gradient(circle,#FCA5A5,transparent 70%); }
