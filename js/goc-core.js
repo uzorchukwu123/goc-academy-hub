@@ -642,16 +642,33 @@
     if (!s) return dflt;
     return ['no', 'false', '0', 'n', 'off', 'draft', 'held', 'inactive', 'hidden'].indexOf(s) === -1;
   }
-  function csvOptions(row) {
+  /* Reads optionA..optionH in column order WITHOUT dropping a blank in the
+     middle — a blank slot stays a blank slot, at its own letter's position,
+     with only the run of trailing blanks trimmed off. This is what lets the
+     answer (given as a letter, e.g. "D") be resolved against the exact same
+     positions the columns were written in. Collapsing blanks out here, before
+     the answer letter is resolved, was the bug: a blank optionC used to pull
+     every option after it one slot to the left, so "answer: D" ended up
+     pointing at the option that had been typed into column E. */
+  function csvOptionsRaw(row) {
     var out = [], letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], i, v;
     for (i = 0; i < letters.length; i++) {
       v = row['option' + letters[i]];
       if (v === undefined) v = row['opt' + letters[i]];
       if (v === undefined) v = row['option' + (i + 1)];
       if (v === undefined) v = row['choice' + letters[i]];
-      if (v !== undefined && String(v).trim()) out.push(String(v).trim());
+      out.push(v !== undefined ? String(v).trim() : '');
     }
+    while (out.length && !out[out.length - 1]) out.pop();
     return out;
+  }
+  /* The list actually stored/served: the same slots, blanks squeezed out. Kept
+     as its own step (not folded into csvOptionsRaw) so the answer letter can
+     be resolved first, against the raw, still-aligned positions — see
+     csvQuestion, which resolves the answer against csvOptionsRaw() and only
+     then filters down to this. */
+  function csvOptions(row) {
+    return csvOptionsRaw(row).filter(function (o) { return o.length > 0; });
   }
   /* The answer may be given as a letter, as a position from 1, or simply as the
      text of the correct option — all three appear in real files. */
@@ -683,7 +700,21 @@
   }
   function csvQuestion(row) {
     var r = row || {};
-    var opts = csvOptions(r);
+    /* Resolve the answer against the raw, letter-aligned columns FIRST —
+       "answer: D" always means the optionD column, whether or not an
+       earlier column was left blank — then squeeze the blanks out and carry
+       the answer along to wherever its option landed. Same two-step the
+       admin console's own question form uses when a filled option isn't in
+       every box (see admQSave in app.js), so a CSV import and a hand-typed
+       question are marked the same way. */
+    var rawOpts = csvOptionsRaw(r);
+    var rawAnswer = csvAnswerIndex(r.answer !== undefined ? r.answer : r.correct, rawOpts);
+    var opts = [], answer = -1;
+    rawOpts.forEach(function (o, i) {
+      if (!o) return;
+      if (i === rawAnswer) answer = opts.length;
+      opts.push(o);
+    });
     var text = r.text !== undefined ? r.text : (r.question !== undefined ? r.question : '');
     var subject = r.subject || '';
     var explanation = r.explanation || r.why || '';
@@ -702,7 +733,7 @@
     return {
       subject: subject, section: csvSection(r.section || r.session),
       topic: r.topic || 'General', text: text, options: opts,
-      answer: csvAnswerIndex(r.answer !== undefined ? r.answer : r.correct, opts),
+      answer: answer,
       expected: expected,
       maxMark: r.maxmark !== undefined ? r.maxmark : r.marks,
       difficulty: String(r.difficulty || 'medium').trim().toLowerCase(),

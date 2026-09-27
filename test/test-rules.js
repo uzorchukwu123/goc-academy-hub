@@ -505,6 +505,22 @@ ok('an answer given as a letter becomes the position it means',
    imp.records.map(function (r) { return r.answer; }).join(','));
 ok('and the count read is reported alongside them', imp.read === 2, imp.read);
 
+/* A blank column between two filled ones used to shift every option after it
+   one slot to the left before the answer letter was resolved, so "answer: D"
+   ended up pointing at whatever had actually been typed into column E — the
+   wrong option, and one that didn't match the explanation. The answer must
+   now be resolved against the letter columns as written, gap and all. */
+head('a blank option column does not shift the answer that follows it');
+var gappy = 'subject,section,topic,text,optionA,optionB,optionC,optionD,optionE,answer,explanation\n'
+  + 'Physics,objective,Waves,Which option is correct?,Alpha,Beta,,Delta,Echo,D,Delta is correct.\n';
+var gimp = core.importCSV('questions', gappy);
+ok('the row is accepted', gimp.records.length === 1 && gimp.errors.length === 0, JSON.stringify(gimp.errors));
+ok('the blank column is squeezed out of the stored options',
+   gimp.records[0].options.join('|') === 'Alpha|Beta|Delta|Echo', JSON.stringify(gimp.records[0].options));
+ok('"answer: D" still lands on Delta, not on whatever moved into its old slot',
+   gimp.records[0].options[gimp.records[0].answer] === 'Delta',
+   'answer index ' + gimp.records[0].answer + ' -> ' + gimp.records[0].options[gimp.records[0].answer]);
+
 head('an unreadable file is refused whole, and says why');
 ok('an empty file names the first line as the problem',
    /first line must name the columns/.test(core.importCSV('questions', '   ').error || ''),
