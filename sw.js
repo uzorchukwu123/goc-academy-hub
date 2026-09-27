@@ -1,14 +1,14 @@
 /* G.O.C Academy Hub — service worker.
    Caches the app shell so the hub opens offline. Bump CACHE on every release,
    otherwise returning students keep the old files. */
-const CACHE = 'goc-v43';
+const CACHE = 'goc-v44';
 const ASSETS = [
   './index.html',
-  './css/styles.css?v=43',
-  './js/goc-core.js?v=43',
-  './js/api.js?v=43',
-  './js/app.js?v=43',
-  './js/pwa.js?v=43',
+  './css/styles.css?v=44',
+  './js/goc-core.js?v=44',
+  './js/api.js?v=44',
+  './js/app.js?v=44',
+  './js/pwa.js?v=44',
   './js/vendor/pdfjs/pdf.min.mjs',
   './js/vendor/pdfjs/pdf.worker.min.mjs',
   './manifest.webmanifest',
