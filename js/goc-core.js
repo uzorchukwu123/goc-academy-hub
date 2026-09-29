@@ -190,9 +190,10 @@
   /* --------------------------------------------- the JAMB-oriented sitting
      A JAMB-oriented paper is an objective paper in the same exam shape (60 Use
      of English + 40 per science, one running clock over the whole combination),
-     but it draws on its own pool: eligible({section:'jamb'}) returns questions
-     tagged 'jamb' AND the general 'objective' pool, so it is a superset of the
-     objective bank. It has its own clock and per-paper counts, configured
+     but it draws on its OWN, separate pool: eligible({section:'jamb'}) returns
+     ONLY questions tagged 'jamb'. It is deliberately disconnected from the
+     Objective sitting's bank, so an objective question is never served in the
+     JAMB-oriented test. It has its own clock and per-paper counts, configured
      independently of the Objective sitting (jambMinutes / jambCounts) so the
      academy can run a longer, fuller JAMB rehearsal without changing the
      Objective practice session. The ceilings are the real exam ceilings, the
@@ -237,16 +238,16 @@
        topic       free text, used for the weak-topic breakdown
        kind        'objective' | 'theory'
        section     'objective' | 'theory' | 'jamb' | 'practice'
-                   'objective' MCQs are eligible for BOTH the Objective test and
-                   the JAMB-oriented test; mark a question 'jamb' to keep it
-                   exclusive to the JAMB-oriented paper. 'practice' is separate
-                   again: eligible() (below) only ever asks the bank for
-                   'theory', 'objective' or 'jamb' by name when building a Web
-                   Test paper, so a 'practice' question is never drawn into any
-                   Web Test session — it only ever reaches the student's
-                   Practice screen (studyPool() doesn't filter on section at
-                   all, so it draws every active objective-kind question,
-                   'practice' included).
+                   'objective' MCQs are eligible for the Objective test only.
+                   The JAMB-oriented test draws on its own pool: mark a question
+                   'jamb' to serve it in the JAMB-oriented paper (and only
+                   there). 'practice' is separate again: eligible() (below) only
+                   ever asks the bank for 'theory', 'objective' or 'jamb' by
+                   name when building a Web Test paper, so a 'practice' question
+                   is never drawn into any Web Test session — it only ever
+                   reaches the student's Practice screen (studyPool() doesn't
+                   filter on section at all, so it draws every active
+                   objective-kind question, 'practice' included).
        period      always 'test' — the academy runs one test, not a weekly
                    and a monthly one. Kept so records written before that
                    change still read cleanly.
@@ -1223,9 +1224,11 @@
       /* There is one test, so a question is never held out of it by its period.
          A record written when the academy ran weekly and monthly papers is
          served exactly like one written today. */
-      /* A JAMB-oriented paper is an objective paper, so it may draw on the
-         general objective pool as well as JAMB-exclusive questions. */
-      if (section === 'jamb') return r.section === 'jamb' || r.section === 'objective';
+      /* The JAMB-oriented paper draws ONLY on its own pool: questions filed
+         under the 'jamb' section. It is deliberately kept separate from the
+         Objective sitting's bank, so an 'objective' question never leaks into
+         the JAMB-oriented test — each sitting has its own source of questions. */
+      if (section === 'jamb') return r.section === 'jamb';
       return r.section === section;
     });
   }
