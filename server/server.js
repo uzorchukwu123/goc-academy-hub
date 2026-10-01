@@ -762,9 +762,9 @@ function migrate(db) {
   if (db.settings.objectiveMinutes == null) db.settings.objectiveMinutes = core.OBJ_MIN_DEFAULT;
   if (!db.settings.objectiveCounts) db.settings.objectiveCounts = {};
   /* The JAMB-oriented sitting is configured independently of the Objective one
-     (its own clock and per-paper counts), even though it shares the exam shape
-     and can draw on the objective pool. Defaults seeded once, then owned by the
-     academy. */
+     (its own clock and per-paper counts), and draws on its own separate pool
+     (jamb-tagged questions only), even though it shares the exam shape.
+     Defaults seeded once, then owned by the academy. */
   if (db.settings.jambMinutes == null) db.settings.jambMinutes = core.JAMB_MIN_DEFAULT;
   if (!db.settings.jambCounts) db.settings.jambCounts = {};
   /* Question Bank persistence:
@@ -2779,7 +2779,7 @@ const ROUTES = [
     } },
 
   /* The JAMB-oriented sitting's blueprint — same shape as objective, drawn from
-     the jamb pool (jamb-tagged + objective questions). */
+     its own separate jamb pool (jamb-tagged questions only). */
   { method: 'GET', path: /^\/api\/jamb\/blueprint$/, need: 'console', handler: async (req, res) => {
       const db = readData();
       const period = core.normalizePeriod(new URL(req.url, 'http://localhost').searchParams.get('period'));
@@ -2989,9 +2989,9 @@ const ROUTES = [
         papers = bp.filter(r => r.serving > 0).map(r => ({ subject: r.subject, questions: r.serving }));
       } else if (section === 'jamb') {
         /* The JAMB-oriented sitting: a second full-combination timed paper,
-           assembled exactly like the objective one but from the jamb pool
-           (jamb-tagged + objective questions) and on its own independent clock
-           and per-paper counts. */
+           assembled exactly like the objective one but from its own separate
+           jamb pool (jamb-tagged questions only) and on its own independent
+           clock and per-paper counts. */
         const cohort = s.cohort ? await getCohortOrNull(s.cohort).catch(() => null) : null;
         const eff = effectiveSettingsFor(db, cohort);
         const bp = core.jambBlueprint(allQuestions, subs, eff.jambCounts);

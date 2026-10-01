@@ -766,8 +766,9 @@
           papers = bp.filter(function (r) { return r.serving > 0; })
                      .map(function (r) { return { subject: r.subject, questions: r.serving }; });
         } else if (section === 'jamb') {
-          /* The JAMB-oriented sitting: assembled like objective but from the jamb
-             pool (jamb-tagged + objective questions), on its own clock/counts. */
+          /* The JAMB-oriented sitting: assembled like objective but from its
+             own separate jamb pool (jamb-tagged questions only), on its own
+             clock/counts. */
           var jbp = core.jambBlueprint(questions, subs, settings.jambCounts);
           pool = core.jambPaper(questions, subs, settings.jambCounts);
           if (!pool.length) return fail('No questions have been published for that sitting yet.');
