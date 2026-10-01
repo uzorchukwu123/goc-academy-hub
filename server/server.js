@@ -5305,7 +5305,7 @@ function serveStatic(req, res, urlPath) {
 
 /* ================================================================ DISPATCH */
 
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
   const urlPath = (req.url || '/').split('?')[0];
 
   if (urlPath.indexOf('/api/') !== 0) {
@@ -5369,7 +5369,9 @@ const server = http.createServer((req, res) => {
     .catch(err => {
       if (!res.headersSent) errJson(res, 400, safeClientMessage(err, 'That request could not be handled.'));
     });
-  });
+}
+
+const server = http.createServer(handleRequest);
 
 // Last-resort safety net. Every request path already turns bad input into a
 // 4xx, but if anything unforeseen ever throws, the process must not die and
@@ -5618,43 +5620,35 @@ function start() {
 // On a clean shutdown (a redeploy sends SIGTERM), flush any pending save first.
 process.on('SIGTERM', () => { appwriteSaveChain.finally(() => process.exit(0)); });
 
+let appwriteInitialized = Promise.resolve();
+
 if (hasAppwriteConfig()) {
-  initAppwrite()
+  appwriteInitialized = initAppwrite()
     .then(async () => {
-      // Pull the durable blob down from Appwrite Storage before deciding
-      // whether to seed, so a redeploy that wiped the code folder restores the
-      // real settings/notes/topics instead of reseeding demo defaults.
       await hydrateBlobFromStorage();
-      // Students live in Appwrite, but staff/settings/etc. still come from the
-      // local data.json blob (see initAppwrite()'s own comment) — a fresh
-      // Appwrite deploy with no data.json on disk yet and no blob in Storage
-      // had no seed() call on this path at all, so start()'s new
-      // auditDefaultSecrets() read (and the first real request needing
-      // staff/settings) would throw ENOENT instead of creating the file. Found
-      // while wiring up the Phase 5 boot-time secret audit; same guard the
-      // other two startup paths already had.
       if (!fs.existsSync(DATA_FILE)) seed();
-      start();
     })
     .catch(err => {
-      // Without this catch, a failed Appwrite init (missing node-appwrite
-      // package, a malformed client, etc.) left start() never called at
-      // all: no crash, no error banner, the process just sat there with
-      // no port bound and nothing in the log to say why. Fail loud instead,
-      // reset anything initAppwrite() may have partially set, and still
-      // bring the server up in local-file mode so a misconfigured Appwrite
-      // key degrades the deployment instead of silently killing it.
-      console.error('[goc] Appwrite initialization failed — falling back to local data.json.', err && err.stack || err);
+      console.error(
+        '[goc] Appwrite initialization failed — falling back to local data.json.',
+        err && err.stack || err
+      );
       appwriteDatabases = null;
       appwriteResourcesStorage = null;
       appwriteUsers = null;
       if (!fs.existsSync(DATA_FILE)) seed();
-      start();
     });
 } else {
-  if (!fs.existsSync(DATA_FILE)) seed();
-  start();
+  appwriteInitialized = (async () => {
+    if (!fs.existsSync(DATA_FILE)) seed();
+  })();
 }
+
+appwriteInitialized.then(() => {
+  if (require.main === module) {
+    start();
+  }
+});
 
 /* ============================================================
    APPWRITE STUDENT REPOSITORY
@@ -5729,3 +5723,8 @@ async function nextAppwriteScholarId() {
         : String(next)
   );
 }
+
+module.exports = async (req, res) => {
+  await appwriteInitialized;
+  handleRequest(req, res);
+};
