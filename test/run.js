@@ -9,7 +9,7 @@ var suites = ['test-rules.js', 'test-p1.js', 'test-p2.js', 'test-p6.js', 'test-p
               'test-server.js', 'test-persist.js', 'test-security.js', 'test-driver-parity.js', 'test-contact.js',
               'test-landing-motion.js', 'test-landing-motion-3.js', 'test-migrate-appwrite.js', 'test-media-stub.js', 'test-clear-attempts.js', 'test-clear-attempts-appwrite.js',
               'test-clear-hardening.js', 'test-clear-hardening-appwrite.js', 'test-clear-hardening-noindex.js',
-              'test-clear-console.js'];
+              'test-clear-console.js', 'test-vercel-readonly.js'];
 var failed = [];
 
 suites.forEach(function (s) {

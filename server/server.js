@@ -96,6 +96,10 @@ const DATA_DIR = process.env.GOC_DATA_DIR ? path.resolve(process.env.GOC_DATA_DI
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* already exists */ }
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+/* Vercel serverless deployments have a read-only filesystem. */
+const IS_VERCEL = Boolean(process.env.VERCEL);
+let vercelDb = null;
+let vercelInitError = null;
 const PORT = Number(process.env.PORT) || 8080;
 const SESSION_HOURS = 8;                             // hard ceiling for staff
 
@@ -662,6 +666,11 @@ async function hydrateBlobFromStorage() {
     const text = Buffer.isBuffer(buf) ? buf.toString('utf8')
       : (buf && buf.byteLength != null ? Buffer.from(buf).toString('utf8') : String(buf));
     if (text && text.trim()) {
+      if (IS_VERCEL) {
+        vercelDb = JSON.parse(text);
+        console.log('[goc] Hydrated data blob from Appwrite Storage (in memory).');
+        return true;
+      }
       const tmp = DATA_FILE + '.tmp';
       fs.writeFileSync(tmp, text);
       fs.renameSync(tmp, DATA_FILE);
@@ -685,7 +694,9 @@ function scheduleBlobUpload() {
     catch (_) { /* not present yet — createFile below establishes it */ }
     await appwriteResourcesStorage.createFile(
       APPWRITE_BUCKET_ID, APPWRITE_FILE_ID,
-      InputFile.fromPath(DATA_FILE, 'academy-data.json'));
+      IS_VERCEL
+        ? InputFile.fromBuffer(Buffer.from(JSON.stringify(vercelDb, null, 2)), 'academy-data.json')
+        : InputFile.fromPath(DATA_FILE, 'academy-data.json'));
     blobUploadStatus = { ok: true, at: Date.now(), error: null };
   }).catch(err => {
     blobUploadStatus = { ok: false, at: Date.now(), error: err.message };
@@ -704,6 +715,10 @@ async function blobBackupState() {
 }
 
 function readData() {
+  if (IS_VERCEL) {
+    if (!vercelDb) throw new Error('Data store is not initialised (Vercel in-memory mode).');
+    return migrate(JSON.parse(JSON.stringify(vercelDb)));
+  }
   return migrate(JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')));
 }
 
@@ -845,6 +860,13 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
 /* Written via a temp file + rename, so the file itself is never left
    half-written by a crash mid-write. */
 function writeData(db) {
+  if (IS_VERCEL) {
+    /* Read-only filesystem: keep the blob in memory and mirror it to Appwrite
+       Storage; never touch data.json. */
+    vercelDb = JSON.parse(JSON.stringify(db));
+    scheduleBlobUpload();
+    return;
+  }
   const tmp = DATA_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DATA_FILE);
@@ -5518,7 +5540,7 @@ function startBackupSchedule() {
               (Number(process.env.GOC_BACKUP_KEEP) || 28) + ' in server/backups/.');
 }
 
-function seed() {
+function buildSeedDb() {
   /* The two management passwords are the only credentials in this file that
      matter after launch, because they open the console. The literals below are
      the demo values and are only used when nothing better is supplied: set
@@ -5581,8 +5603,21 @@ function seed() {
       signupCodeChangedBy: null
     }
   };
-  writeData(db);
+  return db;
+}
+
+function seed() {
+  writeData(buildSeedDb());
   console.log('[goc] Created server/data.json with an empty student roster.');
+}
+
+/* Vercel only: if Appwrite Storage held no blob, start from an in-memory seed.
+   Never writes to disk. */
+function seedInMemory() {
+  if (!vercelDb) {
+    vercelDb = buildSeedDb();
+    console.log('[goc] Vercel: initialised data blob in memory (no filesystem writes).');
+  }
 }
 
 function start() {
@@ -5621,8 +5656,23 @@ function start() {
 process.on('SIGTERM', () => { appwriteSaveChain.finally(() => process.exit(0)); });
 
 let appwriteInitialized = Promise.resolve();
-
-if (hasAppwriteConfig()) {
+if (IS_VERCEL) {
+  /* Serverless: no data.json, no seed(), no local fallback. If Appwrite is not
+     configured or fails to initialise, record the error and let the handler
+     answer 503 instead of writing to the read-only filesystem. */
+  appwriteInitialized = (async () => {
+    if (!hasAppwriteConfig()) throw new Error('Appwrite environment variables are not configured.');
+    await initAppwrite();
+    await hydrateBlobFromStorage();
+    seedInMemory();
+  })().catch(err => {
+    vercelInitError = err;
+    console.error('[goc] Appwrite initialization failed on Vercel — no local fallback.', err && err.stack || err);
+    appwriteDatabases = null;
+    appwriteResourcesStorage = null;
+    appwriteUsers = null;
+  });
+} else if (hasAppwriteConfig()) {
   appwriteInitialized = initAppwrite()
     .then(async () => {
       await hydrateBlobFromStorage();
@@ -5726,5 +5776,9 @@ async function nextAppwriteScholarId() {
 
 module.exports = async (req, res) => {
   await appwriteInitialized;
+  if (vercelInitError) {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Service unavailable: storage backend failed to initialise.' }));
+  }
   handleRequest(req, res);
 };
