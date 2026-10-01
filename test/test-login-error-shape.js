@@ -27,10 +27,10 @@ var sandbox = {
   parseInt: parseInt, parseFloat: parseFloat, isNaN: isNaN,
   encodeURIComponent: encodeURIComponent,
   fetch: function (url) {
-    if (url === 'api/health') {
+    if (url === '/api/health') {
       return Promise.resolve(mkResponse(200, { service: 'goc-academy-hub', passcodeLength: 4 }));
     }
-    if (url === 'api/auth/login') {
+    if (url === '/api/auth/login') {
       return Promise.resolve(mkResponse(401, { error: { message: 'That ID and password do not match.' } }));
     }
     return Promise.resolve(mkResponse(200, {}));
