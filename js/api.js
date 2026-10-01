@@ -1860,7 +1860,7 @@
   }
 
   var http = (function () {
-    var base = 'api';
+    var base = '/api';
     var token = null;
     var passLen = 4;
     function serverErrorMessage(data, fallback) {
@@ -2391,7 +2391,7 @@ listPublishedVideos: function () {
   GOC.api.ready = (function () {
     var servable = global.location && String(global.location.protocol).indexOf('http') === 0;
     if (!servable || typeof fetch !== 'function' || typeof Promise !== 'function') return ok(mock.name);
-    return fetch('api/health', { headers: { 'Accept': 'application/json' } })
+    return fetch('/api/health', { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (d && d.service === 'goc-academy-hub') {
