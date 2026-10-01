@@ -1863,6 +1863,12 @@
     var base = 'api';
     var token = null;
     var passLen = 4;
+    function serverErrorMessage(data, fallback) {
+      var raw = data && data.error;
+      if (typeof raw === 'string' && raw.trim()) return raw;
+      if (raw && typeof raw.message === 'string' && raw.message.trim()) return raw.message;
+      return fallback;
+    }
 
     function req(method, path, body) {
       var opts = { method: method, headers: { 'Accept': 'application/json' } };
@@ -1876,7 +1882,7 @@
           var data = null;
           try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
           if (!r.ok) {
-            var msg = (data && data.error) || 'The server could not complete that (' + r.status + ').';
+            var msg = serverErrorMessage(data, 'The server could not complete that (' + r.status + ').');
             throw new Error(msg);
           }
           return data;
@@ -1900,7 +1906,7 @@
         try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
 
         if (!r.ok) {
-          var msg = (data && data.error) || 'The server could not complete that (' + r.status + ').';
+          var msg = serverErrorMessage(data, 'The server could not complete that (' + r.status + ').');
           throw new Error(msg);
         }
 
