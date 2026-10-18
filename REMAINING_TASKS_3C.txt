@@ -1,0 +1,406 @@
+B#2 SCHOLARSHIP SLICE 3 DONE (17 Oct 2026, cache goc-v179): student-facing #scholarship screen.
+  index.html: new <section class="sch-screen" id="scholarship"> inserted before #signup.
+    • auth-brandbar header with ← Home link.
+    • #sch-wrap div — content rendered by scholInit() depending on status: open / waitlist / closed.
+  js/app.js:
+    • 'scholarship' added to openScreens (no login required).
+    • go('scholarship') calls scholInit().
+    • scholInit(): fetches GOC.api.getScholarshipStatus(), renders form / waitlist / closed panel.
+    • scholSubmit(): collects full application form, calls submitScholarApplication(), shows thank-you on success.
+    • scholWlSubmit(): collects waitlist fields, calls submitWaitlistEntry(), shows thank-you on success.
+    • Inline error display; busy state on submit button.
+  js/api.js:
+    • mock driver: getScholarshipStatus → { mode:'open', places:30 }; submitScholarApplication/submitWaitlistEntry → friendly 'needs server' error.
+    • http driver: getScholarshipStatus → GET /api/scholarship/status; submitScholarApplication → POST /api/scholarship/apply; submitWaitlistEntry → POST /api/scholarship/waitlist.
+    • GOC.api export: three new methods delegated to active driver.
+  css/styles.css: .sch-screen, .sch-page, .sch-content, form fields, pledge checkbox, error, closed/thanks panels, .sch-actions.
+  sw.js: cache bumped goc-v178 → goc-v179.
+  NEXT: B#2 slice 4 — console Scholarship panel (list, decide, approve, export, delete) in app.js / index.html.
+B#2 SCHOLARSHIP SLICE 2 DONE (17 Oct 2026, no cache bump — server only):
+  db.scholarshipApplications + db.scholarshipWaitlist initialised at boot.
+  Routes added:
+    GET  /api/scholarship/status                              → { mode, places } (public)
+    POST /api/scholarship/apply                               → { application } (public; validates via core, dedupes email)
+    POST /api/scholarship/waitlist                            → { entry } (public; only when mode=waitlist; dedupes email)
+    GET  /api/scholarship/applications        (scholarship.view = AD + SA)
+    GET  /api/scholarship/applications/export (scholarship.export = SA)  → CSV download
+    POST /api/scholarship/applications/:id/decide             (scholarship.decide = SA) body: { decision, message }
+    POST /api/scholarship/applications/:id/approve            (Founder only; accepted → approved; creates GOC student account)
+    DELETE /api/scholarship/applications/:id                  (scholarship.delete = SA; logged to managerLog)
+  test/test-scholarship-route.js (47 checks) added to run.js. NEXT: B#2 slice 3 (student-facing #scholarship screen in app.js / index.html, cache bump goc-v179).
+B#2 SCHOLARSHIP SLICE 7 DONE (17 Oct 2026, cache goc-v180): homepage scholarship reference.
+  index.html: <div id="lpScholarship" class="lp-sch-banner" hidden> inserted between #lpTiers and
+    #lpStage. Contains icon, h3 (id="lpSchTitle"), p (id="lpSchBody"), and a "Learn more →" button
+    that calls go('scholarship'). Hidden by default; JavaScript reveals it.
+  js/app.js:
+    • go('landing') now calls scholBannerInit().
+    • scholBannerInit(): fetches GOC.api.getScholarshipStatus() once per page load (_scholBannerFetched
+      guard). open → shows banner with "30 places available" copy. waitlist → shows banner with
+      "Cohort 2.0 waitlist" copy. closed → banner stays hidden. Fetch errors are silent.
+  css/styles.css: .lp-sch-banner (amber gradient strip), .lp-sch-inner (flex row), .lp-sch-icon,
+    .lp-sch-copy h3/p, .lp-sch-cta (red button); mobile breakpoint collapses button to full width.
+  sw.js: cache bumped goc-v179 → goc-v180.
+  .build-debug copies updated.
+  NEXT: B#2 slice 5 — Student Affairs console panel (list, filter, accept/reject, CSV export).
+B#2 SCHOLARSHIP SLICE 3 DONE (17 Oct 2026, no cache bump — api.js only):
+  js/api.js HTTP driver: listScholarshipApplications → GET /api/scholarship/applications;
+    decideScholarshipApplication(id,d) → POST /api/scholarship/applications/:id/decide;
+    approveScholarshipApplication(id)  → POST /api/scholarship/applications/:id/approve;
+    deleteScholarshipApplication(id)   → DELETE /api/scholarship/applications/:id;
+    exportScholarshipApplications()    → GET /api/scholarship/applications/export.
+  GOC.api export: all five new methods delegated to active driver (matching mock driver parity).
+  .build-debug/js/api.js updated to match.
+  No cache bump (api.js is not bundled separately; the public bundle already covers these paths
+  via the http driver at runtime). NEXT: B#2 slice 5 — Student Affairs console panel.
+B#2 SCHOLARSHIP SLICE 1 DONE (17 Oct 2026, cache goc-v178): pure rules in js/goc-core.js.
+  SCHOLARSHIP_PLACES (30), SCHOLARSHIP_INACTIVITY_DAYS (14), SCHOLARSHIP_STATUSES, SCHOLARSHIP_EXAM_STATUSES,
+  NIGERIA_STATES (37 states + FCT). Functions: scholarshipOpen (returns 'open'|'waitlist'|'closed'),
+  waitlistOpen, canApply (blocks pending/accepted/approved; allows rejected to reapply; case-insensitive email),
+  validateScholarApplication (fields: name, email, phone, state, city, examStatus, subjects (4 incl. English),
+  parentName, parentEmail+parentPhone (at least one required), pledge), makeApplication (stamps SCH-N id,
+  'pending' status, ISO timestamp), makeWaitlistEntry (stamps WL-N id, 'waiting' status),
+  scholarshipStatus (public summary: mode + places), publicApplication (safe public projection),
+  scholarshipCsv (formula-safe CSV export, apostrophe-prefix on =+−@ cells).
+  test/test-scholarship.js (107 checks) added to run.js. NEXT: B#2 slice 2 (server store + routes).
+CONSOLE TILE NAV DONE (17 Oct 2026, cache goc-v177): the console section dropdown (adm-select-wrap / admSelect) replaced with a tile grid
+  (id="admTileNav", class adm-tile-nav). Each allowed section gets one tappable tile with an emoji icon and a short label. The hidden
+  <select id="admSelect"> is kept (display:none) so all programmatic admOpen() calls that read sel.value continue to work unchanged.
+  admMenuApply() now renders tiles via ADM_TILE_META map; admOpen() marks the active tile (adds/removes class "active").
+  CSS: .adm-tile-nav (3-col grid on mobile, 4-col ≥480 px, 5-col ≥700 px), .adm-tile, .adm-tile.active.
+  No server change, no new tests, no new routes. NEXT per roadmap: Assignments (slice 2 — server store + create/list/edit).
+PHASE 4.B COMPLETE (10 Oct 2026, cache goc-v146): the PDF half. core: resultsPdfModel / pdfTextWidth / pdfFit (A4 landscape pages, one table per subject, JAMB-oriented table with four
+  subject scores and Total /400, column heads repeat, 'Page n of N'); server/pdf-writer.js (no dependencies, standard Helvetica, real xref table); GET /api/results/export?format=pdf;
+  getResultsPdf on both drivers (offline demo says it needs the server); Download PDF button next to Download CSV; rows now carry the cohort NAME (CSV and PDF show it, not the opaque id).
+  test/test-results-export.js now 101 checks. NEXT per roadmap: 4.A Ask a tutor, then 4.C Friend / cohort challenges.
+PHASE 4.B HALF DONE (9 Oct 2026, cache goc-v145): Results export steps 1-4. core: defaultTerms / termRange / schoolYearStart / resultsExportRows / resultsCsv (shared csvCell);
+  server: GET /api/results/export (console gate = Founder + Academic Director; term+year or typed From/To, cohort, subject, session; JSON or ?format=csv);
+  drivers: getResultsExport (offline demo says it needs the server); console: Export results card in the Results panel (term, school year, dates, filters, count, Download CSV).
+  Owner's choices: a term = console-set dates with the 3 Nigerian terms as defaults (1 Sep-31 Dec, 1 Jan-31 Mar, 1 Apr-31 Aug); only Founder and Academic Director export.
+  New suite test/test-results-export.js (68 checks) in run.js. LEFT for 4.B: steps 5-7 (PDF page model, server PDF, Download PDF button).
+TEST REPAIR (9 Oct 2026): public sign-up no longer signs anyone in (the account waits for approval), which broke about 50 suites that expected a token.
+  New test/active-student.js walks the real flow: sign up -> founder approves -> student logs in (HTTP), and a demo-driver version (activeStudent.demo).
+  test-tutors-atrisk-route now stops its own leftover server on port 8176 before binding. test-question-images-route: only the 4 non-busboy
+  failures fixed (busboy still not installed, 6 upload checks still skipped). test-p78 now expects four student filters (Pending approval added)
+  and checks that sign-up answers 'pending'. Tests only: no app change, cache stays goc-v144. 
+  test-p1.js FIXED: it was not CSS; the check looked for animEnter('id') within 400 characters of sign-up's .then, and the new pending-approval branch pushed it past that, so the window is now 900 (test only). 149 of 149 suites pass. busboy could not be installed here (no network): the 6 upload checks stay skipped until you run npm install.
+PHASE 3C (Tutors) — ALL SEVEN SLICES FINISHED (8 Oct 2026).
+AT-RISK LIST (9 Oct 2026): slice 1 DONE - pure rules core.tutorAtRisk / core.sortAtRisk (test/test-tutors-atrisk.js).
+  Slice 2 DONE - GET /api/tutor/atrisk?subject=[&sort=inactive|score] (need 'tutor', through tutorSubjectOr403).
+  Returns { subject, subjects, sort, limits:{inactiveDays,lowAverage}, count, students[] }; each row has Scholar ID, name,
+  daysInactive, never, lastScore, average, papers, reasons. No email, phone or hash. An unknown sort reads as 'inactive'.
+  test/test-tutors-atrisk-route.js (real server). Server only: no cache bump.
+  Slice 3 DONE (9 Oct 2026) - the At-risk students card on the tutor dashboard (server/tutor/tutor-app.js, never in the
+  public bundle, so no cache bump): sits after Last 7 days and before Weak topics. Says what 'at risk' means (limits come from
+  the server), counts the students, switch Most inactive / Lowest score (asks the server again; the page never sorts), ten rows
+  at first with Show all / Show fewer, one plain line per reason (never started, N days without practice or test, test average
+  with papers and last score). Name and ID written escaped. A failed load shows on this card only; nobody at risk says so.
+  test/test-tutors-atrisk-ui.js; test-tutors-shell.js gained a stand-in for the new request.
+  HONEST LIMITS: rows show the student's NAME as well as the Scholar ID (say if you want names hidden); there is no tap-through
+  to a student yet - that is the student detail page, still not built; no message or reminder can be sent from the card.
+TOP PERFORMERS (9 Oct 2026): slice 1 DONE - pure rule core.tutorTopPerformers (test/test-tutors-top.js). Cache goc-v127 (core changed).
+  Owner's choices: TWO lists, never blended - Web Tests (average of marked papers in the subject) and Practice (percent right over
+  answered questions); each ranked student needs 2 marked papers (tests) or 20 answers (practice); under the floor they are counted in
+  `hidden`, never ranked; the screen shows the top 10 with Show all. Highest first; ties go to more evidence, then name, then Scholar ID.
+  GOC students taking the subject, not deactivated. Rows: Scholar ID, name and the figures only (no email, phone, hash).
+  Slice 2 DONE - GET /api/tutor/top?subject= (need 'tutor', through tutorSubjectOr403; runs trimmed with core.dropOldRuns).
+  Returns { subject, subjects, tests:{items,hidden,minPapers}, practice:{items,hidden,minAnswers} }; every ranked student is
+  returned. test/test-tutors-top-route.js (real server). Server only: no cache bump.
+  Owner's choices for slice 3 (9 Oct 2026): rows show NAME AND SCHOLAR ID (this settles the earlier question for the at-risk list
+  too: keep both); ONE card with TWO TABS (Web Tests / Practice); ONLY THE TOP 3 rows carry a rank number; top 10 shown, Show all.
+  Slice 3 DONE (9 Oct 2026) - the Top performers card (server/tutor/tutor-app.js, never in the public bundle, so no cache bump):
+  sits right after At-risk students and before Weak topics. One card, two tabs, Web Tests open first and Practice second (never blended);
+  rows show name, Scholar ID and the figures; rank numbers on the top 3 only; ten rows then Show all / Show fewer; switching tab goes
+  back to ten rows. Students held back for too little evidence show as a count only ("N students need more work to be ranked").
+  Nobody ranked says so. Server text written escaped; a failed load shows on this card only; sign out clears it.
+  test/test-tutors-top-ui.js; test-tutors-shell.js has a stand-in for the new request. 133 suites pass.
+  Honest limit: practice figures come from the runs the server still holds (one year), as for the snapshot.
+PHASE 3C IS COMPLETE: the console audit screen (Tutor access log) is built - see 'Slice 4 LAST PART DONE' below. (This line was out of date.)
+(with its audit log of who looked at which student).
+
+1. PURE RULES — done. js/goc-core.js: tutor ID format GOC-T-001, validateTutor, tutorCan,
+   scopeToSubjects, tutorSubjectFor, tutorPublic, subjectDepth. test/test-tutors.js.
+
+2. SERVER ACCOUNTS AND SCOPE — done (server only, no cache bump). test/test-tutors-route.js.
+   - Tutors are stored in data.json (db.tutors), hashed with scrypt. No Appwrite attribute needed.
+   - POST /api/tutor/login: one 401 message for wrong ID, wrong password or switched-off account.
+     Per-address throttle, plus a per-ID lock (10 misses / 15 min). Sessions last 8 hours.
+   - First sign-in forces a new password (POST /api/tutor/password). Until then only /me and the
+     password change work.
+   - The tutor record is re-read on every tutor request: switch-off, new subjects and password
+     reset all take effect on the next call. A reset or switch-off also ends open sessions.
+   - GET /api/tutor/subject?subject= is the first scoped route: a Chemistry tutor asking for
+     Physics gets 403. Every later tutor route must use tutorSubjectOr403 / core.scopeToSubjects.
+   - A tutor session is refused on the console, the student area and the shared league and
+     question-image routes. Management is not a tutor either.
+
+3. CONSOLE TUTORS PANEL — done (cache goc-v113). test/test-tutors-ui.js.
+   - Console -> Tutors: create, edit name and subjects, reset password, switch off/on.
+   - Subjects & tutors: tutor per subject, and which papers are empty or thin.
+   - Offline demo mode shows no tutors and says changes need a server connection.
+
+4. HIDDEN ENTRANCE AND TUTOR SHELL — done (cache goc-v114). test/test-tutors-door.js, test/test-tutors-shell.js.
+   - The way in: type the secret word into the Scholar ID box on the Log in screen and press Log in.
+     (Chosen instead of the footer-year taps.) The word is set by the owner in GOC_TUTOR_DOOR (6+
+     characters; case and extra spaces ignored). It is in no file the browser can download: the
+     page sends what was typed to POST /api/door and the server compares it.
+   - Anything starting GOC- is never sent to the door. Anything else is offered to it once; if the
+     server does not take it, it is an ordinary wrong ID and nothing looks different.
+   - A right word gives a single-use token (60 seconds). Only that token fetches the tutor screens'
+     code from GET /api/door/<token>.js. The code lives in server/tutor/tutor-app.js, which the static
+     server never serves; it is not in sw.js, the manifest, index.html or any public script.
+   - With GOC_TUTOR_DOOR unset (or under 6 characters) the door answers exactly like an address that
+     does not exist, and the boot log says so. Six wrong words from one address lock that address
+     out of the door for 15 minutes; this does not touch student, staff or tutor sign-in.
+   - The screens (overlay, own styles): sign-in sheet (ID, password, Show), forced new-password
+     screen at first sign-in, then the dashboard: subject switcher (only when the tutor has more
+     than one subject), a card with the paper depth for the open subject, and placeholder cards for
+     the analytics. A refused subject, an ended session, a switched-off account and a pending
+     password change each show the server's reason and put the tutor in the right place.
+   - The session lives in memory only: a reload signs the tutor out and they knock again.
+     Sign out also ends the session on the server.
+
+BEFORE YOU USE IT
+   - Set GOC_TUTOR_DOOR (start-server.ps1 has a commented line; DEPLOYMENT.md lists it). Without it
+     tutors cannot reach their sign-in. Give tutors the word in person or by private message.
+   - Hidden is not secure: anyone who reads the page code can see that a word is sent to the server,
+     but not what it is. What protects the data is the tutor sign-in and the scope guard.
+
+   - data.json now holds tutor password hashes: it is already on the "keep out of public deploys"
+     list, and server/backups/ copies hold them too.
+   - Give each tutor their starting password in person or by a private message. They must change it.
+
+DECISIONS TAKEN (8 Oct 2026)
+   - Tutor notes go live at once (no approval). Tutor questions still wait for approval (slice 6).
+   - Class notices go live at once, and the admin gets an alert for a NEW notice only (slice 7, done).
+   - Tutor theory marking needs NO admin approval: a mark counts as soon as the tutor saves it (own
+     subject only, same scope guard), and the admin gets an alert (slice 6: reuse the same console-home
+     alert list as class notices; each alert says tutor, subject, student/script and time, and the
+     admin can still open and change the mark).
+
+NEXT
+   Slice 5  Analytics, in four parts (owner's choices, 8 Oct 2026: active = practised or sat a test in
+            the last 7 days; average score shown as two numbers, practice and tests; weak topics and
+            hardest questions need 10+ answers; thin data is shown with a small-sample warning):
+            5.1 DONE  pure snapshot rules: core.tutorSnapshot, test/test-tutors-snapshot.js (cache goc-v115).
+                      GOC students and Open count, active this week, practice average, test average,
+                      small-sample flags. Counts and averages only, never a name or ID.
+            5.2 DONE  GET /api/tutor/analytics?subject= (need: 'tutor', through tutorSubjectOr403) returns
+                      { subject, subjects, snapshot, weakTopics, hardestQuestions }. The snapshot cards are on the
+                      dashboard (server/tutor/tutor-app.js: GOC students, active in the last 7 days, practice average,
+                      test average, Open students as a count, plain warnings for small samples). A failed load shows
+                      on the snapshot card only. test/test-tutors-analytics.js, test/test-tutors-shell.js.
+                      No cache bump for the screens (they are never in the public bundle).
+            5.3 DONE  counters kept as answers are marked: db.answerStats = { Subject: { q: {id:{n,c}}, t: {topic:{n,c}} } }.
+                      core.recordAnswerStats, core.rankWeakTopics (weakest 5), core.rankHardestQuestions (hardest 10).
+                      Both lists need 10+ answers; thinner ones are counted in `hidden`, never ranked. Counted at the two
+                      server marking points: POST /api/me/study/submit (practice and CBT) and POST /api/me/tests/submit
+                      (objective rows only; theory has no verdict yet). Only GOC students' answers are counted. Only counts
+                      are stored: no student ID, name or time. A question that was switched off, deleted, pending, theory
+                      or in another subject never appears in the hardest list. test/test-tutors-stats.js (pure) and
+                      test/test-tutors-analytics.js (real server). Cache goc-v116 (core changed).
+                      HONEST LIMITS:
+                      - Counting starts now. Answers marked before this release are not in the counters, so the lists
+                        stay empty until a class has answered 10+ on a topic or question.
+                      - Spaced review is not counted (it re-asks old mistakes and would skew the numbers).
+                      - The snapshot's practice average and "active" come from the practice runs the app saves after
+                        each run (POST /api/me/practice), same as the daily quest; the counters come straight from the
+                        server's marking. The two can differ slightly.
+                      - A student who becomes GOC later is counted from then on; one demoted to Open stops being counted
+                        (past counts stay, since they carry no ID).
+                      - The counters live in data.json (db.answerStats), so back it up and keep it out of public deploys.
+            5.4 DONE  the Weak topics and Hardest questions cards (server/tutor/tutor-app.js). Weak topics lists topic,
+                      percent right and answers, weakest first; Hardest questions shows the question text, its topic and
+                      the same figures. With nothing ranked each card says a topic/question needs 10+ answers from GOC
+                      students; a count of those held back is shown. All server text is written escaped. A failed load
+                      shows on both cards. test/test-tutors-shell.js. No cache bump (never in the public bundle).
+                      5.5 DONE  (8 Oct 2026) the 7-day activity chart. core.tutorActivity gives one entry per Nigeria-time day (UTC+1):
+                      students active, practice answers, tests submitted, for GOC students of the subject only; counts only,
+                      no name or ID. Returned as `activity` by GET /api/tutor/analytics and drawn as three bar rows
+                      (activityCard in server/tutor/tutor-app.js). test/test-tutors-activity.js. Honest limit: practice
+                      rows come from the runs the server still holds, so the chart can differ slightly from the counters.
+                      SLICE 5 IS COMPLETE. Not in this slice (roadmap, later): at-risk list, top performers,
+                      student detail page.
+   Slice 6  PART 6.1 DONE (8 Oct 2026) — see PARTS 6.2 AND 6.3 below: the approval rules as pure functions in js/goc-core.js, nothing stored or
+            served yet. test/test-tutor-approval.js (110 suites pass). Cache goc-v118 (core changed).
+            - Status: live / pending / returned. No status = live, so every existing question is untouched; an
+              unknown status fails closed (not served). core.servablePool now also holds back non-live questions,
+              so every run, blueprint and depth count ignores pending and returned ones.
+            - core.stampTutorQuestion: a tutor's validated question becomes pending, stamped addedBy, addedByName,
+              addedAt and (for an import) batch; a forged live status or review mark is overwritten; a tutor can
+              only add to their own subjects.
+            - core.tutorEditQuestion / tutorOwnsQuestion: a tutor edits only questions they added, in their own
+              subjects; any edit goes back to pending and clears the review marks; id, author and first-added
+              time are kept; admin-added questions are not theirs to edit.
+            - core.reviewQuestion: management only, pending only, never your own; approve, or return with a
+              3-300 character reason; records reviewedBy and reviewedAt. "Edit then approve" = apply the admin's
+              validated edit, then approve.
+            - core.approveBatch (approve all from one import), approvalQueue (oldest first, optional subject),
+              pendingCount (for the console badge), tutorQuestions (a tutor's own, newest first),
+              lastTutorUpload (for Subjects & tutors).
+            - Theory MARKS are not part of this (owner: no approval, admin alert).
+            PARTS 6.2 AND 6.3 DONE (8 Oct 2026): server routes and the tutor's question screens. 112 suites pass.
+            test/test-tutor-questions.js (real server) and test/test-tutor-questions-ui.js (screens).
+            - Storage: a question may now carry status, addedBy, addedByName, addedAt, editedAt, batch,
+              returnReason, reviewedBy, reviewedAt (all optional; admin-added questions have none and are live).
+              In Appwrite these are 9 optional string attributes: RE-RUN `node server/setup-appwrite.js` before
+              tutors add questions. Written only once a question has a status, so an old collection still
+              takes every admin question.
+            - listQuestions now serves LIVE questions only unless a route asks { all: true }. Every student
+              route, paper, blueprint and the tutor numbers read through it, so a route that forgets cannot leak a
+              pending question. The console bank, import duplicate check, topics, passages, counts and bulk delete
+              ask for all.
+            - Tutor routes (need 'tutor', own subject and own questions only): GET/POST /api/tutor/questions,
+              POST /api/tutor/questions/import (one batch id per import, logged in the import history by the
+              tutor), PUT /api/tutor/questions/:id (back to pending), PUT .../:id/active (withdraw or put back an
+              APPROVED question; cannot make anything live), DELETE (not while live and showing). A tutor cannot
+              set a status, author or review mark.
+            - Admin routes (console): GET /api/approvals[?subject=], POST /api/approvals/:id/approve|return,
+              POST /api/approvals/batch/approve. /api/tutors/overview now also gives pending and lastUpload per
+              subject. The console SCREEN for these is part 6.4.
+            - Tutor screens (server/tutor/tutor-app.js, not in the public bundle, so no cache bump): a Your
+              questions card (counts), a list with status filter and Edit / Withdraw / Put back live / Delete,
+              a question form (objective, theory, JAMB, practice), and a CSV import screen with the skipped rows
+              listed. Returned questions show the admin's reason.
+            - "Publish" is built as SUBMIT FOR APPROVAL. Unpublish = Withdraw (an approved question only).
+            HONEST LIMITS:
+            - Tested on the local data file only; the Appwrite path (new attributes) has not been run against a
+              live Appwrite project.
+            - The tutor form has no passage or picture picker yet (typed and CSV passageId rows work as in the
+              console). Notes are slice 6.5.
+            - The console Question Bank list shows pending and returned questions like any other and has no
+              status label yet; approving and returning is by the new routes until 6.4.
+            PART 6.4 DONE: the console Awaiting approval screen and its badge (test/test-approvals-ui.js, test/test-approvals-edit.js):
+              Approve, Edit then approve, Return with a reason, Approve all from one import.
+            PART 6.5 DONE: tutor notes, live at once (no approval), own subject and own notes only: GET/POST /api/tutor/notes,
+              PUT .../:id, PUT .../:id/active (hold back / put back), DELETE (held-back notes only); a student's copy carries no
+              author stamp. Screens: Your notes card, list, form (test/test-tutor-notes-rules.js, test-tutor-notes.js, test-tutor-notes-ui.js).
+            PART 6.6 DONE (8 Oct 2026): TUTOR THEORY MARKING AND THE ADMIN ALERT. 121 suites pass. Cache goc-v120 (core, app and api changed).
+              Owner's choices (8 Oct 2026): a tutor may mark or change ANY theory script in their subject (marked or not); the admin
+              alert is raised ONLY when a save leaves the script fully marked; an alert leaves the console home when the admin taps Seen.
+              - Rules (js/goc-core.js, test/test-tutor-marking-rules.js): tutorMayMarkScript, tutorScriptSummary, makeMarkAlert, addAlert,
+                unseenAlerts, markAlertSeen.
+              - Tutor routes (need 'tutor'): GET /api/tutor/scripts?subject=[&status=awaiting-marking|marked] (counts + list),
+                GET /api/tutor/scripts/:id (written answers only, with the reference answer), POST /api/tutor/scripts/:id/mark { marks }.
+                The subject is taken from the SCRIPT, never from the request: a Chemistry tutor on a Physics script gets 403 and nothing
+                is stored or raised. A mark counts the moment it is saved (no approval); the student sees it and gets the same one-off
+                mark XP the console gives. A mark above the maximum is held at the maximum; a blank box is left unmarked, not zero.
+              - The console and tutor routes now share one locked read-mark-write cycle (markTheoryScript in server/server.js), so the
+                console's behaviour is unchanged (test/test-server.js still passes).
+              - Alerts: stored in data.json as db.alerts { id 'AL-n', kind 'tutor-mark', tutorId, tutorName, subject, attemptId, scholarId,
+                studentName, score, maxScore, percent, changed, at, seen, seenBy, seenAt }. A second save on a script whose alert is still
+                UNSEEN updates that alert in place (new mark and time, 'changed' set if the script was already marked) instead of stacking.
+                A save after the admin tapped Seen raises a fresh one. The admin marking in the console raises no alert. Seen alerts are kept
+                (newest 100) and unseen ones are never dropped. Console routes: GET /api/alerts (unseen, newest first), POST /api/alerts/:id/seen.
+              - Console home (Overview): an Alerts card, hidden when there is nothing to see. Each alert says tutor, subject, student, mark and
+                time, with Open script (jumps to Mark theory papers on that script) and Seen. Offline demo mode has no alerts.
+              - Tutor screens (server/tutor/tutor-app.js, never in the public bundle): a Theory scripts card (waiting / marked), a list with
+                Waiting / Marked / All, and a marking sheet (question, reference answer, student's answer, a mark box per answer, Save marks).
+                test/test-tutor-marking.js (real server), test/test-tutor-marking-ui.js, test/test-alerts-ui.js.
+              HONEST LIMITS:
+              - A tutor sees the Scholar ID (not the name) of the student on a script, so they can tell scripts apart. Say if you want it hidden.
+              - The alert list is in data.json (back it up; keep it out of public deploys). Alerts are not yet in Appwrite.
+              - The Appwrite attempt record stores a theory score as a number, so an unmarked script reads 0 there until it is marked
+                (existing behaviour, not changed here). Marking through the Appwrite path was not run against a live project.
+              - A mark changed on an already-marked script updates the student's score but gives no extra XP (XP is paid once).
+              - Class notices will reuse this alert list in slice 7 (kind 'class-notice'); the card text is written for tutor marks only today.
+   Slice 6  Tutor questions and notes with the approval queue; stamp questions with a time so
+            "last upload" can show on the Subjects & tutors card.
+            ADDED 8 Oct 2026 (owner request): tutors can also TYPE, EDIT, PUBLISH and UNPUBLISH
+            questions (not only import them), and TYPE theory questions and MARK theory answers for
+            their own subject. OPEN: "publish" vs the approval rule (tutor questions wait for the admin).
+            Does publish mean submit-for-approval, go live at once, or live only for trusted tutors? And
+            do theory marks need admin sign-off? Plan stays "submit for approval" until the owner says.
+            See ROADMAP-REMAINING.md, Phase 3C item 6.
+   Slice 7  DONE (8 Oct 2026) — CLASS NOTICES. 125 suites pass. Cache goc-v121 (core, app, api and index changed).
+            Owner's choices (8 Oct 2026): only GOC students taking that subject see a tutor's notice; a notice stays
+            visible until the tutor removes it (no expiry, no pin); the admin is alerted when a notice is NEW and
+            an edit is quiet.
+            - Rules (js/goc-core.js, test/test-notices-rules.js): validateNotice (title 3-80, message 10-1000
+              characters), stampTutorNotice, tutorOwnsNotice, tutorEditNotice, tutorNotices, publicNotice,
+              noticesForStudent, makeNoticeAlert, flagNoticeGone. A notice's subject is fixed when it is posted, so an
+              edit can never act as a quiet new post. addAlert now merges only 'tutor-mark' alerts (it used to match
+              on attemptId alone, which would have merged every notice alert into one).
+            - Storage: db.notices in data.json (settings.noticeSeq), no Appwrite attribute. A notice: id, subject,
+              title, body, addedBy, addedByName, addedAt, editedAt. Back it up and keep it out of public deploys.
+            - Tutor routes (need 'tutor', own subject and own notices only): GET/POST /api/tutor/notices,
+              PUT /api/tutor/notices/:id (edit, quiet), DELETE /api/tutor/notices/:id (remove). A tutor cannot set an
+              author, time or id. Posting raises the alert in the same locked write as the notice.
+            - Student route: GET /api/me/notices. An Open student gets { locked: true, notices: [] } and no notice
+              text ever leaves the server; a GOC student gets only notices for subjects in their own combination,
+              newest first. A tier switch takes effect on the next request.
+            - Admin routes (need 'console'): GET /api/notices[?subject=] (every notice, with the tutor's name) and
+              DELETE /api/notices/:id (the admin may remove any). Removing a notice keeps any unseen alert for it but
+              flags it 'gone'. Existing alert routes (GET /api/alerts, POST /api/alerts/:id/seen) are unchanged.
+            - Alerts: kind 'class-notice' { tutorId, tutorName, subject, noticeId, title, at, seen }. Each new notice
+              is its own alert. The console Alerts card says "<tutor> posted a <subject> class notice" with the title,
+              time and a New notice tag, and "since removed" when it is gone.
+            - Screens: tutor (server/tutor/tutor-app.js, never in the public bundle): a Class notices card, a list with
+              Edit / Remove, and a form that says who will see it and that the academy is told of a new post (and
+              that nobody is told about a change). Student: a Class notices card on Home (newest three, Show more),
+              text escaped with line breaks kept. Console: a Class notices showing card on the overview with Remove
+              notice (asks first).
+            - Drivers: listMyNotices, listNotices, removeNotice on both drivers and GOC.api. The offline demo has no
+              tutors, so it shows no notices (an Open student still reads as locked) and removing needs a server.
+            - Tests: test-notices-rules.js, test-notices.js (real server), test-notices-tutor-ui.js, test-notices-ui.js.
+              test-tutors-shell.js gained a stand-in for the new notices request (like the other tutor lists).
+            HONEST LIMITS:
+            - Students see "Chemistry tutor", never the tutor's name or ID (same rule as notes). Say if you want the
+              name shown.
+            - Because a notice has no expiry, old ones stay on students' Home until a tutor or the admin removes
+              them. The student card shows the newest three; the rest sit behind Show more.
+            - A student sees a notice only for a subject in their current combination; if their combination changes,
+              what they see changes with it.
+            - There is no pin, expiry, email, SMS or push for notices: a student sees them when Home opens.
+            - The console alert has Seen only; removing is from the Class notices showing card (an alert disappears
+              once Seen, the notice does not).
+            - Tested on the local data file only; the Appwrite student-read path (tier and subjects) is the same
+              one notes use, but this route has not been run against a live Appwrite project. No phone walkthrough yet.
+
+STUDENT DETAIL PAGE AND AUDIT LOG (9 Oct 2026): slices 1-2 DONE (server side only). Cache goc-v128 then goc-v129 (core changed again for the contact rule).
+  Owner's choices: every open of a student's page is logged; entries kept ONE YEAR; a tutor may open any GOC student who took their
+  subject, even if the account is switched off since; the page holds name, Scholar ID, email, phone and, for the open subject only,
+  scores, practice, last ten attempts, weak topics; audit readable by management (all) and by each tutor (own entries only).
+  Slice 1 DONE - pure rules in js/goc-core.js: tutorMayOpenStudent, tutorStudentDetail, makeTutorViewEntry, addTutorView, tutorOwnViews,
+    auditViews (test/test-tutors-student.js). Weak topics need 3+ of the student's own answers (thinner ones counted in `hidden`),
+    weakest five. Tests = marked papers only (awaiting-marking and drafts left out). Practice = answered questions in the subject.
+  Slice 2 DONE - routes (server/server.js; data.json gains db.tutorAudit and settings.auditSeq):
+    GET /api/tutor/student?subject=&id=  (need 'tutor', through tutorSubjectOr403). An Open student, one who never took the subject,
+      one who does not exist and a malformed ID all give the SAME plain 404 ("That student is not in your class."), logged nowhere.
+      A successful open is written to the log in the same locked write, BEFORE anything is sent; if the log cannot be written the tutor
+      gets a 500 and no student data. Returns { subject, subjects, student:{ id, name, email, phone, active, subject, lastActiveAt,
+      daysInactive, tests, practice, recent[], weakTopics } }. Never a hash, tier or another subject's data.
+    GET /api/tutor/audit  (need 'tutor'): the tutor's OWN entries, newest first; nothing in the request can widen it.
+    GET /api/audit/tutor-views[?tutorId=&studentId=]  (need 'console'): every entry, newest first.
+    An entry: { id 'AU-n', kind 'tutor-view', tutorId, tutorName, studentId, studentName, subject, at }. No email, phone or hash.
+    Entries older than 365 days are dropped whenever a new one is added.
+    test/test-tutors-student-route.js (real server).
+  CHANGE (9 Oct 2026, owner's choice: "Hidden until the tutor taps Show contact"): email and phone are NO LONGER on the page.
+    The student route returns neither. They come from their own route, GET /api/tutor/student/contact?subject=&id= (need 'tutor',
+    same scope guard, same plain 404, same openable rule), and every call is its own audit entry { kind 'contact-view' } written
+    before anything is sent. core.tutorStudentContact; makeTutorViewEntry takes a kind ('tutor-view' default or 'contact-view').
+    Tests updated (test-tutors-student.js, test-tutors-student-route.js). So the log now says "opened the page" and "showed contact".
+  Slice 3 DONE - the tutor's student page and tap-through (server/tutor/tutor-app.js, never in the public bundle, so no cache bump):
+    an Open button on every At-risk and Top performers row opens the student page: name, ID, subject, "switched off" note, last
+    activity, Contact card (hidden until Show contact; a failed request shows on the card, the button stays), scores, recent
+    attempts, weak topics (with the held-back count). Back returns to the dashboard and reloads My views. Everything from the server is
+    written escaped; opening the same student again starts hidden again; a refused student shows the server's reason and no data.
+    test/test-tutors-student-ui.js; test-tutors-shell.js has a stand-in for the new request.
+  Slice 4 PART DONE - the tutor's "My views" card on the dashboard (after Hardest questions): the tutor's own last 20 entries (name, ID,
+    subject, "Opened page" / "Showed contact", time, newest first), with the full count when there are more than 20; says the academy
+    keeps the record for 12 months. A failed load shows on this card only; with none it says so.
+  (written before the last part was built) NEXT (slice 4, last part): the console's audit screen for management (GET /api/audit/tutor-views is ready; screen not built:
+    it lives in js/app.js, so the cache must be bumped when it is).
+  (out of date: the console audit screen was built afterwards; Phase 3C is complete.)
+  HONEST LIMITS: the log records opens, not what the tutor did on the page; a tutor can read phone and email (owner's choice) and the
+    log does not record that separately; under Appwrite the student and attempts are read through the existing helpers but this route has
+    not been run against a live Appwrite project; the audit log lives in data.json (back it up, keep it out of public deploys).
+
+  Slice 4 LAST PART DONE (9 Oct 2026) - the console's Tutor access log, inside Console -> Tutors (owner's choices: in the Tutors panel;
+    Founder and Academic Director only, which is the console gate; filters tutor, Scholar ID, action (opened page / showed contact) and
+    From/To Nigeria days; Export CSV, no per-tutor totals). Cache goc-v130 (app.js and goc-core.js changed).
+    core.auditViews gained kind, from, to (Nigeria days, both included, swapped if the wrong way round, bad days ignored; a row with no kind
+    counts as an opened page); core.auditCsv (Nigeria date and time, no email/phone/hash, formula-safe cells); core.auditKindLabel; core.validDayStr.
+    GET /api/audit/tutor-views takes ?tutorId=&studentId=&kind=&from=&to=. GOC.api.listTutorViews on both drivers (offline demo: empty).
+    Screen (js/app.js: admAuditLoad, admAuditPaint, admAuditExport, admAuditClear): shows the newest 200 rows, Export CSV has every matching row.
+    Tests: test/test-tutors-audit-screen.js (new), test-tutors-student-route.js (kind and date cases), test-tutors-ui.js (panel load line).
+  PHASE 3C IS COMPLETE. Honest limits: the log records opens, not what the tutor did on the page; the screen is not yet checked on a phone.
