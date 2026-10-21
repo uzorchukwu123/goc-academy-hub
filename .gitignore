@@ -1,0 +1,31 @@
+# Dependencies and build output
+node_modules/
+dist/
+deploy/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Live data, backups and logs — never commit these
+server/data.json
+server/data.json.*
+server/backups/
+server/question-images/
+*.bak
+*.tmp
+*.log
+reminders-outbox.jsonl
+
+# Editor and OS clutter
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env
+.env.*
+node_modules/
+server/data.json
