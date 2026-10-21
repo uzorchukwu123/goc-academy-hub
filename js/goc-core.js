@@ -1626,11 +1626,7 @@
     var ys = Array.isArray(year) ? year : (Number(year) > 0 ? [year] : []);
     ys = ys.map(Number).filter(function (n) { return n > 0; });
     return (bank || []).filter(function (r) {
-<<<<<<< HEAD
       if (!r.active || r.kind !== 'objective') return false;
-=======
-      if (!r.active || r.kind !== 'objective' || r.section !== 'practice') return false;
->>>>>>> origin/main
       if (subject && r.subject !== subject) return false;
       if (want.length && want.indexOf(String(r.topic)) === -1) return false;
       /* Years narrow Practice to those papers' questions only. */
@@ -5789,16 +5785,12 @@
   }
   /* The four roles the Founder can issue IDs for in the Managers panel. */
   function managerRoles() {
-<<<<<<< HEAD
     var allowed = ['finance', 'publicity', 'student-affairs'];
     return ADMIN_ROLES.filter(function (r) {
       return allowed.indexOf(r.key) !== -1;
     }).map(function (r) {
       return { key: r.key, title: r.title };
     });
-=======
-    return ADMIN_ROLES.filter(function (r) { return r.key !== ROLE_FOUNDER && r.key !== 'academic-director'; }).map(function (r) { return { key: r.key, title: r.title }; });
->>>>>>> origin/main
   }
   /* Next management ID: GOC-A-001 and 002 exist; managers start at 003. Gaps are never refilled. */
   function nextAdminId(existingIds) {
@@ -5841,14 +5833,10 @@
     if (name.length > 80) return { error: 'The manager’s name is too long (80 letters at most).' };
 
     var role = adminRoleKey(r.role);
-<<<<<<< HEAD
     var allowedManagerRoles = ['finance', 'publicity', 'student-affairs'];
     if (!role || allowedManagerRoles.indexOf(role) === -1) {
       return { error: 'Choose Finance & Administration Manager, Publicity & Communications Manager, or Student Affairs & Operations Coordinator.' };
     }
-=======
-    if (!role || role === ROLE_FOUNDER) return { error: 'Choose one of the four manager roles.' };
->>>>>>> origin/main
 
     var creating = o.creating === undefined ? true : !!o.creating;
     var pw = r.password == null ? '' : String(r.password);

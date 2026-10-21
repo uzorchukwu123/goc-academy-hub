@@ -75,41 +75,26 @@ function waitForBoot(n) {
 
   head('what is refused');
   ok('the Founder role cannot be issued', (await call('POST', '/api/managers', Object.assign({}, good, { role: 'founder' }), ftok)).status === 400);
-<<<<<<< HEAD
   var adCreate = await call('POST', '/api/managers', Object.assign({}, good, { role: 'academic-director' }), ftok);
   ok('the Academic Director role can be issued', adCreate.status === 200 && adCreate.body.manager.role === 'academic-director' && adCreate.body.manager.id === 'GOC-A-005', adCreate.raw);
-=======
->>>>>>> origin/main
   ok('a short password is refused', (await call('POST', '/api/managers', Object.assign({}, good, { password: 'ab1' }), ftok)).status === 400);
   var noDigit = await call('POST', '/api/managers', Object.assign({}, good, { password: 'lettersonly' }), ftok);
   ok('a password with no number is refused, with the same wording as management passwords', noDigit.status === 400 && /letters and numbers/.test(noDigit.raw), noDigit.raw);
   ok('a bad passcode is refused', (await call('POST', '/api/managers', Object.assign({}, good, { passcode: '12' }), ftok)).status === 400);
   ok('a missing name is refused', (await call('POST', '/api/managers', Object.assign({}, good, { name: '' }), ftok)).status === 400);
   var l2 = await call('GET', '/api/managers', undefined, ftok);
-<<<<<<< HEAD
   ok('none of the refused ones were stored', l2.body.managers.length === 3, l2.raw);
-=======
-  ok('none of the refused ones were stored', l2.body.managers.length === 2, l2.raw);
->>>>>>> origin/main
 
   head('the stored record keeps only hashes');
   var stored = fs.readFileSync(path.join(SANDBOX, 'server', 'data.json'), 'utf8');
   ok('data.json holds no plain password or passcode', !/starter123|another456/.test(stored) && !/"passcode"\s*:\s*"(4821|90210)"/.test(stored));
-<<<<<<< HEAD
   ok('it holds hashes, the must-change flag and the ID high-water mark', /scrypt\$/.test(stored) && /"mustChangePassword": true/.test(stored) && /"managerIdHigh": "GOC-A-005"/.test(stored));
-=======
-  ok('it holds hashes, the must-change flag and the ID high-water mark', /scrypt\$/.test(stored) && /"mustChangePassword": true/.test(stored) && /"managerIdHigh": "GOC-A-004"/.test(stored));
->>>>>>> origin/main
 
   head('the Academic Director keeps full access');
   var a = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, a.body.token);
   var al = await call('GET', '/api/managers', undefined, a.body.token);
-<<<<<<< HEAD
   ok('the seeded Academic Director account can still open the panel', al.status === 200 && al.body.managers.length === 3, al.status);
-=======
-  ok('the seeded Academic Director account can still open the panel', al.status === 200 && al.body.managers.length === 2, al.status);
->>>>>>> origin/main
 
   stop();
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');

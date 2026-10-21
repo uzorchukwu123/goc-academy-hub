@@ -7,7 +7,6 @@ module.exports = {
     instances: 1,            // single instance: data.json is a single-writer file
     autorestart: true,
     max_memory_restart: '500M',
-<<<<<<< HEAD
     env: {
       NODE_ENV: 'production',
       GOC_TRUST_PROXY: '1',
@@ -34,8 +33,5 @@ module.exports = {
       // actual persistent mount.
       GOC_DATA_DIR: '/home/ubuntu/goc-data'
     }
-=======
-    env: { NODE_ENV: 'production', GOC_TRUST_PROXY: '1', GOC_NO_DEMO_SEED: '1' }
->>>>>>> origin/main
   }]
 };

@@ -93,7 +93,6 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   ok('a tutor can type a theory question for their subject', th.status === 200 && th.body.question.status === 'pending' && th.body.question.section === 'theory', th.raw);
 
   console.log('\nstudents never see it');
-<<<<<<< HEAD
   /* Seed one live Chemistry question via admin so the practice pool is non-empty.
      Without this, study/start returns 404 ("No questions published") and the
      assertion below — which checks status === 200 — would always fail. */
@@ -107,17 +106,6 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   ok('the tutor snapshot route still works', counts0.status === 200);
   var depth = await call('GET', '/api/tutor/subject?subject=Chemistry', null, chem.token);
   ok('the paper depth excludes pending questions but counts the new live objective', depth.body.depth.theory === depth0.theory && depth.body.depth.objective === depth0.objective + 1, JSON.stringify({before: depth0, after: depth.body.depth}));
-=======
-  var viaAll = await call('GET', '/api/me/study?subject=Chemistry', null, gTok);
-  ok('the study screen is unchanged by pending questions', viaAll.raw === before.raw, viaAll.raw.slice(0, 200));
-  ok('the question text is nowhere in what a student can read', viaAll.raw.indexOf('ZQX') < 0);
-  var run = await call('POST', '/api/me/study/start', { mode: 'practice', subject: 'Chemistry', count: 50 }, gTok);
-  ok('a practice run never contains a pending question', run.status === 200 && run.raw.indexOf('ZQX') < 0 && run.raw.indexOf('ZQXLIME') < 0, run.raw.slice(0, 120));
-  var counts0 = await call('GET', '/api/tutor/analytics?subject=Chemistry', null, chem.token);
-  ok('the tutor snapshot route still works', counts0.status === 200);
-  var depth = await call('GET', '/api/tutor/subject?subject=Chemistry', null, chem.token);
-  ok('the paper depth does not count pending questions', depth.body.depth.theory === depth0.theory && depth.body.depth.objective === depth0.objective, JSON.stringify(depth.body.depth));
->>>>>>> origin/main
   var consoleList = await call('GET', '/api/questions?subject=Chemistry', null, adm);
   ok('the console bank does list them, with their status', consoleList.body.questions.some(function (q) { return q.id === q1.id && q.status === 'pending'; }));
 

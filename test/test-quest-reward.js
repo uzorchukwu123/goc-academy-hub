@@ -105,7 +105,6 @@ function sit(token, count, wrong) {
 
   waitForBoot(40).then(function () {
     head('Quest reward through the server');
-<<<<<<< HEAD
     /* Seed enough practice questions for Physics so studyPool() returns a
        non-empty pool when sit() calls /api/me/study/start.  The server filter
        requires section === 'practice'; the seeded bank only ships section
@@ -133,9 +132,6 @@ function sit(token, count, wrong) {
       })
       .then(function () {
         var token;
-=======
-    var token;
->>>>>>> origin/main
     return activeStudent.signedUp(call, signup).then(function (r) {
       token = r.body.token;
       return sit(token, 5, false);
@@ -161,10 +157,7 @@ function sit(token, count, wrong) {
       stop();
       process.exit(fails ? 1 : 0);
     });
-<<<<<<< HEAD
       }); // end seeding .then
-=======
->>>>>>> origin/main
   }).catch(function (e) {
     console.log('THREW: ' + e.message);
     console.log(serverLog);

@@ -3351,11 +3351,7 @@ function admOpen(section){
       '<div class="ad-field"><label>Starting password</label><input id="admTutPw" type="text" autocomplete="off" placeholder="at least 8 characters"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" id="admTutNewBtn" onclick="admTutCreate()">Create tutor</button></div></div>'+
       '<div class="ad-card"><div class="ad-h">Tutors</div><div id="admTutList"><div class="ad-loading">Loading tutors…</div></div></div>'+
-<<<<<<< HEAD
       '<div class="ad-card"><div class="ad-h">Tutor Analytics</div><p class="ad-p">Subject activity and student performance overview.</p><div id="admTutAnalytics"><div class="ad-loading">Loading analytics…</div></div></div><div class="ad-card"><div class="ad-h">Subjects &amp; tutors</div><p class="ad-p">Who teaches each subject and where a paper is empty or thin.</p><div id="admTutOver"><div class="ad-loading">Loading…</div></div></div>'+
-=======
-      '<div class="ad-card"><div class="ad-h">Subjects &amp; tutors</div><p class="ad-p">Who teaches each subject and where a paper is empty or thin.</p><div id="admTutOver"><div class="ad-loading">Loading…</div></div></div>'+
->>>>>>> origin/main
       '<div class="ad-card"><div class="ad-h">Tutor access log</div><p class="ad-p">Every time a tutor opens a student\u2019s page or shows their contact details. Kept for 12 months. Times are Nigeria time.</p>'+
       '<div class="ad-field"><label>Tutor</label><select id="admAudTutor"><option value="">Any tutor</option></select></div>'+
       '<div class="ad-field"><label>Scholar ID</label><input id="admAudStudent" placeholder="e.g. GOC-0001 (leave empty for all)" autocomplete="off"></div>'+
@@ -3482,11 +3478,7 @@ function admOpen(section){
   if(section === 'league') admLgLoad();
   if(section === 'access') admAccessLoad();
   if(section === 'siteanalytics') saLoad();
-<<<<<<< HEAD
   if(section === 'tutors'){ admTutLoad(); admAuditLoad(); admTutOverLoad(); admTutAnalyticsLoad(); }
-=======
-  if(section === 'tutors'){ admTutLoad(); admAuditLoad(); }
->>>>>>> origin/main
   if(section === 'managers'){ setTimeout(admMgLoad, 0); setTimeout(admMgLogLoad, 0); }
   if(section === 'approvals') admApLoad();
   if(section === 'flags') admFlagsLoad();
@@ -5636,7 +5628,6 @@ function admObjRender(){
     var tag = r.want === 0 ? '<span class="ad-tag r">Not served</span>'
             : (short ? '<span class="ad-tag a">'+(r.want - r.available)+' short</span>'
                      : '<span class="ad-tag g">Bank covers it</span>');
-<<<<<<< HEAD
     /* Build dropdown options: 0 (not served), then 5-question steps up to the
        UTME ceiling for this subject (60 for Use of English, 40 for sciences). */
     var ceil = Number(r.ceiling) || (admObjCeil
@@ -5653,14 +5644,6 @@ function admObjRender(){
       '<label style="font-size:.85rem;margin-bottom:4px;display:block">Questions per paper</label>'+
       '<select id="admObjCountSel'+n+'" onchange="admObjCountSave('+n+')" style="width:100%;max-width:220px">'+opts+'</select>'+
       '</div></div>';
-=======
-    return '<div class="ad-cred"><div class="ac-top">'+
-      '<div class="ac-who"><b>'+esc(r.subject)+'</b><span>serving '+r.serving+
-      ' of '+r.want+' asked · '+r.available+' live in the bank · ceiling '+r.ceiling+'</span></div>'+tag+'</div>'+
-      '<div class="stepper" style="margin-top:8px"><button onclick="admObjCount('+n+',-5)">−</button>'+
-      '<b>'+r.want+' question'+(r.want === 1 ? '' : 's')+'</b>'+
-      '<button onclick="admObjCount('+n+',5)">+</button></div></div>';
->>>>>>> origin/main
   }).join('') +
     '<div class="ad-metric"><span>A full four-subject sitting</span><b>'+total+' question'+
     (total === 1 ? '' : 's')+'</b></div>' +
@@ -5668,7 +5651,6 @@ function admObjRender(){
       (Number(admObjCeil.english) + Number(admObjCeil.science) * 3)+
       ' questions. A student sits only their own combination, so their total is lower if they carry fewer subjects.</p>' : '');
 }
-<<<<<<< HEAD
 function admObjCountSave(n){
   var r = admObjRows[n];
   if(!r) return;
@@ -5684,18 +5666,10 @@ function admObjCountSave(n){
   }
   GOC.api.setObjectiveCount(r.subject, want).then(function(res){
     toast(r.subject + ' · saved ' + res.questions + ' question' + (res.questions === 1 ? '' : 's') +
-=======
-function admObjCount(n, d){
-  var r = admObjRows[n];
-  if(!r) return;
-  GOC.api.setObjectiveCount(r.subject, (Number(r.want) || 0) + d).then(function(res){
-    toast(r.subject + ' · ' + res.questions + ' question' + (res.questions === 1 ? '' : 's') +
->>>>>>> origin/main
       ' of a possible ' + res.ceiling);
     admObjLoad();
   }, function(err){
     toast(err.message || 'That count could not be saved');
-<<<<<<< HEAD
     sel.value = String(r.want); // restore previous value on error
   });
 }
@@ -5714,10 +5688,6 @@ function admObjCount(n, d){
   sel.value = String(newWant);
   admObjCountSave(n);
 }
-=======
-  });
-}
->>>>>>> origin/main
 /* ---- the JAMB-oriented sitting ----
    The same two settings and honest picture as the objective panel above, but
    on the independent jamb clock/counts and reading the jamb pool. */
@@ -11592,7 +11562,6 @@ function qPanelRefreshGrid(){
     }
   }
 }
-<<<<<<< HEAD
 
 
 /* Admin Console -> Tutors -> Tutor Analytics */
@@ -11649,5 +11618,3 @@ function admTutAnalyticsLoad() {
       '</div>';
   });
 }
-=======
->>>>>>> origin/main

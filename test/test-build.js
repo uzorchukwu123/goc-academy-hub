@@ -80,7 +80,6 @@ if (a && b) {
       var ra, rb;
       try { ra = JSON.stringify(a[k].apply(null, JSON.parse(JSON.stringify(args)))); } catch (e) { ra = 'throws'; }
       try { rb = JSON.stringify(b[k].apply(null, JSON.parse(JSON.stringify(args)))); } catch (e) { rb = 'throws'; }
-<<<<<<< HEAD
       if (k === 'makeApplication') {
           try {
             var va = JSON.parse(ra);
@@ -98,9 +97,6 @@ if (a && b) {
           } catch (e) {}
         }
         if (k === 'srAfterAnswer') {
-=======
-      if (k === 'srAfterAnswer') {
->>>>>>> origin/main
         try {
           var va = JSON.parse(ra);
           if (va && typeof va === 'object') {

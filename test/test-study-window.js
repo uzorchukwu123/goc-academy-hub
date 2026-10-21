@@ -96,11 +96,7 @@ async function main() {
      row to gate — an empty catalogue would let the exhausted branch of
      wtRowEl() go untested by never reaching it. */
   var q = await api('createQuestion')({
-<<<<<<< HEAD
     subject: 'Physics', section: 'practice', topic: 'Waves',
-=======
-    subject: 'Physics', section: 'objective', topic: 'Waves',
->>>>>>> origin/main
     text: 'A wave with a longer wavelength has a — frequency, at the same speed.',
     options: ['higher', 'lower', 'the same', 'undefined'], answer: 1
   });
