@@ -197,6 +197,7 @@ These block a real launch and only you can do them:
 - Saved questions (bookmarks) snapshots store only text and options — images and passages attached to those questions are not shown in Saved questions or the practice results review rows.
 - Team challenges (4.C) fold contributions on the local-file path only; persisting challenge state on Appwrite needs a `challengeState` attribute on the students collection.
 - The manager-action log is written synchronously — two requests finishing at the exact same instant could in rare cases lose one entry.
+<<<<<<< HEAD
 
 ---
 
@@ -272,3 +273,5 @@ test-p3 demo-paper open fails — re-inspect after Fix 01 applied
 
 ### GOC_Fix6 — Pending D — PENDING
 managerRoles() wrong set / shared reference (test-roles.js unit test)
+=======
+>>>>>>> origin/main

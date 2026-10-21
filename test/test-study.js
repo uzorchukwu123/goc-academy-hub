@@ -124,12 +124,21 @@ async function main() {
   /* The pool is what a student could be asked. Theory is not in it: theory needs
      a marker, and self-study has none. */
   var BANK = [
+<<<<<<< HEAD
     { id:1, subject:'Physics', kind:'objective', section:'practice', topic:'Waves',  active:true,  answer:1, explanation:'why' },
     { id:2, subject:'Physics', kind:'objective', section:'practice', topic:'Waves',  active:true,  answer:0, explanation:'' },
     { id:3, subject:'Physics', kind:'objective', section:'practice', topic:'Motion', active:true,  answer:2, explanation:'' },
     { id:4, subject:'Physics', kind:'objective', section:'practice', topic:'Motion', active:false, answer:0, explanation:'' },
     { id:5, subject:'Physics', kind:'theory',    topic:'Waves',  active:true,  expected:'x', maxMark:5 },
     { id:6, subject:'Chemistry', kind:'objective', section:'practice', topic:'Acids', active:true, answer:3, explanation:'' }
+=======
+    { id:1, subject:'Physics', kind:'objective', topic:'Waves',  active:true,  answer:1, explanation:'why' },
+    { id:2, subject:'Physics', kind:'objective', topic:'Waves',  active:true,  answer:0, explanation:'' },
+    { id:3, subject:'Physics', kind:'objective', topic:'Motion', active:true,  answer:2, explanation:'' },
+    { id:4, subject:'Physics', kind:'objective', topic:'Motion', active:false, answer:0, explanation:'' },
+    { id:5, subject:'Physics', kind:'theory',    topic:'Waves',  active:true,  expected:'x', maxMark:5 },
+    { id:6, subject:'Chemistry', kind:'objective', topic:'Acids', active:true, answer:3, explanation:'' }
+>>>>>>> origin/main
   ];
   var poolAll = R.studyPool(BANK, 'Physics', null);
   ok('the pool holds only this subject', poolAll.every(function (q) { return q.subject === 'Physics'; }));
@@ -395,11 +404,17 @@ async function main() {
      markup('suSubjectDD').indexOf('Mathematics') === -1);
   ok('the dropdown starts on the paper that is selected', id('suSubjectDD').value === run('suSubj'), id('suSubjectDD').value);
   var startSub = run('suSubj');
+<<<<<<< HEAD
   ok('practice now offers the topic picker, one option per topic plus All topics',
      id('suTopicsSection').hidden === false &&
      count('suTopics', 'select') === 1 &&
      count('suTopics', 'option') === run('suEntry')(startSub).topics.length + 1,
      count('suTopics', 'option'));
+=======
+  ok('practice now offers the topic picker, one row per topic the paper holds',
+     id('suTopicsSection').hidden === false && count('suTopics', 'button') === run('suEntry')(startSub).topics.length,
+     count('suTopics', 'button'));
+>>>>>>> origin/main
   ok('every topic starts ticked, so the default is still the whole paper',
      run('suChosen')().length === run('suEntry')(startSub).topics.length);
   ok('the year picker only shows when the paper holds dated past questions',
@@ -621,10 +636,15 @@ async function main() {
   run('openPastQuestions')();
   await flush();
   ok('it opens the set-up screen, named for past questions', screenNow() === 'studySet' && /past questions/i.test(text('suTitle')), text('suTitle'));
+<<<<<<< HEAD
   ok('the year picker offers All years and every available year',
      id('suYearSection').hidden === false &&
      count('suYears', 'select') === 1 &&
      count('suYears', 'option') === run('suYearList')().length + 1 &&
+=======
+  ok('the year list is shown with one row per year, every year ticked',
+     id('suYearSection').hidden === false && count('suYears', 'button') === run('suYearList')().length &&
+>>>>>>> origin/main
      run('suYearsOn')().length === run('suYearList')().length);
   var allCount = run('suAvailable')();
   run('suToggleYear')(2021);

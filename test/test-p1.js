@@ -91,8 +91,12 @@ ok('the Priority 1 block exists in the stylesheet', block.length > 400);
 
 /* Rule 1: transform and opacity only. Anything else costs a layout pass and
    can shove text that is already on screen. */
+<<<<<<< HEAD
 var newKeyframes = (block.match(/@keyframes\s+\w+\s*\{[\s\S]*?\}\s*\}/g) || [])
   .filter(function (kf) { return !/@keyframes\s+upsDotPulse\b/.test(kf); });
+=======
+var newKeyframes = block.match(/@keyframes\s+\w+\s*\{[\s\S]*?\}\s*\}/g) || [];
+>>>>>>> origin/main
 ok('the new keyframes are declared', newKeyframes.length >= 4, String(newKeyframes.length));
 var animatedProps = [];
 newKeyframes.join('\n').replace(/\{([^{}]*)\}/g, function (m, decls) {

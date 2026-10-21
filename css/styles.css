@@ -3174,6 +3174,7 @@ a.cv:hover{color:var(--red)}
   border-radius:50%;
   background:#DC2626;
   border:2px solid #fff;
+<<<<<<< HEAD
 }
 @media (prefers-reduced-motion: no-preference){
   .lp-updates-dot{animation:upsDotPulse 2s ease-in-out infinite}
@@ -3181,6 +3182,13 @@ a.cv:hover{color:var(--red)}
     0%,100%{filter:drop-shadow(0 0 0px rgba(220,38,38,.5))}
     50%{filter:drop-shadow(0 0 4px rgba(220,38,38,0))}
   }
+=======
+  animation:upsDotPulse 2s ease-in-out infinite;
+}
+@keyframes upsDotPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}
+  50%{box-shadow:0 0 0 5px rgba(220,38,38,0)}
+>>>>>>> origin/main
 }
 /* On narrow mobile, the lp-actions hides .lp-link but keeps .lp-cta;
    also show the updates button since it's important */

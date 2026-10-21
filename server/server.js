@@ -98,6 +98,7 @@ const DATA_DIR = process.env.GOC_DATA_DIR ? path.resolve(process.env.GOC_DATA_DI
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* already exists */ }
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+<<<<<<< HEAD
 
 /* ── One-time migration: if GOC_DATA_DIR is set and the target data.json does
    not yet exist there, copy the bundled server/data.json across so existing
@@ -116,6 +117,8 @@ if (process.env.GOC_DATA_DIR) {
     }
   }
 }
+=======
+>>>>>>> origin/main
 const PORT = Number(process.env.PORT) || 8080;
 const SESSION_HOURS = 8;                             // hard ceiling for staff
 
@@ -132,7 +135,10 @@ const APPWRITE_BUCKET_ID = appwriteConfig.bucketId;
 const APPWRITE_FILE_ID = appwriteConfig.fileId;
 const APPWRITE_DATABASE_ID = 'goc_academy';
 const APPWRITE_STUDENTS_COLLECTION_ID = 'students';
+<<<<<<< HEAD
 const APPWRITE_TUTORS_COLLECTION_ID = 'tutors';
+=======
+>>>>>>> origin/main
 const APPWRITE_QUESTIONS_COLLECTION_ID = 'questions';
 const APPWRITE_ATTEMPTS_COLLECTION_ID = 'attempts';
 const APPWRITE_RESOURCES_COLLECTION_ID = 'resources';
@@ -150,7 +156,11 @@ async function createAppwriteAuthUser(rec) {
   const authEmail = rec.id.toLowerCase() + '@gocacademy.com';
 
   return appwriteUsers.create(
+<<<<<<< HEAD
     require("node-appwrite").ID.unique(),
+=======
+    'unique()',
+>>>>>>> origin/main
     authEmail,
     undefined,
     rec.plainPassword,
@@ -275,10 +285,14 @@ function appwriteStudentToRecord(doc) {
     appwriteUserId: doc.appwriteUserId || null,
     cohort: doc.cohort || null,
     createdAt: doc.$createdAt || null,
+<<<<<<< HEAD
     lastSeenAt: doc.lastSeenAt || null,
     pendingApproval: doc.pendingApproval === true,
     approvedBy: doc.approvedBy || null,
     approvedAt: doc.approvedAt || null
+=======
+    lastSeenAt: doc.lastSeenAt || null
+>>>>>>> origin/main
   };
 }
 
@@ -306,6 +320,7 @@ function appwriteStudentToRecord(doc) {
    to the collection.
    ========================================================================== */
 
+<<<<<<< HEAD
 
 /* ---- tutors: record <-> Appwrite document ---- */
 function appwriteTutorToRecord(doc) {
@@ -374,6 +389,8 @@ async function saveAppwriteTutor(rec) {
   return appwriteTutorToRecord(doc);
 }
 
+=======
+>>>>>>> origin/main
 function appwriteQuery() {
   return require('node-appwrite').Query;
 }
@@ -517,12 +534,15 @@ async function listQuestions(filter, localDb) {
   const keep = rows => filter.all ? rows : rows.filter(core.questionIsLive);
   if (!appwriteDatabases) {
     let rows = (localDb ? localDb.questions : readData().questions) || [];
+<<<<<<< HEAD
     /* Phase 4 — archived questions (soft-deleted) are excluded from every view
        unless the caller explicitly asks for them. Student pools, blueprint
        counts, and the normal admin bank never see archived questions.
        { all: true } still excludes archived unless showArchived is also set,
        so even the approval queue does not resurface soft-deleted records. */
     if (!filter.showArchived) rows = rows.filter(q => !q.archived);
+=======
+>>>>>>> origin/main
     if (filter.subject) rows = rows.filter(q => q.subject === filter.subject);
     if (filter.section) rows = rows.filter(q => q.section === filter.section);
     if (filter.kind) rows = rows.filter(q => q.kind === filter.kind);
@@ -567,6 +587,7 @@ async function getQuestionById(id, localDb) {
 
 async function createQuestion(rec, localDb) {
   if (!appwriteDatabases) {
+<<<<<<< HEAD
     if (localDb) {
       /* Local mode: guard against stale in-memory state producing a
          duplicate ID — this cannot happen via the normal import path
@@ -591,6 +612,11 @@ async function createQuestion(rec, localDb) {
      when a new import reused an ID that the sequence counter had already
      handed out to a different question.  Throw a collision error instead so
      the import handler can skip this record and report the conflict. */
+=======
+    if (localDb) localDb.questions.push(rec);
+    return rec;
+  }
+>>>>>>> origin/main
   try {
     const doc = await appwriteDatabases.createDocument(
       APPWRITE_DATABASE_ID, APPWRITE_QUESTIONS_COLLECTION_ID,
@@ -598,12 +624,19 @@ async function createQuestion(rec, localDb) {
     return docToQuestion(doc);
   } catch (err) {
     if (Number(err && (err.code || err.status)) !== 409) throw err;
+<<<<<<< HEAD
     const collision = new Error(
       'ID collision: question ' + rec.id + ' already exists in Appwrite. ' +
       'The new record was NOT saved and the existing one was NOT changed.');
     collision.code = 409;
     collision.collisionId = rec.id;
     throw collision;
+=======
+    const doc = await appwriteDatabases.updateDocument(
+      APPWRITE_DATABASE_ID, APPWRITE_QUESTIONS_COLLECTION_ID,
+      String(rec.id), questionToDoc(rec));
+    return docToQuestion(doc);
+>>>>>>> origin/main
   }
 }
 
@@ -924,6 +957,7 @@ async function updateAttempt(id, patch, localDb) {
    at boot. That makes the blob durable across a code-folder-replacing redeploy
    without turning the ~67 synchronous readData()/writeData() call sites async. */
 function blobStorageEnabled() {
+<<<<<<< HEAD
   /* Use the constants loaded once at startup from appwriteConfig (via loadEnv)
      rather than re-reading process.env at call time.  dotenv.config() never
      overwrites a variable that is already set in the process environment, so
@@ -933,6 +967,9 @@ function blobStorageEnabled() {
      the constants here guarantees the check always matches the values that are
      actually being used for uploads and downloads. */
   return !!(appwriteResourcesStorage && APPWRITE_BUCKET_ID && APPWRITE_FILE_ID);
+=======
+  return !!(appwriteResourcesStorage && process.env.APPWRITE_BUCKET_ID && process.env.APPWRITE_FILE_ID);
+>>>>>>> origin/main
 }
 
 async function hydrateBlobFromStorage() {
@@ -942,6 +979,7 @@ async function hydrateBlobFromStorage() {
     const text = Buffer.isBuffer(buf) ? buf.toString('utf8')
       : (buf && buf.byteLength != null ? Buffer.from(buf).toString('utf8') : String(buf));
     if (text && text.trim()) {
+<<<<<<< HEAD
       /* ── Stale-blob guard ───────────────────────────────────────────────────
          If the local file already exists and carries a _savedAt timestamp that
          is more recent than the one in the downloaded blob, the local file is
@@ -970,6 +1008,12 @@ async function hydrateBlobFromStorage() {
       fs.writeFileSync(tmp, text);
       fs.renameSync(tmp, DATA_FILE);
       console.log('[goc] Hydrated data.json blob from Appwrite Storage' + (blobTs ? ' (blob _savedAt: ' + blobTs + ')' : '') + '.');
+=======
+      const tmp = DATA_FILE + '.tmp';
+      fs.writeFileSync(tmp, text);
+      fs.renameSync(tmp, DATA_FILE);
+      console.log('[goc] Hydrated data.json blob from Appwrite Storage.');
+>>>>>>> origin/main
       return true;
     }
   } catch (err) {
@@ -1139,6 +1183,7 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
   if (db.settings.questionSeq == null) {
     db.settings.questionSeq = db.questions.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0);
   }
+<<<<<<< HEAD
   /* Phase 9 — Persistence guard. Runs only in Appwrite mode where the local
      data.json is a cache/fallback rather than the authoritative store. If the
      local file appears to be an older or emptier snapshot than what Appwrite
@@ -1187,6 +1232,8 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
       }
     });
   }
+=======
+>>>>>>> origin/main
   if (db.settings.attemptSeq == null) db.settings.attemptSeq = 0;
   /* The academy used to publish a weekly paper and a monthly one; it publishes
      one test. Stored records keep reading cleanly either way — nothing filters
@@ -1236,12 +1283,17 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
 }
 
 /* Written via a temp file + rename, so the file itself is never left
+<<<<<<< HEAD
    half-written by a crash mid-write.
    A _savedAt ISO timestamp is injected on every write so that
    hydrateBlobFromStorage() can compare the blob against the local file and
    refuse to restore a stale blob over a newer local copy. */
 function writeData(db) {
   db._savedAt = new Date().toISOString();
+=======
+   half-written by a crash mid-write. */
+function writeData(db) {
+>>>>>>> origin/main
   const tmp = DATA_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DATA_FILE);
@@ -1848,22 +1900,32 @@ function studyExtendCountToday(s) {
   if (!s || s.studyBonusDay !== core.dayStamp()) return 0;
   return Number(s.studyExtendCount) || 0;
 }
+<<<<<<< HEAD
 /* GOC_RUN_TIMEOUT: max lifetime (seconds) for an untimed practice run in the
    in-memory openStudy map.  Default is 4 hours.  Tests may set a shorter value
    via the environment variable to verify expiry logic without waiting 4 hours. */
 const GOC_RUN_TIMEOUT_SEC = Number(process.env.GOC_RUN_TIMEOUT) || (4 * 3600);
 
+=======
+>>>>>>> origin/main
 setInterval(() => {
   const now = Date.now();
   openPapers.forEach((v, k) => {
     if (now - v.startedAt > (v.durationSec + 600) * 1000) openPapers.delete(k);
   });
   /* Study runs are swept too, so an abandoned one does not sit in memory. An
+<<<<<<< HEAD
      untimed practice run is given GOC_RUN_TIMEOUT seconds (default 4 hours):
      it has no clock of its own, and a student who puts their phone down
      mid-run should still be able to finish. */
   openStudy.forEach((v, k) => {
     const life = (v.durationSec ? v.durationSec + 600 : GOC_RUN_TIMEOUT_SEC) * 1000;
+=======
+     untimed practice run is given four hours: it has no clock of its own, and a
+     student who puts their phone down mid-run should still be able to finish. */
+  openStudy.forEach((v, k) => {
+    const life = (v.durationSec ? v.durationSec + 600 : 4 * 3600) * 1000;
+>>>>>>> origin/main
     if (now - v.startedAt > life) openStudy.delete(k);
   });
 }, 10 * 60 * 1000).unref();
@@ -2928,6 +2990,7 @@ const ROUTES = [
           }
         }
       } else if (isStaff && account.id !== 'GOC-A-001' && account.id !== 'GOC-A-002') {
+<<<<<<< HEAD
         // Migrated managers authenticate through Appwrite Auth; unmigrated managers
         // continue using their existing local password hash.
         // When Appwrite is not configured (endpoint/projectId missing — e.g. in a
@@ -2952,6 +3015,12 @@ const ROUTES = [
             passwordOk = verifyPassword(password, account.pwHash);
           }
         }
+=======
+        // Roles slice (c), step 3a: a manager issued in the Managers panel is checked against
+        // the hash stored on their record. A switched-off manager is refused with the same
+        // message as a wrong password, so the login screen never says which IDs exist.
+        passwordOk = account.active !== false && verifyPassword(password, account.pwHash);
+>>>>>>> origin/main
       } else if (isStaff) {
         // TEMPORARY LOCAL TEST: use the seeded account's data.json hash.
         if (account.pwHash) {
@@ -3118,6 +3187,7 @@ const ROUTES = [
         }
         const bad = core.managerPasswordChangeError(current, next);
         if (bad) return errJson(res, 400, bad);
+<<<<<<< HEAD
         // Synchronize migrated manager passwords before committing local changes.
         if (m.appwriteUserId) {
           if (!appwriteUsers) {
@@ -3131,6 +3201,8 @@ const ROUTES = [
           }
         }
 
+=======
+>>>>>>> origin/main
         attempts.delete(ip);
         m.pwHash = hashPassword(next);
         m.mustChangePassword = false;
@@ -4020,7 +4092,11 @@ const ROUTES = [
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
 
+<<<<<<< HEAD
   { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
+=======
+  { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: (req, res, body) => {
+>>>>>>> origin/main
       const ip = getClientIp(req);
       if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
       const id = core.cleanTutorId(clean(body.id, 20));
@@ -4028,6 +4104,7 @@ const ROUTES = [
       if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
 
       const db = readData();
+<<<<<<< HEAD
       let t = null;
       if (core.validTutorId(id)) {
         if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
@@ -4039,6 +4116,12 @@ const ROUTES = [
 
       /* Keep identical failure responses and dummy-hash work for unknown,
          incorrect-password, and inactive tutor accounts. */
+=======
+      const t = core.validTutorId(id) ? db.tutors.find(x => x.id === id) : null;
+      /* One message for an unknown ID, a wrong password and a switched-off account, and
+         the same hashing work in every case, so neither the text nor the timing says
+         which IDs exist. */
+>>>>>>> origin/main
       if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
       const pwOk = verifyPassword(password, t ? t.pwHash : TUTOR_DUMMY_HASH);
       if (!t || !pwOk || t.active === false) {
@@ -4046,11 +4129,15 @@ const ROUTES = [
         if (id) tutorIdFailed(id);
         return errJson(res, 401, 'That ID and password do not match.');
       }
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
       attempts.delete(ip);
       tutorFails.delete(id);
 
       t.lastLogin = new Date().toISOString();
+<<<<<<< HEAD
       if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
         await saveAppwriteTutor(t);
       } else {
@@ -4063,6 +4150,9 @@ const ROUTES = [
       if (!Array.isArray(db.tutors)) db.tutors = [];
       if (!db.tutors.some(x => x.id === t.id)) db.tutors.push(t);
 
+=======
+      writeData(db);
+>>>>>>> origin/main
       return newSession(t, 'tutor', db).then(token => {
         const d = sessions.get(token);
         okJson(res, { token, user: {
@@ -4079,6 +4169,7 @@ const ROUTES = [
       okJson(res, { tutor: tutorRow(t), subject: core.tutorSubjectFor(t, '').subject || null });
     } },
 
+<<<<<<< HEAD
   { method: 'POST', path: /^\/api\/tutor\/password$/, need: 'tutor-setup', handler: async (req, res, body, sess) => {
       const current = String(body.currentPassword == null ? '' : body.currentPassword);
       const next = String(body.newPassword == null ? '' : body.newPassword);
@@ -4111,22 +4202,49 @@ const ROUTES = [
 
       sess.tutor.pwHash = t.pwHash;
       sess.tutor.mustChangePassword = false;
+=======
+  { method: 'POST', path: /^\/api\/tutor\/password$/, need: 'tutor-setup', handler: (req, res, body, sess) => {
+      const current = String(body.currentPassword == null ? '' : body.currentPassword);
+      const next = String(body.newPassword == null ? '' : body.newPassword);
+      if (!verifyPassword(current, sess.tutor.pwHash)) return errJson(res, 400, 'Your current password is not right.');
+      if (next.length < core.TUTOR_PASSWORD_MIN) return errJson(res, 400, 'Choose a password of at least ' + core.TUTOR_PASSWORD_MIN + ' characters.');
+      if (next.length > 200) return errJson(res, 400, 'That password is too long.');
+      if (next === current) return errJson(res, 400, 'Choose a different password from the one you have now.');
+      const db = readData();
+      const t = db.tutors.find(x => x.id === sess.tutor.id);
+      if (!t) return errJson(res, 403, 'This tutor account is no longer available.');
+      t.pwHash = hashPassword(next);
+      t.mustChangePassword = false;
+      t.passwordChangedAt = new Date().toISOString();
+      writeData(db);
+>>>>>>> origin/main
       okJson(res, { ok: true, mustChangePassword: false });
     } },
 
   /* The scope guard in use: a tutor reads only the subject they teach. */
+<<<<<<< HEAD
   { method: 'GET', path: /^\/api\/tutor\/subject$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, new URL(req.url, 'http://x').searchParams.get('subject'));
       if (!subject) return;
       const db = readData();
       const questions = await listQuestions({ subject, all: true }, db);
       const mine = core.subjectDepth(questions, db.notes).find(r => r.subject === subject);
+=======
+  { method: 'GET', path: /^\/api\/tutor\/subject$/, need: 'tutor', handler: (req, res, body, sess) => {
+      const subject = tutorSubjectOr403(res, sess, new URL(req.url, 'http://x').searchParams.get('subject'));
+      if (!subject) return;
+      const db = readData();
+      const mine = core.subjectDepth(db.questions, db.notes).find(r => r.subject === subject);
+>>>>>>> origin/main
       /* Count all questions for this subject by status so the tutor sees pending/returned
          questions, not only approved 'live' ones (subjectDepth skips non-live rows). */
       const statusCounts = { live: 0, pending: 0, returned: 0, other: 0 };
       (db.questions || []).forEach(q => {
         if (!q || q.subject !== subject) return;
+<<<<<<< HEAD
         if (q.addedBy !== sess.tutor.id) return;
+=======
+>>>>>>> origin/main
         const s = q.status || 'live';
         if (s === 'live') statusCounts.live++;
         else if (s === 'pending') statusCounts.pending++;
@@ -4152,18 +4270,27 @@ const ROUTES = [
         const runs = db.practiceRuns && db.practiceRuns[st.id];
         if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
       });
+<<<<<<< HEAD
       const attempts = await listAttempts({ subject }, db);
       const snapshot = core.tutorSnapshot(subject, students, runsByStudent, attempts, Date.now());
+=======
+      const snapshot = core.tutorSnapshot(subject, students, runsByStudent, Array.isArray(db.attempts) ? db.attempts : [], Date.now());
+>>>>>>> origin/main
       const mine = (db.answerStats && Object.prototype.hasOwnProperty.call(db.answerStats, subject)) ? db.answerStats[subject] : {};
       const bank = await listQuestions({ subject }, db);
       okJson(res, {
         subject, subjects: sess.tutor.subjects.slice(), snapshot,
+<<<<<<< HEAD
         activity: core.tutorActivity(subject, students, runsByStudent, attempts, Date.now()),
+=======
+        activity: core.tutorActivity(subject, students, runsByStudent, Array.isArray(db.attempts) ? db.attempts : [], Date.now()),
+>>>>>>> origin/main
         weakTopics: core.rankWeakTopics(mine),
         hardestQuestions: core.rankHardestQuestions(mine, subject, bank)
       });
     } },
 
+<<<<<<< HEAD
 
   /* Admin console tutor analytics.
      Access requires an authenticated console session and the
@@ -4221,6 +4348,8 @@ const ROUTES = [
     }
   },
 
+=======
+>>>>>>> origin/main
   /* Phase 3C, at-risk list, slice 2: GET /api/tutor/atrisk?subject=[&sort=inactive|score]. The tutor's
      own subject only (same scope guard as every tutor route). GOC students taking the subject who have
      not practised or sat a test for 7 days, never started after 7 days, or average under 40% on marked
@@ -4240,8 +4369,12 @@ const ROUTES = [
         const runs = db.practiceRuns && db.practiceRuns[st.id];
         if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
       });
+<<<<<<< HEAD
       const attempts = await listAttempts({ subject }, db);
       const rows = core.sortAtRisk(core.tutorAtRisk(subject, students, runsByStudent, attempts, Date.now()), sort);
+=======
+      const rows = core.sortAtRisk(core.tutorAtRisk(subject, students, runsByStudent, Array.isArray(db.attempts) ? db.attempts : [], Date.now()), sort);
+>>>>>>> origin/main
       okJson(res, {
         subject, subjects: sess.tutor.subjects.slice(), sort,
         limits: { inactiveDays: core.ATRISK_INACTIVE_DAYS, lowAverage: core.ATRISK_LOW_AVERAGE },
@@ -4265,8 +4398,12 @@ const ROUTES = [
         const runs = db.practiceRuns && db.practiceRuns[st.id];
         if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
       });
+<<<<<<< HEAD
       const attempts = await listAttempts({ subject }, db);
       const top = core.tutorTopPerformers(subject, students, runsByStudent, attempts);
+=======
+      const top = core.tutorTopPerformers(subject, students, runsByStudent, Array.isArray(db.attempts) ? db.attempts : []);
+>>>>>>> origin/main
       okJson(res, { subject, subjects: sess.tutor.subjects.slice(), tests: top.tests, practice: top.practice });
     } },
 
@@ -4413,9 +4550,17 @@ const ROUTES = [
         for (const rec of r.records) {
           const st = core.stampTutorQuestion(rec, sess.tutor, { batch }, now);
           if (st.error) { errors.push(st.error); continue; }
+<<<<<<< HEAD
           /* Leave status as 'pending' so imported questions sit in the approval
              queue just like individually submitted tutor questions. The admin
              approves the whole batch in one go via POST /api/approvals/batch/approve. */
+=======
+          /* Mark live immediately so imported questions are visible to students
+             without requiring a separate approval step. Tutors adding individual
+             questions via the form still go through the approval queue as before;
+             only bulk CSV imports from a tutor are stamped live here. */
+          st.rec.status = 'live';
+>>>>>>> origin/main
           db.settings.questionSeq = (db.settings.questionSeq || 0) + 1;
           st.rec.id = db.settings.questionSeq;
           /* createQuestion pushes the record into db.questions before writeData
@@ -4428,7 +4573,11 @@ const ROUTES = [
                         target: subject + '/' + (section || 'any') + (stampSection ? ' (stamped)' : ''),
                         read: r.read, added: ids.length, skipped: errors.length, by: sess.tutor.id });
         writeData(db);
+<<<<<<< HEAD
         okJson(res, { read: r.read, added: ids.length, ids, skipped: errors.length, errors, batch, status: ids.length ? 'pending' : '' });
+=======
+        okJson(res, { read: r.read, added: ids.length, ids, skipped: errors.length, errors, batch, status: 'live' });
+>>>>>>> origin/main
       });
     } },
 
@@ -4833,6 +4982,7 @@ const ROUTES = [
       okJson(res, { question: r.rec, decision: params[1], edited });
     } },
 
+<<<<<<< HEAD
   {
     method: 'GET',
     path: /^\/api\/tutors$/,
@@ -4921,11 +5071,54 @@ const ROUTES = [
       const useAppwrite = !!(appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID);
       const t = useAppwrite ? await getAppwriteTutor(id) : db.tutors.find(x => x.id === id);
 
+=======
+  { method: 'GET', path: /^\/api\/tutors$/, need: 'console', cap: 'tutors.accounts', handler: (req, res) => {
+      okJson(res, { tutors: readData().tutors.map(tutorRow) });
+    } },
+
+  { method: 'POST', path: /^\/api\/tutors$/, need: 'console', cap: 'tutors.accounts', handler: (req, res, body, sess) => {
+      const v = core.validateTutor(body, { needPassword: true });
+      if (v.error) return errJson(res, 400, v.error);
+      const db = readData();
+      let id = v.rec.id;
+      if (id && db.tutors.some(t => t.id === id)) return errJson(res, 409, id + ' is already in use.');
+      if (!id) id = core.nextTutorId(db.tutors.map(t => t.id));
+      const rec = {
+        id, name: v.rec.name, subjects: v.rec.subjects, active: true,
+        pwHash: hashPassword(v.rec.password), mustChangePassword: true,
+        createdAt: new Date().toISOString(), createdBy: sess.data.name || sess.data.id,
+        lastLogin: null
+      };
+      db.tutors.push(rec);
+      writeData(db);
+      okJson(res, { tutor: tutorRow(rec), created: true });
+    } },
+
+  { method: 'PUT', path: /^\/api\/tutors\/(GOC-T-\d+)$/i, need: 'console', cap: 'tutors.accounts', handler: (req, res, body, sess, params) => {
+      const v = core.validateTutor({ name: body.name, subjects: body.subjects }, { needPassword: false });
+      if (v.error) return errJson(res, 400, v.error);
+      const db = readData();
+      const t = db.tutors.find(x => x.id === core.cleanTutorId(params[0]));
+      if (!t) return errJson(res, 404, 'That Tutor ID does not exist.');
+      t.name = v.rec.name; t.subjects = v.rec.subjects;
+      t.editedAt = new Date().toISOString(); t.editedBy = sess.data.name || sess.data.id;
+      writeData(db);
+      okJson(res, { tutor: tutorRow(t), changed: true });
+    } },
+
+  { method: 'PUT', path: /^\/api\/tutors\/(GOC-T-\d+)\/password$/i, need: 'console', cap: 'tutors.accounts', handler: (req, res, body, sess, params) => {
+      const pw = String(body.password == null ? '' : body.password);
+      if (pw.length < core.TUTOR_PASSWORD_MIN) return errJson(res, 400, 'Choose a starting password of at least ' + core.TUTOR_PASSWORD_MIN + ' characters.');
+      if (pw.length > 200) return errJson(res, 400, 'That password is too long.');
+      const db = readData();
+      const t = db.tutors.find(x => x.id === core.cleanTutorId(params[0]));
+>>>>>>> origin/main
       if (!t) return errJson(res, 404, 'That Tutor ID does not exist.');
       t.pwHash = hashPassword(pw);
       t.mustChangePassword = true;
       t.passwordResetAt = new Date().toISOString();
       t.passwordResetBy = sess.data.name || sess.data.id;
+<<<<<<< HEAD
 
       if (useAppwrite) {
         await saveAppwriteTutor(t);
@@ -4933,11 +5126,15 @@ const ROUTES = [
         writeData(db);
       }
 
+=======
+      writeData(db);
+>>>>>>> origin/main
       dropTutorSessions(t.id);
       tutorFails.delete(t.id);
       okJson(res, { tutor: tutorRow(t), reset: true });
     } },
 
+<<<<<<< HEAD
   { method: 'PUT', path: /^\/api\/tutors\/(GOC-T-\d+)\/active$/i, need: 'console', cap: 'tutors.accounts', handler: async (req, res, body, sess, params) => {
       if (typeof body.active !== 'boolean') return errJson(res, 400, 'Say whether the tutor is on or off.');
 
@@ -4946,10 +5143,17 @@ const ROUTES = [
       const useAppwrite = !!(appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID);
       const t = useAppwrite ? await getAppwriteTutor(id) : db.tutors.find(x => x.id === id);
 
+=======
+  { method: 'PUT', path: /^\/api\/tutors\/(GOC-T-\d+)\/active$/i, need: 'console', cap: 'tutors.accounts', handler: (req, res, body, sess, params) => {
+      if (typeof body.active !== 'boolean') return errJson(res, 400, 'Say whether the tutor is on or off.');
+      const db = readData();
+      const t = db.tutors.find(x => x.id === core.cleanTutorId(params[0]));
+>>>>>>> origin/main
       if (!t) return errJson(res, 404, 'That Tutor ID does not exist.');
       t.active = body.active;
       t.activeChangedAt = new Date().toISOString();
       t.activeChangedBy = sess.data.name || sess.data.id;
+<<<<<<< HEAD
 
       if (useAppwrite) {
         await saveAppwriteTutor(t);
@@ -4957,10 +5161,14 @@ const ROUTES = [
         writeData(db);
       }
 
+=======
+      writeData(db);
+>>>>>>> origin/main
       if (!t.active) dropTutorSessions(t.id);
       okJson(res, { tutor: tutorRow(t), changed: true });
     } },
 
+<<<<<<< HEAD
   /* Subjects & tutors: Appwrite-backed overview with local fallback. */
   { method: 'GET', path: /^\/api\/tutors\/overview$/, need: 'console', cap: 'tutors.accounts', handler: async (req, res) => {
       try {
@@ -4993,6 +5201,19 @@ const ROUTES = [
         console.error('Subjects & tutors overview failed:', err);
         errJson(res, 500, 'Could not load the Subjects & Tutors overview.');
       }
+=======
+  /* Subjects & tutors: who teaches each subject and how deep each paper is. */
+  { method: 'GET', path: /^\/api\/tutors\/overview$/, need: 'console', cap: 'tutors.accounts', handler: (req, res) => {
+      const db = readData();
+      const rows = core.subjectDepth(db.questions, db.notes).map(r => {
+        r.tutors = db.tutors.filter(t => t.active !== false && t.subjects.indexOf(r.subject) > -1)
+                            .map(t => ({ id: t.id, name: t.name }));
+        r.pending = core.approvalQueue(db.questions, r.subject).length;
+        r.lastUpload = core.lastTutorUpload(db.questions, r.subject);
+        return r;
+      });
+      okJson(res, { subjects: rows, minimums: core.SUBJECT_DEPTH_MIN });
+>>>>>>> origin/main
     } },
 
   /* Roles slice (c), step 2a: the Managers panel's server half, list and create only.
@@ -5012,11 +5233,15 @@ const ROUTES = [
       return withDataLock(async () => {
         const v = core.validateManager(body || {}, { creating: true });
         if (v.error) return errJson(res, 400, v.error);
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
         const pw = v.rec.password;
         if (!/[0-9]/.test(pw) || !/[a-zA-Z]/.test(pw)) return errJson(res, 400, 'Use both letters and numbers in a management password.');
         const db = readData();
         const id = core.nextManagerId((db.staff || []).map(x => x.id), db.settings.managerIdHigh || null);
+<<<<<<< HEAD
         if (!appwriteUsers && isProductionRun()) {
           return errJson(res, 503, 'Appwrite Auth is unavailable. No manager account was created.');
         }
@@ -5035,10 +5260,15 @@ const ROUTES = [
         const rec = {
           id, name: v.rec.name, title: v.rec.title,
           appwriteUserId: authUserId,
+=======
+        const rec = {
+          id, name: v.rec.name, title: v.rec.title,
+>>>>>>> origin/main
           pwHash: hashPassword(pw), passcodeHash: hashPassword(v.rec.passcode),
           mustChangePassword: true, active: true,
           createdAt: new Date().toISOString(), createdBy: sess.data.id
         };
+<<<<<<< HEAD
 
         try {
           db.staff.push(rec);
@@ -5050,6 +5280,11 @@ const ROUTES = [
           return errJson(res, 500, 'The manager profile could not be saved. Please try again.');
         }
 
+=======
+        db.staff.push(rec);
+        db.settings.managerIdHigh = id;
+        writeData(db);
+>>>>>>> origin/main
         okJson(res, { manager: core.publicManager(rec) });
       });
     } },
@@ -5065,6 +5300,7 @@ const ROUTES = [
         const id = params[0].toUpperCase();
         const m = id === 'GOC-A-001' || id === 'GOC-A-002' ? null : (db.staff || []).find(x => x.id === id && core.adminRoleKey(x.title));
         if (!m) return errJson(res, 404, 'That manager ID does not exist.');
+<<<<<<< HEAD
 
         if (m.appwriteUserId) {
           if (!appwriteUsers) return errJson(res, 503, 'Appwrite Auth is unavailable. The account status was not changed.');
@@ -5077,6 +5313,8 @@ const ROUTES = [
         }
         // If no appwriteUserId, update local record only (local-only manager account)
 
+=======
+>>>>>>> origin/main
         m.active = body.active;
         m.activeChangedAt = new Date().toISOString(); m.activeChangedBy = sess.data.id;
         writeData(db);
@@ -5097,6 +5335,7 @@ const ROUTES = [
         const id = params[0].toUpperCase();
         const m = id === 'GOC-A-001' || id === 'GOC-A-002' ? null : (db.staff || []).find(x => x.id === id && core.adminRoleKey(x.title));
         if (!m) return errJson(res, 404, 'That manager ID does not exist.');
+<<<<<<< HEAD
 
         if (m.appwriteUserId) {
           if (!appwriteUsers) return errJson(res, 503, 'Appwrite Auth is unavailable. The password was not reset.');
@@ -5109,6 +5348,8 @@ const ROUTES = [
         }
         // If no appwriteUserId, update local pwHash only (local-only manager account)
 
+=======
+>>>>>>> origin/main
         m.pwHash = hashPassword(pw);
         if (pc) m.passcodeHash = hashPassword(pc);
         m.mustChangePassword = true;
@@ -5128,6 +5369,7 @@ const ROUTES = [
         const id = params[0].toUpperCase();
         const i = id === 'GOC-A-001' || id === 'GOC-A-002' ? -1 : (db.staff || []).findIndex(x => x.id === id && core.adminRoleKey(x.title));
         if (i < 0) return errJson(res, 404, 'That manager ID does not exist.');
+<<<<<<< HEAD
         const manager = db.staff[i];
         if (manager.appwriteUserId) {
           if (!appwriteUsers) return errJson(res, 503, 'Appwrite Auth is unavailable. The manager was not deleted.');
@@ -5139,6 +5381,8 @@ const ROUTES = [
           }
         }
         // If no appwriteUserId, delete from local store only (local-only manager account)
+=======
+>>>>>>> origin/main
         db.staff.splice(i, 1);
         writeData(db);
         sessions.forEach((d, tok) => { if (d.id === id) sessions.delete(tok); });
@@ -6084,7 +6328,11 @@ const ROUTES = [
         questionIds: picked.map(q => q.id),
         startedAt: Date.now(), durationSec: minutes * 60
       };
+<<<<<<< HEAD
       openStudy.set(String(paper.id), paper);
+=======
+      openStudy.set(paper.id, paper);
+>>>>>>> origin/main
       if (mode === 'practice') {
         /* A practice paper carries its answers, because the page marks each one
            as it is tapped. The run is registered here all the same, so finishing
@@ -6834,8 +7082,17 @@ const ROUTES = [
       const bySubject = {};
       const KNOWN_SECTIONS = ['theory', 'objective', 'jamb', 'practice'];
       const totals = { theory: 0, objective: 0, jamb: 0, practice: 0, other: 0 };
+<<<<<<< HEAD
       const allQuestions = await listQuestions({ all: true }, db);
       allQuestions.forEach(q => {
+=======
+      /* practicePool mirrors what studyPool() actually serves students in Practice
+         mode: every active, live, objective-kind question regardless of section.
+         This is the number students see on the practice setup screen, and it will
+         differ from totals.practice (which counts only section='practice' rows). */
+      let practicePool = 0;
+      (await listQuestions({ all: true }, db)).forEach(q => {
+>>>>>>> origin/main
         const sub = q.subject || 'Unknown';
         if (!bySubject[sub]) bySubject[sub] = { theory: 0, objective: 0, jamb: 0, practice: 0, other: 0 };
         const sec = q.section;
@@ -6848,6 +7105,7 @@ const ROUTES = [
           bySubject[sub].other++;
           totals.other++;
         }
+<<<<<<< HEAD
       });
       /* Phase 5 — authoritative practicePool: call studyPool() directly so the
          admin count and the student-facing pool are always computed by the same
@@ -6855,6 +7113,10 @@ const ROUTES = [
          here automatically without a manual sync. subject=null, topics=null,
          year=[] returns every question the student could ever see in Practice. */
       const practicePool = core.studyPool(allQuestions, null, null, []).length;
+=======
+        if (core.questionIsLive(q) && q.active !== false && q.kind === 'objective' && q.section === 'practice') practicePool++;
+      });
+>>>>>>> origin/main
       okJson(res, { bySubject, totals, practicePool });
     } },
 
@@ -6952,6 +7214,7 @@ const ROUTES = [
            in Appwrite mode (implementation-map STEP 3.1 performance note). Local
            mode pushes into db.questions; createQuestion is called before writeData
            so every question is in-memory before it is persisted, preventing a
+<<<<<<< HEAD
            concurrent request from overwriting the file mid-import.
            ID-collision safety: if createQuestion encounters a 409 (an ID already
            in use that the sequence counter missed — e.g. stale counter, concurrent
@@ -6994,6 +7257,22 @@ const ROUTES = [
         okJson(res, { read: ri.read, added: ids.length, ids, replaced: replacedIds.length, replacedIds,
                       skipped: allErrors.length, errors: allErrors,
                       collisions: collisionErrors.length, total });
+=======
+           concurrent request from overwriting the file mid-import. */
+        for (const rec of ri.records) {
+          db.settings.questionSeq = (db.settings.questionSeq || 0) + 1;
+          rec.id = db.settings.questionSeq;
+          await createQuestion(rec, db);
+          ids.push(rec.id);
+          writeData(db);
+        }
+        logImport(db, { kind: 'questions', filename, fingerprint, target: targetKey, read: ri.read,
+                         added: ids.length, replaced: replacedIds.length, skipped: ri.errors.length, by: sess && sess.data && sess.data.id });
+        writeData(db);
+        const total = existing.length + ids.length;
+        okJson(res, { read: ri.read, added: ids.length, ids, replaced: replacedIds.length, replacedIds,
+                      skipped: ri.errors.length, errors: ri.errors, total });
+>>>>>>> origin/main
       });
     } },
 
@@ -7058,7 +7337,11 @@ const ROUTES = [
      intentionally registered after the single-question DELETE above: /bulk
      never matches the numeric-id pattern, but keeping the specific route
      ahead of nothing more general avoids any future ambiguity. */
+<<<<<<< HEAD
   { method: 'DELETE', path: /^\/api\/questions\/bulk$/, need: 'console', cap: 'questions.manage', handler: async (req, res, body, sess) => {
+=======
+  { method: 'DELETE', path: /^\/api\/questions\/bulk$/, need: 'console', cap: 'questions.manage', handler: async (req, res, body) => {
+>>>>>>> origin/main
       const rawSubject = body && body.subject !== undefined && body.subject !== null ? String(body.subject).trim() : '';
       const rawSection = body && body.section !== undefined && body.section !== null ? String(body.section).trim() : '';
       if (!rawSubject || !rawSection) {
@@ -7077,6 +7360,7 @@ const ROUTES = [
           return errJson(res, 400, 'Choose a section: theory, objective, JAMB-oriented, practice-only, or "all".');
         }
       }
+<<<<<<< HEAD
       /* Phase 4 — soft-delete support: if body.archive===true the questions are
          flagged archived instead of being removed from disk. An archived question
          is invisible to all student-facing pools and to the normal admin list
@@ -7084,11 +7368,14 @@ const ROUTES = [
          GET /api/questions?archived=true. Hard delete remains the default so
          existing callers that omit the field behave exactly as before. */
       const softDelete = !!(body && body.archive);
+=======
+>>>>>>> origin/main
       const db = readData();
       const all = await listQuestions({ all: true }, db);
       const matches = all.filter(q => {
         if (!subjectAll && q.subject !== subject) return false;
         if (!sectionAll && q.section !== section) return false;
+<<<<<<< HEAD
         /* Never touch already-archived questions; they were previously deleted
            softly and should not appear in a new soft-delete run. */
         if (softDelete && q.archived) return false;
@@ -7123,18 +7410,29 @@ const ROUTES = [
           at: new Date().toISOString()
         });
         if (db.deletionLog.length > 500) db.deletionLog = db.deletionLog.slice(-500);
+=======
+        return true;
+      });
+      const deletedCount = matches.length;
+      if (deletedCount > 0) {
+        await deleteQuestions(matches.map(q => q.id), db);
+>>>>>>> origin/main
         writeData(db);
       }
       okJson(res, {
         ok: true,
         deleted: deletedCount,
+<<<<<<< HEAD
         archived: softDelete,
+=======
+>>>>>>> origin/main
         remaining: all.length - deletedCount,
         subject: subjectAll ? 'all' : subject,
         section: sectionAll ? 'all' : section
       });
     } },
 
+<<<<<<< HEAD
   /* Phase 4 — recover archived questions. Accepts a JSON body with an `ids`
      array (specific IDs) or subject+section scope (same grammar as the bulk
      delete). Only archived questions are touched; live questions are ignored
@@ -7327,6 +7625,8 @@ const ROUTES = [
       okJson(res, { min, ready, subjects: subjectStats, short, recentDeletions, warning });
     } },
 
+=======
+>>>>>>> origin/main
   /* ==================== Priority 4.3-4.5: results and manual theory marking
      Every row is identified by Scholar ID. Theory is never scored
      automatically — an administrator awards each mark. */
@@ -8453,11 +8753,16 @@ const ROUTES = [
       okJson(res, { entry: r.entry });
     } },
 
+<<<<<<< HEAD
   { method: 'GET', path: /^\/api\/scholarship\/applications$/, need: 'console', cap: 'scholarship.view', handler: (req, res) => {
+=======
+  { method: 'GET', path: /^\/api\/scholarship\/applications$/, need: 'console', cap: 'approvals.review', handler: (req, res) => {
+>>>>>>> origin/main
       const db = readData();
       okJson(res, db.scholarshipApplications.map(core.publicApplication));
     } },
 
+<<<<<<< HEAD
   /* scholarship.export — SA only: download all applications as a CSV.
      GOC-A-002 (Academic Director) has scholarship.view but not scholarship.export;
      because FULL_ACCESS_IDS bypasses the cap gate we add an explicit role check here,
@@ -8465,6 +8770,10 @@ const ROUTES = [
   { method: 'GET', path: /^\/api\/scholarship\/applications\/export$/, need: 'console', cap: 'scholarship.export', handler: (req, res, body, sess) => {
       if (!core.roleCan(sess.data.roleKey, 'scholarship.export'))
         return errJson(res, 403, 'Only Student Affairs can export scholarship applications.');
+=======
+  /* scholarship.export — SA only: download all applications as a CSV. */
+  { method: 'GET', path: /^\/api\/scholarship\/applications\/export$/, need: 'console', cap: 'results.export', handler: (req, res) => {
+>>>>>>> origin/main
       const db = readData();
       const csv = core.scholarshipCsv(db.scholarshipApplications);
       res.writeHead(200, {
@@ -8475,7 +8784,11 @@ const ROUTES = [
     } },
 
   /* scholarship.decide — SA: accept or reject a pending application. */
+<<<<<<< HEAD
   { method: 'POST', path: /^\/api\/scholarship\/applications\/(SCH-\d+)\/decide$/, need: 'console', cap: 'scholarship.decide', handler: (req, res, body, sess, params) => {
+=======
+  { method: 'POST', path: /^\/api\/scholarship\/applications\/(SCH-\d+)\/decide$/, need: 'console', cap: 'approvals.review', handler: (req, res, body, sess, params) => {
+>>>>>>> origin/main
       const id = params[0];
       const decision = String(body.decision || '').toLowerCase();
       if (decision !== 'accept' && decision !== 'reject')
@@ -8498,7 +8811,11 @@ const ROUTES = [
 
   /* scholarship.approve — Founder only: convert an accepted application to 'approved'
      and automatically create a GOC student account for the scholar. */
+<<<<<<< HEAD
   { method: 'POST', path: /^\/api\/scholarship\/applications\/(SCH-\d+)\/approve$/, need: 'console', cap: 'scholarship.approve', handler: async (req, res, body, sess, params) => {
+=======
+  { method: 'POST', path: /^\/api\/scholarship\/applications\/(SCH-\d+)\/approve$/, need: 'console', cap: 'approvals.review', handler: async (req, res, body, sess, params) => {
+>>>>>>> origin/main
       if (sess.data.title !== 'Founder')
         return errJson(res, 403, 'Only the Founder can approve scholarship applications.');
 
@@ -8550,7 +8867,11 @@ const ROUTES = [
     } },
 
   /* scholarship.delete — SA: remove an application and log it. */
+<<<<<<< HEAD
   { method: 'DELETE', path: /^\/api\/scholarship\/applications\/(SCH-\d+)$/, need: 'console', cap: 'scholarship.delete', handler: (req, res, body, sess, params) => {
+=======
+  { method: 'DELETE', path: /^\/api\/scholarship\/applications\/(SCH-\d+)$/, need: 'console', cap: 'students.deactivate', handler: (req, res, body, sess, params) => {
+>>>>>>> origin/main
       const id = params[0];
       const db = readData();
       const before = db.scholarshipApplications.length;
@@ -8807,7 +9128,11 @@ function serveStatic(req, res, urlPath) {
 
 /* ================================================================ DISPATCH */
 
+<<<<<<< HEAD
 const server = http.createServer(async (req, res) => {
+=======
+const server = http.createServer((req, res) => {
+>>>>>>> origin/main
   const urlPath = (req.url || '/').split('?')[0];
 
   // Crawler shield: set before anything is written, so it rides on EVERY
@@ -8863,9 +9188,13 @@ const server = http.createServer(async (req, res) => {
   if (route.need === 'tutor' || route.need === 'tutor-setup') {
     if (!sess) return errJson(res, 401, 'Your session has ended. Please sign in again.');
     if (sess.data.role !== 'tutor') return errJson(res, 403, 'Tutor accounts only.');
+<<<<<<< HEAD
     const tRec = appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID
       ? await getAppwriteTutor(sess.data.id)
       : (readData().tutors || []).find(t => t.id === sess.data.id);
+=======
+    const tRec = (readData().tutors || []).find(t => t.id === sess.data.id);
+>>>>>>> origin/main
     if (!tRec || tRec.active === false) {
       sessions.delete(sess.token);
       return errJson(res, 403, 'This tutor account has been switched off by the academy.');

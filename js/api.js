@@ -2937,7 +2937,10 @@ listPublishedVideos: function () {
       }, function () { throw new Error('Cannot reach the server. Check that it is running.'); });
     },
     tutorOverview: function () { return req('GET', '/tutors/overview'); },
+<<<<<<< HEAD
     adminTutorAnalytics: function () { return req('GET', '/admin/tutors/analytics'); },
+=======
+>>>>>>> origin/main
     listApprovals: function (subject) {
       return req('GET', '/approvals' + (subject ? '?subject=' + encodeURIComponent(String(subject)) : ''));
     },

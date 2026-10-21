@@ -22,8 +22,11 @@ const { createAppwriteClient } = require('./lib/appwrite');
 const DATABASE_ID = 'goc_academy';
 const QUESTIONS = 'questions';
 const ATTEMPTS = 'attempts';
+<<<<<<< HEAD
 const STUDENTS = 'students';
 const TUTORS = 'tutors';
+=======
+>>>>>>> origin/main
 
 const bundle = createAppwriteClient();
 if (!bundle) {
@@ -54,9 +57,15 @@ function tolerate(label, promise) {
   );
 }
 
+<<<<<<< HEAD
 async function ensureCollection(id, name, permissions = COLLECTION_PERMS) {
   await tolerate('collection ' + id, databases.createCollection(
     DATABASE_ID, id, name, permissions, /* documentSecurity */ false));
+=======
+async function ensureCollection(id, name) {
+  await tolerate('collection ' + id, databases.createCollection(
+    DATABASE_ID, id, name, COLLECTION_PERMS, /* documentSecurity */ false));
+>>>>>>> origin/main
 }
 
 /* Attribute helpers. `size` is the max string length; large text fields use a
@@ -106,11 +115,14 @@ async function ensureQuestionAttributes() {
   await str(QUESTIONS, 'reviewedAt', 40);
 }
 
+<<<<<<< HEAD
 async function ensureTutorAttributes() {
   // Store the complete tutor record to preserve existing fields and password hashes.
   await str(TUTORS, 'record', 1000000, true);
 }
 
+=======
+>>>>>>> origin/main
 async function ensureAttemptAttributes() {
   await str(ATTEMPTS, 'scholarId', 60);
   await str(ATTEMPTS, 'studentName', 200);
@@ -168,6 +180,7 @@ async function waitForAttributes(col) {
   console.warn('  (proceeding though some ' + col + ' attributes are still processing)');
 }
 
+<<<<<<< HEAD
 /* Migrate the existing `students` collection: add the approval-state fields
    that were missing from the original schema. These are idempotent — an
    "already exists" (409) is treated as success, so this is safe to re-run. */
@@ -179,33 +192,48 @@ async function ensureStudentAttributes() {
   await str(STUDENTS, 'approvedAt', 40);
 }
 
+=======
+>>>>>>> origin/main
 (async () => {
   console.log('Provisioning Appwrite collections in database "' + DATABASE_ID + '"...');
   await ensureCollection(QUESTIONS, 'Questions');
   await ensureCollection(ATTEMPTS, 'Attempts');
+<<<<<<< HEAD
   // Tutor records contain password hashes: no public collection permissions.
   await ensureCollection(TUTORS, 'Tutors', []);
+=======
+>>>>>>> origin/main
 
   console.log('Questions attributes:');
   await ensureQuestionAttributes();
   console.log('Attempts attributes:');
   await ensureAttemptAttributes();
+<<<<<<< HEAD
   console.log('Tutors attributes:');
   await ensureTutorAttributes();
 
   await waitForAttributes(QUESTIONS);
   await waitForAttributes(ATTEMPTS);
   await waitForAttributes(TUTORS);
+=======
+
+  await waitForAttributes(QUESTIONS);
+  await waitForAttributes(ATTEMPTS);
+>>>>>>> origin/main
 
   console.log('Indexes:');
   await ensureIndexes();
 
+<<<<<<< HEAD
   // Migrate students collection — adds pendingApproval, approvedBy, approvedAt
   console.log('Students attributes (migration — adds missing approval fields):');
   await ensureStudentAttributes();
   await waitForAttributes(STUDENTS);
 
   console.log('\nDone. Collections "questions", "attempts", "tutors" provisioned; "students" approval fields migrated.');
+=======
+  console.log('\nDone. Collections "questions" and "attempts" are provisioned.');
+>>>>>>> origin/main
   console.log('Next: trigger POST /api/admin/migrate-appwrite once from the running app.');
 })().catch(err => {
   console.error('\nProvisioning failed:', err.message || err);

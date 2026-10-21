@@ -64,10 +64,17 @@ first run are the two management consoles:
 
 | ID | Password | Opens |
 |---|---|---|
+<<<<<<< HEAD
 | `GOC-A-001` | `<set GOC_FOUNDER_PW>` (or `GOC_FOUNDER_PW` if set) | Console access portal (Founder) |
 | `GOC-A-002` | `<set GOC_ACADDIR_PW>` (or `GOC_ACADDIR_PW` if set) | Console access portal (Academic Director) |
 
 Console passcode: `<set GOC_PASSCODE>`. Configure all three securely through environment variables.
+=======
+| `GOC-A-001` | `founder2027` (or `GOC_FOUNDER_PW` if set) | Console access portal (Founder) |
+| `GOC-A-002` | `acaddir2027` (or `GOC_ACADDIR_PW` if set) | Console access portal (Academic Director) |
+
+Console passcode: `2027` (or `GOC_PASSCODE` if set). Change all three from
+>>>>>>> origin/main
 Console → Access & firewall before a cohort registers — the server refuses to
 boot in production with any of them still at the published default. Any ID
 not on the roster is refused; students are created when anyone signs up (an
@@ -137,7 +144,11 @@ part of `js/goc-core.js` and is covered by `test/test-math.js`.
 
 ## Before real students use it
 
+<<<<<<< HEAD
 Management passwords and the console passcode must never be published in this file. They
+=======
+The three passwords above and the passcode are published in this file, so they
+>>>>>>> origin/main
 are not secrets. In real mode all four can be replaced, and the two console
 passwords must be — set them **before the very first run**, because that is when
 `server/data.json` is written:
@@ -276,6 +287,7 @@ question object whose content is empty, and `wtPaintHead()` never updating
 **No server-side change is needed** — the `openPapers` in-memory design is
 intentional (a restart signs everyone out of in-progress papers, which is correct
 behaviour). The fix is purely defensive client-side hygiene.
+<<<<<<< HEAD
 
 ---
 
@@ -340,3 +352,5 @@ behaviour). The fix is purely defensive client-side hygiene.
 **Status:** APPLIED — GOC_Fix6_Fix01.zip
 
 **Pending fixes (Fix 02–07 + A–D):** See ROADMAP-REMAINING.md.
+=======
+>>>>>>> origin/main

@@ -504,6 +504,7 @@ async function main() {
   run('confirmExit')();
   await flush();
 
+<<<<<<< HEAD
   /* Seed practice questions so studyPool() returns a non-empty pool when
      openCBT/openPractice calls studyCatalogue().  The seeded bank ships
      section:'objective' questions; studyPool() requires section:'practice'.
@@ -523,6 +524,8 @@ async function main() {
   await run('GOC.api.login')(SID, PW);
   run('GOC.api._drivers.mock._setTier')(SID, 'goc');
 
+=======
+>>>>>>> origin/main
   head('a self-directed CBT run uses the same screen but never the record');
   run('openCBT')();
   await flush();
