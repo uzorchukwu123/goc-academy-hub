@@ -1162,24 +1162,38 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
           console.warn(
             '[goc] PERSISTENCE GUARD: local data.json has ' + localCount + ' questions (max ID ' + localMaxId + ')' +
             ' but Appwrite has ' + appwriteList.length + ' (max ID ' + appwriteMaxId + ').' +
-            ' The local file may be a stale snapshot. Set GOC_DATA_DIR to a persistent path outside the' +
-            ' deployment directory. Until then, imports may produce ID collisions (which are now reported' +
-            ' rather than silently overwriting existing questions).'
+            ' Syncing questionSeq to Appwrite\'s real max ID (' + appwriteMaxId + ') so imports no longer collide.'
           );
-          /* Stamp the warning into settings so /api/questions/diagnostics can
-             surface it without making another Appwrite round-trip. */
+          /* FIX: Sync questionSeq from Appwrite's real max ID so that new
+             imports start from the correct next ID instead of colliding with
+             questions already in Appwrite. This is the root cause of the
+             "ID collision: question 1373 already exists" error that blocks
+             every import when data.json is reset on redeploy (no persistent
+             disk). Without this fix, data.json resets questionSeq to the
+             local count (e.g. 43) on every restart, and every new import
+             immediately collides with the 500+ questions already in Appwrite. */
           try {
             const liveDb = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
             liveDb.settings = liveDb.settings || {};
+            /* Only move the counter forward, never backward — if for some
+               reason the local counter is already ahead of Appwrite (e.g. an
+               import is in-flight), we keep the higher value. */
+            if ((liveDb.settings.questionSeq || 0) < appwriteMaxId) {
+              liveDb.settings.questionSeq = appwriteMaxId;
+              console.log('[goc] PERSISTENCE GUARD: questionSeq updated to ' + appwriteMaxId + '.');
+            }
             liveDb.settings.persistenceWarning = {
               detectedAt: new Date().toISOString(),
               localCount,
               localMaxId,
               appwriteCount: appwriteList.length,
-              appwriteMaxId
+              appwriteMaxId,
+              seqSynced: true
             };
             fs.writeFileSync(DATA_FILE, JSON.stringify(liveDb));
           } catch (e2) { /* non-fatal: the console.warn above is the primary signal */ }
+        } else {
+          console.log('[goc] Persistence guard: local data.json and Appwrite are in sync (' + appwriteList.length + ' questions).');
         }
       } catch (e) {
         /* Appwrite may not be reachable on cold boot — not an error here. */
@@ -1478,7 +1492,9 @@ function readBody(req) {
     let raw = '';
     req.on('data', chunk => {
       raw += chunk;
-      if (raw.length > 64 * 1024) { reject(new ClientError('Request too large.')); req.destroy(); }
+      /* Raised from 64 KB to 512 KB so a 500-question CSV import (≈150–200 KB
+         of JSON) fits comfortably without being cut off mid-import. */
+      if (raw.length > 512 * 1024) { reject(new ClientError('Request too large.')); req.destroy(); }
     });
     req.on('end', () => {
       if (!raw) return resolve({});
@@ -4961,38 +4977,17 @@ const ROUTES = [
       okJson(res, { tutor: tutorRow(t), changed: true });
     } },
 
-  /* Subjects & tutors: Appwrite-backed overview with local fallback. */
-  { method: 'GET', path: /^\/api\/tutors\/overview$/, need: 'console', cap: 'tutors.accounts', handler: async (req, res) => {
-      try {
-        const db = readData();
-
-        const questions = appwriteDatabases
-          ? await listQuestions({ all: true }, db)
-          : (db.questions || []);
-
-        const tutors = appwriteDatabases
-          ? await listAppwriteTutors()
-          : (db.tutors || []);
-
-        const rows = core.subjectDepth(questions, db.notes || []).map(r => {
-          r.tutors = tutors
-            .filter(t => t && t.active !== false &&
-              Array.isArray(t.subjects) && t.subjects.indexOf(r.subject) > -1)
-            .map(t => ({ id: t.id, name: t.name }));
-
-          r.pending = core.approvalQueue(questions, r.subject).length;
-          r.lastUpload = core.lastTutorUpload(questions, r.subject);
-          return r;
-        });
-
-        okJson(res, {
-          subjects: rows,
-          minimums: core.SUBJECT_DEPTH_MIN
-        });
-      } catch (err) {
-        console.error('Subjects & tutors overview failed:', err);
-        errJson(res, 500, 'Could not load the Subjects & Tutors overview.');
-      }
+  /* Subjects & tutors: who teaches each subject and how deep each paper is. */
+  { method: 'GET', path: /^\/api\/tutors\/overview$/, need: 'console', cap: 'tutors.accounts', handler: (req, res) => {
+      const db = readData();
+      const rows = core.subjectDepth(db.questions, db.notes).map(r => {
+        r.tutors = db.tutors.filter(t => t.active !== false && t.subjects.indexOf(r.subject) > -1)
+                            .map(t => ({ id: t.id, name: t.name }));
+        r.pending = core.approvalQueue(db.questions, r.subject).length;
+        r.lastUpload = core.lastTutorUpload(db.questions, r.subject);
+        return r;
+      });
+      okJson(res, { subjects: rows, minimums: core.SUBJECT_DEPTH_MIN });
     } },
 
   /* Roles slice (c), step 2a: the Managers panel's server half, list and create only.
@@ -6888,6 +6883,16 @@ const ROUTES = [
       if (pl) return errJson(res, 400, pl);
       const il = imageLinkError(v.rec);
       if (il) return errJson(res, 400, il);
+      /* FIX: sync questionSeq from Appwrite before assigning the new ID so
+         a stale local counter never produces a collision with an ID that
+         Appwrite already holds. */
+      if (appwriteDatabases) {
+        const existing = await listQuestions({ all: true }, db);
+        const appwriteMaxId = existing.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0);
+        if (appwriteMaxId > (db.settings.questionSeq || 0)) {
+          db.settings.questionSeq = appwriteMaxId;
+        }
+      }
       db.settings.questionSeq = (db.settings.questionSeq || 0) + 1;
       v.rec.id = db.settings.questionSeq;
       await createQuestion(v.rec, db);
@@ -6933,6 +6938,19 @@ const ROUTES = [
       return withDataLock(async () => {
         const db = readData();
         const existing = await listQuestions({ all: true }, db);
+        /* FIX: In Appwrite mode, the local data.json may have a stale
+           questionSeq (e.g. 43) while Appwrite already holds 500+ questions
+           with IDs up to 1150. Every import then collides because it tries to
+           create IDs 44, 45, 46… which Appwrite already has. Fix: before
+           assigning any new IDs, sync questionSeq to the real max ID in
+           Appwrite so new questions always get fresh, unused IDs. */
+        if (appwriteDatabases) {
+          const appwriteMaxId = existing.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0);
+          if (appwriteMaxId > (db.settings.questionSeq || 0)) {
+            console.log('[goc] Import: syncing questionSeq from ' + (db.settings.questionSeq || 0) + ' to Appwrite max ID ' + appwriteMaxId + '.');
+            db.settings.questionSeq = appwriteMaxId;
+          }
+        }
         /* Re-run the import inside the lock against the freshest snapshot so
            duplicate detection and replace matching are always accurate. */
         const ri = core.importCSV('questions', csvText, target, existing, db.passages, { replace });
