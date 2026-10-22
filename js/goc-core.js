@@ -1627,10 +1627,12 @@
     ys = ys.map(Number).filter(function (n) { return n > 0; });
     return (bank || []).filter(function (r) {
       if (!r.active || r.kind !== 'objective') return false;
+      /* Practice is its own exclusive pool — never mix in webtest or JAMB-style questions. */
+      if (r.section !== 'practice') return false;
       if (subject && r.subject !== subject) return false;
       if (want.length && want.indexOf(String(r.topic)) === -1) return false;
       /* Years narrow Practice to those papers' questions only. */
-      if (ys.length && !(r.section === 'practice' && ys.indexOf(Number(r.year)) !== -1)) return false;
+      if (ys.length && ys.indexOf(Number(r.year)) === -1) return false;
       return true;
     });
   }
