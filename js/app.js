@@ -8194,6 +8194,7 @@ function suCountCap(avail){
   return Math.max(0, Math.min(max, Number(avail) || 0));
 }
 function suCountTyped(el){
+  if(!el) return;
   var cap = suCountCap(suAvailable());
   var n = Math.floor(Number(el.value));
   if(!isFinite(n) || n < 1) n = 0;
@@ -8208,7 +8209,15 @@ function suCountTyped(el){
   suPaintStart();
 }
 function suCountCommit(el){
-  if(suMode !== 'practice' || !el) return;
+  if(suMode !== 'practice') return;
+  if(!el){
+    /* input not in DOM — suCount already holds the last rendered value; just clamp it */
+    var cap = suCountCap(suAvailable());
+    if(suCount > cap) suCount = cap;
+    if(suCount >= 1) suLastCount = suCount;
+    suPaintStart();
+    return;
+  }
   suCountTyped(el);
   if(!(suCount >= 1)){
     var cap = suCountCap(suAvailable());
