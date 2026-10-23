@@ -118,6 +118,7 @@ h1,h2,h3{letter-spacing:-.02em;line-height:1.15}
 .winddown h3{font-size:20px;font-weight:800;margin-bottom:8px}
 .winddown p{color:var(--gray);font-size:14px;line-height:1.55;margin-bottom:20px}
 .test-info{width:100%;max-width:380px;background:#fff;border-radius:22px;padding:24px;text-align:left;box-shadow:var(--sh-lg)}
+#testInfoOverlay{z-index:92}
 /* ============ CELEBRATE (Task 3 — streak-up / badge-earned pop-up) ============
    One shared card + burst; celebrateStreak()/celebrateBadge() in js/app.js
    just swap the icon/title/sub text before showing it via .overlay.show. */
