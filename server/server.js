@@ -5201,10 +5201,18 @@ const ROUTES = [
         : db.students.find(x => x.id === sess.data.id);
       if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
       const p = await perfFor(db, s.id);
-      okJson(res, {
+      const today = core.dayStamp();
+  const prevDay = s.streakDay || null;
+  const dayBefore = prevDay ? core.dayBefore(prevDay) : null;
+  let displayStreak = s.streak || 0;
+  if (prevDay && prevDay !== today && prevDay !== core.dayBefore(today)) {
+    const freezeCanSave = (s.streakFreezes > 0) && (prevDay === core.dayBefore(core.dayBefore(today)));
+    if (!freezeCanSave) displayStreak = 0;
+  }
+  okJson(res, {
         id: s.id, name: s.name, exam: core.EXAM,
         subjects: (s.subjects || []).slice(),
-        xp: s.xp || 0, streak: s.streak || 0, streakFreezes: s.streakFreezes || 0,
+        xp: s.xp || 0, streak: displayStreak, streakFreezes: s.streakFreezes || 0,
         level: core.levelFor(s.xp || 0),
         xpIntoLevel: core.xpIntoLevel(s.xp || 0),
         xpPerLevel: core.xpPerLevel(),

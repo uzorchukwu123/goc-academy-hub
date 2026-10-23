@@ -8221,6 +8221,7 @@ function suCountCommit(el){
 function suStart(){
   if(!suAvailable()) return;
   if(suMode === 'practice') suCountCommit(document.getElementById('suCountInput'));
+  if(!(suCount >= 1)) return;
   if(state.studyExhausted){ showWinddown(); return; }
   var info = suInstructions();
   showTestInfo(info.title, info.about, info.rules, suStartConfirmed);

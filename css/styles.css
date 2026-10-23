@@ -99,7 +99,7 @@ h1,h2,h3{letter-spacing:-.02em;line-height:1.15}
 .field input{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:15px;font-family:var(--font);background:var(--bg);color:var(--ink)}
 .field input:focus{outline:none;border-color:var(--red);background:#fff}
 /* ============ MODALS ============ */
-.overlay{position:absolute;inset:0;z-index:80;background:rgba(15,17,20,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:22px}
+.overlay{position:absolute;inset:0;z-index:85;background:rgba(15,17,20,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:22px}
 .overlay.show{display:flex}
 @media (prefers-reduced-motion: no-preference){
   .overlay.show{animation:fade .25s ease}
