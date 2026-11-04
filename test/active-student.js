@@ -4,16 +4,22 @@
    Usage: var a = await activeStudent(call, signupBody, founderToken);
    Returns { id, token, student, signup, approve, login }; token is null if any step failed.
 
-   Two setup rules, added after the audit:
+   Setup rules, added after the audit:
    · Registration now requires an explicit privacy-policy acceptance. The helper
      injects one (accepted: true) unless the caller supplied its own — a test
      that wants to exercise the refusal posts to /api/students directly.
-   · A failed SETUP step (founder sign-in, console unlock, approval) throws a
-     descriptive error instead of being walked past. Continuing after a failed
-     setup only produced a cascade of confusing assertion failures downstream;
-     a setup failure is an infrastructure problem and is named as one. A failed
-     SIGN-UP still returns the signup reply unchanged, because several suites
-     deliberately assert on refusals. */
+   · A failed founder SIGN-IN or console UNLOCK throws a descriptive error: those
+     are infrastructure failures (the test server is misconfigured), and walking
+     past them only produced a cascade of confusing assertion failures downstream.
+   · A failed APPROVAL is deliberately NOT thrown. Two suites depend on it:
+     test-results-export.js passes a founder token whose console is still locked
+     (it asserts the lock itself, then unlocks by hand) and test-tiers-route.js
+     restarts the server so the cached founder session goes stale — both read
+     data.json directly rather than needing an approved student. Throwing here
+     broke those intentional designs, so the walk continues and returns whatever
+     token the student login produced (null if approval/login failed).
+   · A failed SIGN-UP still returns the signup reply unchanged, because several
+     suites deliberately assert on refusals. */
 'use strict';
 var founders = new WeakMap();
 /* If the test has no founder session handy, sign one in (the test servers set GOC_FOUNDER_PW and GOC_PASSCODE). */
@@ -39,9 +45,9 @@ module.exports = async function activeStudent(call, body, founderToken) {
   var id = signup.body && signup.body.student && signup.body.student.id;
   if (!id) return { id: null, token: null, student: null, signup: signup, approve: null, login: null };
   var approve = await call('POST', '/api/students/' + id + '/approve', null, founderToken);
-  if (approve.status !== 200) {
-    throw new Error('active-student setup: approval of ' + id + ' failed (' + approve.status + ' ' + (approve.raw || '') + ')');
-  }
+  /* Approval may legitimately fail here (locked console / stale founder session in
+     test-results-export.js and test-tiers-route.js); those suites read data.json
+     directly, so continue and let the student login decide the token. */
   var login = await call('POST', '/api/auth/login', { id: id, password: body.password });
   return {
     id: id,
