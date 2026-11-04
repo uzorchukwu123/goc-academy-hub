@@ -4140,7 +4140,7 @@ const ROUTES = [
       /* Count all questions for this subject by status so the tutor sees pending/returned
          questions, not only approved 'live' ones (subjectDepth skips non-live rows). */
       const statusCounts = { live: 0, pending: 0, returned: 0, other: 0 };
-      (db.questions || []).forEach(q => {
+      questions.forEach(q => {
         if (!q || q.subject !== subject) return;
         if (q.addedBy !== sess.tutor.id) return;
         const s = q.status || 'live';
@@ -4204,8 +4204,9 @@ const ROUTES = [
         }
       });
 
+      const allQuestions = await listQuestions({ all: true }, db);
       const subjects = Array.from(new Set(
-        (db.questions || [])
+        allQuestions
           .filter(q => q && q.subject)
           .map(q => q.subject)
       ));
@@ -4978,13 +4979,14 @@ const ROUTES = [
     } },
 
   /* Subjects & tutors: who teaches each subject and how deep each paper is. */
-  { method: 'GET', path: /^\/api\/tutors\/overview$/, need: 'console', cap: 'tutors.accounts', handler: (req, res) => {
+  { method: 'GET', path: /^\/api\/tutors\/overview$/, need: 'console', cap: 'tutors.accounts', handler: async (req, res) => {
       const db = readData();
-      const rows = core.subjectDepth(db.questions, db.notes).map(r => {
+      const allQuestions = await listQuestions({ all: true }, db);
+      const rows = core.subjectDepth(allQuestions, db.notes).map(r => {
         r.tutors = db.tutors.filter(t => t.active !== false && t.subjects.indexOf(r.subject) > -1)
                             .map(t => ({ id: t.id, name: t.name }));
-        r.pending = core.approvalQueue(db.questions, r.subject).length;
-        r.lastUpload = core.lastTutorUpload(db.questions, r.subject);
+        r.pending = core.approvalQueue(allQuestions, r.subject).length;
+        r.lastUpload = core.lastTutorUpload(allQuestions, r.subject);
         return r;
       });
       okJson(res, { subjects: rows, minimums: core.SUBJECT_DEPTH_MIN });
