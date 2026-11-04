@@ -5250,6 +5250,11 @@ const ROUTES = [
           stu = db.students.find(x => x.id === sess.data.id);
         }
         if (!stu) return { notFound: true };
+        /* Access tiers: buying a freeze is a GOC feature (TIER_FEATURES.open
+           .streakFreezes is false). Enforced here, not only on the Profile
+           row — freezes a student EARNS in the weekly quest or team challenge
+           are still held and spent by anyone; only the XP purchase is gated. */
+        if (!core.canUse('streakFreezes', stu.tier)) return { tierLocked: true };
         const r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
         if (!r.ok) return { refused: r };
         if (appwriteDatabases) {
@@ -5262,6 +5267,7 @@ const ROUTES = [
         return { r };
       });
       if (out.notFound) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+      if (out.tierLocked) return errJson(res, 403, 'Buying streak freezes is for GOC students. Ask the academy about joining.');
       if (out.refused) {
         const why = out.refused.reason === 'max'
           ? 'You already hold the most streak freezes you can (' + core.STREAK_FREEZE_MAX + ').'

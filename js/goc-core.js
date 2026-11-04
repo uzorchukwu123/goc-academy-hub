@@ -76,8 +76,15 @@
 
   /* XP per level. 1,240 XP -> level 8, matching the academy's existing scale. */
   var XP_PER_LEVEL = 160;
-  var STREAK_FREEZE_COST_XP = 100;
+  /* The academy's price for one streak freeze (owner's decision: 500 XP).
+     One constant, read by the server route, the demo driver and the Profile
+     row, so the three can never quote different prices. */
+  var STREAK_FREEZE_COST_XP = 500;
   var STREAK_FREEZE_MAX = 2;
+  /* The privacy policy a registration accepts. Bump this whenever the policy
+     text in index.html changes materially, so a stored consent always names
+     the version the student actually saw. */
+  var PRIVACY_POLICY_VERSION = '2026-11-04';
 
   /* Default weighting for overall academic performance (Priority 11).
      Configurable through settings.perfWeights rather than hard-coded at the
@@ -394,7 +401,12 @@
                    Web Test session — it only ever reaches the student's
                    Practice screen (studyPool() doesn't filter on section at
                    all, so it draws every active objective-kind question,
-                   'practice' included).
+                   'practice' included — see the note below).
+       NOTE: studyPool() DOES filter on section: self-directed study draws
+       ONLY 'practice' rows, so the three pools (Practice, Web Test, JAMB)
+       stay disjoint in both directions. An earlier version of this comment
+       claimed studyPool drew every objective-kind question; that stopped
+       being true when Practice became its own exclusive pool.
        period      always 'test' — the academy runs one test, not a weekly
                    and a monthly one. Kept so records written before that
                    change still read cleanly.
@@ -2386,7 +2398,15 @@
   /* The stamp a day's allowance is counted against, in the academy's own terms:
      one calendar day, not a rolling 24 hours. */
   function dayStamp(when) {
-    var d = when ? new Date(when) : new Date();
+    /* "Today" is the academy's day (Africa/Lagos, UTC+1) — the same clock the
+       daily practice/review allowances use (lagosDay). Before this, a streak
+       on a UTC host rolled over at 01:00 Lagos time, and the demo driver
+       rolled over in whatever timezone the student's phone was set to, so
+       the same student could be counted against two different days.
+       An explicit argument still formats that Date's own calendar fields —
+       dayBefore()'s date arithmetic and the test fixtures rely on that. */
+    if (when == null) return lagosDay();
+    var d = when instanceof Date ? when : new Date(when);
     var m = d.getMonth() + 1, day = d.getDate();
     return d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
   }
@@ -2484,8 +2504,10 @@
     for (i = 0; i < (runs || []).length; i++) {
       var r = runs[i];
       if (!r) continue;
-      if (r.ts && dayStamp(r.ts) === t) todays.push(r);
-      else if (!r.ts || dayStamp(r.ts) < t) history.push(r);
+      /* A run's timestamp is an instant, so it is stamped in the academy's
+         timezone (lagosDay), the same clock `t` defaults to. */
+      if (r.ts && lagosDay(r.ts) === t) todays.push(r);
+      else if (!r.ts || lagosDay(r.ts) < t) history.push(r);
     }
     var weak = weakestTopicFromRuns(history);
     var answered = 0;
@@ -2730,7 +2752,11 @@
     if (!challenge || !challenge.active) return null;
     var s = cleanChallengeState(state, challenge);
     var total = challengeCount(teamTotal);
-    var td = dayStamp(today ? new Date(today) : undefined);
+    /* `today` arrives as a 'YYYY-MM-DD' stamp from the routes (already the
+       academy's day); a Date/number is formatted as its own calendar day.
+       Parsing a stamp through new Date() would read it as UTC midnight and
+       slide a day backwards on hosts west of UTC. */
+    var td = validDayStr(today) ? String(today) : dayStamp(today == null ? undefined : new Date(today));
     var end = challenge.endsOn || weekEnd(challenge.week);
     var daysLeft = Math.max(0, Math.round((Date.parse(end + 'T00:00:00') - Date.parse(td + 'T00:00:00')) / 86400000));
     return {
@@ -6866,6 +6892,7 @@
     QUEST_XP_REWARD: QUEST_XP_REWARD,
     STREAK_FREEZE_COST_XP: STREAK_FREEZE_COST_XP,
     STREAK_FREEZE_MAX: STREAK_FREEZE_MAX,
+    PRIVACY_POLICY_VERSION: PRIVACY_POLICY_VERSION,
     PRACTICE_XP_PER_ANSWER: PRACTICE_XP_PER_ANSWER,
     PRACTICE_XP_PER_CORRECT: PRACTICE_XP_PER_CORRECT,
     PRACTICE_XP_DAILY_CAP: PRACTICE_XP_DAILY_CAP,

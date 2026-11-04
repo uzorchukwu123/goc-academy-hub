@@ -52,7 +52,7 @@ head('the built scripts');
   ok(f + ' is smaller than the source', b.length < s.length * 0.9, b.length + ' vs ' + s.length);
   ok(f + ' carries no /* block comment */', !/\/\*[\s\S]*?\*\//.test(b.replace(/(["'`])(?:\\.|(?!\1)[^\\\n])*\1/g, '')));
 });
-ok('the test-only hooks are gone from the built api.js', built('js/api.js').indexOf('_setJambReadyMin') < 0 && built('js/api.js').indexOf('_setTier') < 0);
+ok('the test-only hooks are gone from the built api.js', built('js/api.js').indexOf('_setJambReadyMin') < 0 && built('js/api.js').indexOf('_setTier') < 0 && built('js/api.js').indexOf('_grantXp') < 0);
 ok('the production-needed _setPasscodeLength is kept', built('js/api.js').indexOf('_setPasscodeLength') > -1);
 ok('the hooks are still in the readable source (tests use them)', src('js/api.js').indexOf('_setJambReadyMin') > -1);
 ok('sw.js keeps its cache name', /goc-v\d+/.exec(built('sw.js')) && /goc-v\d+/.exec(built('sw.js'))[0] === /goc-v\d+/.exec(src('sw.js'))[0]);

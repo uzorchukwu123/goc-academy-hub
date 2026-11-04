@@ -147,10 +147,17 @@ function paintFreeze(me){
   var held = Number(me && me.streakFreezes) || 0;
   var cost = GOC.core.STREAK_FREEZE_COST_XP, max = GOC.core.STREAK_FREEZE_MAX;
   var note = document.getElementById('freezeNote'), btn = document.getElementById('freezeBuyBtn');
-  if(note) note.textContent = 'Covers one missed day \u00B7 holding ' + held + ' of ' + max + ' \u00B7 ' + cost + ' XP each';
+  /* Access tiers: buying a freeze is a GOC feature. The server refuses the
+     purchase for an Open account, so the row says so rather than offering a
+     button that always fails. Freezes earned in the weekly quest still show
+     and still work \u2014 only buying is gated. */
+  var locked = !!(me && me.features && me.features.streakFreezes === false);
+  if(note) note.textContent = locked
+    ? 'Covers one missed day \u00B7 holding ' + held + ' of ' + max + ' \u00B7 buying is for GOC students'
+    : 'Covers one missed day \u00B7 holding ' + held + ' of ' + max + ' \u00B7 ' + cost + ' XP each';
   if(btn){
-    btn.textContent = held >= max ? 'Full' : 'Get one';
-    btn.disabled = held >= max;
+    btn.textContent = locked ? 'GOC only' : (held >= max ? 'Full' : 'Get one');
+    btn.disabled = locked || held >= max;
   }
 }
 function buyFreeze(){

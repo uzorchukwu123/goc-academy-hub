@@ -38,7 +38,7 @@ var toasts = [], refreshed = 0, profileRepaints = 0, buyImpl;
 var sandbox = {
   role: 'student',
   document: { getElementById: function (id) { return els[id] || null; } },
-  GOC: { core: { STREAK_FREEZE_COST_XP: 100, STREAK_FREEZE_MAX: 2 },
+  GOC: { core: { STREAK_FREEZE_COST_XP: 500, STREAK_FREEZE_MAX: 2 },
          api: { buyStreakFreeze: function () { return buyImpl(); } } },
   toast: function (m) { toasts.push(m); },
   refreshMe: function () { refreshed++; },
@@ -50,24 +50,31 @@ vm.runInContext(grab('paintFreeze') + '\n' + grab('buyFreeze'), ctx);
 
 sandbox.paintFreeze({ streakFreezes: 1 });
 ok('shows the held count, the cap and the cost',
-  /holding 1 of 2/.test(els.freezeNote.textContent) && /100 XP/.test(els.freezeNote.textContent), els.freezeNote.textContent);
+  /holding 1 of 2/.test(els.freezeNote.textContent) && /500 XP/.test(els.freezeNote.textContent), els.freezeNote.textContent);
 ok('one held: the button still offers another', els.freezeBuyBtn.textContent === 'Get one' && !els.freezeBuyBtn.disabled);
 sandbox.paintFreeze({ streakFreezes: 2 });
 ok('at the cap: the button reads Full and is disabled', els.freezeBuyBtn.textContent === 'Full' && els.freezeBuyBtn.disabled);
 sandbox.paintFreeze({});
 ok('no field (older server): treated as none held', /holding 0 of 2/.test(els.freezeNote.textContent));
+sandbox.paintFreeze({ streakFreezes: 1, features: { streakFreezes: false } });
+ok('an Open account is told buying is GOC-only, and the button is disabled',
+  /buying is for GOC students/.test(els.freezeNote.textContent) && els.freezeBuyBtn.disabled && els.freezeBuyBtn.textContent === 'GOC only',
+  els.freezeNote.textContent);
+ok('the freezes they already hold are still shown', /holding 1 of 2/.test(els.freezeNote.textContent));
+sandbox.paintFreeze({ streakFreezes: 0, features: { streakFreezes: true } });
+ok('a GOC account gets the normal row back', /500 XP/.test(els.freezeNote.textContent) && !els.freezeBuyBtn.disabled);
 
 buyImpl = function () { return Promise.resolve({ ok: true, xp: 30, streakFreezes: 1 }); };
 sandbox.buyFreeze();
 Promise.resolve().then(function () {}).then(function () {}).then(function () {
   ok('a successful buy tells the student', toasts.length === 1 && /1 held/.test(toasts[0]), toasts.join('|'));
   ok('and re-reads XP and shows the new count', refreshed === 1 && /holding 1 of 2/.test(els.freezeNote.textContent));
-  buyImpl = function () { return Promise.reject(new Error('A streak freeze costs 100 XP.')); };
+  buyImpl = function () { return Promise.reject(new Error('A streak freeze costs 500 XP.')); };
   els.freezeBuyBtn.disabled = false;
   sandbox.buyFreeze();
   return Promise.resolve().then(function () {}).then(function () {}).then(function () {});
 }).then(function () {
-  ok('a refusal shows the server\'s own message', toasts[1] === 'A streak freeze costs 100 XP.', toasts.join('|'));
+  ok('a refusal shows the server\'s own message', toasts[1] === 'A streak freeze costs 500 XP.', toasts.join('|'));
   ok('and the button is usable again', els.freezeBuyBtn.disabled === false);
   sandbox.role = 'admin';
   var before = toasts.length;

@@ -782,6 +782,10 @@
       _setJambReadyMin: function (min) { settings.jambReadyMin = core.clampJambReadyMin(min); },
       /* Test-only: a public sign-up is Open, so a suite that sits Web Tests promotes its student, as the console would. */
       _setTier: function (id, tier) { var st = find(students, id); if (st) st.tier = core.cleanTier(tier); },
+      /* Test-only (stripped from the production build like the two above):
+         grants an XP balance so a suite can test an XP purchase (e.g. a 500-XP
+         streak freeze) without grinding past the daily practice XP cap. */
+      _grantXp: function (id, xp) { var st = find(students, id); if (st) st.xp = Math.max(0, Math.round(Number(xp) || 0)); },
       setJambCount: function (subject, n) {
         var e = requireUnlocked(); if (e) return e;
         var sub = String(subject || '');
@@ -1531,6 +1535,9 @@
       buyStreakFreeze: function () {
         var e = requireStudent(); if (e) return e;
         var stu = find(students, session.id);
+        if (!core.canUse('streakFreezes', stu.tier)) {
+          return fail('Buying streak freezes is for GOC students. Ask the academy about joining.');
+        }
         var r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
         if (!r.ok) {
           return fail(r.reason === 'max'
