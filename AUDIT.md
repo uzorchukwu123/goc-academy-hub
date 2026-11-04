@@ -71,7 +71,18 @@ Per the owner's instruction ("Implement all the fix on the PR"), the confirmed d
 
 The single skip is `test-media-stub.js`'s live-Appwrite section: *"Appwrite not configured (APPWRITE_ENDPOINT/PROJECT_ID/API_KEY unset) — nothing to verify."* This is an environment limitation, not a defect. `test/test-appwrite-registration.js` is deliberately excluded from the runner (a half-finished manual walk-through that requires a live, empty Appwrite project); it was **not** executed.
 
-No test results in this report are invented; the baseline log was captured in full (`/tmp/test-baseline.log` during the audit session). Post-fix runs are reported in the PR description.
+No test results in this report are invented; the baseline log was captured in full (`/tmp/test-baseline.log` during the audit session).
+
+### Post-fix verification (after all phases, on this branch)
+
+| Command | Result |
+|---------|--------|
+| `npm test` (`node test/run.js`) — **COMPLETE re-run** | **exit 0 · 184/184 suites passed · 6,943 assertions passed · 0 failed** (`/tmp/test-final3.log`) |
+| `node --check` sweep (app, api, core, pwa, server, lib/appwrite, lib/reminders, setup-appwrite, build/build, sw, run.js, active-student, both new suites) | exit 0 — `ALL_SYNTAX_OK` |
+| Conflict-marker scan (`^<{7}` / `^={7}` / `^>{7}`) over js, server, index.html, sw, build, test | none |
+| `npm run build` | exit 0 — `dist: 1,533,235 → 945,368 bytes (38% smaller)` |
+
+The two added suites are `test-privacy-consent.js` (23 checks) and `test-tutors-appwrite-source.js` (7 checks). Three fixtures needed consent/robustness updates that the first post-fix re-run surfaced and that are now resolved: `test-p78.js` (three direct demo sign-ups now inject consent), and `test-tiers-route.js` / `test-results-export.js` (the `active-student.js` approval-step continuation was preserved — see A2 — because both deliberately exercise a locked/stale founder session and read `data.json` directly). The earlier intermediate re-run that showed these three failures is `/tmp/test-final.log`; the clean final run is `/tmp/test-final3.log`.
 
 ---
 
@@ -98,6 +109,7 @@ No test results in this report are invented; the baseline log was captured in fu
 | Spaced-review state/counts, quests, challenge state | `db.reviewState/reviewCount`, student fields, `db.challengeState` | blob (quests partly on student doc) | **Local JSON + blob** (quests: Appwrite student) | Same durability gap |
 | Tutor notes / notices / flags / alerts | `db.notes/notices/flags/alerts` | blob | **Local JSON + blob** | Same |
 | Tutor audit / manager log | `db.tutorAudit`, `db.managerLog` | blob (audit written under lock before response) | **Local JSON + blob** | Same |
+| Privacy-consent record (added on this branch) | `db.consentLog[id]` → `{at, version}`; exposed on `/api/me` as `privacyConsent` | `writeData` → blob mirror, in **both** Appwrite and local modes | **Local JSON + blob** | Server-stamped at sign-up; deliberately kept out of the Appwrite `students` schema so it needs no migration. Same blob durability gap |
 | Subject/question answer stats | `db.answerStats` | blob (recorded on submit) | **Local JSON + blob** | Tutor analytics read it; **status counts/subject list wrongly read `db.questions` in Appwrite mode (fixed on this branch)** |
 | Settings / feature config / reminders | `db.settings`, `db.reminderState` | blob | **Local JSON + blob** | Same |
 | Resources / videos / live classes / cohorts | Appwrite collections + Storage | same | **Appwrite DB/Storage** | — |
