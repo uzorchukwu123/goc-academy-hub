@@ -82,7 +82,8 @@ function signupBody(n) {
   return { name: 'Pending ' + n, password: 'secret123',
            email: 'pending' + n + '@example.com', phone: '0800000' + (1000 + n),
            goal: 'JAMB / UTME 2027',
-           subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] };
+           subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'],
+           privacyConsent: { accepted: true } };
 }
 
 var adm = null, pendingId = null, rejectId = null;

@@ -445,7 +445,7 @@
         <div class="legal-card">
           <div class="lp-eyebrow">Legal</div>
           <h1>Terms of Use &amp; Privacy Policy</h1>
-          <p class="meta">Effective date: 4 September 2026</p>
+          <p class="meta">Effective date: 4 November 2026 · Policy version 2026-11-04</p>
 
           <h2>1. About the service</h2>
           <p>G.O.C Academy Hub is an educational platform operated by G.O.C Academy for students preparing for academic study, especially JAMB/UTME-focused learning. The app provides lessons, revision practice, quizzes, mock CBT exams, progress tracking and academy updates.</p>
@@ -465,12 +465,15 @@
 
           <h2>4. Privacy policy</h2>
           <p><strong>Information we collect:</strong> We may collect name, email address, phone number, password data, examination goal, subject combination, study progress, scores, quiz attempts, lesson completion data and support messages.</p>
-          <p><strong>How we use it:</strong> This information is used to provide account access, personalise learning paths, track progress, improve academic support, verify eligibility for enrolled programmes and communicate important updates, reminders and support responses.</p>
+          <p><strong>How we use it:</strong> This information is used to provide account access, personalise learning paths, track progress, improve academic support, verify eligibility for enrolled programmes and communicate important updates, reminders and support responses. These are the educational and operational purposes of the platform.</p>
+          <p><strong>Publicity:</strong> The academy may use aggregated, anonymised performance statistics (for example, overall pass rates or average scores) to describe its programmes publicly. Anything that identifies a student personally — a name, photograph, result or testimonial — is only published with that student's (or their guardian's) separate, explicit permission, which can be withdrawn by contacting the academy.</p>
+          <p><strong>Your consent record:</strong> Registration requires you to tick the acceptance box below the sign-up form. When you do, we store the date and time of your acceptance together with the policy version you accepted, against your Scholar ID, so we can show what you agreed to.</p>
           <p><strong>How we protect it:</strong> We use reasonable technical and organisational safeguards, including secure access controls, encrypted transmission where available, role-based account restrictions and limited access to data. No system is completely risk-free, so we ask users to protect their own login information and report any suspicious access immediately.</p>
           <p><strong>Data storage:</strong> Some information may be stored in local browser storage, server-side app data or third-party hosting and database services used to run the platform. We keep data only for as long as needed to provide the service or to satisfy legal, academic or support requirements.</p>
 
-          <h2>5. Cookies and local storage</h2>
-          <p>The app may use browser storage to remember your session, preferences, study progress and local settings. This helps the platform work reliably and remember your recent activity. You can clear local browser data at any time, but doing so may log you out or reset some saved preferences.</p>
+          <h2>5. Cookies, local storage and site analytics</h2>
+          <p>The app uses browser storage (not advertising cookies) to remember your session, preferences, study progress and local settings. This helps the platform work reliably and remember your recent activity. You can clear local browser data at any time, but doing so may log you out or reset some saved preferences.</p>
+          <p>The platform includes a simple visit counter that records which screens were opened, how long a visit lasted, and whether the device is a phone or a computer. The server stores only a daily-rotating hash of the IP address — never the raw address — and no name, email or Scholar ID travels with it. This counter runs <strong>only after the privacy policy has been accepted on the device</strong> (at registration, or when a registered student signs in); visits by people who have not accepted the policy are not recorded. There is no third-party advertising tracker.</p>
 
           <h2>6. Third-party services</h2>
           <p>We may rely on hosting providers, messaging tools, email delivery services and analytics or support infrastructure to operate the platform. These providers are used only to support the service and are expected to handle data lawfully and responsibly under their own privacy obligations.</p>
@@ -706,7 +709,7 @@
                 </div>
                 <div class="field-hint">Use at least 8 characters with a number.</div>
               </div>
-              <label class="check-lbl" style="margin-bottom:18px"><input type="checkbox" checked> I agree to the <button type="button" class="inline-legal-btn" onclick="go('legal')">Terms &amp; Privacy Policy</button></label>
+              <label class="check-lbl" style="margin-bottom:18px"><input type="checkbox" id="signConsent"> I have read and accept the <button type="button" class="inline-legal-btn" onclick="go('legal')">Terms &amp; Privacy Policy</button>. I understand my study data is used to run my account and track my progress.</label>
               <button class="btn btn-red btn-block" type="submit" id="signupBtn">Create free account</button>
             </form>
             <p class="auth-legal">Your account is personal to you — one active session per scholar keeps your progress secure.</p>
@@ -2174,48 +2177,5 @@ window.__gocBootTimer = setTimeout(function() {
 })();
 </script>
 
-  <!-- ============ COOKIE CONSENT BANNER ============ -->
-  <div id="cookieBanner" role="dialog" aria-live="polite" aria-label="Cookie notice" style="
-    display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;
-    background:#1F2937;color:#F9FAFB;padding:14px 16px;
-    box-shadow:0 -2px 12px rgba(0,0,0,.35);font-size:13.5px;line-height:1.5;">
-    <div style="max-width:600px;margin:0 auto;display:flex;flex-direction:column;gap:10px;">
-      <p style="margin:0">
-        G.O.C Academy Hub uses cookies and local storage to keep you logged in and save your progress.
-        By continuing you accept our use of these technologies.
-        <a href="#" onclick="go('privacy');cookieDismiss();return false;" style="color:#93C5FD;text-decoration:underline;">Privacy&nbsp;policy</a>
-      </p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button onclick="cookieAccept()" style="
-          background:#2563EB;color:#fff;border:none;border-radius:6px;
-          padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer">Accept</button>
-        <button onclick="cookieDismiss()" style="
-          background:transparent;color:#9CA3AF;border:1px solid #4B5563;border-radius:6px;
-          padding:7px 14px;font-size:13px;cursor:pointer">Dismiss</button>
-      </div>
-    </div>
-  </div>
-  <script>
-  (function(){
-    var KEY = 'goc-cookie-consent';
-    function cookieShow(){ var b=document.getElementById('cookieBanner'); if(b) b.style.display='block'; }
-    function cookieHide(){ var b=document.getElementById('cookieBanner'); if(b) b.style.display='none'; }
-    window.cookieAccept = function(){ try{ localStorage.setItem(KEY,'accepted'); }catch(e){} cookieHide(); };
-    window.cookieDismiss = function(){ cookieHide(); };
-    /* Show only on the public landing page (no auth session) and only if not yet decided. */
-    function maybShow(){
-      try{ if(localStorage.getItem(KEY)) return; }catch(e){ return; }
-      /* Only show on the home / landing view, not inside the app. */
-      var activeSection = document.querySelector('section.screen.active');
-      if(activeSection && activeSection.id !== 'home') return;
-      cookieShow();
-    }
-    if(document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', function(){ setTimeout(maybShow, 800); });
-    } else {
-      setTimeout(maybShow, 800);
-    }
-  })();
-  </script>
 </body>
 </html>

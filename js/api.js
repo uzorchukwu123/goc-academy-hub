@@ -528,6 +528,12 @@
       /* Sign-up is open to the public: no session and no access code. Every self-made
          account is Open. */
       createStudent: function (data) {
+        /* Explicit privacy-policy acceptance, mirroring POST /api/students:
+           no acceptance, no account — however the call arrives. */
+        var consent = data && data.privacyConsent;
+        if (!consent || consent.accepted !== true) {
+          return fail('Please read and accept the Privacy Policy to create your account.');
+        }
         var name = String((data && data.name) || '').trim();
         var pw = String((data && data.password) || '');
         if (name.length < 2) return fail('Enter your full name.');
@@ -554,7 +560,10 @@
           last: 'Awaiting approval', tag: 'a', tl: 'Pending',
           xp: 0, streak: 0, active: false, pendingApproval: true,
           subjects: sub.subjects,
-          tier: 'open'   /* self-registered accounts are Open, as on the server */
+          tier: 'open',  /* self-registered accounts are Open, as on the server */
+          /* The acceptance, stamped with the server-side policy version rule:
+             the demo keeps the same shape the real server stores. */
+          privacyConsent: { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION }
         };
         students.push(rec);
         /* No session is issued — the student must wait for approval. */
@@ -835,6 +844,7 @@
           id: s.id, name: s.name, exam: core.EXAM,
           subjects: (s.subjects || []).slice(),
           xp: s.xp || 0, streak: s.streak || 0, streakFreezes: s.streakFreezes || 0,
+          privacyConsent: s.privacyConsent || null,
           level: core.levelFor(s.xp || 0),
           xpIntoLevel: core.xpIntoLevel(s.xp || 0),
           xpPerLevel: core.xpPerLevel(),

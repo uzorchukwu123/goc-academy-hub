@@ -1256,6 +1256,16 @@ function chosenCombination(){
 /* Sign-up always creates a student account and issues a Scholar ID.
    The new scholar is added to the roster so management can look the ID up. */
 function signupSubmit(){
+  /* Privacy consent is explicit and required: the box starts unticked and
+     nothing is sent to the API until it is ticked. The server refuses a
+     registration without consent as well, so the rule holds however the
+     call arrives. */
+  var consentBox = document.getElementById('signConsent');
+  if(!consentBox || !consentBox.checked){
+    toast('Please read and accept the Privacy Policy to create your account.');
+    if(consentBox && consentBox.focus) consentBox.focus();
+    return;
+  }
   var nm = ((document.getElementById('signName')||{}).value||'').trim();
   var pw = ((document.getElementById('signPw')||{}).value||'');
   var em = ((document.getElementById('signEmail')||{}).value||'').trim();
@@ -1283,11 +1293,13 @@ function signupSubmit(){
   busy(btn, true);
   // The server issues the Scholar ID, so two people signing up at the same
   // moment can never be handed the same one.
-  GOC.api.createStudent({name:nm, password:pw, email:em, phone:ph, goal:goal, subjects:check.subjects}).then(function(r2){
+  GOC.api.createStudent({name:nm, password:pw, email:em, phone:ph, goal:goal, subjects:check.subjects,
+    privacyConsent: { accepted: true, version: GOC.core.PRIVACY_POLICY_VERSION } }).then(function(r2){
     busy(btn, false);
     /* Admin-approval flow: account is pending, no session is issued.
        Show the holding screen with the student's Scholar ID. */
     if(r2.pending){
+      notePrivacyConsent(GOC.core.PRIVACY_POLICY_VERSION);
       var idEl = document.getElementById('pendingScholarId');
       if(idEl) idEl.textContent = r2.student.id;
       var nmEl = document.getElementById('pendingStudentName');
@@ -2694,7 +2706,7 @@ function saLoad(){
     var rb = document.getElementById('saVisitRows');
     if(rb){
       var visits = d.recentVisits || [];
-      if(!visits.length){ rb.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;color:#6b7280">No visits recorded yet — cookies must be accepted by visitors.</td></tr>'; }
+      if(!visits.length){ rb.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;color:#6b7280">No visits recorded yet — the visit counter only runs for visitors who have accepted the privacy policy.</td></tr>'; }
       else {
         rb.innerHTML = visits.map(function(v, i){
           return '<tr style="'+(i%2?'background:#f9fafb':'')+';border-bottom:1px solid #f3f4f6">'+
@@ -2732,6 +2744,20 @@ function saExport(){
 }
 /* ======================================== */
 
+/* Privacy acceptance marker. The visit counter below only runs on a device
+   that has accepted the privacy policy: it is written when a registration
+   with the ticked consent box succeeds, and when a signed-in student's
+   profile reports a stored consent record (so it follows them across
+   devices). Clearing browser storage clears it, and the counter stops until
+   the next sign-in. */
+var PRIVACY_CONSENT_KEY = 'goc-privacy-consent';
+function notePrivacyConsent(version){
+  try { localStorage.setItem(PRIVACY_CONSENT_KEY, String(version || GOC.core.PRIVACY_POLICY_VERSION)); } catch(_){}
+}
+function privacyConsentGiven(){
+  try { return !!localStorage.getItem(PRIVACY_CONSENT_KEY); } catch(_){ return false; }
+}
+
 /* ============ VISITOR BEACON ============
    Records one visit per page-load to /api/analytics/visit.
    • Collects which #sections the visitor navigated to.
@@ -2762,6 +2788,9 @@ function saExport(){
 
   function send(){
     if(_sent) return;
+    /* Consent gate: no acceptance recorded on this device, no visit record.
+       The beacon never fires for a visitor who has not accepted the policy. */
+    if(!privacyConsentGiven()) return;
     _sent = true;
     var durationSec = Math.round((Date.now() - _startMs) / 1000);
     var ua = navigator.userAgent || '';
@@ -3408,7 +3437,7 @@ function admOpen(section){
     ); },
     siteanalytics: function(){ return (
       '<div class="ad-card"><div class="ad-h">Site Analytics</div>'+
-      '<p class="ad-p">Real visitor data: page views, time on site, sections explored, and general location. Only collected from visitors who accepted cookies.</p>'+
+      '<p class="ad-p">Real visitor data: page views, time on site, sections explored, and general location. Only collected from visitors who accepted the privacy policy.</p>'+
       '<div class="ad-grid2">'+
         '<div class="ad-metric"><span>Total visits (all time)</span><b id="saTotalVisits">…</b></div>'+
         '<div class="ad-metric"><span>Visits today</span><b id="saToday">…</b></div>'+
@@ -9840,6 +9869,9 @@ function refreshMe(){
   if(role !== 'student' || !GOC.api.myProfile) return;
   GOC.api.myProfile().then(function(me){
     var set = function(id, v){ var e = document.getElementById(id); if(e) e.textContent = v; };
+    /* A stored consent record follows the student to any device they sign
+       in on: it re-enables the (consent-gated) visit counter here. */
+    if(me.privacyConsent && me.privacyConsent.at) notePrivacyConsent(me.privacyConsent.version);
     set('dashLevel', 'Lv ' + (me.level || 1));
     countUpText('dashXp', me.xp || 0, function(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); });
     set('dashStreak', (me.streak || 0) + ' 🔥');

@@ -56,7 +56,8 @@ waitForBoot(20).then(async function (h) {
   adm = lin.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
   var reg = await call('POST', '/api/students', { name: 'Tobi Flag', password: 'secret123',
-    email: 'tobi.flag@example.com', phone: '08011110000', goal: 'JAMB / UTME 2027', subjects: COMBO });
+    email: 'tobi.flag@example.com', phone: '08011110000', goal: 'JAMB / UTME 2027', subjects: COMBO,
+    privacyConsent: { accepted: true } });
   stuId = reg.body.student.id;
   await call('POST', '/api/students/' + stuId + '/approve', {}, adm);
   await call('PUT', '/api/students/' + stuId + '/tier', { tier: 'goc' }, adm);

@@ -158,7 +158,8 @@ waitForBoot(100).then(function () {
     var seen = [];
     function body(i) {
       return { name: 'Limit Test ' + i, password: 'secret123', email: 'lim' + i + '@example.com', phone: '0801100000' + i,
-               goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] };
+               goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'],
+               privacyConsent: { accepted: true } };
     }
     for (var i = 0; i < 5; i++) {
       (function (n) {

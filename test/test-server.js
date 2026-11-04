@@ -92,7 +92,8 @@ function stop() {
 
 var good = { signupCode: SIGNUP, name: 'Ada Test', password: 'secret123', email: 'ada.test@example.com',
              phone: '08000000009', goal: 'JAMB / UTME 2027',
-             subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] };
+             subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'],
+             privacyConsent: { accepted: true } };
 /* Kept for the sections that come after registration. */
 var stuToken = null, stuId = null, theoryId = null;
 /* The access code currently in force. The Priority 8 section rotates it, and

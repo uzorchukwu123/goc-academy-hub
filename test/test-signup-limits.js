@@ -71,7 +71,8 @@ var seq = 0;
 function signup(extra) {
   seq++;
   return call('POST', '/api/students', Object.assign({ name: 'Open Person ' + seq, password: 'secret123', email: 'o' + seq + '@example.com',
-    goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] }, extra || {}));
+    goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'],
+    privacyConsent: { accepted: true } }, extra || {}));
 }
 
 (async function () {

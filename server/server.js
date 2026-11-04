@@ -1084,6 +1084,15 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
      data file written before practice sync existed — start it empty; there is
      nothing to migrate, as older runs only ever lived on the device. */
   if (!db.practiceRuns || typeof db.practiceRuns !== 'object') db.practiceRuns = {};
+  /* Privacy-policy acceptances, kept per Scholar ID: { at, version }. Written
+     once at registration (the sign-up route refuses a registration without an
+     explicit acceptance) and read by /api/me so the acceptance follows the
+     student to any device they sign in on. Lives in the data blob like the
+     other per-student records, so it needs no students-collection attribute
+     and survives on any Appwrite schema. Missing on an older data file —
+     start it empty; accounts registered before consent existed simply have
+     no record. */
+  if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
   /* Saved questions, kept per Scholar ID (Phase 1, part 2). Missing on a data
      file written before bookmarks existed — start it empty. */
   if (!db.bookmarks || typeof db.bookmarks !== 'object') db.bookmarks = {};
@@ -3190,6 +3199,16 @@ const ROUTES = [
         return errJson(res, 429, core.signupLimitMessage(blocked.retryAfter, blocked.window));
       }
 
+      /* Explicit privacy-policy acceptance is required, server-side: the
+         sign-up form's ticked box sends { accepted: true, version }, and a
+         registration that arrives without it is refused before anything is
+         created. The version stored is the server's own current policy
+         version — never a value the browser chooses. */
+      const consent = body && body.privacyConsent;
+      if (!consent || consent.accepted !== true) {
+        return errJson(res, 400, 'Please read and accept the Privacy Policy to create your account.');
+      }
+
       const name = clean(body.name, 80);
       const password = String(body.password == null ? '' : body.password);
       if (name.length < 2) return errJson(res, 400, 'Enter your full name.');
@@ -3240,6 +3259,13 @@ const ROUTES = [
         db.students.push(rec);
       }
       delete rec.plainPassword;
+      /* Record the acceptance against the Scholar ID with the server's own
+         policy version and a timestamp. Kept in the data blob (db.consentLog)
+         so it needs no students-collection attribute and works on any
+         Appwrite schema; /api/me reads it back for the device's visit-counter
+         gate. */
+      if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
+      db.consentLog[rec.id] = { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION };
   writeData(db);
       attempts.delete(ip);
       noteSignup(ip);
@@ -5212,6 +5238,10 @@ const ROUTES = [
   okJson(res, {
         id: s.id, name: s.name, exam: core.EXAM,
         subjects: (s.subjects || []).slice(),
+        /* The stored privacy acceptance (or null for accounts registered
+           before consent existed). The page uses it to re-enable the
+           consent-gated visit counter on a new device. */
+        privacyConsent: (db.consentLog && db.consentLog[s.id]) || null,
         xp: s.xp || 0, streak: displayStreak, streakFreezes: s.streakFreezes || 0,
         level: core.levelFor(s.xp || 0),
         xpIntoLevel: core.xpIntoLevel(s.xp || 0),
