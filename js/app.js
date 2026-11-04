@@ -8389,7 +8389,14 @@ function pracNext(){
       res.mode = 'practice';
       srShow(res);
       refreshMe();                     /* the XP has moved, so the header must too */
-    }, function(){ srShow(local); });
+    }, function(err){
+      /* The run could not be recorded — e.g. the server restarted and the open
+         paper was lost ("That study run has ended"). Show the review the page
+         marked, but say plainly that no XP was recorded instead of a silent 0.
+         The run is still mirrored to history by srShow/savePracResult. */
+      toast(((err && err.message) || 'That run could not be saved.') + ' Your review is shown, but no XP was recorded.');
+      srShow(local);
+    });
 }
 function pracLocalResult(paper){
   var correct = pracMarks.filter(function(m){ return m.isCorrect; }).length;
@@ -8770,10 +8777,17 @@ function paintReviewCard(r){
   if(btn) btn.style.display = q.dueCount ? '' : 'none';
   card.style.display = '';
 }
+/* The hub card's last successful /me/review reply, kept for ONE immediate
+   reuse by rvOpen: tapping "Start review" right after the hub loaded used to
+   refetch the exact same (expensive) payload a second time. One-shot — any
+   later rvOpen (e.g. "keep going" after answering) fetches fresh, and signing
+   out or another student clears it. */
+var rvFresh = null;
 function refreshReview(){
-  if(!studentId){ paintReviewCard(null); return Promise.resolve(); }
+  if(!studentId){ rvFresh = null; paintReviewCard(null); return Promise.resolve(); }
   if(!GOC.api || typeof GOC.api.listReview !== 'function') return Promise.resolve();
   return GOC.api.listReview().then(function(r){
+    rvFresh = { student: studentId, payload: r };
     paintReviewCard(r);
   }).catch(function(){ /* offline — leave the card as it is */ });
 }
@@ -8782,14 +8796,22 @@ function rvOpen(){
   var host = document.getElementById('rvHost');
   rvQueue = []; rvIndex = 0; rvRight = 0; rvAnswered = 0; rvBusy = false; rvMore = 0; rvNextDue = null;
   if(!studentId || !GOC.api || typeof GOC.api.listReview !== 'function'){ rvRender(); return Promise.resolve(); }
-  if(host) host.innerHTML = '<div class="wt-none">Loading your review…</div>';
-  return GOC.api.listReview().then(function(r){
+  function adopt(r){
     var q = (r && r.review) || {};
     rvQueue = q.due || [];
     rvMore = Math.max(0, (Number(q.dueCount) || 0) - rvQueue.length);
     rvNextDue = q.nextDue || null;
     rvRender();
-  }).catch(function(){
+  }
+  /* The hub card just fetched this same payload — adopt it once instead of
+     paying for the whole mistakes build a second time. */
+  if(rvFresh && rvFresh.student === studentId){
+    var fresh = rvFresh.payload; rvFresh = null;
+    adopt(fresh);
+    return Promise.resolve();
+  }
+  if(host) host.innerHTML = '<div class="wt-none">Loading your review…</div>';
+  return GOC.api.listReview().then(adopt).catch(function(){
     if(host) host.innerHTML = '<div class="wt-none">Could not load your review. Check your connection and try again.</div>';
   });
 }

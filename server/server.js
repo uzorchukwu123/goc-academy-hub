@@ -1298,13 +1298,22 @@ function withDataLock(fn) {
    the wrong objective answers in their latest marked Web Test papers (bounded,
    so one request stays cheap), merged newest first. Shared by the mistakes
    review and spaced repetition so both always read the same list. */
-async function mistakesFor(db, studentId) {
+async function mistakesFor(db, studentId, bank) {
   const runs = await practiceRunsOf(db, studentId);
   const marked = (await attemptsFor(db, studentId))
     .filter(a => a.status === 'marked')
     .sort((a, b) => b.submittedAt - a.submittedAt)
     .slice(0, 20);
-  const sums = await Promise.all(marked.map(a => summariseOwn(db, a, null)));
+  /* Resolve every answer row from ONE bank fetch instead of one findQ per row.
+     On Appwrite each findQ is a getDocument round-trip, so twenty marked papers
+     of forty answers used to mean ~800 document fetches per review load — the
+     root cause of the slow "Start review". A caller that already holds the bank
+     passes it in; otherwise it is fetched once here. { all: true, showArchived:
+     true } matches findQ's reach (any status, archived included), so a mistake
+     on a since-held-back or archived question still reads exactly as before. */
+  const all = bank || await listQuestions({ all: true, showArchived: true }, db);
+  const byId = new Map(all.map(q => [String(q.id), q]));
+  const sums = await Promise.all(marked.map(a => summariseOwn(db, a, null, id => byId.get(String(id)) || null)));
   return core.mergeMistakes([core.mistakesFromRuns(runs), core.mistakesFromAttempts(sums)]);
 }
 
@@ -1727,7 +1736,7 @@ function attemptSummary(a) {
 /* What the owning student may see. Correct answers and explanations are
    released only after the paper is marked, and only on their own paper. A
    student has no route that writes to a score, a mark or a correct answer. */
-async function summariseOwn(db, a, stu) {
+async function summariseOwn(db, a, stu, qLookup) {
   const out = attemptSummary(a);
   out.xpTotal = stu ? (stu.xp || 0) : 0;
   out.level = stu ? core.levelFor(stu.xp || 0) : 1;
@@ -1735,8 +1744,11 @@ async function summariseOwn(db, a, stu) {
   out.breakdown = a.status === 'marked' ? core.topicBreakdown(a.answers) : [];
   /* Resolve the question behind each answer row through the data-access layer.
      Fetched in parallel so a marked-paper review is one round of lookups, not
-     a serial walk. */
-  const questions = await Promise.all(a.answers.map(r => findQ(db, r.questionId)));
+     a serial walk. A caller that already holds the whole bank (mistakesFor)
+     passes a synchronous qLookup so no per-row document fetch happens at all. */
+  const questions = qLookup
+    ? a.answers.map(r => qLookup(r.questionId))
+    : await Promise.all(a.answers.map(r => findQ(db, r.questionId)));
   out.review = a.answers.map((r, i) => {
     const q = questions[i] || {};
     const row = {
@@ -4164,9 +4176,12 @@ const ROUTES = [
       const questions = await listQuestions({ subject, all: true }, db);
       const mine = core.subjectDepth(questions, db.notes).find(r => r.subject === subject);
       /* Count all questions for this subject by status so the tutor sees pending/returned
-         questions, not only approved 'live' ones (subjectDepth skips non-live rows). */
+         questions, not only approved 'live' ones (subjectDepth skips non-live rows).
+         Read from the SAME fetched list as the depth figures above — in Appwrite
+         mode db.questions is only the local cache and can be empty or stale, which
+         made these counts read zero while the bank actually held the tutor's rows. */
       const statusCounts = { live: 0, pending: 0, returned: 0, other: 0 };
-      (db.questions || []).forEach(q => {
+      (questions || []).forEach(q => {
         if (!q || q.subject !== subject) return;
         if (q.addedBy !== sess.tutor.id) return;
         const s = q.status || 'live';
@@ -4230,8 +4245,12 @@ const ROUTES = [
         }
       });
 
+      /* The subject list comes from the data-access layer, not the local blob:
+         in Appwrite mode db.questions is a cache that can be empty on a fresh
+         deploy, which used to make this report come back with no subjects at all. */
+      const bank = await listQuestions({ all: true }, db);
       const subjects = Array.from(new Set(
-        (db.questions || [])
+        bank
           .filter(q => q && q.subject)
           .map(q => q.subject)
       ));
@@ -5369,8 +5388,10 @@ const ROUTES = [
      in their stored practice runs, once each, newest first. Read-only. */
   { method: 'GET', path: /^\/api\/me\/mistakes$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
-      const mistakes = await mistakesFor(db, sess.data.id);
-      const bank = await listQuestions({}, db);
+      /* One bank fetch serves both the mistakes build and the passage/image
+         attachment — no second full-bank read, no per-answer document fetch. */
+      const bank = await listQuestions({ all: true, showArchived: true }, db);
+      const mistakes = await mistakesFor(db, sess.data.id, bank);
       okJson(res, { mistakes: core.attachImagesToMistakes(core.attachPassagesToMistakes(mistakes, bank, db.passages), bank) });
     } },
 
@@ -5383,10 +5404,11 @@ const ROUTES = [
      nothing goes in the academic record and no XP is paid. */
   { method: 'GET', path: /^\/api\/me\/review$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
-      const mistakes = await mistakesFor(db, sess.data.id);
+      /* One bank fetch for the mistakes build and the attachment (see /me/mistakes). */
+      const bank = await listQuestions({ all: true, showArchived: true }, db);
+      const mistakes = await mistakesFor(db, sess.data.id, bank);
       const state = (db.reviewState && db.reviewState[sess.data.id]) || {};
       const queue = core.srQueue(mistakes, state, Date.now());
-      const bank = await listQuestions({}, db);
       queue.due = core.attachImagesToMistakes(core.attachPassagesToMistakes(queue.due, bank, db.passages), bank);
       const tier = await studentTierOf(db, sess.data.id);
       okJson(res, { review: queue, today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsToday(db, sess.data.id), tier) } });
