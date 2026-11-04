@@ -10,7 +10,7 @@ Set-Location -Path $PSScriptRoot
 
 Write-Host ''
 Write-Host '  G.O.C Academy Hub' -ForegroundColor Red
-Write-Host '  Building Purpose-Driven Independent Scholars'
+Write-Host '  Raising Smart Scholars for Academic Excellence'
 Write-Host ''
 
 # --- is Node installed? -----------------------------------------------------
