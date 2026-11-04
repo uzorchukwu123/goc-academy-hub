@@ -122,6 +122,16 @@ start().then(function () {
   staff = r.body.token;
   return call('POST', '/api/auth/unlock', { passcode: '2027' }, staff);
 }).then(function () {
+  /* js/goc-core.js now seeds a starter Practice pool for every subject, dated
+     past questions included — which is what makes Practice work on a fresh
+     install. This suite pins the EXACT year list and the exact per-year counts
+     that an Open and a GOC student are offered for Chemistry, so it clears the
+     seeded Chemistry Practice rows first and builds the whole pool itself. The
+     tier rule is what is under test here, not the contents of the seed; other
+     suites cover that. One call, scoped to this subject and this section, so the
+     rest of the bank is left alone. */
+  return call('DELETE', '/api/questions/bulk', { subject: 'Chemistry', section: 'practice' }, staff);
+}).then(function () {
   var p = Promise.resolve();
   [2021, 2021, 2021, 2018, 2018].forEach(function (y, i) {
     p = p.then(function () { return call('POST', '/api/questions', pq(y, i + 1), staff); }).then(function (r) {

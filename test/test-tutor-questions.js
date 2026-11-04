@@ -70,7 +70,13 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   var phys = await tutorToken('Mr Eze', ['Physics'], 'my-own-pass-2');
   ok('setup: a Chemistry tutor and a Physics tutor are signed in', !!chem.token && !!phys.token);
 
-  var good = { subject: 'Chemistry', section: 'objective', topic: 'Acids', text: 'ZQXALPHA which of these is a strong acid?', options: ['Ethanoic acid', 'Hydrochloric acid', 'Citric acid', 'Carbonic acid'], answer: 1, difficulty: 'medium' };
+  /* 'practice', not 'objective'. Several checks below measure what a student is
+     actually served through POST /api/me/study/start, and studyPool() serves
+     exclusively from the Practice section — an 'objective' row is stored, listed
+     in the console and counted in the paper depth, but no study run will ever
+     hand it to a scholar. With 'objective' here, "once approved, students can be
+     served it" could not pass however the approval flow behaved. */
+  var good = { subject: 'Chemistry', section: 'practice', topic: 'Acids', text: 'ZQXALPHA which of these is a strong acid?', options: ['Ethanoic acid', 'Hydrochloric acid', 'Citric acid', 'Carbonic acid'], answer: 1, difficulty: 'medium' };
   var before = (await call('GET', '/api/me/study?subject=Chemistry', null, gTok));
   var depth0 = (await call('GET', '/api/tutor/subject?subject=Chemistry', null, chem.token)).body.depth;
 
@@ -93,9 +99,12 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   ok('a tutor can type a theory question for their subject', th.status === 200 && th.body.question.status === 'pending' && th.body.question.section === 'theory', th.raw);
 
   console.log('\nstudents never see it');
-  /* Seed one live Chemistry question via admin so the practice pool is non-empty.
-     Without this, study/start returns 404 ("No questions published") and the
-     assertion below — which checks status === 200 — would always fail. */
+  /* Seed one live Chemistry question through the console, in the OBJECTIVE
+     section on purpose: its job is the paper-depth check further down, which
+     counts a new live objective row. (An older comment here said this row was
+     what made the practice pool non-empty — it never did, because studyPool()
+     serves only 'practice' rows. The practice pool now comes from the starter
+     bank js/goc-core.js seeds, so nothing extra is needed for it.) */
   await call('POST', '/api/questions', { subject: 'Chemistry', section: 'objective', topic: 'Acids', text: 'ZQXSEED what is the pH of pure water?', options: ['5', '6', '7', '8'], answer: 2, difficulty: 'easy' }, adm);
   var viaAll = await call('GET', '/api/me/study?subject=Chemistry', null, gTok);
   ok('the study screen is unchanged by pending questions', viaAll.status === 200, viaAll.raw.slice(0, 200));

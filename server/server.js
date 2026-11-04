@@ -6126,7 +6126,13 @@ const ROUTES = [
       if (isNaN(used) || used < 0) used = Math.round((Date.now() - paper.startedAt) / 1000);
       used = Math.max(used, 0);
       if (paper.durationSec) used = Math.min(used, paper.durationSec);
-      openStudy.delete(paper.id);
+      /* Keyed with String() exactly as the set() and get() above are, so the
+         three can never disagree about the key type. Harmless while a paper id
+         is already a string ('S' + hex), but Fix 4 coerced the set and the get
+         and left this delete behind — a numeric id would then have been served
+         and marked, yet never removed, blocking that student from starting a
+         different subject until the 4-hour sweep ran. */
+      openStudy.delete(String(paper.id));
       const mode = paper.mode || 'cbt';
         let stu;
 

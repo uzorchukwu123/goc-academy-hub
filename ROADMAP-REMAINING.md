@@ -197,7 +197,6 @@ These block a real launch and only you can do them:
 - Saved questions (bookmarks) snapshots store only text and options — images and passages attached to those questions are not shown in Saved questions or the practice results review rows.
 - Team challenges (4.C) fold contributions on the local-file path only; persisting challenge state on Appwrite needs a `challengeState` attribute on the students collection.
 - The manager-action log is written synchronously — two requests finishing at the exact same instant could in rare cases lose one entry.
-<<<<<<< HEAD
 
 ---
 
@@ -271,7 +270,16 @@ academic-director second account refused — inspect after Fix 02 applied
 ### GOC_Fix6 — Pending C — PENDING (after Fix 01)
 test-p3 demo-paper open fails — re-inspect after Fix 01 applied
 
-### GOC_Fix6 — Pending D — PENDING
+### GOC_Fix6 — Pending D — DONE
 managerRoles() wrong set / shared reference (test-roles.js unit test)
-=======
->>>>>>> origin/main
+
+**Applied.** `js/goc-core.js` held the issuable-manager list twice — once inside
+`managerRoles()` and again inside `validateManager()` — and both copies had
+dropped `academic-director`, so the Managers panel offered three roles and the
+server refused to issue a fourth Academic Director, while the comment above
+`managerRoles()` and the tests pinning the owner's decision of 14 Oct 2026 both
+said four. Both now read one `ISSUABLE_MANAGER_ROLES` list, and the refusal
+message is built from it, so the offer and the acceptance cannot drift apart
+again. `founder` stays unissuable. Heals test-roles.js, test-roles-cap.js,
+test-managers-rules.js, test-managers-route.js, test-managers-ui.js,
+test-alert-owners.js and test-overview-scope.js.

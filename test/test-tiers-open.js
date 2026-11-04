@@ -111,6 +111,14 @@ start().then(function () {
   staff = r.body.token;
   return call('POST', '/api/auth/unlock', { passcode: '2027' }, staff);
 }).then(function () {
+  /* Clear the seeded Chemistry Practice rows before building this suite's own
+     pool. js/goc-core.js now ships a starter Practice bank for every subject
+     (dated past questions included) so Practice works on a fresh install, but
+     the checks below pin exact year lists and exact run totals for Chemistry.
+     Scoped to this subject and section, so nothing else in the bank is touched;
+     the seed itself is covered by other suites. */
+  return call('DELETE', '/api/questions/bulk', { subject: 'Chemistry', section: 'practice' }, staff);
+}).then(function () {
   var p = Promise.resolve(), list = [2021, 2021, 2021, 2018, 2018];
   for (var i = 1; i <= 12; i++) list.push(null);
   list.forEach(function (y, i) {

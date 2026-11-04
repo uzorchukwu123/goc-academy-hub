@@ -25,14 +25,21 @@ ok('a later manager gets exactly what the map gives their role', held.length > 0
 
 head('routes tagged with a capability use real capability names');
 var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
-var tagged = (srcText.match(/need: 'console', cap: '[^']+'/g) || []).map(function (m) { return m.replace(/.*cap: '/, '').replace(/'$/, ''); });
-ok('every one of the 109 console routes carries a capability', tagged.length === 109, tagged.length);
+/* `cap:` sits on the same line as `need: 'console'` for most routes, but a few
+   are laid out across two lines — so the match allows any whitespace between the
+   two and counts the routes that are really tagged, rather than the ones that
+   happen to fit one particular formatting. Pinned deliberately as well: a new
+   console route changes this number, so whoever adds one has to state here which
+   capability guards it. */
+var CONSOLE_ROUTES = 110;
+var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
+ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));
 ok('the tags are the thirty-four chosen, nothing stray', tagged.every(function (c) { return ['signup.limits', 'broadcast.send', 'notices.manage', 'results.view', 'results.export', 'theory.mark', 'students.deactivate', 'students.approve', 'students.passwords', 'students.add', 'cohort.manage', 'cohort.create', 'students.tier', 'tutors.accounts', 'tutors.audit', 'questions.manage', 'resources.publish', 'classes.schedule', 'approvals.review', 'roster.view', 'challenges.manage', 'sittings.configure', 'homepage.edit', 'managers.accounts', 'alerts.all', 'overview.all', 'overview.own', 'system.migrate', 'scholarship.view', 'scholarship.export', 'scholarship.decide', 'scholarship.approve', 'scholarship.delete', 'analytics.site'].indexOf(c) > -1; }), tagged.join(','));
 var fo = ['alerts.all', 'system.migrate', 'overview.all', 'managers.accounts'].every(function (c) { var r = core.rolesWithCapability(c); return r.length === 1 && r[0] === 'founder'; });
 ok('alerts, the migration, the full overview and manager accounts are Founder-only', fo);
 var allConsole = (srcText.match(/need: 'console',/g) || []).length;
-ok('no console route is left without a capability', allConsole === tagged.length && allConsole === 109, allConsole + ' vs ' + tagged.length);
+ok('no console route is left without a capability', allConsole === tagged.length && allConsole === CONSOLE_ROUTES, allConsole + ' vs ' + tagged.length);
 var rvw = core.rolesWithCapability('roster.view'), chm = core.rolesWithCapability('challenges.manage'), sc = core.rolesWithCapability('sittings.configure');
 ok('every manager role reads the roster; challenges and sitting settings are for the Founder and the Academic Director only', rvw.length === 5 && chm.length === 2 && chm.indexOf('academic-director') > -1 && sc.length === 2 && sc.indexOf('academic-director') > -1);
 var ar = core.rolesWithCapability('approvals.review');

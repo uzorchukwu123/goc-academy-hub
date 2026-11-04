@@ -1013,6 +1013,23 @@
           <div class="sec-head"><div class="section-t">Topics</div><button class="ss-link" id="suAll" onclick="suToggleAll()">Select all</button></div>
           <div class="card wrap" style="padding:4px 16px"><div id="suTopics"></div></div>
         </div>
+
+        <!-- Year narrowing. js/app.js drives four ids here — suYearSection (shown
+             only for Practice and Past questions, and only when the subject holds
+             dated past questions), suYearTitle, suYearHint and suYears, which it
+             fills with the year dropdown. All four were missing from this file,
+             so every lookup in app.js returned null, its guard skipped the block,
+             and the year picker never rendered at all: a student could not narrow
+             Practice to a past-paper year even though the server accepts `years`
+             and the catalogue reports them. Kept hidden by default because CBT
+             set-ups have no year choice. -->
+        <div id="suYearSection" hidden>
+          <div class="sec-head"><div class="section-t" id="suYearTitle">Years (optional)</div></div>
+          <div class="card wrap" style="padding:4px 16px">
+            <div id="suYears"></div>
+            <div class="field-hint" id="suYearHint"></div>
+          </div>
+        </div>
         <div class="sec-head"><div class="section-t">Questions</div></div>
         <div id="suCountChipsWrap"><div class="wt-seg" id="suCounts"></div></div>
         <div id="suCountInputWrap" hidden>
@@ -1442,6 +1459,12 @@
           <option value="flags">Question flags</option>
           <option value="challenges">Team challenges</option>
           <option value="access">Access &amp; firewall</option>
+          <!-- Kept in step with GOC.core.allConsoleSections(): the tile grid is
+               built from that rule, and this hidden select is the fallback that
+               programmatic admOpen() calls sync against, so a section missing
+               here is a section no code path can select. -->
+          <option value="siteanalytics">Site Analytics</option>
+          <option value="scholarship">Scholarship</option>
         </select>
         <nav class="adm-tile-nav" id="admTileNav" aria-label="Console sections"></nav>
         <!-- Detail panel -->

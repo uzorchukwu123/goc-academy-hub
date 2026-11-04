@@ -200,14 +200,23 @@ var src = '';
      ══════════════════════════════════════════════════════ */
   head('Defect 3 fix / Phase 5 — practicePool = studyPool() count');
 
-  /* Import English practice questions with stampSection=true so they are live */
-  await call('POST', '/api/questions/import', {
+  /* Import Use of English practice questions with stampSection=true so they are
+     live. This used to say 'English', which is not one of the academy's
+     subjects (ALL_SUBJECTS names it 'Use of English'), so the import added
+     nothing at all and the check below passed only because an unseeded install
+     had an empty Practice pool — "less than 3" is true of zero. The reply is
+     asserted now, so a rejected import can never look like a passing check. */
+  var engImp = await call('POST', '/api/questions/import', {
     csv: CSV_HEAD +
-      csvRow('English', 'practice', 'Practice English Q1', 'A', 'yes') +
-      csvRow('English', 'practice', 'Practice English Q2', 'B', 'yes') +
-      csvRow('English', 'practice', 'Practice inactive', 'C', 'no'),
-    subject: 'English', section: 'practice', stampSection: true
+      csvRow('Use of English', 'practice', 'Practice English Q1', 'A', 'yes') +
+      csvRow('Use of English', 'practice', 'Practice English Q2', 'B', 'yes') +
+      csvRow('Use of English', 'practice', 'Practice inactive', 'C', 'no'),
+    subject: 'Use of English', section: 'practice', stampSection: true
   }, tok);
+  ok('the practice import is accepted and stores all three rows',
+     engImp.status === 200 && engImp.body && engImp.body.read === 3 && engImp.body.added === 3 &&
+     (engImp.body.skipped || 0) === 0 && (engImp.body.errors || []).length === 0,
+     engImp.status + ' ' + JSON.stringify(engImp.body).slice(0, 200));
 
   var countsR = await call('GET', '/api/questions/counts', undefined, tok);
   ok('counts endpoint returns 200', countsR.status === 200, JSON.stringify(countsR.body));
@@ -221,9 +230,19 @@ var src = '';
      countsR.body && countsR.body.practicePool === localPool,
      'counts=' + (countsR.body && countsR.body.practicePool) + ' studyPool()=' + localPool);
 
+  /* The pool is the whole bank's Practice section, and js/goc-core.js now seeds
+     a starter Practice bank, so a bare "less than 3" only held while the seed
+     carried no Practice rows at all. What this is really proving is that the row
+     imported as inactive is NOT in the pool while its two active siblings are —
+     checked by name, against the rows studyPool() itself returns. */
+  var poolRows = core.studyPool(allQR.body && allQR.body.questions || [], null, null, []);
+  var poolTexts = poolRows.map(function (r) { return r.text; });
   ok('inactive question is excluded from practicePool',
-     countsR.body && countsR.body.practicePool < 3,
-     'pool=' + (countsR.body && countsR.body.practicePool));
+     poolTexts.indexOf('Practice inactive') === -1 &&
+     poolTexts.indexOf('Practice English Q1') > -1 &&
+     poolTexts.indexOf('Practice English Q2') > -1 &&
+     countsR.body && countsR.body.practicePool === poolRows.length,
+     'pool=' + (countsR.body && countsR.body.practicePool) + ' studyPool()=' + poolRows.length);
 
   /* Structural: counts handler calls studyPool directly */
   ok('counts handler calls studyPool() directly (structural)',

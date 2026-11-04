@@ -2048,6 +2048,42 @@
         var e = requireUnlocked(); if (e) return e;
         return ok({ subjects: core.subjectDepth(questions, notes).map(function (r) { r.tutors = []; return r; }), minimums: core.SUBJECT_DEPTH_MIN });
       },
+      /* Console -> Tutors -> Tutor Analytics. Mirrors the server's
+         GET /api/admin/tutors/analytics one-for-one: one report per subject
+         that has questions, each carrying the same snapshot / activity /
+         weakTopics triple, built from the same core rules. Without this the
+         method existed on the http driver only, so GOC.api never forwarded it
+         and admTutAnalyticsLoad()'s `!GOC.api.adminTutorAnalytics` guard bailed
+         — leaving the card stuck on "Loading analytics…" even against a live
+         server. The offline demo keeps no per-answer counters, so weakTopics is
+         ranked from an empty stat map exactly as the server ranks a subject
+         that has none yet. */
+      adminTutorAnalytics: function () {
+        var e = requireUnlocked(); if (e) return e;
+        var runsByStudent = {};
+        students.forEach(function (st) {
+          if (!st || !st.id) return;
+          if (Array.isArray(practiceRuns[st.id])) runsByStudent[st.id] = core.dropOldRuns(practiceRuns[st.id]);
+        });
+        var subjects = [];
+        var seenSubject = {};
+        questions.forEach(function (r) {
+          if (!r || !r.subject || seenSubject[r.subject]) return;
+          seenSubject[r.subject] = true; subjects.push(r.subject);
+        });
+        var now = Date.now();
+        return ok({
+          reports: subjects.map(function (subject) {
+            var subjectAttempts = attempts.filter(function (a) { return a && a.subject === subject; });
+            return {
+              subject: subject,
+              snapshot: core.tutorSnapshot(subject, students, runsByStudent, subjectAttempts, now),
+              activity: core.tutorActivity(subject, students, runsByStudent, subjectAttempts, now),
+              weakTopics: core.rankWeakTopics({})
+            };
+          })
+        });
+      },
       /* Tutor questions waiting for approval live on the server; offline there are none. */
       listApprovals: function () {
         var e = requireUnlocked(); if (e) return e;
@@ -3179,6 +3215,7 @@ listPublishedVideos: function () {
     getResultsExport: function (f) { return active.getResultsExport(f); },
     getResultsPdf: function (f) { return active.getResultsPdf(f); },
     tutorOverview: function () { return active.tutorOverview(); },
+    adminTutorAnalytics: function () { return active.adminTutorAnalytics(); },
     listApprovals: function (subject) { return active.listApprovals(subject); },
     approveQuestion: function (id, edit) { return active.approveQuestion(id, edit); },
     returnQuestion: function (id, reason) { return active.returnQuestion(id, reason); },
