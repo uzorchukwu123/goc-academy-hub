@@ -34,6 +34,7 @@ function head(t) { console.log('\n' + t); }
 /* ---------------------------------------------------------- the sandbox app */
 var SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-f27-local-'));
 var DATA = path.join(SANDBOX, 'local-test-data');
+var MAIL_FILE = path.join(DATA, 'mail-capture.jsonl');
 fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(path.join(SANDBOX, 'server'), { recursive: true });
 fs.cpSync(path.join(APP, 'server'), path.join(SANDBOX, 'server'), { recursive: true });
@@ -85,10 +86,13 @@ function bootApp(extraEnv) {
   log = '';
   var env = Object.assign({}, process.env, {
     PORT: String(PORT),
-    NODE_PATH: path.join(APP, 'node_modules'),
+    NODE_PATH: [path.join(APP, 'test', 'stubs'), path.join(APP, 'node_modules')].join(path.delimiter),
+    GOC_TEST_MAIL_FILE: MAIL_FILE,
+    GOC_FREE_2027_OTP_SECRET: 'local-test-otp-secret-0123456789abcdef',
+    GOC_SMTP_HOST: 'mailpit-test',
+    GOC_SMTP_FROM: 'G.O.C Academy Hub <verification@gocacademy.test>',
     GOC_DATA_DIR: DATA,
     GOC_FREE_2027: '1',
-    GOC_FREE_2027_DEV_OTP: '1',
     /* a real deployment's .env, copied to this box: Appwrite is configured,
        and the API it points at refuses everything. */
     APPWRITE_ENDPOINT: 'http://127.0.0.1:' + STUB_PORT + '/v1',
@@ -115,11 +119,19 @@ function stopApp() {
   return new Promise(function (r) { setTimeout(r, 600); });
 }
 
+function mailedCode(email) {
+  if (!fs.existsSync(MAIL_FILE)) return null;
+  var rows = fs.readFileSync(MAIL_FILE, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  var mail = rows.filter(function (x) { return x.message && x.message.to === email; }).slice(-1)[0];
+  var m = mail && String(mail.message.text || '').match(/verification code is (\d{6})/i);
+  return m ? m[1] : null;
+}
 function register(name, email) {
   return call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Medicine and Surgery' })
     .then(function (r) {
-      if (!r.body || !r.body.devCode) return Promise.reject(new Error('no dev code: ' + r.raw));
-      return call('POST', '/api/free2027/register/verify', { email: email, code: r.body.devCode });
+      var code = mailedCode(email);
+      if (!r.body || r.status !== 200 || !code) return Promise.reject(new Error('verification email unavailable: ' + r.raw));
+      return call('POST', '/api/free2027/register/verify', { email: email, code: code });
     });
 }
 function adminLogin(id, password, passcode) {
@@ -150,7 +162,7 @@ function adminLogin(id, password, passcode) {
     stub.hits = 0; stub.databaseHits = 0; stub.paths = [];
 
     var reg = await register('Ada Obi', 'ada@example.com');
-    ok('a candidate registers without Appwrite', reg.status === 200 && /^GOC-F27-\d{4}$/.test(reg.body.participant.id), reg.raw);
+    ok('a candidate registers without Appwrite', reg.status === 200 && /^GOC-F27-[A-F0-9]{20}$/.test(reg.body.participant.id), reg.raw);
     var ada = reg.body.token;
 
     var prog0 = await call('GET', '/api/free2027/programme', undefined, ada);

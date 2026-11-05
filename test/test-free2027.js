@@ -33,9 +33,9 @@ ok('a good address is accepted and lower-cased', f.cleanEmail(' Ada.Obi@Example.
 });
 ok('a course is required', !!f.cleanCourse('').error && f.cleanCourse('Law').course === 'Law');
 ok('the console course list is de-duplicated and trimmed', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join() === 'Law,Physics', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join());
-ok('participant IDs are issued as GOC-F27-nnnn', f.participantId(7) === 'GOC-F27-0007' && f.participantId(1234) === 'GOC-F27-1234');
-ok('only that shape is a participant ID', f.isParticipantId('GOC-F27-0001') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-x'));
-var pub = f.publicParticipant({ id: 'GOC-F27-0001', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
+ok('participant IDs preserve a random non-sequential identifier', f.participantId('0123456789abcdefabcd') === 'GOC-F27-0123456789ABCDEFABCD');
+ok('only the 80-bit random ID shape is accepted', f.isParticipantId('GOC-F27-0123456789ABCDEFABCD') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-0001'));
+var pub = f.publicParticipant({ id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
 ok('a public participant carries no email address and no code', JSON.stringify(pub).indexOf('@') < 0 && !pub.otp, JSON.stringify(pub));
 ok('the address is masked even for the candidate themselves', f.maskEmail('ada.obi@example.com').indexOf('ada.obi') < 0 && /@example\.com$/.test(f.maskEmail('ada.obi@example.com')), f.maskEmail('ada.obi@example.com'));
 

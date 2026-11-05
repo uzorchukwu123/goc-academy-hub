@@ -16,7 +16,7 @@ function head(t) { console.log('\n' + t); }
 
 head('the guard rule (pure)');
 var c0 = core.allCapabilities()[0];
-ok('GOC-A-001 and GOC-A-002 keep full access, whatever the capability', core.adminMayUse('GOC-A-001', 'founder', undefined) && core.adminMayUse('GOC-A-002', 'academic-director', undefined) && core.adminMayUse('GOC-A-002', 'academic-director', 'no-such-cap'));
+ok('the Founder is unrestricted while the Academic Director is capability-scoped', core.adminMayUse('GOC-A-001', 'founder', undefined) && core.adminMayUse('GOC-A-002', 'academic-director', 'questions.manage') && core.adminMayUse('GOC-A-002', 'academic-director', 'overview.own') && !core.adminMayUse('GOC-A-002', 'academic-director', 'system.migrate') && !core.adminMayUse('GOC-A-002', 'academic-director', 'managers.accounts') && !core.adminMayUse('GOC-A-002', 'academic-director', 'no-such-cap'));
 ok('a later manager with no capability on the route is refused', core.adminMayUse('GOC-A-003', 'finance', undefined) === false && core.adminMayUse('GOC-A-003', 'finance', '') === false);
 ok('a later manager is refused a capability that is not listed', core.adminMayUse('GOC-A-003', 'finance', 'no-such-cap') === false);
 ok('a later manager with a missing or mistyped role is refused', core.adminMayUse('GOC-A-004', null, c0) === false && core.adminMayUse('GOC-A-004', 'chairman', c0) === false);

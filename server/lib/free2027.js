@@ -76,6 +76,10 @@ function ensureEdition(db, opts) {
   if (!Array.isArray(ed.sessions)) ed.sessions = [];
   if (!Array.isArray(ed.archives)) ed.archives = [];
   if (!Array.isArray(ed.otps)) ed.otps = [];
+  /* Permanent identifier registry is scoped to this programme and survives
+     session archiving/deletion. */
+  if (!Array.isArray(ed.studentIds)) ed.studentIds = [];
+  if (!ed.studentIdsByEmail || typeof ed.studentIdsByEmail !== 'object' || Array.isArray(ed.studentIdsByEmail)) ed.studentIdsByEmail = {};
   if (typeof ed.rev !== 'number') ed.rev = 0;
 
   /* One session always exists, so every route has somewhere to write. */
@@ -86,6 +90,13 @@ function ensureEdition(db, opts) {
   }
   var cur = ed.sessions.filter(function (s) { return s && s.id === ed.currentSessionId; })[0];
   if (!cur) { cur = ed.sessions[ed.sessions.length - 1]; ed.currentSessionId = cur.id; }
+  (ed.sessions || []).forEach(function (session) {
+    (session && session.participants || []).forEach(function (p) {
+      if (!p || !p.id) return;
+      if (ed.studentIds.indexOf(String(p.id)) < 0) ed.studentIds.push(String(p.id));
+      if (p.email && !ed.studentIdsByEmail[String(p.email).toLowerCase()]) ed.studentIdsByEmail[String(p.email).toLowerCase()] = String(p.id);
+    });
+  });
   ['participants', 'activities', 'attempts', 'records', 'lessons', 'audit'].forEach(function (k) {
     if (!Array.isArray(cur[k])) cur[k] = [];
   });
@@ -104,7 +115,7 @@ function ensureEdition(db, opts) {
      readData, writeData,        the hub's own data-file accessors
      withDataLock,               the hub's read-modify-write queue
      listQuestions,              the hub's question-bank reader
-     deliverOtp,                 async ({email,name,code}) -> {delivered,dev,devCode}
+     deliverOtp,                 async ({email,name,code}) -> {delivered}
      now,                        () -> ms (injected so tests own the clock)
      log                         (optional) message sink
    }
@@ -143,9 +154,26 @@ function createFree2027(deps) {
 
   /* ------------------------------------------------------------- utilities */
 
-  function codeHash(salt, code) { return crypto.createHmac('sha256', String(salt)).update(String(code)).digest('hex'); }
+  function codeHash(salt, code) {
+    var secret = String(d.otpSecret || (d.env || process.env).GOC_FREE_2027_OTP_SECRET || '');
+    return crypto.createHmac('sha256', secret).update(String(salt) + ':' + String(code)).digest('hex');
+  }
+  function otpSecretAvailable() {
+    return String(d.otpSecret || (d.env || process.env).GOC_FREE_2027_OTP_SECRET || '').length >= 32;
+  }
   function sixDigits() { return String(crypto.randomInt ? crypto.randomInt(0, 1000000) : Math.floor(Math.random() * 1000000)).padStart(6, '0'); }
   function token() { return crypto.randomBytes(24).toString('hex'); }
+  function uniqueParticipantId(ed) {
+    var used = new Set((ed.studentIds || []).map(function (id) { return String(id).toUpperCase(); }));
+    (ed.sessions || []).forEach(function (session) {
+      (session && session.participants || []).forEach(function (p) { if (p && p.id) used.add(String(p.id).toUpperCase()); });
+    });
+    for (var i = 0; i < 10; i++) {
+      var id = rules.participantId(crypto.randomBytes(10).toString('hex'));
+      if (!used.has(id)) return id;
+    }
+    throw FreeError(503, 'Could not allocate a unique student identifier. Please try again.');
+  }
 
   function findParticipant(session, id) {
     var want = String(id || '').toUpperCase();
@@ -279,6 +307,7 @@ function createFree2027(deps) {
     return locked(async function () {
       var db = readData();
       var ed = requireOn(edition(db));
+      if (!otpSecretAvailable()) throw FreeError(503, 'Email verification is not configured. Contact the academy before registering.');
       var name = rules.cleanName(body.name);
       if (name.error) throw FreeError(400, name.error);
       var email = rules.cleanEmail(body.email);
@@ -325,21 +354,18 @@ function createFree2027(deps) {
         log('[free2027] OTP delivery failed: ' + (e && e.message ? e.message : e));
         delivery = { delivered: false, dev: false };
       }
-      var out = {
+      if (delivery.delivered !== true) {
+        /* Do not turn a missing or failed sender into a fake success. The
+           stored digest remains unusable unless the code reached the inbox;
+           the resend window also bounds repeated delivery attempts. */
+        throw FreeError(503, 'Email delivery is not configured or is temporarily unavailable. Please contact the academy or try again later.');
+      }
+      return {
         sent: true,
-        delivered: delivery.delivered === true,
+        delivered: true,
         expiresInMin: rules.OTP_TTL_MIN,
         resendInSec: rules.OTP_RESEND_SEC,
-        returning: !!existing
       };
-      /* The code comes back only when the delivery hook says this deployment
-         has deliberately opted into that (no SMTP, development, and
-         GOC_FREE_2027_DEV_OTP=1). server.js is the only place that decides. */
-      if (!out.delivered && delivery.dev === true) {
-        out.dev = true;
-        out.devCode = code;
-      }
-      return out;
     });
   }
 
@@ -372,14 +398,22 @@ function createFree2027(deps) {
         throw FreeError(403, 'That code is not right. Check your email and try again.');
       }
 
-      otp.usedAt = t;
+      /* All issued codes for the address are invalidated when any current one
+         succeeds. This prevents an older resent code being replayed later. */
+      (ed.otps || []).forEach(function (o) {
+        if (o && o.email === email.email && !o.usedAt) o.usedAt = t;
+      });
       var session = currentSession(ed);
       var p = findParticipantByEmail(session, email.email);
       if (p && p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
       if (!p) {
         session.participantSeq = (session.participantSeq || 0) + 1;
+        var emailKey = email.email.toLowerCase();
+        var permanentId = ed.studentIdsByEmail[emailKey] || uniqueParticipantId(ed);
+        if (ed.studentIds.indexOf(permanentId) < 0) ed.studentIds.push(permanentId);
+        ed.studentIdsByEmail[emailKey] = permanentId;
         p = {
-          id: rules.participantId(session.participantSeq),
+          id: permanentId,
           name: otp.name || rules.cleanName(body.name).name || 'Candidate',
           email: email.email,
           course: otp.course || rules.cleanCourse(body.course, ed.courses).course || 'Other',
@@ -1417,6 +1451,12 @@ function createFree2027(deps) {
         throw FreeError(500, 'The previous session could not be archived, so nothing was changed. Check the data folder is writable.');
       }
 
+      /* Retain permanent student IDs when session records move to the archive. */
+      (session.participants || []).forEach(function (p) {
+        if (!p || !p.id) return;
+        if (ed.studentIds.indexOf(String(p.id)) < 0) ed.studentIds.push(String(p.id));
+        if (p.email && !ed.studentIdsByEmail[String(p.email).toLowerCase()]) ed.studentIdsByEmail[String(p.email).toLowerCase()] = String(p.id);
+      });
       /* Record the archive, then start the new session with fresh records. */
       ed.archives = (ed.archives || []).filter(function (a) { return a && a.file !== file; });
       ed.archives.unshift({

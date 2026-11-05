@@ -41,25 +41,9 @@ body.f27-mode .phone { }
   body.f27-mode .screens { left: 0 !important; }
 }
 
-/* The landing page keeps its own header, hero and footer; the sections that
-   only make sense for the paid hub are held back while the edition is on. */
-body.f27-mode #landing .lp-sec,
-body.f27-mode #landing .lp-stats,
-body.f27-mode #landing .lp-logos,
-body.f27-mode #landing .lp-news-intro,
-body.f27-mode #landing .lp-sch-banner,
-body.f27-mode #landing .lp-footer,
-body.f27-mode #landing .lp-contact { display: none !important; }
-body.f27-mode #landing .lp-hero { display: flex !important; }
-body.f27-mode #landing .lp-hero .hero-btns,
-body.f27-mode #landing .lp-hero .hero-art,
-body.f27-mode #landing .lp-hero .lp-trust { display: none !important; }
-body.f27-mode #landing .lp-actions .lp-link { display: none !important; }
-body.f27-mode #landing .lp-actions::after {
-  content: 'Free Tutorial 2027';
-  font-size: 11.5px; font-weight: 800; letter-spacing: .04em;
-  color: var(--red); text-transform: uppercase;
-}
+/* The original public homepage remains intact and visible in either mode.
+   Only unrelated in-app student screens are disabled while the testing edition
+   is active; the homepage, admin sign-in and admin console remain reachable. */
 
 /* ---- the edition's own screens ------------------------------------------ */
 .f27 { background: var(--bg, #F6F7F9); color: #141821; }

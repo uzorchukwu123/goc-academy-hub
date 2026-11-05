@@ -111,7 +111,7 @@ function waitForBoot(n) {
   head('the seeded accounts are untouched');
   var a = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, a.body.token);
-  ok('the Academic Director signs in and unlocks with the shared passcode, with full access', a.status === 200 && a.body.user.roleKey === 'academic-director' && (await call('GET', '/api/managers', undefined, a.body.token)).status === 200);
+  ok('the Academic Director signs in and unlocks but is denied Founder-only manager controls', a.status === 200 && a.body.user.roleKey === 'academic-director' && (await call('GET', '/api/managers', undefined, a.body.token)).status === 403);
 
   stop();
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');

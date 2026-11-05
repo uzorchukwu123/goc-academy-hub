@@ -1948,6 +1948,7 @@
          already has that tier, otherwise who and when are stamped on the student. */
       setStudentTier: function (id, tier) {
         var e = requireUnlocked(); if (e) return e;
+        if (!core.adminMayUse(session.id, core.adminRoleKey(session.title), 'students.tier')) return fail('Your role does not include this.');
         var want = core.parseTierChange(tier);
         if (!want.ok) return fail(want.error);
         var s = find(students, id);

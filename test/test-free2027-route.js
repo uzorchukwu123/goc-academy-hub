@@ -33,6 +33,7 @@ function head(t) { console.log('\n' + t); }
 
 var SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-f27-test-'));
 var DATA = path.join(SANDBOX, 'data');
+var MAIL_FILE = path.join(DATA, 'mail-capture.jsonl');
 fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(path.join(SANDBOX, 'server'), { recursive: true });
 fs.cpSync(path.join(APP, 'server'), path.join(SANDBOX, 'server'), { recursive: true });
@@ -49,15 +50,19 @@ var child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')],
   cwd: SANDBOX,
   env: Object.assign({}, process.env, {
     PORT: String(PORT),
-    NODE_PATH: path.join(APP, 'node_modules'),
+    NODE_PATH: [path.join(APP, 'test', 'stubs'), path.join(APP, 'node_modules')].join(path.delimiter),
+    GOC_TEST_MAIL_FILE: MAIL_FILE,
+    GOC_FREE_2027_OTP_SECRET: 'local-test-otp-secret-0123456789abcdef',
+    GOC_SMTP_HOST: 'mailpit-test',
+    GOC_SMTP_FROM: 'G.O.C Academy Hub <verification@gocacademy.test>',
     GOC_FOUNDER_PW: 'founder2027',
     GOC_ACADDIR_PW: 'acaddir2027',
     GOC_PASSCODE: '2027',
     GOC_DATA_DIR: DATA,
     /* the central switch: this deployment opens in the edition */
     GOC_FREE_2027: '1',
-    /* no SMTP in a test, so the one-time code is handed back to the caller */
-    GOC_FREE_2027_DEV_OTP: '1'
+    /* Test-only SMTP capture exercises the real delivery hook without exposing
+       the message/code through the public API. */
   }),
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -93,11 +98,24 @@ function waitForBoot(tries) {
   });
 }
 function dataFile() { return JSON.parse(fs.readFileSync(path.join(DATA, 'data.json'), 'utf8')); }
+function mailRows() {
+  if (!fs.existsSync(MAIL_FILE)) return [];
+  return fs.readFileSync(MAIL_FILE, 'utf8').trim().split('\n').filter(Boolean).map(function (x) { return JSON.parse(x); });
+}
+function latestMail(email) {
+  return mailRows().filter(function (x) { return x.message && x.message.to === email; }).slice(-1)[0] || null;
+}
+function mailedCode(email) {
+  var mail = latestMail(email);
+  var match = mail && String(mail.message.text || '').match(/verification code is (\d{6})/i);
+  return match ? match[1] : null;
+}
 function register(name, email) {
   return call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Medicine and Surgery' })
     .then(function (r) {
-      if (!r.body || !r.body.devCode) return Promise.reject(new Error('no code: ' + r.raw));
-      return call('POST', '/api/free2027/register/verify', { email: email, code: r.body.devCode });
+      var code = mailedCode(email);
+      if (r.status !== 200 || !code) return Promise.reject(new Error('verification email missing: ' + r.raw));
+      return call('POST', '/api/free2027/register/verify', { email: email, code: code });
     });
 }
 
@@ -112,11 +130,8 @@ waitForBoot(40).then(async function (h) {
   var cfg = await call('GET', '/api/free2027/config');
   ok('the public config lists both modes and the six screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 6, cfg.raw.slice(0, 120));
   ok('the config carries no participant, address or code', cfg.raw.indexOf('@') < 0 && cfg.raw.indexOf('otpCode') < 0);
-  /* The page decides what to promise before the first registration from these
-     two facts alone: with no SMTP configured here, a code cannot be emailed,
-     and this test deployment has opted in to showing it on screen. */
-  ok('the config says whether a code can actually be emailed, and how',
-    cfg.body.otpDelivery && cfg.body.otpDelivery.available === false && cfg.body.otpDelivery.devAllowed === true,
+  ok('the test mail provider is configured and the public config exposes availability only',
+    cfg.body.otpDelivery && cfg.body.otpDelivery.available === true && cfg.body.otpDelivery.devAllowed === undefined,
     JSON.stringify(cfg.body.otpDelivery));
 
   head('the console signs in (unchanged) and unlocks (unchanged)');
@@ -133,23 +148,55 @@ waitForBoot(40).then(async function (h) {
   var badEmail = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'not-an-email', course: 'Law' });
   ok('a malformed address is refused', badEmail.status === 400, badEmail.raw);
   var start1 = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
-  ok('asking for a code succeeds and hands one back only because this run has no mail sender', start1.status === 200 && !!start1.body.devCode, start1.raw);
+  var code1 = mailedCode('ada@example.com');
+  ok('registration sends a real verification email to the submitted address', start1.status === 200 && start1.body.delivered === true && !!code1 && latestMail('ada@example.com').message.to === 'ada@example.com', start1.raw);
+  ok('the public response never contains the verification code', start1.raw.indexOf(code1) < 0 && start1.body.devCode === undefined && start1.body.code === undefined, start1.raw);
+  ok('the email has the academy identity and expiry guidance', /G\.O\.C Academy Hub/.test(latestMail('ada@example.com').message.text) && /expires in \d+ minutes/.test(latestMail('ada@example.com').message.text), latestMail('ada@example.com').message.text);
   ok('nothing was created by asking for a code', dataFile().free2027.sessions[0].participants.length === 0);
   var again = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
-  ok('a second code within a minute is refused', again.status === 429, again.raw);
-  var wrong = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: '000000' });
+  ok('a second code within the resend window is rate limited', again.status === 429, again.raw);
+  /* Advance only the persisted resend timestamp so this test remains fast. */
+  var otpDb = dataFile(); otpDb.free2027.otps[otpDb.free2027.otps.length - 1].createdAt = Date.now() - 61000;
+  fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(otpDb));
+  var resent = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
+  var code2 = mailedCode('ada@example.com');
+  ok('resending after the cooldown sends a fresh email', resent.status === 200 && resent.body.delivered === true && !!code2, resent.raw);
+  var wrongCode = code2 === '000000' ? '000001' : '000000';
+  var wrong = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: wrongCode });
   ok('a wrong code is refused', wrong.status === 403, wrong.raw);
-  var good = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: start1.body.devCode });
-  ok('the right code verifies and issues a participant ID', good.status === 200 && /^GOC-F27-\d{4}$/.test(good.body.participant.id), good.raw.slice(0, 160));
+  var old = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code1 });
+  ok('the older code is rejected after a resend', old.status === 403, old.raw);
+  var good = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code2 });
+  ok('the emailed code verifies and issues a cryptographically random student ID', good.status === 200 && /^GOC-F27-[A-F0-9]{20}$/.test(good.body.participant.id), good.raw.slice(0, 160));
   ok('the candidate is told their own address only masked', good.body.participant.email.indexOf('ada@') < 0 && /@example\.com$/.test(good.body.participant.email), good.body.participant.email);
-  ok('the code cannot be used twice', (await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: start1.body.devCode })).status === 400);
+  ok('the code cannot be used twice', (await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code2 })).status === 400);
   ada = { token: good.body.token, participant: good.body.participant };
+  var stored = dataFile();
+  ok('verification codes are stored only as salted hashes', stored.free2027.otps.every(function (o) { return o.hash && String(o.hash).length === 64; }) && JSON.stringify(stored.free2027.otps).indexOf(code2) < 0);
   ben = await register('Ben Eze', 'ben@example.com').then(function (r) { return { token: r.body.token, participant: r.body.participant }; });
   cat = await register('Cat Musa', 'cat@example.com').then(function (r) { return { token: r.body.token, participant: r.body.participant }; });
   ok('each verified participant gets their own ID', ada.participant.id !== ben.participant.id && ben.participant.id !== cat.participant.id);
   var stored = dataFile();
   ok('the stored record keeps the address (it is private, not absent)', /ada@example\.com/.test(JSON.stringify(stored.free2027)));
-  ok('no readable one-time code is stored, only a hash', JSON.stringify(stored.free2027.otps || []).indexOf(start1.body.devCode) < 0 || (stored.free2027.otps || []).every(function (o) { return o.hash && String(o.hash).length === 64; }));
+  ok('the permanent ID is associated with the student email in the Free Tutorial registry', stored.free2027.studentIds.indexOf(ada.participant.id) > -1 && stored.free2027.studentIdsByEmail['ada@example.com'] === ada.participant.id);
+  var expiredStart = await call('POST', '/api/free2027/register/start', { name: 'Zed Obi', email: 'zed@example.com', course: 'Law' });
+  var expiredCode = mailedCode('zed@example.com');
+  var expiredDb = dataFile();
+  expiredDb.free2027.otps.filter(function (o) { return o.email === 'zed@example.com'; }).forEach(function (o) { o.expiresAt = Date.now() - 1; });
+  fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(expiredDb));
+  var expiredVerify = await call('POST', '/api/free2027/register/verify', { email: 'zed@example.com', code: expiredCode });
+  ok('an expired email verification code is rejected', expiredStart.status === 200 && expiredVerify.status === 400, expiredVerify.raw);
+  var burstOk = true;
+  for (var oi = 0; oi < 6; oi++) {
+    var br = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', course: 'Law' });
+    if (br.status !== 200) burstOk = false;
+    var burstDb = dataFile();
+    var burstRows = burstDb.free2027.otps.filter(function (o) { return o.email === 'limit@example.com'; });
+    if (burstRows.length) burstRows[burstRows.length - 1].createdAt = Date.now() - 61000;
+    fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(burstDb));
+  }
+  var limited = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', course: 'Law' });
+  ok('verification email requests have an hourly per-address cap', burstOk && limited.status === 429, limited.raw);
 
   head('the administrator creates and schedules the activities');
   var qbank = await call('GET', '/api/questions?section=practice&kind=objective', undefined, adm);
@@ -340,6 +387,17 @@ waitForBoot(40).then(async function (h) {
   ok('an unknown lesson cannot be edited', (await call('PUT', '/api/free2027/admin/lessons/F27-L-999', { title: 'Ghost lesson' }, adm)).status === 404);
   var all2 = await call('GET', '/api/free2027/admin/lessons', undefined, acadT);
   ok('both administrators read the same catalogue', all2.status === 200 && all2.body.lessons.length === 2, all2.raw.slice(0, 200));
+  ok('the Academic Director cannot change the Free Tutorial site mode',
+    (await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, acadT)).status === 403);
+  ok('the Academic Director cannot archive programme/system data',
+    (await call('GET', '/api/free2027/admin/archives', undefined, acadT)).status === 403);
+  var finMade = await call('POST', '/api/managers', { name: 'Local Finance', role: 'finance', password: 'starter123', passcode: '4821' }, adm);
+  var finLogin = await call('POST', '/api/auth/login', { id: finMade.body.manager.id, password: 'starter123' });
+  var finToken = finLogin.body.token;
+  await call('POST', '/api/auth/password', { currentPassword: 'starter123', newPassword: 'finance-1234' }, finToken);
+  await call('POST', '/api/auth/unlock', { passcode: '4821' }, finToken);
+  ok('a non-academic management role cannot open Free Tutorial administration',
+    (await call('GET', '/api/free2027/admin/overview', undefined, finToken)).status === 403);
 
   head('a candidate works through the lessons, and the console sees it');
   var before = await call('GET', '/api/free2027/programme', undefined, ada.token);
@@ -428,12 +486,10 @@ waitForBoot(40).then(async function (h) {
   process.exit(fails ? 1 : 0);
 });
 
-/* Phase three: a production deployment with the developer switch still set.
-   GOC_FREE_2027_DEV_OTP must never hand a code back to the browser here —
-   without a real mail sender, registration simply cannot complete, and the
-   public config has to say so before the first candidate tries. */
+/* Phase three: with no SMTP sender, production must expose a clear config
+   error and must not pretend that an email was sent or return a code. */
 async function phaseThree() {
-  head('a production deployment never shows a code on screen');
+  head('missing SMTP is an explicit configuration error in production');
   var DATA2 = path.join(SANDBOX, 'data-prod');
   fs.mkdirSync(DATA2, { recursive: true });
   var child3 = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')], {
@@ -443,7 +499,7 @@ async function phaseThree() {
       /* a production-like run refuses to boot on the published demo secrets,
          so this one is given real ones (and no SMTP). */
       GOC_FOUNDER_PW: 'prod-founder-2027', GOC_ACADDIR_PW: 'prod-acaddir-2027', GOC_PASSCODE: '918273',
-      GOC_DATA_DIR: DATA2, GOC_FREE_2027: '1', GOC_FREE_2027_DEV_OTP: '1',
+      GOC_DATA_DIR: DATA2, GOC_FREE_2027: '1',
       NODE_ENV: 'production'
     }),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -455,12 +511,12 @@ async function phaseThree() {
     var r = await waitForBoot(40);
     ok('the edition still opens in production', r.body && r.body.free2027 && r.body.free2027.on === true, r.raw + ' ' + prodLog.slice(-300));
     var c = await call('GET', '/api/free2027/config');
-    ok('the config says a code cannot be emailed and will not be shown',
-      c.body.otpDelivery && c.body.otpDelivery.available === false && c.body.otpDelivery.devAllowed === false,
+    ok('the public config says SMTP is unavailable without advertising a bypass',
+      c.body.otpDelivery && c.body.otpDelivery.available === false && c.body.otpDelivery.devAllowed === undefined,
       JSON.stringify(c.body.otpDelivery));
     var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', course: 'Law' });
-    ok('registration reports the code was not delivered', reg.status === 200 && reg.body.delivered === false, reg.raw.slice(0, 200));
-    ok('and no code is handed back, even with the developer switch set', reg.body.dev !== true && reg.body.devCode === undefined, reg.raw.slice(0, 200));
+    ok('registration fails clearly instead of pretending to send an email', reg.status === 503 && /email verification is not configured/i.test(reg.body.error || reg.body.message || ''), reg.raw.slice(0, 200));
+    ok('no verification code is handed back in the error response', !/\b\d{6}\b/.test(reg.raw), reg.raw.slice(0, 200));
     ok('nothing was created from an unproved address', ((JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027 || {}).sessions || [{}])[0].participants === undefined ||
       (JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027.sessions[0].participants || []).length === 0);
   } finally {

@@ -134,14 +134,16 @@
     return out.slice(0, 60);
   }
 
-  /* A participant ID is issued by the server, never chosen by the client:
-     GOC-F27-0001 upward. It identifies a candidate across every activity of
-     the session and is the only handle the public leaderboard ever shows. */
-  var ID_RE = /^GOC-F27-\d{3,6}$/;
+  /* A participant ID is generated on the server from cryptographically random
+     bytes. It is deliberately non-sequential and carries no personal data or
+     registration count. The server checks persisted IDs before accepting it;
+     this helper only formats/validates its public shape. */
+  var ID_RE = /^GOC-F27-[A-F0-9]{20}$/;
   function isParticipantId(v) { return ID_RE.test(String(v == null ? '' : v).trim().toUpperCase()); }
-  function participantId(n) {
-    var k = Math.max(1, Math.floor(Number(n) || 1));
-    return 'GOC-F27-' + (k < 10 ? '000' + k : k < 100 ? '00' + k : k < 1000 ? '0' + k : String(k));
+  function participantId(randomHex) {
+    var value = String(randomHex == null ? '' : randomHex).toUpperCase();
+    if (!/^[A-F0-9]{20}$/.test(value)) throw new Error('A 20-character cryptographic ID value is required.');
+    return 'GOC-F27-' + value;
   }
 
   /* The shape the PUBLIC side of the site may hold. No email address, no OTP,

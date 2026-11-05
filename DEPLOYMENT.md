@@ -183,74 +183,85 @@ next 17:00 window, and one older than 2 days is never mailed. Who has been email
 is kept in `data.json` (`broadcastMail`) and removed with the broadcast. An email
 that fails is retried on later sweeps, up to 3 times per student.
 
-### 2027 Free Tutorial Edition (temporary, switchable)
+### 2027 Free Tutorial Edition (testing edition)
 
-A second, temporary way to open the hub: a **2027 Free Tutorial** homepage plus a
-CBT Portal (Weekly Assessments, Competitions, Competition Leaderboard) for
-students who register with a name, an email address and an intended course — no
-password. **Original Mode is the default and the fallback**: with the switch off,
-unset, or the server unreachable, the hub is exactly what it always was. Nothing
-in the hub is deleted or overwritten to make room for the edition; it is one
-class on `<body>` plus its own screens, and its data lives under `free2027` in
-`data.json`.
+The original G.O.C Academy Hub homepage remains the public landing page in every
+mode, with its existing branding, navigation, sections, and Science Subjects
+Statistics card intact. A single click on the existing card marked **4 Science
+subjects** opens the existing staff login; there is no separate public Admin
+Console link. Staff still authenticate with their existing account credentials
+and the console passcode.
 
-**It is off unless a deployment turns it on.**
+The 2027 Free Tutorial registration, courses, lessons, activities, quizzes,
+progress, and audit records are namespaced under `db.free2027`. The mode can
+restrict unrelated original student screens during testing, but does not remove
+or rewrite them. Existing Appwrite integration for original G.O.C modules stays
+in place; Free Tutorial routes use the local question-bank snapshot and do not
+call Appwrite Database APIs. Do not set `GOC_APPWRITE_OFF` in production.
 
-```text
-GOC_FREE_2027=1              # the master switch. Unset or 0 ⇒ Original Mode only,
-                             # and every /api/free2027/* route 404s.
-GOC_FREE_2027_DEV_OTP=1      # hand the one-time code back to the page instead of
-                             # emailing it. ONLY outside production (NODE_ENV must
-                             # not be 'production'); ignored in production, always.
-```
+**Enable the edition** with `GOC_FREE_2027=1` or from the Founder-only Free
+Tutorial settings. It is disabled by default on a fresh deployment. Turning it
+off restores the original hub without deleting either programme or original
+hub records.
 
-**An email sender is required in production.** Registration is proved by a
-one-time code. Without `GOC_SMTP_*` (the same settings the contact form and study
-reminders use) no code can be delivered, so registration stops at the code step
-and the candidate is told so — the homepage says it before the form is filled in.
-`GOC_FREE_2027_DEV_OTP=1` is for a local or staging box only; in a production run
-the code is never shown on screen, whatever that variable says. The console's
-**2027 Free Tutorial** panel shows whether a sender is configured, so check it
-once after deploying.
+#### SMTP email verification
 
-Working on the edition locally, in Chrome, with no Appwrite access at all? See
-[`LOCAL-DEVELOPMENT.md`](./LOCAL-DEVELOPMENT.md) for the exact commands
-(`GOC_FREE_2027=1`, `GOC_DATA_DIR=./local-test-data`, `PORT=8080`,
-`GOC_APPWRITE_OFF=1`) and the click-through for both the candidate and the two
-programme administrators.
+A working SMTP sender is required before students can register. The server
+returns an explicit configuration/delivery error when SMTP is absent or fails;
+it never claims a message was sent, returns a code to the browser, logs a code,
+or stores a code in plaintext. Codes are random, salted-hash persisted, expire
+after the configured interval, single-use, and rate-limited. The registration
+page and Admin Console show whether mail delivery is configured.
 
-The edition's records never leave the local file: `/api/health` reports
-`free2027.storage: "local-json"` and the exact path in use. The console's question
-picker reads `db.questions` **locally** (`/api/free2027/admin/questions`) rather
-than the Appwrite-backed `/api/questions`, so papers can be built and marked even
-while the Database API is unavailable. `GOC_APPWRITE_OFF=1` makes the whole
-process local for a development run and must never be set in production.
-
-`GOC_DATA_DIR` decides where everything is written, the edition included:
+Set the following environment variables (do not commit credentials). Generate the OTP secret with a cryptographically secure random generator, for example `openssl rand -hex 32`:
 
 ```text
-$GOC_DATA_DIR/data.json                              # the whole store, edition state under `free2027`
-$GOC_DATA_DIR/free2027-archives/free2027-archive-<session>.json   # one file per archived session
+GOC_SMTP_HOST=smtp.your-provider.example
+GOC_SMTP_PORT=587
+GOC_SMTP_SECURE=false          # true for implicit TLS (usually port 465)
+GOC_SMTP_USER=provider-user
+GOC_SMTP_PASS=provider-password
+GOC_SMTP_FROM=G.O.C Academy Hub <no-reply@your-verified-domain.example>
+GOC_FREE_2027_OTP_SECRET=<at-least-32-random-characters>
 ```
 
-**Session archiving.** The console's *Sessions* tab (needs `{label, confirm:true}`)
-writes the outgoing session — its participants, activities, attempts, results and
-competition rankings — to its own JSON file, by temp file and rename, and starts a
-new, empty session. Archives are readable only through the console
-(`/api/free2027/admin/archives`). Because **temporary deployment storage is not
-permanent**, copy `free2027-archives/` off the box (or keep `GOC_DATA_DIR` on a
-persistent disk, as "Step 1 — Persistent data directory" already requires) or the
-archive is lost with the next redeploy. No original G.O.C record is ever read,
-overwritten or deleted by an archive.
+`GOC_SMTP_USER` and `GOC_SMTP_PASS` may both be omitted for a local SMTP capture
+service. For local testing with Mailpit, run its SMTP listener on `127.0.0.1:1025`
+and set `GOC_SMTP_HOST=127.0.0.1`, `GOC_SMTP_PORT=1025`,
+`GOC_SMTP_SECURE=false`, and `GOC_SMTP_FROM=G.O.C Academy Hub <test@gocacademy.test>`.
+Open the Mailpit inbox to read the actual email and code. This is real SMTP
+handoff to the local capture service, not a production bypass. Resend is subject
+to the same cooldown and hourly limit.
 
-**Turning it on and off.** Deploy with `GOC_FREE_2027=1`, sign in to the console,
-open the **2027 Free Tutorial** tile, and switch the mode (the switch asks for
-confirmation and is reversible in one click — Original Mode restores the tab bar,
-the sidebar and the admin entrance untouched). Then create and schedule the first
-activity and publish it. The administrator reaches the console in the edition by
-five quick clicks on the homepage's "**4** Science subjects" card, which opens the
-hub's own staff sign-in and passcode; the server authorises every console route
-exactly as it always did.
+#### Data, identifiers, and local testing
+
+The local JSON data file continues to support existing app operations, but the
+new Free Tutorial records are scoped to `db.free2027`; the implementation does
+not migrate original Appwrite-backed modules. Use a scratch `GOC_DATA_DIR` while
+testing so test records never touch the normal server data file:
+
+```text
+$GOC_DATA_DIR/data.json                                  # db.free2027 plus existing local store
+$GOC_DATA_DIR/free2027-archives/free2027-archive-<session>.json
+```
+
+A student receives an ID of the form `GOC-F27-<20 random hex characters>` from
+cryptographic random bytes. The server checks the permanent ID registry before
+issuing one, keeps the email-to-ID association within `db.free2027`, and does
+not change the ID on logout, re-verification, or a new tutorial session. It is
+not sequential and contains no personal information. The ID is shown on the
+student's programme dashboard and in administrative participant/progress
+records and search.
+
+`GOC_DATA_DIR` must point to persistent storage in production so profiles,
+enrolments, progress, quiz attempts, settings, audit records, and identity
+registry survive restarts. Session archives should be separately backed up.
+Only the Founder may change Free Tutorial mode/edition settings or archive
+programme sessions; the Academic Director can manage academic programme content
+and review participation/progress, but cannot access these system controls.
+
+See [`LOCAL-DEVELOPMENT.md`](./LOCAL-DEVELOPMENT.md) for the commands and
+role-specific authentication details.
 
 ### Shipped default secrets
 
@@ -418,8 +429,7 @@ stays green offline.
 - [ ] `GOC_APPWRITE_OFF` is **not** set in production (it is a local-development
       switch that stops the hub contacting Appwrite entirely).
 - [ ] 2027 Free Tutorial Edition, if this deployment opens it: `GOC_FREE_2027=1`, a real SMTP
-      sender configured (the console's *2027 Free Tutorial* panel says whether one is), no
-      `GOC_FREE_2027_DEV_OTP` in production, `GOC_DATA_DIR` persistent, and the archive folder
+      sender configured (the console's *2027 Free Tutorial* panel says whether one is), SMTP secrets configured only via environment variables, `GOC_DATA_DIR` persistent, and the archive folder
       copied off the box on a schedule. With the switch unset the hub behaves exactly as
       before and every `/api/free2027/*` route is a 404.
 - [ ] `server/backups/` is accumulating rotating local copies of `data.json`

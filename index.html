@@ -1474,6 +1474,7 @@
             <p class="f27-err" id="freeOtpErr" role="alert"></p>
             <p class="f27-dev-note" id="freeOtpDev" hidden></p>
             <button class="btn btn-red btn-block" id="freeOtpBtn" onclick="freeRegisterVerify()">Verify and continue</button>
+            <button class="btn btn-outline btn-block" id="freeOtpResendBtn" style="margin-top:9px" onclick="freeRegisterResend()">Resend verification code</button>
             <button class="btn btn-outline btn-block" style="margin-top:9px" onclick="freeRegisterRestart()">Use a different email</button>
           </div>
         </div>
@@ -1563,10 +1564,9 @@
       <div class="f27-sec" id="freeBoardBody"><div class="ad-loading">Loading the board…</div></div>
     </section>
 
-    <!-- The hidden entrance's gate: the same administrator sign-in the hub
-         already uses, shown here because in 2027 Free Tutorial Mode the
-         landing page's Log in button is gone. Reuses #loginId/#loginPw and
-         login(), so the server-side authorisation is unchanged. -->
+    <!-- Admin Console sign-in. Reached from the original homepage's existing
+         Science Subjects Statistics card; standard staff authentication and
+         the additional console passcode gate are both retained. -->
     <section class="screen auth" id="free-admin">
       <div class="auth-brandbar">
         <div class="lp-brand"><span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><span class="bt">G.O.C Academy Hub</span></div>

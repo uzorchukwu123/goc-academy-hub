@@ -1962,7 +1962,10 @@ function clean(v, max) {
 let _mailTransport;
 function getMailTransport() {
   if (_mailTransport !== undefined) return _mailTransport;
-  if (!process.env.GOC_SMTP_HOST || !process.env.GOC_SMTP_USER || !process.env.GOC_SMTP_PASS) {
+  const host = String(process.env.GOC_SMTP_HOST || '').trim();
+  const user = String(process.env.GOC_SMTP_USER || '').trim();
+  const pass = String(process.env.GOC_SMTP_PASS || '');
+  if (!host || (!!user !== !!pass)) {
     _mailTransport = null;
     return _mailTransport;
   }
@@ -1970,13 +1973,13 @@ function getMailTransport() {
     // eslint-disable-next-line global-require
     const nodemailer = require('nodemailer');
     _mailTransport = nodemailer.createTransport({
-      host: process.env.GOC_SMTP_HOST,
+      host,
       port: Number(process.env.GOC_SMTP_PORT) || 587,
       secure: process.env.GOC_SMTP_SECURE === '1' || process.env.GOC_SMTP_SECURE === 'true',
-      auth: { user: process.env.GOC_SMTP_USER, pass: process.env.GOC_SMTP_PASS }
+      ...(user ? { auth: { user, pass } } : {})
     });
   } catch (e) {
-    console.warn('[contact] GOC_SMTP_* is set but the optional "nodemailer" package is not installed — run npm install. Falling back to the stored copy only.');
+    console.error('[mail] SMTP transport could not be initialized. Check dependencies and GOC_SMTP_* configuration.');
     _mailTransport = null;
   }
   return _mailTransport;
@@ -1995,57 +1998,56 @@ async function sendContactEmail(name, email, message) {
 }
 
 /* --------------------------------------------- 2027 Free Tutorial Edition
-   The temporary edition is a module of its own (server/lib/free2027.js); this
-   is only the wiring: the hub's own data accessors, the question bank (read
-   only — marking reuses core.markAttempt), the mail transport already built
-   for the contact form and the reminders, and the folder the archives go in.
-
-   Delivery of a one-time code needs SMTP (GOC_SMTP_HOST / GOC_SMTP_USER /
-   GOC_SMTP_PASS — the same three the contact form and the reminders use).
-   With no SMTP configured the edition still works end to end, but the page
-   says plainly that no code was emailed; a deployment may set
-   GOC_FREE_2027_DEV_OTP=1 to let the server hand the code back so the flow can
-   be tried before the mail account is wired up. That is refused whenever
-   NODE_ENV=production. */
+   Verification uses the configured SMTP transport. Missing SMTP configuration
+   is surfaced as an explicit 503; codes are never returned to the browser or
+   written to logs. A local Mailpit/MailHog SMTP listener is supported by the
+   same environment-based transport for development/testing. */
 function freeOtpDelivery() {
-  const transport = getMailTransport();
-  return {
-    /* the console shows this, so the administrator knows whether codes can
-       really reach a candidate before the first candidate tries */
-    available: !!transport,
-    devAllowed: !transport && process.env.NODE_ENV !== 'production' && process.env.GOC_FREE_2027_DEV_OTP === '1'
-  };
+  const host = String(process.env.GOC_SMTP_HOST || '').trim();
+  const user = String(process.env.GOC_SMTP_USER || '').trim();
+  const pass = String(process.env.GOC_SMTP_PASS || '');
+  const otpSecret = String(process.env.GOC_FREE_2027_OTP_SECRET || '');
+  const configured = otpSecret.length >= 32 && !!host && (!!user === !!pass) && !!getMailTransport();
+  return { available: configured };
 }
 async function deliverFreeOtp(m) {
   const transport = getMailTransport();
-  if (!transport) {
-    console.warn('[free2027] no SMTP configured — the one-time code for ' + m.email + ' was NOT emailed.');
-    /* The code is only ever handed back to the browser when a deployment has
-       deliberately opted in with GOC_FREE_2027_DEV_OTP=1 (and never in
-       production). Otherwise nothing verifies and the page says so. */
-    if (freeOtpDelivery().devAllowed) return { delivered: false, dev: true };
-    return { delivered: false, dev: false };
-  }
-  await transport.sendMail({
-    from: process.env.GOC_SMTP_FROM || process.env.GOC_SMTP_USER,
-    to: m.email,
-    subject: 'Your G.O.C Academy 2027 Free Tutorial verification code',
-    text: 'Hello ' + (m.name || '') + ',\n\n' +
-      'Your verification code is ' + m.code + '.\n\n' +
-      'It expires in ' + FREE2027.OTP_TTL_MIN + ' minutes. If you did not ask for it, ignore this email.\n\n' +
-      '— G.O.C Academy',
-    html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">' +
-      '<p>Hello ' + String(m.name || '').replace(/[<>&"]/g, '') + ',</p>' +
-      '<p>Your G.O.C Academy 2027 Free Tutorial verification code is</p>' +
-      '<p style="font-size:30px;font-weight:800;letter-spacing:6px;margin:18px 0;color:#DC2626">' + m.code + '</p>' +
-      '<p style="color:#6b7280;font-size:13px">It expires in ' + FREE2027.OTP_TTL_MIN +
-      ' minutes. If you did not ask for it, ignore this email.</p>' +
-      '<p style="color:#6b7280;font-size:13px">— G.O.C Academy</p></div>'
+  if (!transport) return { delivered: false };
+  const from = process.env.GOC_SMTP_FROM || process.env.GOC_SMTP_USER || 'G.O.C Academy Hub <no-reply@gocacademy.com>';
+  const expires = FREE2027.OTP_TTL_MIN + ' minutes';
+  const safeName = String(m.name || 'Student').replace(/[&<>"']/g, function (c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
   });
-  return { delivered: true, dev: false };
+  try {
+    await transport.sendMail({
+      from,
+      to: m.email,
+      subject: 'Your G.O.C Academy Hub 2027 Free Tutorial verification code',
+      text: 'Hello ' + (m.name || 'Student') + ',\n\n' +
+        'Your G.O.C Academy Hub verification code is ' + m.code + '.\n\n' +
+        'This code expires in ' + expires + ' and can be used only once. If you did not request it, ignore this message.\n\n' +
+        'G.O.C Academy Hub\n2027 Free Tutorial Edition',
+      html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937;border:1px solid #e5e7eb;border-radius:12px">' +
+        '<div style="font-size:18px;font-weight:800;color:#991b1b">G.O.C Academy Hub</div>' +
+        '<p style="font-size:12px;color:#667085">2027 Free Tutorial Edition</p>' +
+        '<p>Hello ' + safeName + ',</p>' +
+        '<p>Use this verification code to complete your student registration:</p>' +
+        '<p style="font-size:32px;font-weight:800;letter-spacing:7px;margin:20px 0;color:#DC2626">' + m.code + '</p>' +
+        '<p style="color:#667085;font-size:13px">This code expires in ' + expires + ' and can be used only once. If you did not request it, ignore this email.</p>' +
+        '<hr style="border:0;border-top:1px solid #e5e7eb;margin:22px 0">' +
+        '<p style="color:#667085;font-size:12px">G.O.C Academy Hub · Raising Smart Scholars for Academic Excellence</p></div>'
+    });
+    return { delivered: true };
+  } catch (e) {
+    /* Provider errors may contain addresses or message fragments. Keep logs
+       intentionally non-sensitive. */
+    console.error('[free2027] Verification email delivery failed. Check SMTP provider configuration.');
+    return { delivered: false };
+  }
 }
 const free2027 = free2027Lib.createFree2027({
   env: process.env,
+  otpSecret: process.env.GOC_FREE_2027_OTP_SECRET,
   dataDir: DATA_DIR,
   readData: () => readData(),
   writeData: db => writeData(db),
@@ -3718,7 +3720,7 @@ const ROUTES = [
       }
 
       /* Roles slice (d) follow-up: every management role may open the Overview, but each sees only
-         the figures its capabilities allow (core.overviewFor); the Founder and the seeded accounts see all four. */
+         the figures its capabilities allow (core.overviewFor); the Founder sees all four; the Academic Director sees only role-authorized figures. */
       okJson(res, core.overviewFor(sess.data.id, sess.data.roleKey, { studentsTotal, activeToday, avgScorePercent, lessonsPublished }));
     } },
 
@@ -4569,7 +4571,7 @@ const ROUTES = [
 
   /* Management (Founder and Academic Director, via the console gate) reads every entry, optionally narrowed with
      ?tutorId=, ?studentId=, ?kind=tutor-view|contact-view, ?from= and ?to= (Nigeria days, YYYY-MM-DD). */
-  /* Roles slice (c), step 7: read the manager log. The Founder (and the two seeded accounts) read all of it;
+  /* Roles slice (c), step 7: read the manager log. The Founder reads all of it;
      any other manager reads only their own entries (core.managerLogFor decides, from the session, never the request). */
   { method: 'GET', path: /^\/api\/audit\/manager-actions$/, need: 'console', cap: 'overview.own', handler: (req, res, body, sess) => {
       const q = new URL(req.url, 'http://x').searchParams;
@@ -5006,7 +5008,7 @@ const ROUTES = [
 
   /* ---- Alerts on the console home. Unseen ones only; the admin taps Seen. ---- */
   /* Roles slice (c), step 6: each manager sees only the alerts that belong to their role (core.alertsFor);
-     the Founder and the two seeded accounts see all of them. */
+     the Founder sees all of them; */
   { method: 'GET', path: /^\/api\/alerts$/, need: 'console', cap: 'overview.own', handler: (req, res, body, sess) => {
       const list = core.unseenAlerts(core.alertsFor(readData().alerts, sess.data.id, sess.data.roleKey));
       okJson(res, { count: list.length, alerts: list });
@@ -8879,7 +8881,7 @@ const ROUTES = [
          registration: without it the homepage would promise an email that no
          sender can deliver. Only the two booleans are published. */
       const d = freeOtpDelivery();
-      out.otpDelivery = { available: d.available, devAllowed: d.devAllowed };
+      out.otpDelivery = { available: d.available };
       okJson(res, out);
     }) },
 
@@ -9389,11 +9391,22 @@ const server = http.createServer(async (req, res) => {
     if (route.need !== 'staff' && !sess.data.unlocked) return errJson(res, 403, 'Enter the access passcode first.');
     if (route.need !== 'staff' && sess.data.mustChangePassword) return errJson(res, 403, 'Change your starting password first.');
     // Priority 8 — the Founder check is a server-side gate, not a hidden button.
-    /* Roles slice (b), step 2: a console route is checked against the role's capability.
-       No route carries a `cap` yet and the two seeded accounts keep full access, so today this
-       refuses no one; it starts to bite only for managers issued in a later slice. */
+    /* Console routes are checked against the session role's capability. The Founder
+       alone bypasses the map; the seeded Academic Director is not a superuser. */
+    if (route.need === 'console' && /^\/api\/free2027\/admin\//.test(urlPath) &&
+        ['founder', 'academic-director'].indexOf(sess.data.roleKey) < 0) {
+      return errJson(res, 403, 'The Free Tutorial Console is for the Founder and Academic Director.');
+    }
     if (route.need === 'console' && !core.adminMayUse(sess.data.id, sess.data.roleKey, route.cap)) {
       return errJson(res, 403, 'Your role does not include this.');
+    }
+    /* The Free Tutorial mode/edition switches and session archive controls are
+       system-level operations, reserved for the Founder rather than the
+       Academic Director's academic/programme role. */
+    if (route.need === 'console' && sess.data.roleKey === 'academic-director' &&
+        /^\/api\/free2027\/admin\//.test(urlPath) &&
+        (/^\/api\/free2027\/admin\/(mode|edition)$/.test(urlPath) || route.cap === 'system.migrate')) {
+      return errJson(res, 403, 'Only the Founder can change Free Tutorial system settings or archive programme data.');
     }
     if (route.need === 'founder' && sess.data.title !== 'Founder') {
       return errJson(res, 403, 'Only the Founder can change management credentials.');

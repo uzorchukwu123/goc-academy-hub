@@ -20,9 +20,8 @@
         enforced on the server, which is the authority: this side exists so the
         page behaves sensibly, not so it can be trusted.
 
-     3. THE HIDDEN ENTRANCE. Five clicks, quickly, on the "4 Science subjects"
-        card reveal the administrator sign-in. The card itself is untouched: the
-        script only listens. A pause longer than the window restarts the count.
+     3. THE ADMIN ENTRY. One click on the existing "4 Science subjects" card
+        opens the administrator sign-in. It is the only public console entry.
 
    Loading order: js/goc-free-2027.js (rules), js/api.js, js/app.js, then this
    file. Requires js/free2027-api.js. */
@@ -46,12 +45,6 @@
   F.saveQueue = {};
   F.gateClicks = 0;
   F.gateAt = 0;
-
-  /* The click window and the number of clicks that opens the gate. Five
-     clicks "within a short time window"; a pause longer than GATE_WINDOW_MS
-     between two clicks restarts the count. */
-  var GATE_CLICKS = 5;
-  var GATE_WINDOW_MS = 2500;
 
   function $(id) { return document.getElementById(id); }
   function esc(v) {
@@ -100,21 +93,13 @@
     var fine = $('freeHomeNote');
     if (fine && F.config) {
       var del = F.config.otpDelivery || null;
-      if (del && del.available === false) {
-        /* No sender: say what actually happens. In development the code is
-           shown on screen; in production nothing can deliver it, so the visitor
-           is told before they fill the form rather than after. */
-        fine.textContent = del.devAllowed
-          ? 'Registration is verified by a one-time email code. The academy has not connected its email sender yet, so codes are shown on screen for now.'
-          : 'Registration is verified by a one-time email code. The academy has not connected its email sender yet, so registration cannot be completed until it does.';
-      } else {
-        fine.textContent = 'Registration is verified by a one-time code sent to your email address.';
-      }
+      fine.textContent = del && del.available === false
+        ? 'Email verification is required. Registration is temporarily unavailable until the academy configures email verification.'
+        : 'Registration is verified by a one-time code sent to your email address.';
     }
     if (free) {
       wireLanding(0);
       freeHomeLoad();
-      if (!o.stay && typeof global.go === 'function') global.go('free-home');
     }
   }
   F.applyMode = applyMode;
@@ -214,32 +199,40 @@
 
     var btn = $('freeRegBtn');
     busy(btn, true);
+    F.pendingName = n.name;
+    F.pendingEmail = e.email;
+    F.pendingCourse = c.course;
     api.registerStart({ name: n.name, email: e.email, course: c.course }).then(function (r) {
       busy(btn, false);
-      F.pendingEmail = e.email;
       var step1 = $('freeRegStep1'), step2 = $('freeRegStep2');
       if (step1) step1.hidden = true;
       if (step2) step2.hidden = false;
       var to = $('freeOtpTo');
       if (to) to.textContent = e.email;
       var dev = $('freeOtpDev');
-      if (dev) {
-        if (r.devCode) {
-          dev.hidden = false;
-          dev.textContent = 'This site has no email sender configured yet, so your code is shown here: ' + r.devCode;
-        } else {
-          dev.hidden = true;
-          dev.textContent = '';
-        }
-      }
+      if (dev) { dev.hidden = true; dev.textContent = ''; }
       var otp = $('freeOtp');
       if (otp) { otp.value = ''; otp.focus(); }
-      if (r.delivered === false && !r.devCode) {
-        showErr('freeOtpErr', 'The code could not be emailed from this site yet. Ask the academy to finish setting up its email sender, or try again later.');
-      }
+      showErr('freeOtpErr', '');
     }, function (er) {
       busy(btn, false);
       showErr('freeRegErr', er.message || 'Could not send the code.');
+    });
+  };
+
+  F.freeRegisterResend = function () {
+    if (!F.pendingEmail || !F.pendingName || !F.pendingCourse) {
+      showErr('freeOtpErr', 'Start registration again to request a verification code.');
+      return;
+    }
+    var btn = $('freeOtpResendBtn');
+    busy(btn, true);
+    api.registerStart({ name: F.pendingName, email: F.pendingEmail, course: F.pendingCourse }).then(function () {
+      busy(btn, false);
+      showErr('freeOtpErr', 'A new verification code has been emailed. Older codes are no longer valid.');
+    }, function (er) {
+      busy(btn, false);
+      showErr('freeOtpErr', er.message || 'Could not resend the code.');
     });
   };
 
@@ -732,29 +725,14 @@
     });
   };
 
-  /* =================================================== 9. HIDDEN ADMIN GATE
-     Exactly GATE_CLICKS clicks on the "4 Science subjects" card, each within
-     GATE_WINDOW_MS of the one before. The card is not restyled, renamed or
-     given a hint; the only thing that changes after the fifth click is that the
-     administrator sign-in is shown. A pause longer than the window resets the
-     count to one (the click that broke the pause still counts as a fresh
-     first click, so a slow tap-tap-tap-tap-tap never opens it by accident). */
+  /* =================================================== 9. ADMIN ENTRY
+     The existing homepage statistic is the single public console gateway.
+     It opens the existing staff sign-in; authentication and the console's
+     passcode gate remain enforced by the original server mechanisms. */
   F.freeGateClick = function () {
-    var now = Date.now();
-    if (!F.gateAt || now - F.gateAt > GATE_WINDOW_MS) F.gateClicks = 1;
-    else F.gateClicks += 1;
-    F.gateAt = now;
-    if (F.gateClicks >= GATE_CLICKS) {
-      F.gateClicks = 0;
-      F.gateAt = 0;
-      revealAdminGate();
-    }
+    revealAdminGate();
   };
   function revealAdminGate() {
-    /* Only while the edition is showing. The card is rendered on the landing
-       page alone, so asking whether #landing is the active screen adds nothing
-       and is wrong here: in the edition the visitor is on #free-home. */
-    if (!F.on || F.mode !== rules.MODE_FREE) return;
     global.go('free-admin');
     var note = $('freeAdminNote');
     if (note) note.textContent = 'The console keeps its own passcode. Attempts are limited and logged.';
@@ -816,8 +794,7 @@
 
   function hydrate() {
     wireLanding(0);
-    /* Delegated listener: five quick clicks anywhere on the card, even if the
-       landing markup is re-rendered underneath. */
+    /* Delegated listener survives homepage animation/re-rendering. */
     document.addEventListener('click', function (ev) {
       var t = ev.target;
       if (!t || !t.closest) return;
@@ -837,10 +814,9 @@
     return F.ready;
   }
 
-  /* In 2027 Free Tutorial Mode the hub's own screens are not reachable by a
-     visitor: a stray call to go('home') lands on the edition's homepage
-     instead. The administrator's own screens (the gate and the console) stay
-     reachable, and only after the server has accepted the sign-in. */
+  /* The original public homepage always remains the initial page. In Free
+     Tutorial mode, legacy student routes resolve to that edition's portal, but
+     no mode switch hides or replaces the G.O.C Academy Hub homepage. */
   function hookGo() {
     if (!global.go || global.go.__f27) return;
     var original = global.go;
@@ -859,7 +835,7 @@
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
-    'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freePortalLoad', 'applyMode',
+    'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];

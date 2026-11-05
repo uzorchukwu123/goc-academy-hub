@@ -47,6 +47,9 @@
   A.archive = null;
 
   function $(id) { return document.getElementById(id); }
+  function roleKey() { return global.admMe && String(global.admMe.roleKey || ''); }
+  function isFounder() { return roleKey() === 'founder' || (global.admMe && global.admMe.id === 'GOC-A-001'); }
+  function mayManageProgramme() { return isFounder() || roleKey() === 'academic-director'; }
   function esc(v) {
     return String(v == null ? '' : v)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -104,8 +107,9 @@
       '<div id="f27AdmBody"><div class="ad-loading">Reading the programme…</div></div></div>';
   }
   function tabsHtml() {
-    var tabs = [['mode', 'Website mode'], ['participants', 'Participants'], ['activities', 'Activities'],
-      ['results', 'Results'], ['leaderboards', 'Leaderboards'], ['records', 'Session records'], ['sessions', 'Sessions & archive']];
+    var tabs = [['mode', 'Programme settings'], ['participants', 'Participants'], ['activities', 'Activities'],
+      ['results', 'Results'], ['leaderboards', 'Leaderboards'], ['records', 'Session records']];
+    if (isFounder()) tabs.push(['sessions', 'Sessions & archive']);
     return tabs.map(function (t) {
       return '<button data-f27adm="' + t[0] + '"' + (A.tab === t[0] ? ' class="on"' : '') +
         ' onclick="f27AdmTab(\'' + t[0] + '\')">' + t[1] + '</button>';
@@ -130,10 +134,12 @@
        are: the edition's records are not a console section in the capability
        map, they are a temporary programme, and every one of its routes carries
        its own guard on the server. */
+    if (!mayManageProgramme()) return;
     var open = global.admOpen;
     if (typeof open === 'function' && !open.__f27) {
       var wrapped = function (section) {
         if (section === 'free2027') {
+          if (!mayManageProgramme()) { say('The Free Tutorial Console is for the Founder and Academic Director.'); return; }
           var b = $('admSheetBody'), back = $('admSheetBack'), sheet = $('admSheet'), title = $('admSheetTitle');
           if (b) {
             if (title) title.textContent = '2027 Free Tutorial';
@@ -164,6 +170,7 @@
     if (typeof apply === 'function' && !apply.__f27) {
       var painted = function () {
         var out = apply.apply(this, arguments);
+        if (!mayManageProgramme()) return out;
         var nav = $('admTileNav');
         if (nav && nav.innerHTML.indexOf('data-section="free2027"') < 0) {
           nav.insertAdjacentHTML('beforeend',
@@ -212,15 +219,17 @@
         '<div class="ad-metric"><span>2027 edition</span><b>' + (on ? 'Active' : 'Switched off') + '</b></div>' +
         '<div class="ad-metric"><span>Delivery of one-time codes</span><b>' +
           (o.otpDelivery && o.otpDelivery.available ? 'Email (SMTP configured)' :
-            (o.otpDelivery && o.otpDelivery.devAllowed ? 'No email — codes shown on screen (development)' : 'No email sender configured yet')) +
+            'Email verification not configured — registration is unavailable') +
         '</b></div>' +
         '<p class="ad-note">Original Mode restores the full G.O.C Academy Hub and every one of its features. ' +
         '2027 Free Tutorial Mode shows the homepage and the CBT Portal only — weekly assessments, competitions and the ' +
         'competition leaderboard. Switching either way deletes nothing: every G.O.C record, question and setting stays exactly where it is.</p>' +
-        '<div class="ad-actions">' +
-          '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
-          '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
-        '</div>' +
+        (isFounder()
+          ? '<div class="ad-actions">' +
+              '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
+              '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
+            '</div>'
+          : '<p class="ad-note">Only the Founder can change site mode or edition-wide settings. Academic programme content and reports remain available to you.</p>') +
         '<div class="ad-grid2" style="margin-top:14px">' +
           '<div class="ad-field"><label>Course list (one per line)</label>' +
             '<textarea id="f27Courses" rows="7">' + esc((o.courses || []).join('\n')) + '</textarea></div>' +
@@ -242,12 +251,13 @@
   }
 
   global.f27AdmSetMode = function (mode) {
+    if (!isFounder()) { say('Only the Founder can change Free Tutorial site settings.'); return; }
     var label = rules.modeLabel(mode);
     var free = mode === rules.MODE_FREE;
     /* The confirmation step. The server insists on `confirm:true` too, so this
        is not the only thing standing between a mis-click and the switch. */
     if (!confirmDo('Switch the website to ' + label + '?' + (free
-      ? '\n\nThe full hub is hidden (nothing is deleted) and the public site becomes the 2027 Free Tutorial homepage and CBT Portal.'
+      ? '\n\nThe original G.O.C Academy Hub homepage remains public; unrelated student modules are disabled and the 2027 Free Tutorial student experience is enabled.'
       : '\n\nEvery feature of the G.O.C Academy Hub comes straight back, exactly as it was.'))) return;
     api.setMode(mode, true).then(function (r) {
       say('Website is now in ' + r.label);
@@ -791,6 +801,7 @@
   /* ================================================ 7. SESSIONS & ARCHIVE */
 
   function loadSessions() {
+    if (!isFounder()) { body('<p class="ad-warn">Only the Founder can access programme session archives.</p>'); return; }
     loading('Reading this session and the archives…');
     api.adminOverview().then(function (o) {
       A.overview = o;
@@ -821,6 +832,7 @@
   }
 
   global.f27AdmNewSession = function (btn) {
+    if (!isFounder()) { say('Only the Founder can archive programme sessions.'); return; }
     var label = String(($('f27NewLabel') || {}).value || '').trim();
     /* Two confirmations: one states what is archived, the second is the
        server's own acknowledgement, which the request carries. */
@@ -839,6 +851,7 @@
   };
 
   global.f27AdmReadArchive = function (file) {
+    if (!isFounder()) { say('Only the Founder can read programme archives.'); return; }
     var host = $('f27ArchiveView');
     if (!host) return;
     host.innerHTML = '<div class="ad-loading">Opening the archive…</div>';
