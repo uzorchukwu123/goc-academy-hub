@@ -59,9 +59,16 @@ function minJs(rel) {
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-['js/goc-core.js', 'js/api.js', 'js/app.js', 'js/pwa.js', 'sw.js'].forEach(minJs);
+/* The 2027 Free Tutorial Edition's three scripts are built beside the hub's own,
+   and its stylesheet is minified with them. Deleting this line only stops the
+   edition being built; the original hub is unaffected. */
+['js/goc-core.js', 'js/goc-free-2027.js', 'js/api.js', 'js/app.js',
+ 'js/free2027-api.js', 'js/free2027-ui.js', 'js/free2027-admin.js', 'js/pwa.js', 'sw.js'].forEach(minJs);
 
 write('css/styles.css', esbuild.transformSync(read('css/styles.css'), { loader: 'css', minify: true, legalComments: 'none' }).code);
+if (fs.existsSync(path.join(ROOT, 'css', 'free2027.css'))) {
+  write('css/free2027.css', esbuild.transformSync(read('css/free2027.css'), { loader: 'css', minify: true, legalComments: 'none' }).code);
+}
 
 // index.html: drop comments (keep conditional comments, none today) and blank runs.
 var html = read('index.html').replace(/<!--(?!\[if)[\s\S]*?-->/g, '').replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n');
@@ -88,7 +95,8 @@ if (missing.length) { console.error('Build is missing: ' + missing.join(', ')); 
 
 function size(p) { return fs.statSync(path.join(OUT, p)).size; }
 var before = 0, after = 0;
-['js/goc-core.js', 'js/api.js', 'js/app.js', 'js/pwa.js', 'sw.js', 'css/styles.css', 'index.html'].forEach(function (p) {
+['js/goc-core.js', 'js/api.js', 'js/app.js', 'js/pwa.js', 'sw.js', 'css/styles.css', 'index.html',
+ 'js/goc-free-2027.js', 'js/free2027-api.js', 'js/free2027-ui.js', 'js/free2027-admin.js', 'css/free2027.css'].forEach(function (p) {
   before += fs.statSync(path.join(ROOT, p)).size; after += size(p);
 });
 console.log('Built ' + path.relative(ROOT, OUT) + ': ' + before + ' -> ' + after + ' bytes (' + Math.round(100 - after / before * 100) + '% smaller)');

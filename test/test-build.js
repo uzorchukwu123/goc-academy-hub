@@ -160,6 +160,9 @@ fs.renameSync(OUT, path.join(APPDIR, 'dist'));
 // the static route must never serve it, because with GOC_PUBLIC_DIR only dist/ answers.
 fs.mkdirSync(path.join(APPDIR, 'js'), { recursive: true });
 fs.copyFileSync(path.join(APP, 'js', 'goc-core.js'), path.join(APPDIR, 'js', 'goc-core.js'));
+// The 2027 Free Tutorial Edition's shared rules are loaded the same way, and are
+// equally never served: they only describe modes, policies and ranking.
+fs.copyFileSync(path.join(APP, 'js', 'goc-free-2027.js'), path.join(APPDIR, 'js', 'goc-free-2027.js'));
 function call(urlPath) {
   return new Promise(function (resolve) {
     http.get({ host: '127.0.0.1', port: PORT, path: urlPath }, function (res) {
