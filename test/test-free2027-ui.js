@@ -284,6 +284,11 @@ settle(load(w1)).then(function () {
       w.calls.go.indexOf('free-admin') > -1, w.calls.go.join(','));
     ok('and the edition\'s homepage gives way to it', w.els['free-admin'].classList.contains('active') &&
       !w.els['free-home'].classList.contains('active'));
+    /* The hand-rolled go() is a stand-in: what the visitor actually sees is
+       decided by the stylesheet, so the sign-in it lands on must be one the
+       edition shows. */
+    ok('the stylesheet shows that screen while the edition is on',
+      /body\.f27-mode #free-admin\.active/.test(css.replace(/\s+/g, ' ')));
     ok('the note warns that the console keeps its own passcode',
       /own passcode/i.test(w.els.freeAdminNote.textContent), w.els.freeAdminNote.textContent);
     ok('and the sign-in is the hub\'s own administrator form', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
