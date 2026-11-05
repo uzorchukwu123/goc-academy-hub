@@ -162,12 +162,14 @@
      the server; this rule just makes sure a real password was chosen. */
   var PASSWORD_MIN = 8;
   var PASSWORD_MAX = 72;
+  /* One rule, shared by the page and the server so they can never disagree.
+     The messages name the exact failure: too short, or missing a letter or a
+     number. */
   function cleanPassword(v) {
     var s = String(v == null ? '' : v);
-    if (!s) return { error: 'Choose a password of at least ' + PASSWORD_MIN + ' characters.' };
-    if (s.length < PASSWORD_MIN) return { error: 'Choose a password of at least ' + PASSWORD_MIN + ' characters.' };
-    if (s.length > PASSWORD_MAX) return { error: 'A password cannot be longer than ' + PASSWORD_MAX + ' characters.' };
-    if (!/[a-zA-Z]/.test(s) || !/\d/.test(s)) return { error: 'Use a password with both letters and numbers.' };
+    if (s.length < PASSWORD_MIN) return { error: 'Your password must contain at least ' + PASSWORD_MIN + ' characters.' };
+    if (s.length > PASSWORD_MAX) return { error: 'Your password cannot be longer than ' + PASSWORD_MAX + ' characters.' };
+    if (!/[a-zA-Z]/.test(s) || !/\d/.test(s)) return { error: 'Use a password containing both letters and numbers.' };
     return { password: s };
   }
 

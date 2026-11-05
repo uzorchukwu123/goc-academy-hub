@@ -240,6 +240,15 @@
   };
   F.freeNavHome = function () { global.go('landing'); };
 
+  /* The navigation drawer's CBT Portal action (Free Tutorial Mode only — the
+     button is hidden by CSS in Original Mode). Closes the drawer, then runs
+     the same entry chain as the homepage button: login when there is no valid
+     session, dashboard when there is. */
+  F.dwFreePortal = function () {
+    if (typeof global.closeDrawer === 'function') global.closeDrawer();
+    setTimeout(function () { F.freePortalEnter(); }, 180);
+  };
+
   /* ================================================= 3. REGISTRATION (OTP) */
 
   F.freeRegisterStart = function () {
@@ -911,7 +920,7 @@
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
     'freeExamPanelClose', 'freeExamLeave', 'freeExamHome', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
-    'freeProgrammeLoad', 'freeLessonDone', 'freeLogin', 'freePortalEnter', 'freeNavBack', 'freeNavHome'];
+    'freeProgrammeLoad', 'freeLessonDone', 'freeLogin', 'freePortalEnter', 'freeNavBack', 'freeNavHome', 'dwFreePortal'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

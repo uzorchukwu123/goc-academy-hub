@@ -48,8 +48,12 @@
           <span class="bt">G.O.C Academy Hub</span>
         </div>
         <div class="lp-actions">
-          <button class="lp-link" onclick="go('login-v2')">Log in</button>
-          <button class="lp-cta" onclick="go('signup')">Get started</button>
+          <!-- In 2027 Free Tutorial Mode the edition swaps the original account
+               actions for one CBT Portal entry (see css/free2027.css); in Original
+               Mode the original Log in / Get started show again, unchanged. -->
+          <button class="lp-link dw-cbt-link" onclick="freePortalEnter()">CBT Portal</button>
+          <button class="lp-link dw-original" onclick="go('login-v2')">Log in</button>
+          <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
         </div>
       </nav>
 
@@ -1469,7 +1473,8 @@
               <p class="field-hint">Used only to verify you and to keep your record. It is never shown publicly.</p></div>
             <div class="field"><label for="freePassword">Password</label>
               <div class="pw-wrap">
-                <input id="freePassword" type="password" autocomplete="new-password" placeholder="At least 8 characters, letters and numbers">
+                <input id="freePassword" type="password" autocomplete="new-password" placeholder="At least 8 characters, letters and numbers"
+                       oninput="var e=document.getElementById('freeRegErr'); if(e) e.textContent='';">
                 <button type="button" class="pw-toggle" onclick="togglePw('freePassword',this)">Show</button>
               </div>
               <p class="field-hint">You will use this email and password to log in to the CBT Portal.</p></div>
@@ -1516,7 +1521,8 @@
               <input id="freeLoginEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div>
             <div class="field"><label for="freeLoginPassword">Password</label>
               <div class="pw-wrap">
-                <input id="freeLoginPassword" type="password" autocomplete="current-password" placeholder="Your password">
+                <input id="freeLoginPassword" type="password" autocomplete="current-password" placeholder="Your password"
+                       oninput="var e=document.getElementById('freeLoginErr'); if(e) e.textContent='';">
                 <button type="button" class="pw-toggle" onclick="togglePw('freeLoginPassword',this)">Show</button>
               </div></div>
             <p class="f27-err" id="freeLoginErr" role="alert"></p>
@@ -1597,7 +1603,11 @@
           <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
           <span class="bt">Your result</span>
         </div>
-        <div class="lp-actions"><button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button></div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+          <button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button>
+        </div>
       </nav>
       <div class="f27-sec" id="freeResultBody"><div class="ad-loading">Marking your paper…</div></div>
     </section>
@@ -1973,8 +1983,12 @@
           <button onclick="dwGo('updates')" class="dw-updates-link"><span class="dwi-bell" aria-hidden="true">🔔</span>Updates &amp; News<span class="dw-new-badge">New</span></button>
         </nav>
         <div class="dw-btns">
-          <button class="btn btn-red btn-block" onclick="dwGo('signup')">Create free account</button>
-          <button class="btn btn-outline btn-block" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
+          <!-- Free Tutorial Mode replaces these two with the CBT Portal entry
+               (css/free2027.css); Original Mode shows them exactly as before. -->
+          <button class="btn btn-red btn-block dw-cbt" onclick="dwFreePortal()">CBT Portal</button>
+          <p class="dw-cbt-hint">Access your weekly assessments and competitions.</p>
+          <button class="btn btn-red btn-block dw-original" onclick="dwGo('signup')">Create free account</button>
+          <button class="btn btn-outline btn-block dw-original" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
         </div>
         <div class="dw-foot">
           <a href="mailto:godsowncenterinfo@gmail.com">godsowncenterinfo@gmail.com</a>

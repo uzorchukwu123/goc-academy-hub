@@ -40,6 +40,13 @@ var pub = f.publicParticipant({ id: 'GOC-F-001', name: 'Ada', course: 'Law', ema
 ok('a public participant carries no email address and no code', JSON.stringify(pub).indexOf('@') < 0 && !pub.otp, JSON.stringify(pub));
 ok('the address is masked even for the candidate themselves', f.maskEmail('ada.obi@example.com').indexOf('ada.obi') < 0 && /@example\.com$/.test(f.maskEmail('ada.obi@example.com')), f.maskEmail('ada.obi@example.com'));
 
+head('registration passwords');
+ok('a password shorter than 8 is rejected with the exact message', f.cleanPassword('').error === 'Your password must contain at least 8 characters.' && f.cleanPassword('ab1').error === 'Your password must contain at least 8 characters.' && f.cleanPassword('Abcdefg').error === 'Your password must contain at least 8 characters.', JSON.stringify(f.cleanPassword('Abcdefg')));
+ok('a password with no letter is rejected with the exact message', f.cleanPassword('12345678').error === 'Use a password containing both letters and numbers.');
+ok('a password with no number is rejected with the exact message', f.cleanPassword('onlyletters').error === 'Use a password containing both letters and numbers.');
+ok('a valid alphanumeric password of 8+ characters is accepted', f.cleanPassword('ada2027obi').password === 'ada2027obi' && f.cleanPassword('Abcd1234').password === 'Abcd1234' && !f.cleanPassword('a1'.repeat(36)).error);
+ok('an over-long password is refused', !!f.cleanPassword('a1' + 'x'.repeat(100)).error);
+
 head('one-time codes');
 ok('a code is exactly six digits', f.OTP_LENGTH === 6 && f.cleanOtp('123456').code === '123456');
 ok('a short or long code is refused', !!f.cleanOtp('12345').error && !!f.cleanOtp('1234567').error);
