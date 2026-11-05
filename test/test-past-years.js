@@ -77,8 +77,17 @@ var pb = [
   rec(4, { topic: 'Motion', year: null }), rec(5, { topic: 'Motion', year: 2018, section: 'jamb' }), rec(6, { topic: 'Heat', year: 2018, active: false })
 ];
 function ids(a) { return a.map(function (x) { return x.id; }).join(); }
-ok('no narrowing: every live objective question in the subject', ids(core.studyPool(pb, 'Physics', null)) === '1,2,3,4,5');
-ok('topics narrow it', ids(core.studyPool(pb, 'Physics', ['Motion'])) === '1,3,4,5');
+/* Practice is an EXCLUSIVE pool: studyPool() takes only rows whose section is
+   'practice', so row 5 (a JAMB-oriented question) is held out of it by design —
+   a student grinding Practice must never meet a question reserved for the
+   JAMB-oriented sitting, and vice versa. These two expectations predated that
+   rule and still counted row 5; the year-narrowing checks immediately below
+   already reflected it. Row 6 is inactive and stays out for that reason. */
+ok('no narrowing: every live Practice question in the subject', ids(core.studyPool(pb, 'Physics', null)) === '1,2,3,4',
+   ids(core.studyPool(pb, 'Physics', null)));
+ok('and a JAMB-oriented row is held out of the Practice pool', ids(core.studyPool(pb, 'Physics', null)).indexOf('5') === -1);
+ok('topics narrow it', ids(core.studyPool(pb, 'Physics', ['Motion'])) === '1,3,4',
+   ids(core.studyPool(pb, 'Physics', ['Motion'])));
 ok('a year narrows to that Practice paper only', ids(core.studyPool(pb, 'Physics', null, 2018)) === '1,2');
 ok('topic and year together', ids(core.studyPool(pb, 'Physics', ['Motion'], 2018)) === '1');
 ok('studyYears lists newest first with a per-topic split',

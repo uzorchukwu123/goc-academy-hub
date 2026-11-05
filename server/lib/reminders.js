@@ -178,7 +178,7 @@ function createReminderService(deps) {
     try {
       if (!deps.channels || (!deps.channels.email && !deps.channels.sms)) { result.skipped = 'no-channel'; return result; }
       if (!deps.publicUrl) { result.skipped = 'no-public-url'; return result; }
-      var today = core.dayStamp(now), hour = now.getHours();
+      var today = core.lagosDay(now), hour = now.getHours();
       var from = deps.startHour != null ? deps.startHour : core.REMINDER_START_HOUR;
       var to = deps.endHour != null ? deps.endHour : core.REMINDER_END_HOUR;
       if (!(hour >= from && hour < to)) { result.skipped = 'window'; return result; }
@@ -265,7 +265,7 @@ function createReminderService(deps) {
     try {
       if (!deps.channels || !deps.channels.email) { result.skipped = 'no-channel'; return result; }
       if (!deps.publicUrl) { result.skipped = 'no-public-url'; return result; }
-      var today = core.dayStamp(now), hour = now.getHours();
+      var today = core.lagosDay(now), hour = now.getHours();
       var from = deps.startHour != null ? deps.startHour : core.REMINDER_START_HOUR;
       var to = deps.endHour != null ? deps.endHour : core.REMINDER_END_HOUR;
       if (!(hour >= from && hour < to)) { result.skipped = 'window'; return result; }

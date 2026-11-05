@@ -25,7 +25,8 @@ reminders-outbox.jsonl
 Thumbs.db
 .vscode/
 .idea/
-.env
-.env.*
-node_modules/
-server/data.json
+
+# NOTE: this file used to carry a second copy of `.env`, `.env.*`,
+# `node_modules/` and `server/data.json` appended below the editor section.
+# Those four duplicate lines are gone; every distinct pattern above is unchanged,
+# so nothing that was ignored has become tracked.

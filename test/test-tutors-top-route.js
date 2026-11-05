@@ -78,7 +78,7 @@ function total(stats, subject, which) {
   var subs = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
   function mk(name, n) { return call('POST', '/api/admin/students', { name: name, email: n + '@example.com', phone: '0800000005' + n.slice(-1), goal: 'JAMB / UTME 2027', subjects: subs }, adm); }
   var g1 = await mk('Gina Goc', 'g1'), g2 = await mk('Bola Goc', 'g2'), g3 = await mk('Chi Goc', 'g3');
-  var o = await call('POST', '/api/students', { name: 'Olu Open', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: subs });
+  var o = await call('POST', '/api/students', { name: 'Olu Open', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: subs, privacyConsent: { accepted: true } });
   var ID1 = g1.body.student.id, ID2 = g2.body.student.id, ID3 = g3.body.student.id, IDO = o.body && o.body.student && o.body.student.id;
   var tok1 = (await call('POST', '/api/auth/login', { id: ID1, password: g1.body.temporaryPassword })).body.token;
   ok('setup: three GOC students and one Open student', !!ID1 && !!ID2 && !!ID3 && !!IDO);

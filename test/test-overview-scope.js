@@ -106,7 +106,7 @@ function waitForBoot(n) {
   var sd = await call('GET', '/api/admin/overview', undefined, seeded.body.token);
   ok('the seeded Academic Director account still gets all four', sd.status === 200 && Object.keys(sd.body).length === 4, sd.raw);
   ok('no sign-in at all is refused (401)', (await call('GET', '/api/admin/overview')).status === 401);
-  var stu = await call('POST', '/api/students', { name: 'Open Person', password: 'pass-word-1', subjects: ['Use of English', 'Mathematics', 'Physics', 'Chemistry'] });
+  var stu = await call('POST', '/api/students', { name: 'Open Person', password: 'pass-word-1', subjects: ['Use of English', 'Mathematics', 'Physics', 'Chemistry'], goal: 'JAMB / UTME 2027', privacyConsent: { accepted: true } });
   var slogin = stu.body && stu.body.id ? await call('POST', '/api/auth/login', { id: stu.body.id, password: 'pass-word-1' }) : { body: {} };
   ok('a student session still cannot read the overview', !slogin.body.token || (await call('GET', '/api/admin/overview', undefined, slogin.body.token)).status >= 401);
 

@@ -169,7 +169,7 @@ ok('each picture has lines that carry their own origin and delay, and stars that
 ok('the picture sits first in the footer, ahead of the text',
    /<footer class="lp-foot">\s*<svg class="lp-const cn-n"/.test(html));
 ok('the footer\'s words and links are unchanged',
-   ['Building Purpose-Driven Independent Scholars.', 'Updates &amp; News', 'UTME Bootcamp', 'Privacy Policy', 'Email us']
+   ['Raising Smart Scholars for Academic Excellence.', 'Updates &amp; News', 'UTME Bootcamp', 'Privacy Policy', 'Email us']
      .every(function (t) { return html.indexOf(t) > -1; }));
 
 /* ------------------------------------------------------------- the script -- */

@@ -41,43 +41,37 @@ ok('GOC.api forwards buyStreakFreeze', typeof api.buyStreakFreeze === 'function'
 ok('both drivers have it', typeof mock.buyStreakFreeze === 'function' &&
   typeof vm.runInContext('GOC.api._drivers', ctx).http.buyStreakFreeze === 'function');
 
+var SID = null;
 rejects(mock.buyStreakFreeze()).then(function (m) {
   ok('signed out: refused', /log in/i.test(m || ''), m);
   var code = 'GOC2027';
   return activeStudent.demo(mock, { signupCode: code, name: 'Ada Test', password: 'secret123',
     goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] });
-}).then(function () {
+}).then(function (r) {
+  SID = r && r.student && r.student.id;
   return rejects(mock.buyStreakFreeze());
 }).then(function (m) {
-  ok('a new student has too little XP: refused with the cost', m && m.indexOf(String(COST)) >= 0, m);
+  /* A self-registered account is Open; buying freezes is a GOC feature, so
+     the tier refusal comes before any balance check — same as the server. */
+  ok('an Open student is refused as GOC-only', m && /GOC students/.test(m), m);
+  mock._setTier(SID, 'goc');
+  return rejects(mock.buyStreakFreeze());
+}).then(function (m) {
+  ok('a new GOC student has too little XP: refused with the cost', m && m.indexOf(String(COST)) >= 0, m);
   return mock.myProfile();
 }).then(function (p) {
   ok('profile reports zero freezes and no XP spent', p.streakFreezes === 0 && p.xp === 0, JSON.stringify(p));
-  // Earn XP the real way: practice runs until the balance covers a freeze.
-  var earned = 0, subject = 'Physics', rounds = 0;
-  function run() {
-    if (earned >= COST || rounds++ > 40) return Promise.resolve();
-    return mock.startStudy({ mode: 'practice', subject: subject, count: 5 }).then(function (r) {
-      var ans = {}; (r.questions || []).forEach(function (q) { ans[q.id] = q.answer; });
-      return mock.submitStudy({ paperId: r.paperId, responses: ans });
-    }).then(function (s) {
-      earned = s.xpTotal;
-      return run();
-    }, function () { rounds = 99; });
-  }
-  return run().then(function () { return earned; });
-}).then(function (earned) {
-  if (earned < COST) {
-    console.log('  note  demo practice could not earn ' + COST + ' XP here (' + earned + '); success path skipped');
-    return null;
-  }
-  return mock.buyStreakFreeze().then(function (r) {
-    ok('enough XP: bought', r.ok === true && r.streakFreezes === 1, JSON.stringify(r));
-    ok('cost taken from XP', r.xp === earned - COST, JSON.stringify(r));
-    return mock.myProfile();
-  }).then(function (p) {
-    ok('profile shows the freeze', p.streakFreezes === 1, JSON.stringify(p));
-  });
+  /* The price (500 XP) is above one day's practice XP cap (120), so the
+     balance is granted with the test-only hook instead of grinding runs —
+     the earning path itself is covered by test-study.js. */
+  mock._grantXp(SID, COST + 30);
+  return mock.buyStreakFreeze();
+}).then(function (r) {
+  ok('enough XP: bought', r.ok === true && r.streakFreezes === 1, JSON.stringify(r));
+  ok('cost taken from XP', r.xp === 30, JSON.stringify(r));
+  return mock.myProfile();
+}).then(function (p) {
+  ok('profile shows the freeze', p.streakFreezes === 1, JSON.stringify(p));
 }).then(function () {
   console.log('\n' + passes + ' passed, ' + fails + ' failed');
   process.exit(fails ? 1 : 0);

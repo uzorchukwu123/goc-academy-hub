@@ -124,7 +124,7 @@ async function main() {
   ok('no tier named is 400', e.status === 400, e.raw);
   var f = await call('PUT', '/api/admin/cohorts/C1/tier', { tier: 'goc' });
   ok('no session is refused', f.status === 401 || f.status === 403, f.status);
-  var g = await call('POST', '/api/students', { signupCode: 'GOC-2027', name: 'Plain Student', password: 'secret123', email: 'p@example.com', phone: '08000000077', goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] });
+  var g = await call('POST', '/api/students', { signupCode: 'GOC-2027', name: 'Plain Student', password: 'secret123', email: 'p@example.com', phone: '08000000077', goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'], privacyConsent: { accepted: true } });
   var st = g.body && g.body.token;
   var h = await call('PUT', '/api/admin/cohorts/C1/tier', { tier: 'goc' }, st);
   ok('a student cannot move a cohort', h.status === 401 || h.status === 403, h.status + ' ' + h.raw);

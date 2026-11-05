@@ -25,8 +25,9 @@ ok('held freezes are clamped to the maximum', r.freezes === core.STREAK_FREEZE_M
 r = core.streakAfterActivity(5, D2, T, -3);
 ok('bad freeze counts are safe', r.streak === 1 && r.freezes === 0);
 
-var b = core.buyStreakFreeze(250, 0);
-ok('buying spends the cost and adds one', b.ok && b.xp === 250 - core.STREAK_FREEZE_COST_XP && b.freezes === 1);
+ok('the academy price is 500 XP', core.STREAK_FREEZE_COST_XP === 500);
+var b = core.buyStreakFreeze(core.STREAK_FREEZE_COST_XP + 250, 0);
+ok('buying spends the cost and adds one', b.ok && b.xp === 250 && b.freezes === 1);
 b = core.buyStreakFreeze(core.STREAK_FREEZE_COST_XP - 1, 0);
 ok('not enough XP is refused', !b.ok && b.reason === 'xp' && b.xp === core.STREAK_FREEZE_COST_XP - 1);
 b = core.buyStreakFreeze(1000, core.STREAK_FREEZE_MAX);

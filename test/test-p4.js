@@ -227,14 +227,20 @@ async function main() {
   ok('the new maximum was stored', markup('admQList').indexOf('Maximum mark <b>15</b>') > -1);
 
   head('4.2 — a question can be held back without being deleted');
+  /* Measured as a change rather than as an absolute. listQuestions() below is
+     not narrowed to the Web Test sections the console panel is showing, and
+     js/goc-core.js now seeds a starter Practice bank, so the served total is no
+     longer just the eleven rows this suite built. */
+  var liveBefore = await api('listQuestions')({ subject: 'Physics', activeOnly: true });
   run('admQToggle')(NEWQ, false);
   await flush();
   ok('it is shown as inactive', count('admQList', '.ad-q.off') === 1, count('admQList', '.ad-q.off'));
   ok('with a plain-language tag', markup('admQList').indexOf('>Inactive<') > -1);
   ok('it is still in the bank, not deleted', text('admQCount') === '11 in Physics', text('admQCount'));
   var live = await api('listQuestions')({ subject: 'Physics', activeOnly: true });
-  ok('but it is no longer served', live.questions.length === 10 &&
-     !live.questions.some(function (q) { return q.id === NEWQ; }), live.questions.length);
+  ok('but it is no longer served', live.questions.length === liveBefore.questions.length - 1 &&
+     !live.questions.some(function (q) { return q.id === NEWQ; }),
+     liveBefore.questions.length + ' → ' + live.questions.length);
   run('admQToggle')(NEWQ, true);
   await flush();
   ok('and it can be brought back', count('admQList', '.ad-q.off') === 0, count('admQList', '.ad-q.off'));
@@ -258,9 +264,16 @@ async function main() {
      typeof countsNow.totals.theory === 'number' && typeof countsNow.totals.objective === 'number' &&
      typeof countsNow.totals.jamb === 'number' && typeof countsNow.totals.practice === 'number',
      JSON.stringify(countsNow.totals));
-  ok('Physics carries the 11 web-test questions just built, and no practice ones yet',
-     countsNow.bySubject.Physics.theory + countsNow.bySubject.Physics.objective + countsNow.bySubject.Physics.jamb === 11 &&
-     countsNow.bySubject.Physics.practice === 0, JSON.stringify(countsNow.bySubject.Physics));
+  /* The Practice count is taken as a baseline here, and every Practice check
+     below is a delta against it: js/goc-core.js now seeds a starter Practice
+     bank, so "no practice ones yet" was only ever true of an unseeded install.
+     What still has to hold exactly is that this suite's eleven Web Test rows are
+     the only Web Test rows, and that adding one Practice row moves the Practice
+     count by one and nothing else. */
+  var practiceBase = countsNow.bySubject.Physics.practice;
+  ok('Physics carries the 11 web-test questions just built',
+     countsNow.bySubject.Physics.theory + countsNow.bySubject.Physics.objective + countsNow.bySubject.Physics.jamb === 11,
+     JSON.stringify(countsNow.bySubject.Physics));
 
   run('admQSetBank')('practice');
   await flush();
@@ -268,7 +281,8 @@ async function main() {
   ok('Practice reads as the active tab', markup('admQBankTabs').indexOf('class="on" onclick="admQSetBank(\'practice\')">Practice') > -1, markup('admQBankTabs'));
   ok('the Web Test session picker is gone on the Practice panel', !id('admQSection'));
   ok('the section is shown fixed instead', markup('admQForm').indexOf('Practice only — not in Web Test') > -1);
-  ok('nothing in the Practice bank for Physics yet', text('admQCount') === '0 in Physics', text('admQCount'));
+  ok('the Practice panel opens on the seeded bank, holding nothing this suite built',
+     text('admQCount') === practiceBase + ' in Physics', text('admQCount'));
   ok('the session tabs are not shown for a bank with one section', markup('admQTabs') === '');
 
   set('admQText', 'Which gas is released when zinc reacts with dilute acid?');
@@ -278,11 +292,11 @@ async function main() {
   run('admQSave')();
   await flush();
   ok('a practice question is accepted', text('toast').indexOf('added to Physics') > -1, text('toast'));
-  ok('it counts in the Practice bank', text('admQCount') === '1 in Physics', text('admQCount'));
+  ok('it counts in the Practice bank', text('admQCount') === (practiceBase + 1) + ' in Physics', text('admQCount'));
   ok('it is listed here', markup('admQList').indexOf('Which gas is released') > -1);
   var practiceCounts = await api('questionCounts')();
-  ok('the counts endpoint picked it up', practiceCounts.bySubject.Physics.practice === 1,
-     JSON.stringify(practiceCounts.bySubject.Physics));
+  ok('the counts endpoint picked it up', practiceCounts.bySubject.Physics.practice === practiceBase + 1,
+     practiceBase + ' → ' + JSON.stringify(practiceCounts.bySubject.Physics));
   ok('and the Web Test sections were untouched by it',
      practiceCounts.bySubject.Physics.theory + practiceCounts.bySubject.Physics.objective +
      practiceCounts.bySubject.Physics.jamb === 11, JSON.stringify(practiceCounts.bySubject.Physics));

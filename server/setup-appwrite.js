@@ -168,15 +168,26 @@ async function waitForAttributes(col) {
   console.warn('  (proceeding though some ' + col + ' attributes are still processing)');
 }
 
-/* Migrate the existing `students` collection: add the approval-state fields
-   that were missing from the original schema. These are idempotent — an
-   "already exists" (409) is treated as success, so this is safe to re-run. */
+/* Migrate the existing `students` collection: add the approval-state and
+   access-tier fields that were missing from the original schema. These are
+   idempotent — an "already exists" (409) is treated as success, so this is safe
+   to re-run. */
 async function ensureStudentAttributes() {
   // Core approval flag — the one that caused "always showing Awaiting Approval"
   await bool(STUDENTS, 'pendingApproval');
   // Audit trail: who approved and when (optional, but stored on approve)
   await str(STUDENTS, 'approvedBy', 120);
   await str(STUDENTS, 'approvedAt', 40);
+  // Access tier (Phase 3B). Without `tier` the boot-time migrateAppwriteTiers()
+  // cannot stamp existing students as GOC: every update is refused, students
+  // keep reading as Open, and the GOC-only tutor lists (at-risk students, top
+  // performers, the analytics GOC count) come back empty even though the
+  // students are right there in Appwrite. Provisioning it here lets the
+  // migration finish on the next restart. `tierChangedBy`/`tierChangedAt` record
+  // who moved a student between tiers and when (written by the tier routes).
+  await str(STUDENTS, 'tier', 8);
+  await str(STUDENTS, 'tierChangedBy', 80);
+  await str(STUDENTS, 'tierChangedAt', 40);
 }
 
 (async () => {
@@ -201,11 +212,11 @@ async function ensureStudentAttributes() {
   await ensureIndexes();
 
   // Migrate students collection — adds pendingApproval, approvedBy, approvedAt
-  console.log('Students attributes (migration — adds missing approval fields):');
+  console.log('Students attributes (migration — adds missing approval + tier fields):');
   await ensureStudentAttributes();
   await waitForAttributes(STUDENTS);
 
-  console.log('\nDone. Collections "questions", "attempts", "tutors" provisioned; "students" approval fields migrated.');
+  console.log('\nDone. Collections "questions", "attempts", "tutors" provisioned; "students" approval + tier fields migrated.');
   console.log('Next: trigger POST /api/admin/migrate-appwrite once from the running app.');
 })().catch(err => {
   console.error('\nProvisioning failed:', err.message || err);

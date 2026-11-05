@@ -368,14 +368,16 @@ async function main() {
 
   head('8 — anyone can sign up, with no code');
   var joined = await api('createStudent')({ name: 'Ngozi Open', password: 'letmein9',
+    privacyConsent: { accepted: true },
     goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] });
   ok('the account is created with no code', /^GOC-S-\d+$/.test((joined.student || {}).id || ''), (joined.student || {}).id);
   ok('and waits for approval, with no session yet (sign-up no longer signs anyone in)', joined.pending === true && !joined.session, JSON.stringify(joined));
   var oddCode = await api('createStudent')({ signupCode: 'ignored-now', name: 'Ada Extra', password: 'letmein9',
+    privacyConsent: { accepted: true },
     goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] });
   ok('a code sent anyway is simply ignored', /^GOC-S-\d+$/.test((oddCode.student || {}).id || ''));
   var utme = await refused(function () {
-    return api('createStudent')({ name: 'X Y', password: 'letmein9', goal: 'WAEC', subjects: [] });
+    return api('createStudent')({ name: 'X Y', password: 'letmein9', privacyConsent: { accepted: true }, goal: 'WAEC', subjects: [] });
   });
   ok('the other sign-up rules still apply (UTME only)', utme.indexOf('UTME') > -1, utme);
 

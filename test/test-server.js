@@ -92,7 +92,8 @@ function stop() {
 
 var good = { signupCode: SIGNUP, name: 'Ada Test', password: 'secret123', email: 'ada.test@example.com',
              phone: '08000000009', goal: 'JAMB / UTME 2027',
-             subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] };
+             subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'],
+             privacyConsent: { accepted: true } };
 /* Kept for the sections that come after registration. */
 var stuToken = null, stuId = null, theoryId = null;
 /* The access code currently in force. The Priority 8 section rotates it, and
@@ -1391,7 +1392,13 @@ waitForBoot(20).then(function (h) {
   var LOPT = '$x = 2$ or $x = 3$';
   var LEXP = 'With $a = 1$, $b = -5$, $c = 6$: $$x = \\frac{5 \\pm \\sqrt{25 - 24}}{2} = \\frac{5 \\pm 1}{2}$$';
   var lq = await call('POST', '/api/questions', {
-    subject: 'Physics', section: 'objective', topic: 'Latex Round Trip',
+    /* 'practice', not 'objective': this block measures what reaches a scholar
+       through /api/me/study/start, and studyPool() serves exclusively from the
+       Practice section (so a student grinding Practice never meets a Web Test or
+       JAMB-oriented question). An 'objective' row is stored and read back by the
+       console exactly the same, but no study run will ever serve it — which is
+       what made the three "reaches the scholar" checks below fail. */
+    subject: 'Physics', section: 'practice', topic: 'Latex Round Trip',
     text: STEM, options: [LOPT, '$x = -2$ or $x = -3$', '$x = 1$ or $x = 6$', '$x = 0$'],
     answer: 0, explanation: LEXP, difficulty: 'medium'
   }, f.token);

@@ -606,12 +606,26 @@ async function main() {
   await api('login')(SID, SPW);
   var mc = await api('studyCatalogue')();
   var phys = mc.subjects.filter(function (e) { return e.subject === 'Physics'; })[0];
+  /* The bank is seeded — js/goc-core.js ships a starter Practice pool with past
+     questions of its own — so these assert the property under test (newest
+     first, and the three years just created are in the list) rather than the
+     exact contents of an otherwise-empty bank. */
+  var physYears = phys.years.map(function (y) { return y.year; });
   ok('the catalogue lists the years newest first',
-     phys.years.map(function (y) { return y.year; }).join() === '2021,2019,2018', JSON.stringify(phys.years));
+     physYears.length >= 3 &&
+     physYears.every(function (y, i) { return i === 0 || physYears[i - 1] > y; }) &&
+     [2021, 2019, 2018].every(function (y) { return physYears.indexOf(y) > -1; }),
+     JSON.stringify(phys.years));
   var multi = await api('startStudy')({ mode: 'practice', subject: 'Physics', years: [2018, 2019], count: 10 });
+  var servedYears = multi.questions.map(function (q) { return q.year; });
+  var servedTexts = multi.questions.map(function (q) { return q.text; });
   ok('two ticked years serve only those two papers, and nothing undated',
-     multi.questions.length === 2 && multi.questions.every(function (q) { return q.year === 2018 || q.year === 2019; }),
-     JSON.stringify(multi.questions.map(function (q) { return q.year; })));
+     multi.questions.length >= 2 &&
+     servedYears.every(function (q) { return q === 2018 || q === 2019; }) &&
+     servedTexts.indexOf('Past question 2018 about uniform motion?') > -1 &&
+     servedTexts.indexOf('Past question 2019 about uniform motion?') > -1 &&
+     servedTexts.indexOf('An undated practice question on motion?') === -1,
+     JSON.stringify(servedYears));
   await api('submitStudy')({ paperId: multi.paperId, responses: {} });
   var badList = await refused(api('startStudy')({ mode: 'practice', subject: 'Physics', years: [2018, 'abc'] }));
   ok('one bad year in the list refuses the whole request', /four digits/.test(badList || ''), badList);
@@ -627,9 +641,19 @@ async function main() {
      count('suYears', 'option') === run('suYearList')().length + 1 &&
      run('suYearsOn')().length === run('suYearList')().length);
   var allCount = run('suAvailable')();
+  /* How many questions 2021 holds, read from the catalogue rather than assumed
+     to be one: the seeded Practice bank contributes its own 2021 papers, so the
+     drop has to be that year's real count. Every topic is still ticked here, so
+     the year's own count is what comes out of the total. */
+  var y2021 = run('suYearList')().filter(function (y) { return y.year === 2021; })[0] || null;
   run('suToggleYear')(2021);
-  ok('unticking a year takes its questions out of the count', run('suAvailable')() === allCount - 1, allCount + ' → ' + run('suAvailable')());
-  ['2018', '2019'].forEach(function (y) { run('suToggleYear')(Number(y)); });
+  ok('unticking a year takes its questions out of the count',
+     !!y2021 && y2021.count > 0 && run('suAvailable')() === allCount - y2021.count,
+     allCount + ' → ' + run('suAvailable')() + ' (2021 holds ' + (y2021 ? y2021.count : 'none') + ')');
+  /* Untick every year the subject holds, not just the ones this test created —
+     the seeded bank has years of its own, and leaving any ticked would keep the
+     count above zero and the Start button out of its "Pick a year" state. */
+  run('suYearsOn')().map(function (y) { return y.year; }).forEach(function (y) { run('suToggleYear')(y); });
   ok('with every year unticked, Start asks for a year', id('suStart').disabled === true && text('suStart') === 'Pick a year', text('suStart'));
   run('suToggleYear')(2019);
   ok('one year ticked is enough to start', id('suStart').disabled === false && /^Start practice/.test(text('suStart')), text('suStart'));

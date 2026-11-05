@@ -66,7 +66,13 @@ ok('the server passes kind, from and to on, behind the console gate', /path: \/\
 console.log('\nthe screen');
 var panel = app.slice(app.indexOf('tutors: function(){'), app.indexOf('approvals: function(){'));
 ok('the Tutors panel has the Tutor access log with all five filters and Export CSV', /Tutor access log/.test(panel) && ['admAudTutor', 'admAudStudent', 'admAudKind', 'admAudFrom', 'admAudTo', 'admAudCsvBtn'].every(function (i) { return panel.indexOf('id="' + i + '"') > -1; }));
-ok('it opens with the panel, and the tutor list also fills the tutor choice', /section === 'tutors'\)\{ admTutLoad\(\); admAuditLoad\(\); \}/.test(app) && /admTutRender\(\);\s*admAuditFillTutors\(\);/.test(app));
+/* The Tutors branch is matched loosely — "calls admTutLoad() and then
+   admAuditLoad()" — because two further panels have since been appended to the
+   same one-line branch, and an exact-match on the whole sequence broke on every
+   addition without anything here actually regressing. */
+ok('it opens with the panel, and the tutor list also fills the tutor choice',
+   /section === 'tutors'\)\{[^}]*admTutLoad\(\);[^}]*admAuditLoad\(\);/.test(app) &&
+   /admTutRender\(\);\s*admAuditFillTutors\(\);/.test(app));
 
 var els = { admAudList: { innerHTML: '' }, admAudTutor: { value: '', innerHTML: '' }, admAudStudent: { value: '' }, admAudKind: { value: '' }, admAudFrom: { value: '' }, admAudTo: { value: '' }, admAudCsvBtn: { disabled: true } };
 var asked = [], toasts = [], blobs = [], downloads = [], reply = null, fail = null;

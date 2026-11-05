@@ -341,7 +341,7 @@ function notCapRefused(r) {
   var signUp = await call('POST', '/api/students', {
     name: 'Ayo Student', email: 'ayo@test.ng', phone: '08099999999',
     subjects: ['Use of English', 'Mathematics', 'Physics', 'Chemistry'], cohort: 'cohort1', password: 'stupass12',
-    goal: 'JAMB / UTME'
+    goal: 'JAMB / UTME', privacyConsent: { accepted: true }
   });
   ok('sign-up goes to pending (not the cap guard)', signUp.status === 200 && !isCapRefused(signUp), signUp.raw);
   /* a student session on a console route should get 403 "Management accounts only.", not the cap message */

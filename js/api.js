@@ -528,6 +528,12 @@
       /* Sign-up is open to the public: no session and no access code. Every self-made
          account is Open. */
       createStudent: function (data) {
+        /* Explicit privacy-policy acceptance, mirroring POST /api/students:
+           no acceptance, no account — however the call arrives. */
+        var consent = data && data.privacyConsent;
+        if (!consent || consent.accepted !== true) {
+          return fail('Please read and accept the Privacy Policy to create your account.');
+        }
         var name = String((data && data.name) || '').trim();
         var pw = String((data && data.password) || '');
         if (name.length < 2) return fail('Enter your full name.');
@@ -554,7 +560,10 @@
           last: 'Awaiting approval', tag: 'a', tl: 'Pending',
           xp: 0, streak: 0, active: false, pendingApproval: true,
           subjects: sub.subjects,
-          tier: 'open'   /* self-registered accounts are Open, as on the server */
+          tier: 'open',  /* self-registered accounts are Open, as on the server */
+          /* The acceptance, stamped with the server-side policy version rule:
+             the demo keeps the same shape the real server stores. */
+          privacyConsent: { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION }
         };
         students.push(rec);
         /* No session is issued — the student must wait for approval. */
@@ -782,6 +791,10 @@
       _setJambReadyMin: function (min) { settings.jambReadyMin = core.clampJambReadyMin(min); },
       /* Test-only: a public sign-up is Open, so a suite that sits Web Tests promotes its student, as the console would. */
       _setTier: function (id, tier) { var st = find(students, id); if (st) st.tier = core.cleanTier(tier); },
+      /* Test-only (stripped from the production build like the two above):
+         grants an XP balance so a suite can test an XP purchase (e.g. a 500-XP
+         streak freeze) without grinding past the daily practice XP cap. */
+      _grantXp: function (id, xp) { var st = find(students, id); if (st) st.xp = Math.max(0, Math.round(Number(xp) || 0)); },
       setJambCount: function (subject, n) {
         var e = requireUnlocked(); if (e) return e;
         var sub = String(subject || '');
@@ -831,6 +844,7 @@
           id: s.id, name: s.name, exam: core.EXAM,
           subjects: (s.subjects || []).slice(),
           xp: s.xp || 0, streak: s.streak || 0, streakFreezes: s.streakFreezes || 0,
+          privacyConsent: s.privacyConsent || null,
           level: core.levelFor(s.xp || 0),
           xpIntoLevel: core.xpIntoLevel(s.xp || 0),
           xpPerLevel: core.xpPerLevel(),
@@ -1531,6 +1545,9 @@
       buyStreakFreeze: function () {
         var e = requireStudent(); if (e) return e;
         var stu = find(students, session.id);
+        if (!core.canUse('streakFreezes', stu.tier)) {
+          return fail('Buying streak freezes is for GOC students. Ask the academy about joining.');
+        }
         var r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
         if (!r.ok) {
           return fail(r.reason === 'max'
@@ -2047,6 +2064,42 @@
       tutorOverview: function () {
         var e = requireUnlocked(); if (e) return e;
         return ok({ subjects: core.subjectDepth(questions, notes).map(function (r) { r.tutors = []; return r; }), minimums: core.SUBJECT_DEPTH_MIN });
+      },
+      /* Console -> Tutors -> Tutor Analytics. Mirrors the server's
+         GET /api/admin/tutors/analytics one-for-one: one report per subject
+         that has questions, each carrying the same snapshot / activity /
+         weakTopics triple, built from the same core rules. Without this the
+         method existed on the http driver only, so GOC.api never forwarded it
+         and admTutAnalyticsLoad()'s `!GOC.api.adminTutorAnalytics` guard bailed
+         — leaving the card stuck on "Loading analytics…" even against a live
+         server. The offline demo keeps no per-answer counters, so weakTopics is
+         ranked from an empty stat map exactly as the server ranks a subject
+         that has none yet. */
+      adminTutorAnalytics: function () {
+        var e = requireUnlocked(); if (e) return e;
+        var runsByStudent = {};
+        students.forEach(function (st) {
+          if (!st || !st.id) return;
+          if (Array.isArray(practiceRuns[st.id])) runsByStudent[st.id] = core.dropOldRuns(practiceRuns[st.id]);
+        });
+        var subjects = [];
+        var seenSubject = {};
+        questions.forEach(function (r) {
+          if (!r || !r.subject || seenSubject[r.subject]) return;
+          seenSubject[r.subject] = true; subjects.push(r.subject);
+        });
+        var now = Date.now();
+        return ok({
+          reports: subjects.map(function (subject) {
+            var subjectAttempts = attempts.filter(function (a) { return a && a.subject === subject; });
+            return {
+              subject: subject,
+              snapshot: core.tutorSnapshot(subject, students, runsByStudent, subjectAttempts, now),
+              activity: core.tutorActivity(subject, students, runsByStudent, subjectAttempts, now),
+              weakTopics: core.rankWeakTopics({})
+            };
+          })
+        });
       },
       /* Tutor questions waiting for approval live on the server; offline there are none. */
       listApprovals: function () {
@@ -3179,6 +3232,7 @@ listPublishedVideos: function () {
     getResultsExport: function (f) { return active.getResultsExport(f); },
     getResultsPdf: function (f) { return active.getResultsPdf(f); },
     tutorOverview: function () { return active.tutorOverview(); },
+    adminTutorAnalytics: function () { return active.adminTutorAnalytics(); },
     listApprovals: function (subject) { return active.listApprovals(subject); },
     approveQuestion: function (id, edit) { return active.approveQuestion(id, edit); },
     returnQuestion: function (id, reason) { return active.returnQuestion(id, reason); },

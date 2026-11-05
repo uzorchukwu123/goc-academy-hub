@@ -1084,6 +1084,15 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
      data file written before practice sync existed — start it empty; there is
      nothing to migrate, as older runs only ever lived on the device. */
   if (!db.practiceRuns || typeof db.practiceRuns !== 'object') db.practiceRuns = {};
+  /* Privacy-policy acceptances, kept per Scholar ID: { at, version }. Written
+     once at registration (the sign-up route refuses a registration without an
+     explicit acceptance) and read by /api/me so the acceptance follows the
+     student to any device they sign in on. Lives in the data blob like the
+     other per-student records, so it needs no students-collection attribute
+     and survives on any Appwrite schema. Missing on an older data file —
+     start it empty; accounts registered before consent existed simply have
+     no record. */
+  if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
   /* Saved questions, kept per Scholar ID (Phase 1, part 2). Missing on a data
      file written before bookmarks existed — start it empty. */
   if (!db.bookmarks || typeof db.bookmarks !== 'object') db.bookmarks = {};
@@ -1289,13 +1298,22 @@ function withDataLock(fn) {
    the wrong objective answers in their latest marked Web Test papers (bounded,
    so one request stays cheap), merged newest first. Shared by the mistakes
    review and spaced repetition so both always read the same list. */
-async function mistakesFor(db, studentId) {
+async function mistakesFor(db, studentId, bank) {
   const runs = await practiceRunsOf(db, studentId);
   const marked = (await attemptsFor(db, studentId))
     .filter(a => a.status === 'marked')
     .sort((a, b) => b.submittedAt - a.submittedAt)
     .slice(0, 20);
-  const sums = await Promise.all(marked.map(a => summariseOwn(db, a, null)));
+  /* Resolve every answer row from ONE bank fetch instead of one findQ per row.
+     On Appwrite each findQ is a getDocument round-trip, so twenty marked papers
+     of forty answers used to mean ~800 document fetches per review load — the
+     root cause of the slow "Start review". A caller that already holds the bank
+     passes it in; otherwise it is fetched once here. { all: true, showArchived:
+     true } matches findQ's reach (any status, archived included), so a mistake
+     on a since-held-back or archived question still reads exactly as before. */
+  const all = bank || await listQuestions({ all: true, showArchived: true }, db);
+  const byId = new Map(all.map(q => [String(q.id), q]));
+  const sums = await Promise.all(marked.map(a => summariseOwn(db, a, null, id => byId.get(String(id)) || null)));
   return core.mergeMistakes([core.mistakesFromRuns(runs), core.mistakesFromAttempts(sums)]);
 }
 
@@ -1718,7 +1736,7 @@ function attemptSummary(a) {
 /* What the owning student may see. Correct answers and explanations are
    released only after the paper is marked, and only on their own paper. A
    student has no route that writes to a score, a mark or a correct answer. */
-async function summariseOwn(db, a, stu) {
+async function summariseOwn(db, a, stu, qLookup) {
   const out = attemptSummary(a);
   out.xpTotal = stu ? (stu.xp || 0) : 0;
   out.level = stu ? core.levelFor(stu.xp || 0) : 1;
@@ -1726,8 +1744,11 @@ async function summariseOwn(db, a, stu) {
   out.breakdown = a.status === 'marked' ? core.topicBreakdown(a.answers) : [];
   /* Resolve the question behind each answer row through the data-access layer.
      Fetched in parallel so a marked-paper review is one round of lookups, not
-     a serial walk. */
-  const questions = await Promise.all(a.answers.map(r => findQ(db, r.questionId)));
+     a serial walk. A caller that already holds the whole bank (mistakesFor)
+     passes a synchronous qLookup so no per-row document fetch happens at all. */
+  const questions = qLookup
+    ? a.answers.map(r => qLookup(r.questionId))
+    : await Promise.all(a.answers.map(r => findQ(db, r.questionId)));
   out.review = a.answers.map((r, i) => {
     const q = questions[i] || {};
     const row = {
@@ -3190,6 +3211,16 @@ const ROUTES = [
         return errJson(res, 429, core.signupLimitMessage(blocked.retryAfter, blocked.window));
       }
 
+      /* Explicit privacy-policy acceptance is required, server-side: the
+         sign-up form's ticked box sends { accepted: true, version }, and a
+         registration that arrives without it is refused before anything is
+         created. The version stored is the server's own current policy
+         version — never a value the browser chooses. */
+      const consent = body && body.privacyConsent;
+      if (!consent || consent.accepted !== true) {
+        return errJson(res, 400, 'Please read and accept the Privacy Policy to create your account.');
+      }
+
       const name = clean(body.name, 80);
       const password = String(body.password == null ? '' : body.password);
       if (name.length < 2) return errJson(res, 400, 'Enter your full name.');
@@ -3240,6 +3271,13 @@ const ROUTES = [
         db.students.push(rec);
       }
       delete rec.plainPassword;
+      /* Record the acceptance against the Scholar ID with the server's own
+         policy version and a timestamp. Kept in the data blob (db.consentLog)
+         so it needs no students-collection attribute and works on any
+         Appwrite schema; /api/me reads it back for the device's visit-counter
+         gate. */
+      if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
+      db.consentLog[rec.id] = { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION };
   writeData(db);
       attempts.delete(ip);
       noteSignup(ip);
@@ -4138,9 +4176,12 @@ const ROUTES = [
       const questions = await listQuestions({ subject, all: true }, db);
       const mine = core.subjectDepth(questions, db.notes).find(r => r.subject === subject);
       /* Count all questions for this subject by status so the tutor sees pending/returned
-         questions, not only approved 'live' ones (subjectDepth skips non-live rows). */
+         questions, not only approved 'live' ones (subjectDepth skips non-live rows).
+         Read from the SAME fetched list as the depth figures above — in Appwrite
+         mode db.questions is only the local cache and can be empty or stale, which
+         made these counts read zero while the bank actually held the tutor's rows. */
       const statusCounts = { live: 0, pending: 0, returned: 0, other: 0 };
-      (db.questions || []).forEach(q => {
+      (questions || []).forEach(q => {
         if (!q || q.subject !== subject) return;
         if (q.addedBy !== sess.tutor.id) return;
         const s = q.status || 'live';
@@ -4204,8 +4245,12 @@ const ROUTES = [
         }
       });
 
+      /* The subject list comes from the data-access layer, not the local blob:
+         in Appwrite mode db.questions is a cache that can be empty on a fresh
+         deploy, which used to make this report come back with no subjects at all. */
+      const bank = await listQuestions({ all: true }, db);
       const subjects = Array.from(new Set(
-        (db.questions || [])
+        bank
           .filter(q => q && q.subject)
           .map(q => q.subject)
       ));
@@ -5212,6 +5257,10 @@ const ROUTES = [
   okJson(res, {
         id: s.id, name: s.name, exam: core.EXAM,
         subjects: (s.subjects || []).slice(),
+        /* The stored privacy acceptance (or null for accounts registered
+           before consent existed). The page uses it to re-enable the
+           consent-gated visit counter on a new device. */
+        privacyConsent: (db.consentLog && db.consentLog[s.id]) || null,
         xp: s.xp || 0, streak: displayStreak, streakFreezes: s.streakFreezes || 0,
         level: core.levelFor(s.xp || 0),
         xpIntoLevel: core.xpIntoLevel(s.xp || 0),
@@ -5250,6 +5299,11 @@ const ROUTES = [
           stu = db.students.find(x => x.id === sess.data.id);
         }
         if (!stu) return { notFound: true };
+        /* Access tiers: buying a freeze is a GOC feature (TIER_FEATURES.open
+           .streakFreezes is false). Enforced here, not only on the Profile
+           row — freezes a student EARNS in the weekly quest or team challenge
+           are still held and spent by anyone; only the XP purchase is gated. */
+        if (!core.canUse('streakFreezes', stu.tier)) return { tierLocked: true };
         const r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
         if (!r.ok) return { refused: r };
         if (appwriteDatabases) {
@@ -5262,6 +5316,7 @@ const ROUTES = [
         return { r };
       });
       if (out.notFound) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+      if (out.tierLocked) return errJson(res, 403, 'Buying streak freezes is for GOC students. Ask the academy about joining.');
       if (out.refused) {
         const why = out.refused.reason === 'max'
           ? 'You already hold the most streak freezes you can (' + core.STREAK_FREEZE_MAX + ').'
@@ -5333,8 +5388,10 @@ const ROUTES = [
      in their stored practice runs, once each, newest first. Read-only. */
   { method: 'GET', path: /^\/api\/me\/mistakes$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
-      const mistakes = await mistakesFor(db, sess.data.id);
-      const bank = await listQuestions({}, db);
+      /* One bank fetch serves both the mistakes build and the passage/image
+         attachment — no second full-bank read, no per-answer document fetch. */
+      const bank = await listQuestions({ all: true, showArchived: true }, db);
+      const mistakes = await mistakesFor(db, sess.data.id, bank);
       okJson(res, { mistakes: core.attachImagesToMistakes(core.attachPassagesToMistakes(mistakes, bank, db.passages), bank) });
     } },
 
@@ -5347,10 +5404,11 @@ const ROUTES = [
      nothing goes in the academic record and no XP is paid. */
   { method: 'GET', path: /^\/api\/me\/review$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
-      const mistakes = await mistakesFor(db, sess.data.id);
+      /* One bank fetch for the mistakes build and the attachment (see /me/mistakes). */
+      const bank = await listQuestions({ all: true, showArchived: true }, db);
+      const mistakes = await mistakesFor(db, sess.data.id, bank);
       const state = (db.reviewState && db.reviewState[sess.data.id]) || {};
       const queue = core.srQueue(mistakes, state, Date.now());
-      const bank = await listQuestions({}, db);
       queue.due = core.attachImagesToMistakes(core.attachPassagesToMistakes(queue.due, bank, db.passages), bank);
       const tier = await studentTierOf(db, sess.data.id);
       okJson(res, { review: queue, today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsToday(db, sess.data.id), tier) } });
@@ -6126,7 +6184,13 @@ const ROUTES = [
       if (isNaN(used) || used < 0) used = Math.round((Date.now() - paper.startedAt) / 1000);
       used = Math.max(used, 0);
       if (paper.durationSec) used = Math.min(used, paper.durationSec);
-      openStudy.delete(paper.id);
+      /* Keyed with String() exactly as the set() and get() above are, so the
+         three can never disagree about the key type. Harmless while a paper id
+         is already a string ('S' + hex), but Fix 4 coerced the set and the get
+         and left this delete behind — a numeric id would then have been served
+         and marked, yet never removed, blocking that student from starting a
+         different subject until the 4-hour sweep ran. */
+      openStudy.delete(String(paper.id));
       const mode = paper.mode || 'cbt';
         let stu;
 

@@ -26,7 +26,16 @@ function grab(name) {
 
 console.log('\nthe section is on the console');
 ok('the selector offers Tutors', /<option value="tutors">Tutors<\/option>/.test(html));
-ok('opening it loads the tutors (and the access log)', /if\(section === 'tutors'\)\{ admTutLoad\(\); admAuditLoad\(\); \}/.test(app));
+/* Read as "the Tutors branch calls each of these", not as one exact literal
+   string. Two more panels — Subjects & tutors, and Tutor Analytics — have since
+   been added to the same branch, and pinning the whole call sequence made this
+   check fail on every addition even though nothing it was written to protect had
+   changed. */
+var tutorsBranch = (app.match(/if\(section === 'tutors'\)\{[^}]*\}/) || [''])[0];
+ok('opening it loads the tutors (and the access log)',
+   ['admTutLoad()', 'admAuditLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
+ok('and the two panels added since: Subjects & tutors, and Tutor Analytics',
+   ['admTutOverLoad()', 'admTutAnalyticsLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
 
 var calls = [], toasts = [], confirms = [], answer = true, tutors = [];
 var els = {};

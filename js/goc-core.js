@@ -76,8 +76,15 @@
 
   /* XP per level. 1,240 XP -> level 8, matching the academy's existing scale. */
   var XP_PER_LEVEL = 160;
-  var STREAK_FREEZE_COST_XP = 100;
+  /* The academy's price for one streak freeze (owner's decision: 500 XP).
+     One constant, read by the server route, the demo driver and the Profile
+     row, so the three can never quote different prices. */
+  var STREAK_FREEZE_COST_XP = 500;
   var STREAK_FREEZE_MAX = 2;
+  /* The privacy policy a registration accepts. Bump this whenever the policy
+     text in index.html changes materially, so a stored consent always names
+     the version the student actually saw. */
+  var PRIVACY_POLICY_VERSION = '2026-11-04';
 
   /* Default weighting for overall academic performance (Priority 11).
      Configurable through settings.perfWeights rather than hard-coded at the
@@ -394,7 +401,12 @@
                    Web Test session — it only ever reaches the student's
                    Practice screen (studyPool() doesn't filter on section at
                    all, so it draws every active objective-kind question,
-                   'practice' included).
+                   'practice' included — see the note below).
+       NOTE: studyPool() DOES filter on section: self-directed study draws
+       ONLY 'practice' rows, so the three pools (Practice, Web Test, JAMB)
+       stay disjoint in both directions. An earlier version of this comment
+       claimed studyPool drew every objective-kind question; that stopped
+       being true when Practice became its own exclusive pool.
        period      always 'test' — the academy runs one test, not a weekly
                    and a monthly one. Kept so records written before that
                    change still read cleanly.
@@ -410,11 +422,18 @@
 
   var bankSeq = 0;
 
-  function q(subject, topic, section, period, text, options, answer, explanation, difficulty) {
+  function q(subject, topic, section, period, text, options, answer, explanation, difficulty, year) {
     return {
       id: ++bankSeq, subject: subject, topic: topic, kind: 'objective',
       section: section, period: period, text: text, options: options,
       answer: answer, expected: '', maxMark: 1,
+      /* Only a Practice question can carry a past-paper year — that is what
+         makes it a past question (see isPastQuestion and studyYears). Every
+         other section stores null, which is exactly the shape
+         validateQuestion() gives a record written through the console, so a
+         seeded row and an imported one are indistinguishable downstream.
+         cleanQuestionYear() clamps and refuses out-of-range values here too. */
+      year: section === 'practice' ? cleanQuestionYear(year).year : null,
       difficulty: difficulty || 'medium', explanation: explanation || '', active: true
     };
   }
@@ -483,7 +502,102 @@
     q('Biology', 'Ecology', 'objective', 'test', 'Organisms that manufacture their own food from simple inorganic substances are called', ['consumers', 'decomposers', 'producers', 'parasites'], 2, 'Producers, mainly green plants, are autotrophic and form the first trophic level.', 'easy'),
     q('Biology', 'Genetics', 'jamb', 'test', 'A cross between two heterozygous tall pea plants (Tt × Tt) gives a phenotypic ratio of', ['1 : 1', '2 : 1', '3 : 1', '9 : 3 : 3 : 1'], 2, 'The offspring are TT, Tt, Tt and tt — three tall to one short, a 3 : 1 phenotypic ratio.', 'hard'),
     th('Biology', 'Plant Nutrition', 'test', 'Define photosynthesis and write the balanced overall equation for the process.', 'Photosynthesis is the process by which green plants use light energy trapped by chlorophyll to convert carbon dioxide and water into carbohydrate, releasing oxygen as a by-product. Overall equation: 6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂, in the presence of light and chlorophyll. Award marks for a definition mentioning light energy, chlorophyll and the raw materials (6) and a correctly balanced equation (4).', 10),
-    th('Biology', 'Transport System', 'test', 'State three differences between arteries and veins.', 'Any three of the following: arteries carry blood away from the heart while veins carry blood towards it; arteries carry oxygenated blood (except the pulmonary artery) while veins carry deoxygenated blood (except the pulmonary vein); arteries have thick muscular elastic walls and a narrow lumen while veins have thin walls and a wide lumen; veins contain valves to prevent backflow while arteries do not; blood in arteries is under high pressure and flows in spurts, whereas blood in veins is under low pressure and flows smoothly. Award 3 marks per valid, clearly stated difference.', 9)
+    th('Biology', 'Transport System', 'test', 'State three differences between arteries and veins.', 'Any three of the following: arteries carry blood away from the heart while veins carry blood towards it; arteries carry oxygenated blood (except the pulmonary artery) while veins carry deoxygenated blood (except the pulmonary vein); arteries have thick muscular elastic walls and a narrow lumen while veins have thin walls and a wide lumen; veins contain valves to prevent backflow while arteries do not; blood in arteries is under high pressure and flows in spurts, whereas blood in veins is under low pressure and flows smoothly. Award 3 marks per valid, clearly stated difference.', 9),
+
+    /* ==================================================================
+       PRACTICE POOL
+       ------------------------------------------------------------------
+       Self-directed Practice (and the student's own timed CBT set-up) is
+       served from an EXCLUSIVE pool: studyPool() takes only rows whose
+       section is 'practice', so that a student grinding Practice never
+       meets a question reserved for the Web Test or the JAMB-oriented
+       sitting, and vice versa. Past-question browsing narrows that same
+       pool by year (isPastQuestion).
+
+       The 43 rows above carry sections 'objective', 'jamb' and 'theory'
+       only — so on a fresh install, before management imported anything,
+       the Practice pool was empty for every subject: /api/me/study/start
+       answered 404 "No questions have been published for <subject> yet"
+       and a new student could not practise at all. These rows are the
+       starter Practice bank that was missing, twelve per subject across
+       the topics the academy already teaches, with a spread of past-paper
+       years so year-narrowing and the Past questions screen have something
+       real to show from the very first boot.
+
+       They are appended, never interleaved, so the ids of the 43 rows
+       above are unchanged (44 onward from here) and nothing that refers to
+       a seeded question by id moves.
+       ================================================================== */
+
+    /* ------------------------------------------------ Use of English (Practice) */
+    q(ENGLISH, 'Lexis & Structure', 'practice', 'test', 'Choose the option nearest in meaning to the word in capital letters: The judge’s summary was LUCID.', ['Confusing', 'Clear', 'Lengthy', 'Repetitive'], 1, '“Lucid” means expressed clearly and easy to understand.', 'easy', 2021),
+    q(ENGLISH, 'Antonyms', 'practice', 'test', 'Choose the option opposite in meaning to the word in capital letters: She was FRUGAL with her allowance.', ['Wasteful', 'Thrifty', 'Careful', 'Grateful'], 0, '“Frugal” means sparing and thrifty, so its opposite is wasteful.', 'easy', 2020),
+    q(ENGLISH, 'Concord', 'practice', 'test', 'Choose the correct option: Neither of the candidates ______ present at the debate.', ['was', 'were', 'are', 'have been'], 0, '“Neither of” takes a singular verb, so “was” is correct.', 'medium', null),
+    q(ENGLISH, 'Tenses', 'practice', 'test', 'Complete the sentence: By the time we reached the hall, the film ______.', ['has started', 'had started', 'starts', 'was starting'], 1, 'An action completed before another past action takes the past perfect: “had started”.', 'medium', 2022),
+    q(ENGLISH, 'Oral Forms', 'practice', 'test', 'Choose the word whose underlined vowel sound is different from the others.', ['go', 'no', 'do', 'so'], 2, '“Do” carries the long /uː/ sound; “go”, “no” and “so” all carry /əʊ/.', 'medium', 2019),
+    q(ENGLISH, 'Idioms & Phrasal Verbs', 'practice', 'test', 'In the sentence “She let the cat out of the bag”, the expression means she', ['released a pet', 'revealed a secret', 'started a quarrel', 'made a careless mistake'], 1, 'To “let the cat out of the bag” is to disclose a secret, often unintentionally.', 'easy', null),
+    q(ENGLISH, 'Lexis & Structure', 'practice', 'test', 'The committee’s decision was IRREVOCABLE, which means it', ['could be reversed', 'could not be reversed', 'was deeply unpopular', 'had been postponed'], 1, '“Irrevocable” describes something that cannot be changed or withdrawn once made.', 'medium', 2023),
+    q(ENGLISH, 'Concord', 'practice', 'test', 'Choose the correct option: Bread and eggs ______ what he eats every morning.', ['is', 'was', 'are', 'has been'], 2, 'Two items joined by “and” take a plural verb, so “are” is correct.', 'easy', null),
+    q(ENGLISH, 'Antonyms', 'practice', 'test', 'Choose the option opposite in meaning to the word in capital letters: The witness was TACITURN throughout the trial.', ['Talkative', 'Quiet', 'Hostile', 'Truthful'], 0, '“Taciturn” means reserved and saying little, so its opposite is talkative.', 'hard', 2021),
+    q(ENGLISH, 'Tenses', 'practice', 'test', 'Complete the sentence: If I ______ you, I would withdraw the application.', ['am', 'was', 'were', 'be'], 2, 'The second conditional uses the subjunctive “were” for every person: “If I were you”.', 'medium', null),
+    q(ENGLISH, 'Idioms & Phrasal Verbs', 'practice', 'test', 'The thief was caught red-handed, meaning he was caught', ['while committing the act', 'after a long chase', 'without any evidence', 'by a passer-by'], 0, '“Red-handed” means in the very act of doing something wrong.', 'easy', 2020),
+    q(ENGLISH, 'Lexis & Structure', 'practice', 'test', 'Choose the option nearest in meaning to the word in capital letters: Her argument was COGENT.', ['Confusing', 'Convincing', 'Lengthy', 'Polite'], 1, '“Cogent” means clear, logical and convincing.', 'medium', 2022),
+
+    /* ---------------------------------------------------- Mathematics (Practice) */
+    q('Mathematics', 'Indices', 'practice', 'test', 'Simplify $3^2 \\times 3^3$.', ['$3^5$', '$3^6$', '$9^5$', '$6^5$'], 0, 'When powers of the same base are multiplied the indices are added: $2 + 3 = 5$, giving $3^5$.', 'easy', 2021),
+    q('Mathematics', 'Linear Equations', 'practice', 'test', 'Solve for $x$: $5x + 8 = 33$.', ['3', '5', '7', '25'], 1, '$5x = 33 - 8 = 25$, so $x = 25 \\div 5 = 5$.', 'easy', 2020),
+    q('Mathematics', 'Plane Geometry', 'practice', 'test', 'Each interior angle of a regular pentagon is', ['$100^\\circ$', '$108^\\circ$', '$120^\\circ$', '$135^\\circ$'], 1, 'The interior angles sum to $(5 - 2) \\times 180^\\circ = 540^\\circ$, and a regular pentagon divides that equally: $540^\\circ \\div 5 = 108^\\circ$.', 'medium', 2019),
+    q('Mathematics', 'Statistics', 'practice', 'test', 'The median of 3, 7, 9, 12 and 15 is', ['7', '8', '9', '12'], 2, 'Arranged in order, the middle value of these five numbers is 9.', 'easy', null),
+    q('Mathematics', 'Coordinate Geometry', 'practice', 'test', 'The midpoint of the line joining $(2, 4)$ and $(6, 10)$ is', ['$(4, 7)$', '$(8, 14)$', '$(3, 5)$', '$(4, 6)$'], 0, 'The midpoint averages each coordinate: $\\frac{2 + 6}{2} = 4$ and $\\frac{4 + 10}{2} = 7$.', 'medium', 2022),
+    q('Mathematics', 'Logarithms', 'practice', 'test', 'Evaluate $\\log_{10} 100$.', ['1', '2', '10', '100'], 1, '$10^2 = 100$, so the logarithm of 100 to base 10 is 2.', 'easy', null),
+    q('Mathematics', 'Sequences & Series', 'practice', 'test', 'The sum of the first ten natural numbers is', ['45', '50', '55', '60'], 2, 'Using $S = \\frac{n(n + 1)}{2}$ with $n = 10$ gives $\\frac{10 \\times 11}{2} = 55$.', 'medium', 2021),
+    q('Mathematics', 'Indices', 'practice', 'test', 'Express $0.00032$ in standard form.', ['$3.2 \\times 10^{-4}$', '$3.2 \\times 10^{-5}$', '$32 \\times 10^{-5}$', '$3.2 \\times 10^{4}$'], 0, 'The point moves four places to the right, so the power of ten is $-4$.', 'medium', 2023),
+    q('Mathematics', 'Linear Equations', 'practice', 'test', 'If $2(x - 3) = x + 4$, find $x$.', ['7', '10', '11', '14'], 1, 'Expanding gives $2x - 6 = x + 4$, so $x = 10$.', 'medium', null),
+    q('Mathematics', 'Fractions & Percentages', 'practice', 'test', 'Convert $\\frac{3}{8}$ to a percentage.', ['30%', '35%', '37.5%', '40%'], 2, '$\\frac{3}{8} = 0.375$, and multiplying by 100 gives $37.5\\%$.', 'easy', 2020),
+    q('Mathematics', 'Statistics', 'practice', 'test', 'The probability of throwing a five on a fair die is', ['$\\frac{1}{2}$', '$\\frac{1}{3}$', '$\\frac{1}{6}$', '$\\frac{5}{6}$'], 2, 'One favourable outcome out of six equally likely ones gives $\\frac{1}{6}$.', 'easy', null),
+    q('Mathematics', 'Sequences & Series', 'practice', 'test', 'The eighth term of the progression 2, 5, 8, 11, … is', ['20', '23', '26', '29'], 1, 'This is an arithmetic progression with $a = 2$ and $d = 3$, so the eighth term is $2 + (7 \\times 3) = 23$.', 'medium', 2022),
+
+    /* -------------------------------------------------------- Physics (Practice) */
+    q('Physics', 'Motion', 'practice', 'test', 'A car starts from rest and accelerates uniformly at $2\\ \\text{m/s}^2$ for 10 seconds. Find its final speed.', ['5 m/s', '12 m/s', '20 m/s', '40 m/s'], 2, '$v = u + at = 0 + (2 \\times 10) = 20\\ \\text{m/s}$.', 'easy', 2021),
+    q('Physics', 'Electricity', 'practice', 'test', 'Three resistors of 2 ohms each are connected in series. Their total resistance is', ['3 ohms', '4 ohms', '6 ohms', '8 ohms'], 2, 'Resistances in series add: $2 + 2 + 2 = 6$ ohms.', 'easy', 2020),
+    q('Physics', 'Heat Energy', 'practice', 'test', 'Convert $100^\\circ C$ to kelvin.', ['173 K', '273 K', '373 K', '473 K'], 2, 'K = °C + 273, so $100 + 273 = 373$ K.', 'easy', null),
+    q('Physics', 'Waves', 'practice', 'test', 'A wave has a frequency of 20 Hz and a wavelength of 3 m. Calculate its speed.', ['6.7 m/s', '17 m/s', '23 m/s', '60 m/s'], 3, '$v = f\\lambda = 20 \\times 3 = 60\\ \\text{m/s}$.', 'medium', 2019),
+    q('Physics', 'Scalars & Vectors', 'practice', 'test', 'Which of the following is a scalar quantity?', ['Velocity', 'Force', 'Speed', 'Displacement'], 2, 'Speed has magnitude only; velocity, force and displacement all carry a direction.', 'easy', null),
+    q('Physics', 'Electromagnetism', 'practice', 'test', 'A transformer steps 240 V down to 12 V. The ratio of secondary turns to primary turns is', ['1 : 20', '20 : 1', '1 : 10', '10 : 1'], 0, '$\\frac{N_s}{N_p} = \\frac{V_s}{V_p} = \\frac{12}{240} = \\frac{1}{20}$, so the ratio is 1 : 20.', 'medium', 2022),
+    q('Physics', 'Motion', 'practice', 'test', 'The area under a velocity–time graph represents', ['the acceleration', 'the distance travelled', 'the speed', 'the force applied'], 1, 'Speed multiplied by time is distance, so the enclosed area is the distance travelled.', 'medium', null),
+    q('Physics', 'Machines', 'practice', 'test', 'A machine has a velocity ratio of 4 and an efficiency of 50%. Its mechanical advantage is', ['1', '2', '4', '8'], 1, 'Efficiency is mechanical advantage divided by velocity ratio, so $M.A. = 0.5 \\times 4 = 2$.', 'hard', 2023),
+    q('Physics', 'Electricity', 'practice', 'test', 'The SI unit of electrical power is the', ['joule', 'watt', 'volt', 'ampere'], 1, 'Power is measured in watts; the joule measures energy, the volt potential difference and the ampere current.', 'easy', null),
+    q('Physics', 'Heat Energy', 'practice', 'test', 'Heat travels along a metal rod by molecular collision. This mode of transfer is called', ['convection', 'radiation', 'conduction', 'evaporation'], 2, 'Conduction is the transfer of heat through a material without the material itself moving.', 'easy', 2020),
+    q('Physics', 'Projectiles', 'practice', 'test', 'A body projected horizontally near the earth’s surface follows a path that is', ['a straight line', 'a circle', 'a parabola', 'a sine curve'], 2, 'Constant horizontal velocity combined with uniform vertical acceleration traces a parabola.', 'medium', null),
+    q('Physics', 'Waves', 'practice', 'test', 'Sound cannot travel through', ['water', 'air', 'steel', 'a vacuum'], 3, 'Sound is a mechanical wave and needs a material medium; a vacuum contains none.', 'easy', 2021),
+
+    /* ------------------------------------------------------ Chemistry (Practice) */
+    q('Chemistry', 'Mole Concept', 'practice', 'test', 'How many moles are there in 8 g of oxygen gas, $O_2$? (O = 16)', ['0.25', '0.5', '2', '4'], 0, 'The molar mass of $O_2$ is 32 g, so $n = \\frac{8}{32} = 0.25$ mole.', 'medium', 2021),
+    q('Chemistry', 'Acids, Bases & Salts', 'practice', 'test', 'The pH of a neutral solution at room temperature is', ['0', '7', '10', '14'], 1, 'A neutral solution is exactly pH 7; below that is acidic and above it alkaline.', 'easy', null),
+    q('Chemistry', 'States of Matter', 'practice', 'test', 'The change of state from a gas directly to a solid is called', ['condensation', 'sublimation', 'deposition', 'freezing'], 2, 'Deposition skips the liquid stage entirely; sublimation is the reverse, solid straight to gas.', 'hard', 2020),
+    q('Chemistry', 'Organic Chemistry', 'practice', 'test', 'The general formula of the alkanes is', ['$C_nH_{2n}$', '$C_nH_{2n+2}$', '$C_nH_{2n-2}$', '$C_nH_{n+2}$'], 1, 'Alkanes are saturated, so every member fits $C_nH_{2n+2}$ — methane $CH_4$, ethane $C_2H_6$, and so on.', 'medium', 2019),
+    q('Chemistry', 'Electrolysis', 'practice', 'test', 'During the electrolysis of molten sodium chloride, sodium is discharged at the', ['anode', 'cathode', 'salt bridge', 'electrolyte'], 1, 'Sodium ions are positive, so they migrate to the negative electrode, the cathode, and gain electrons there.', 'medium', null),
+    q('Chemistry', 'Redox Reactions', 'practice', 'test', 'The oxidation number of sulphur in $H_2SO_4$ is', ['+2', '+4', '+6', '-2'], 2, 'Hydrogen contributes $+2$ and the four oxygens $-8$, so sulphur must be $+6$ for the molecule to be neutral.', 'hard', 2022),
+    q('Chemistry', 'Tests for Gases', 'practice', 'test', 'The gas that turns lime water milky is', ['hydrogen', 'oxygen', 'carbon (IV) oxide', 'ammonia'], 2, 'Carbon (IV) oxide forms insoluble calcium trioxocarbonate (IV), which clouds the lime water.', 'easy', null),
+    q('Chemistry', 'Mole Concept', 'practice', 'test', 'The volume occupied by 2 moles of a gas at s.t.p. is', ['$11.2\\ \\text{dm}^3$', '$22.4\\ \\text{dm}^3$', '$44.8\\ \\text{dm}^3$', '$67.2\\ \\text{dm}^3$'], 2, 'One mole of any gas occupies $22.4\\ \\text{dm}^3$ at s.t.p., so two moles occupy $44.8\\ \\text{dm}^3$.', 'medium', 2023),
+    q('Chemistry', 'Acids, Bases & Salts', 'practice', 'test', 'Which of the following is a strong acid?', ['Ethanoic acid', 'Citric acid', 'Hydrochloric acid', 'Carbonic acid'], 2, 'Hydrochloric acid ionises completely in water; the other three are weak acids.', 'easy', null),
+    q('Chemistry', 'Organic Chemistry', 'practice', 'test', 'The functional group of the alcohols is', ['$-OH$', '$-COOH$', '$-NH_2$', '$-CHO$'], 0, 'Alcohols carry the hydroxyl group $-OH$; $-COOH$ is the carboxylic acid group.', 'easy', 2020),
+    q('Chemistry', 'States of Matter', 'practice', 'test', 'The process by which a gas changes into a liquid is called', ['evaporation', 'condensation', 'distillation', 'diffusion'], 1, 'Condensation is the change from vapour to liquid on cooling.', 'easy', null),
+    q('Chemistry', 'Redox Reactions', 'practice', 'test', 'A substance that is oxidised during a chemical reaction', ['gains electrons', 'loses electrons', 'gains protons', 'loses neutrons'], 1, 'Oxidation is the loss of electrons; reduction is the gain of them.', 'medium', 2021),
+
+    /* -------------------------------------------------------- Biology (Practice) */
+    q('Biology', 'Cell Biology', 'practice', 'test', 'The organelle responsible for cellular respiration is the', ['nucleus', 'mitochondrion', 'ribosome', 'vacuole'], 1, 'Mitochondria release energy from food, which is why hard-working cells contain many of them.', 'easy', 2021),
+    q('Biology', 'Plant Nutrition', 'practice', 'test', 'The raw materials required for photosynthesis are', ['oxygen and water', 'carbon (IV) oxide and water', 'glucose and oxygen', 'nitrogen and water'], 1, 'Green plants take in carbon (IV) dioxide and water, and use light energy to make glucose and oxygen.', 'easy', null),
+    q('Biology', 'Transport System', 'practice', 'test', 'The component of blood that carries oxygen is the', ['white blood cell', 'platelet', 'red blood cell', 'plasma'], 2, 'Haemoglobin inside the red blood cells combines with oxygen for transport round the body.', 'easy', 2020),
+    q('Biology', 'Genetics', 'practice', 'test', 'The genotype of a homozygous tall pea plant is', ['TT', 'Tt', 'tt', 'T'], 0, 'Homozygous means both alleles are alike, and tallness is dominant, so the genotype is TT.', 'medium', 2019),
+    q('Biology', 'Excretion', 'practice', 'test', 'The functional unit of the kidney is the', ['alveolus', 'nephron', 'neuron', 'villus'], 1, 'Each kidney contains thousands of nephrons, which filter the blood and form urine.', 'easy', null),
+    q('Biology', 'Ecology', 'practice', 'test', 'A relationship in which one organism benefits and the other is harmed is', ['commensalism', 'mutualism', 'parasitism', 'saprophytism'], 2, 'In parasitism the parasite gains at the host’s expense; in mutualism both gain, and in commensalism only one gains while the other is unaffected.', 'medium', 2022),
+    q('Biology', 'Cell Biology', 'practice', 'test', 'The structure that controls the movement of substances in and out of a cell is the', ['cell wall', 'cell membrane', 'cytoplasm', 'nucleus'], 1, 'The cell membrane is selectively permeable; the cell wall, found only in plants, gives support and shape.', 'easy', null),
+    q('Biology', 'Transport System', 'practice', 'test', 'The blood vessels that carry blood away from the heart are the', ['veins', 'capillaries', 'arteries', 'venules'], 2, 'Arteries carry blood away from the heart under high pressure; veins carry it back.', 'easy', 2023),
+    q('Biology', 'Genetics', 'practice', 'test', 'The number of chromosomes in a normal human body cell is', ['23', '44', '46', '48'], 2, 'Human body cells are diploid with 46 chromosomes in 23 pairs; the gametes carry 23.', 'medium', 2020),
+    q('Biology', 'Plant Nutrition', 'practice', 'test', 'The green pigment that traps light energy during photosynthesis is', ['carotene', 'chlorophyll', 'xanthophyll', 'haemoglobin'], 1, 'Chlorophyll, held in the chloroplasts, absorbs the light energy the process runs on.', 'easy', null),
+    q('Biology', 'Ecology', 'practice', 'test', 'The breaking down of dead plants and animals by micro-organisms is called', ['photosynthesis', 'decomposition', 'transpiration', 'nitrification'], 1, 'Decomposers return nutrients to the soil, which is why they close every food cycle.', 'easy', 2021),
+    q('Biology', 'Excretion', 'practice', 'test', 'Which of the following is NOT a function of the mammalian kidney?', ['Filtering the blood', 'Regulating the water balance', 'Making urea from ammonia', 'Removing excess salts'], 2, 'Urea is made in the liver by deamination; the kidney only filters it out of the blood and excretes it.', 'hard', null)
 
   ];
 
@@ -2284,7 +2398,15 @@
   /* The stamp a day's allowance is counted against, in the academy's own terms:
      one calendar day, not a rolling 24 hours. */
   function dayStamp(when) {
-    var d = when ? new Date(when) : new Date();
+    /* "Today" is the academy's day (Africa/Lagos, UTC+1) — the same clock the
+       daily practice/review allowances use (lagosDay). Before this, a streak
+       on a UTC host rolled over at 01:00 Lagos time, and the demo driver
+       rolled over in whatever timezone the student's phone was set to, so
+       the same student could be counted against two different days.
+       An explicit argument still formats that Date's own calendar fields —
+       dayBefore()'s date arithmetic and the test fixtures rely on that. */
+    if (when == null) return lagosDay();
+    var d = when instanceof Date ? when : new Date(when);
     var m = d.getMonth() + 1, day = d.getDate();
     return d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
   }
@@ -2382,8 +2504,10 @@
     for (i = 0; i < (runs || []).length; i++) {
       var r = runs[i];
       if (!r) continue;
-      if (r.ts && dayStamp(r.ts) === t) todays.push(r);
-      else if (!r.ts || dayStamp(r.ts) < t) history.push(r);
+      /* A run's timestamp is an instant, so it is stamped in the academy's
+         timezone (lagosDay), the same clock `t` defaults to. */
+      if (r.ts && lagosDay(r.ts) === t) todays.push(r);
+      else if (!r.ts || lagosDay(r.ts) < t) history.push(r);
     }
     var weak = weakestTopicFromRuns(history);
     var answered = 0;
@@ -2628,7 +2752,11 @@
     if (!challenge || !challenge.active) return null;
     var s = cleanChallengeState(state, challenge);
     var total = challengeCount(teamTotal);
-    var td = dayStamp(today ? new Date(today) : undefined);
+    /* `today` arrives as a 'YYYY-MM-DD' stamp from the routes (already the
+       academy's day); a Date/number is formatted as its own calendar day.
+       Parsing a stamp through new Date() would read it as UTC midnight and
+       slide a day backwards on hosts west of UTC. */
+    var td = validDayStr(today) ? String(today) : dayStamp(today == null ? undefined : new Date(today));
     var end = challenge.endsOn || weekEnd(challenge.week);
     var daysLeft = Math.max(0, Math.round((Date.parse(end + 'T00:00:00') - Date.parse(td + 'T00:00:00')) / 86400000));
     return {
@@ -5480,6 +5608,27 @@
   ];
   var AD = 'academic-director', FIN = 'finance', PUB = 'publicity', SA = 'student-affairs';
 
+  /* The four roles the Founder may issue a management ID for — every role but
+     the Founder's own, so the single Founder account stays GOC-A-001 and no
+     second Founder can ever be created.
+
+     Held ONCE here and read by both managerRoles() (what the Managers panel
+     offers) and validateManager() (what the server actually accepts), so the
+     offer and the acceptance can never drift apart again. Before this, each of
+     the two kept its own copy of the list and both had silently dropped
+     'academic-director', so the panel offered three roles and the server
+     refused to issue a fourth Academic Director — while this comment, and the
+     tests pinning the owner's decision of 14 Oct 2026, both said four. */
+  var ISSUABLE_MANAGER_ROLES = [AD, FIN, PUB, SA];
+
+  /* The refusal message, built from the same list so it always names exactly
+     the roles that can be issued: "Choose A, B, C, or D." */
+  function issuableManagerTitles() {
+    var titles = ISSUABLE_MANAGER_ROLES.map(function (k) { return adminRoleTitle(k); });
+    if (titles.length < 2) return titles.join('');
+    return titles.slice(0, -1).join(', ') + ', or ' + titles[titles.length - 1];
+  }
+
   /* capability -> the non-Founder roles that hold it ([] = Founder only). */
   var ROLE_CAPS = {
     /* Founder only */
@@ -5671,6 +5820,16 @@
     challenges: ['challenges.manage'],
     access: ['managers.accounts'],
     siteanalytics: ['analytics.site'],
+    /* Scholarship (B#2 slice 4). The panel, the tile and the five server routes
+       all shipped, but this section was never listed here — and
+       consoleSectionAllowed() fails closed on a section nobody listed, so
+       admMenuApply() filtered the Scholarship tile out for EVERY signed-in
+       manager, the Founder included. The whole console was unreachable through
+       the UI. Opened by scholarship.view (Academic Director + Student Affairs),
+       the same capability that guards GET /api/scholarship/applications; the
+       decide / export / approve / delete buttons inside it are gated per-route
+       on the server, exactly as the menu comment above describes. */
+    scholarship: ['scholarship.view'],
   };
   function consoleSectionAllowed(section, id, role) {
     if (!Object.prototype.hasOwnProperty.call(CONSOLE_SECTIONS, section)) return false;
@@ -5785,11 +5944,11 @@
   function rolesWithCapability(cap) {
     return ADMIN_ROLES.map(function (r) { return r.key; }).filter(function (k) { return roleCan(k, cap); });
   }
-  /* The four roles the Founder can issue IDs for in the Managers panel. */
+  /* The four roles the Founder can issue IDs for in the Managers panel — read
+     from ISSUABLE_MANAGER_ROLES, the one list validateManager() also obeys. */
   function managerRoles() {
-    var allowed = ['finance', 'publicity', 'student-affairs'];
     return ADMIN_ROLES.filter(function (r) {
-      return allowed.indexOf(r.key) !== -1;
+      return ISSUABLE_MANAGER_ROLES.indexOf(r.key) !== -1;
     }).map(function (r) {
       return { key: r.key, title: r.title };
     });
@@ -5835,9 +5994,8 @@
     if (name.length > 80) return { error: 'The manager’s name is too long (80 letters at most).' };
 
     var role = adminRoleKey(r.role);
-    var allowedManagerRoles = ['finance', 'publicity', 'student-affairs'];
-    if (!role || allowedManagerRoles.indexOf(role) === -1) {
-      return { error: 'Choose Finance & Administration Manager, Publicity & Communications Manager, or Student Affairs & Operations Coordinator.' };
+    if (!role || ISSUABLE_MANAGER_ROLES.indexOf(role) === -1) {
+      return { error: 'Choose ' + issuableManagerTitles() + '.' };
     }
 
     var creating = o.creating === undefined ? true : !!o.creating;
@@ -6734,6 +6892,7 @@
     QUEST_XP_REWARD: QUEST_XP_REWARD,
     STREAK_FREEZE_COST_XP: STREAK_FREEZE_COST_XP,
     STREAK_FREEZE_MAX: STREAK_FREEZE_MAX,
+    PRIVACY_POLICY_VERSION: PRIVACY_POLICY_VERSION,
     PRACTICE_XP_PER_ANSWER: PRACTICE_XP_PER_ANSWER,
     PRACTICE_XP_PER_CORRECT: PRACTICE_XP_PER_CORRECT,
     PRACTICE_XP_DAILY_CAP: PRACTICE_XP_DAILY_CAP,

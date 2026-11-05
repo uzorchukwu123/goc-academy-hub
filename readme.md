@@ -17,14 +17,14 @@ read each part on its own — and it now has a real backend behind it.
 | `js/api.js` | **Where data comes from.** The only file that knows. Holds two drivers: demo data, and a real server. |
 | `js/app.js` | Everything it does: screen switching, login, the console, the timetable, the Web Test, practice and reading mode. Never touches data directly — it asks `js/api.js`. |
 | `js/pwa.js` | Six lines that register the service worker so the app can be installed. Skipped when opened from a file. |
-| `sw.js` | The offline cache list. Bump `CACHE` (currently `goc-v176`) whenever you change a file, or phones keep the old copy. |
+| `sw.js` | The offline cache list. Bump `CACHE` (currently `goc-v184`) whenever you change a file, or phones keep the old copy. |
 | `manifest.webmanifest` | The app's name, colours, and icons for "Add to home screen". |
 | `icons/` | The app icons. |
 | `start-server.ps1` | Right-click → Run with PowerShell. Starts the server and opens the app. |
 | `server/server.js` | The backend. Real accounts, hashed passwords, expiring logins. Uses local JSON or Appwrite Storage in production. |
 | `server/data.json` | The database — written on first run. Passwords are hashed here, never plain. |
-| `server/schema.sql` | The same database as Postgres tables, for when you move to Supabase. |
-| `server/supabase.md` | The step-by-step map for moving to Supabase later. |
+| `server/schema.sql` | **Planned, not written yet** — the same database as Postgres tables, for when you move to Supabase. `server/export-questions.js` already emits the question inserts it would follow. |
+| `server/supabase.md` | **Planned, not written yet** — the step-by-step map for moving to Supabase later. Until it exists, `DEPLOYMENT.md` is the deployment guide. |
 | `server/export-questions.js` | Writes the question bank out as a spreadsheet you can edit and re-import. |
 | `test/` | The checks. One command tells you whether anything is broken — see below. |
 
@@ -34,7 +34,7 @@ read each part on its own — and it now has a real backend behind it.
 node test\run.js
 ```
 
-176 suites and thousands of separate checks. Set `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` and `GOC_PASSCODE` first (the server refuses the published demo passwords), and run `npm install` once so the Appwrite and upload checks can run. It drives the
+182 suites and thousands of separate checks. Set `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` and `GOC_PASSCODE` first (the server refuses the published demo passwords), and run `npm install` once so the Appwrite and upload checks can run. It drives the
 real screens and the real server: signing in, sitting a paper, marking it in the
 console, the league order, practice runs, the mathematics renderer, the offline
 cache list. Every suite must say `passed`. If one says `FAILED`, the lines above it
@@ -64,17 +64,11 @@ first run are the two management consoles:
 
 | ID | Password | Opens |
 |---|---|---|
-<<<<<<< HEAD
-| `GOC-A-001` | `<set GOC_FOUNDER_PW>` (or `GOC_FOUNDER_PW` if set) | Console access portal (Founder) |
-| `GOC-A-002` | `<set GOC_ACADDIR_PW>` (or `GOC_ACADDIR_PW` if set) | Console access portal (Academic Director) |
+| `GOC-A-001` | from `GOC_FOUNDER_PW` — set it yourself, never published here | Console access portal (Founder) |
+| `GOC-A-002` | from `GOC_ACADDIR_PW` — set it yourself, never published here | Console access portal (Academic Director) |
 
-Console passcode: `<set GOC_PASSCODE>`. Configure all three securely through environment variables.
-=======
-| `GOC-A-001` | `founder2027` (or `GOC_FOUNDER_PW` if set) | Console access portal (Founder) |
-| `GOC-A-002` | `acaddir2027` (or `GOC_ACADDIR_PW` if set) | Console access portal (Academic Director) |
-
-Console passcode: `2027` (or `GOC_PASSCODE` if set). Change all three from
->>>>>>> origin/main
+Console passcode: from `GOC_PASSCODE`, also never published here. All three are
+environment variables, set before the first run. Change all three from
 Console → Access & firewall before a cohort registers — the server refuses to
 boot in production with any of them still at the published default. Any ID
 not on the roster is refused; students are created when anyone signs up (an
@@ -144,11 +138,9 @@ part of `js/goc-core.js` and is covered by `test/test-math.js`.
 
 ## Before real students use it
 
-<<<<<<< HEAD
-Management passwords and the console passcode must never be published in this file. They
-=======
-The three passwords above and the passcode are published in this file, so they
->>>>>>> origin/main
+No password or passcode is published in this file — but the demo defaults the
+server falls back to are in the source, and have been in every earlier copy of
+this file, so they
 are not secrets. In real mode all four can be replaced, and the two console
 passwords must be — set them **before the very first run**, because that is when
 `server/data.json` is written:
@@ -237,7 +229,9 @@ doing something a server should eventually own. The big ones (login checks, the
 passcode, password storage, Scholar ID numbering) are already handled by
 `server/server.js`.
 
-When you are ready to go online, read `server/supabase.md`. The short version:
+When you are ready to go online, read `DEPLOYMENT.md` and `DEPLOY-CHECKLIST.md`
+(`server/supabase.md` is still only planned — see the table above). The short
+version:
 only `js/api.js` changes. `app.js`, `index.html`, and the CSS are untouched.
 
 ## Planned fix — Web Test runner showing blank screen
@@ -287,7 +281,6 @@ question object whose content is empty, and `wtPaintHead()` never updating
 **No server-side change is needed** — the `openPapers` in-memory design is
 intentional (a restart signs everyone out of in-progress papers, which is correct
 behaviour). The fix is purely defensive client-side hygiene.
-<<<<<<< HEAD
 
 ---
 
@@ -352,5 +345,3 @@ behaviour). The fix is purely defensive client-side hygiene.
 **Status:** APPLIED — GOC_Fix6_Fix01.zip
 
 **Pending fixes (Fix 02–07 + A–D):** See ROADMAP-REMAINING.md.
-=======
->>>>>>> origin/main
