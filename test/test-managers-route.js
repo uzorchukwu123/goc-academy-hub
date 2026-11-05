@@ -90,11 +90,11 @@ function waitForBoot(n) {
   ok('data.json holds no plain password or passcode', !/starter123|another456/.test(stored) && !/"passcode"\s*:\s*"(4821|90210)"/.test(stored));
   ok('it holds hashes, the must-change flag and the ID high-water mark', /scrypt\$/.test(stored) && /"mustChangePassword": true/.test(stored) && /"managerIdHigh": "GOC-A-005"/.test(stored));
 
-  head('the Academic Director keeps full access');
+  head('the Academic Director is denied Founder-only manager controls');
   var a = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, a.body.token);
   var al = await call('GET', '/api/managers', undefined, a.body.token);
-  ok('the seeded Academic Director account can still open the panel', al.status === 200 && al.body.managers.length === 3, al.status);
+  ok('the seeded Academic Director account cannot open the Managers panel', al.status === 403, al.status);
 
   stop();
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');

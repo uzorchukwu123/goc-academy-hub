@@ -79,6 +79,16 @@
         return r;
       });
     },
+    /* Email + password login. The token this returns is the authenticated
+       session; it is kept in sessionStorage, so a normal browser refresh
+       keeps the student signed in (the server persists it too). Logout removes
+       it on both sides. */
+    login: function (d) {
+      return request('POST', '/login', d || {}).then(function (r) {
+        if (r && r.token) rememberToken(r.token);
+        return r;
+      });
+    },
 
     /* ---- the participant's own side -------------------------------------- */
     hasToken: function () { return !!participantToken; },
@@ -99,6 +109,12 @@
       return request('POST', '/attempts/' + encodeURIComponent(String(attemptId)) + '/submit', { responses: responses || {} });
     },
     results: function () { return request('GET', '/results'); },
+    /* The candidate's own programme record: profile, enrolment, access, the
+       lesson catalogue and how far through it they are. */
+    programme: function () { return request('GET', '/programme'); },
+    completeLesson: function (id) {
+      return request('POST', '/lessons/' + encodeURIComponent(String(id)) + '/complete', {});
+    },
     leaderboards: function () { return request('GET', '/leaderboards'); },
     leaderboard: function (id) { return request('GET', '/leaderboards/' + encodeURIComponent(String(id))); },
 
@@ -134,6 +150,38 @@
     },
     attemptDetail: function (id) { return request('GET', '/admin/attempts/' + encodeURIComponent(String(id)), undefined, { admin: true }); },
     records: function () { return request('GET', '/admin/records', undefined, { admin: true }); },
+    /* The edition's own question picker. It reads the edition's LOCAL banks on
+       the server (/api/free2027/admin/questions?bank=…), never Appwrite and
+       never the shared db.questions — so activities can be built on a box
+       where the Appwrite Database API is unavailable. */
+    adminQuestions: function (subject, bank) {
+      var qs = '?bank=' + encodeURIComponent(bank === 'competition' ? 'competition' : 'weekly');
+      if (subject) qs += '&subject=' + encodeURIComponent(String(subject));
+      return request('GET', '/admin/questions' + qs, undefined, { admin: true });
+    },
+    /* The two independent question banks (weekly / competition). */
+    adminBanks: function () { return request('GET', '/admin/question-banks', undefined, { admin: true }); },
+    adminBankQuestions: function (bank, params) {
+      params = params || {};
+      var q = [];
+      if (params.q) q.push('q=' + encodeURIComponent(String(params.q)));
+      if (params.subject) q.push('subject=' + encodeURIComponent(String(params.subject)));
+      return request('GET', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions' + (q.length ? '?' + q.join('&') : ''), undefined, { admin: true });
+    },
+    adminBankCreate: function (bank, d) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions', d || {}, { admin: true }); },
+    adminBankUpdate: function (bank, id, d) { return request('PUT', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions/' + encodeURIComponent(String(id)), d || {}, { admin: true }); },
+    adminBankDelete: function (bank, ids, confirm) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions/delete', { ids: ids, confirm: confirm === true }, { admin: true }); },
+    adminBankDeleteAll: function (bank, confirm) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/delete-all', { confirm: confirm === true }, { admin: true }); },
+    adminBankImport: function (bank, csv, preview) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/import', { csv: csv, preview: preview === true }, { admin: true }); },
+    adminLessons: function () { return request('GET', '/admin/lessons', undefined, { admin: true }); },
+    saveLesson: function (d, id) {
+      return id
+        ? request('PUT', '/admin/lessons/' + encodeURIComponent(String(id)), d || {}, { admin: true })
+        : request('POST', '/admin/lessons', d || {}, { admin: true });
+    },
+    deleteLesson: function (id) { return request('DELETE', '/admin/lessons/' + encodeURIComponent(String(id)), undefined, { admin: true }); },
+    adminProgress: function () { return request('GET', '/admin/progress', undefined, { admin: true }); },
+    adminAudit: function () { return request('GET', '/admin/audit', undefined, { admin: true }); },
     newSession: function (label, confirm) {
       return request('POST', '/admin/sessions/new', { label: label, confirm: confirm === true }, { admin: true });
     },

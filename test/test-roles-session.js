@@ -16,7 +16,7 @@ function head(t) { console.log('\n' + t); }
 
 head('the guard rule (pure)');
 var c0 = core.allCapabilities()[0];
-ok('GOC-A-001 and GOC-A-002 keep full access, whatever the capability', core.adminMayUse('GOC-A-001', 'founder', undefined) && core.adminMayUse('GOC-A-002', 'academic-director', undefined) && core.adminMayUse('GOC-A-002', 'academic-director', 'no-such-cap'));
+ok('the Founder is unrestricted while the Academic Director is capability-scoped', core.adminMayUse('GOC-A-001', 'founder', undefined) && core.adminMayUse('GOC-A-002', 'academic-director', 'questions.manage') && core.adminMayUse('GOC-A-002', 'academic-director', 'overview.own') && !core.adminMayUse('GOC-A-002', 'academic-director', 'system.migrate') && !core.adminMayUse('GOC-A-002', 'academic-director', 'managers.accounts') && !core.adminMayUse('GOC-A-002', 'academic-director', 'no-such-cap'));
 ok('a later manager with no capability on the route is refused', core.adminMayUse('GOC-A-003', 'finance', undefined) === false && core.adminMayUse('GOC-A-003', 'finance', '') === false);
 ok('a later manager is refused a capability that is not listed', core.adminMayUse('GOC-A-003', 'finance', 'no-such-cap') === false);
 ok('a later manager with a missing or mistyped role is refused', core.adminMayUse('GOC-A-004', null, c0) === false && core.adminMayUse('GOC-A-004', 'chairman', c0) === false);
@@ -36,7 +36,17 @@ var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
    the roster, the question bank, results, leaderboards and session archiving).
    They are counted here deliberately, so a change to that guard is as visible as
    a change to any other console route. */
-var CONSOLE_ROUTES = 110 + 20;
+/* 130 + 7: the 2027 Free Tutorial Edition's programme records added seven
+   console routes — the local question picker (admin/questions), lessons
+   (list, add, edit, delete), progress and the programme audit trail. Every one
+   still carries a capability from the existing map, so the capability system
+   itself is unchanged. */
+/* 110 + 27 + 1: PR #9 follow-up adds GET /api/free2027/admin/email-status, the
+   safe Brevo/SMTP diagnostic, guarded by the same site-configuration capability
+   (homepage.edit) as the mode switch. +7 more for the two independent question
+   banks (overview, list, create, update, bulk-delete, delete-all, CSV import),
+   all guarded by questions.manage. */
+var CONSOLE_ROUTES = 110 + 35;
 var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
 ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));

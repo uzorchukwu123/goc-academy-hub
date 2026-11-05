@@ -7,9 +7,8 @@
        or switched-off server produces;
      • 2027 Free Tutorial Mode adds one class to <body> and nothing else, and
        taking the class away restores the hub;
-     • five quick clicks on the "4 Science subjects" card open the administrator
-       sign-in, and a pause restarts the count — and the card itself is never
-       restyled, renamed or given a hint;
+     • one click on the existing "4 Science subjects" card opens the administrator
+       sign-in, while the original homepage remains intact;
      • the registration form refuses a bad address before it calls the server;
      • the examination paints the paper it is served, saves an answer, moves,
        and keeps its clock running down from the SERVER's remaining time.
@@ -96,10 +95,11 @@ function makeWorld(opts) {
   /* the pieces of the page the script touches */
   ['freeHomeOpen', 'freeHomeNote', 'freeHomeMode', 'freeRegErr', 'freeRegStep1', 'freeRegStep2', 'freeName',
    'freeEmail', 'freeCourse', 'freeCourseList', 'freeRegBtn', 'freeOtp', 'freeOtpErr', 'freeOtpTo', 'freeOtpDev',
-   'freeOtpBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
+   'freeOtpBtn', 'freeOtpResendBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
    'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeResultBody', 'freeBoardBody',
-   'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing',
+   'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing', 'freeProgramme',
+   'freePassword', 'freeLoginEmail', 'freeLoginPassword', 'freeLoginBtn', 'freeLoginErr', 'free-login',
    'free-admin', 'free-home', 'free-portal', 'free-result', 'free-exam', 'free-leaderboard', 'admin-gate', 'admin'
   ].forEach(el);
   el('freeRegStep2').hidden = true;
@@ -124,18 +124,36 @@ function makeWorld(opts) {
       return o.configFails ? Promise.reject(new Error('no config'))
         : Promise.resolve(o.config || { on: true, mode: 'free2027', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10 });
     },
-    registerStart: function (d) { calls.api.push(['registerStart', d]); return Promise.resolve(o.startReply || { sent: true, delivered: false, devCode: '123456', dev: true }); },
-    registerVerify: function (d) { calls.api.push(['registerVerify', d]); return Promise.resolve(o.verifyReply || { token: 'T1', participant: { id: 'GOC-F27-0001', name: 'Ada', course: 'Law', email: 'ad••@example.com' } }); },
-    me: function () { return Promise.resolve({ participant: { id: 'GOC-F27-0001', name: 'Ada', course: 'Law' } }); },
+    registerStart: function (d) { calls.api.push(['registerStart', d]); return Promise.resolve(o.startReply || { sent: true, delivered: true, expiresInMin: 15, resendInSec: 60 }); },
+    registerVerify: function (d) { calls.api.push(['registerVerify', d]); return Promise.resolve(o.verifyReply || { token: 'T1', participant: { id: 'GOC-F-001', name: 'Ada', course: 'Law', email: 'ad••@example.com' } }); },
+    login: function (d) { calls.api.push(['login', d]); return o.loginFails ? Promise.reject(new Error('That email address or password is not right.')) : Promise.resolve(o.loginReply || { token: 'T2', participant: { id: 'GOC-F-001', name: 'Ada', course: 'Law' } }); },
+    me: function () { return Promise.resolve({ participant: { id: 'GOC-F-001', name: 'Ada', course: 'Law' } }); },
     logout: function () { return Promise.resolve({ ok: true }); },
-    activities: function () { return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F27-0001', name: 'Ada' } }); },
+    activities: function () { return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F-001', name: 'Ada' } }); },
     start: function (id) { calls.api.push(['start', id]); return Promise.resolve(o.startAttempt || { attempt: { id: 'F27-A1', title: 'Week 1', kind: 'weekly', remainingSec: 615, responses: {} }, questions: [], resumed: false }); },
     resume: function () { return Promise.resolve({}); },
     answer: function (a, q, c) { calls.api.push(['answer', a, q, c]); return Promise.resolve({ saved: true }); },
     submit: function (a, r) { calls.api.push(['submit', a, r]); return Promise.resolve(o.submitReply || { result: { title: 'Week 1', kind: 'weekly', score: 2, maxScore: 4, private: true, timeUsedSec: 30 } }); },
     results: function () { return Promise.resolve({ results: [] }); },
     leaderboards: function () { return Promise.resolve({ leaderboards: [] }); },
-    leaderboard: function () { return Promise.resolve({ leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); }
+    leaderboard: function () { return Promise.resolve({ leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); },
+    programme: function () {
+      calls.api.push(['programme']);
+      return Promise.resolve(o.programmeReply || {
+        profile: { id: 'GOC-F-001', name: 'Ada', course: 'Law' },
+        enrolment: { course: 'Law', status: 'enrolled', enrolledAt: 1 },
+        access: { programme: '2027-free-tutorial', status: 'active', grantedAt: 1 },
+        progress: {
+          completed: 1, total: 2, percent: 50,
+          lessons: [
+            { id: 'F27-L-001', title: 'Cell biology', subject: 'Biology', summary: 'Membranes', done: true, completedAt: 1700000000000 },
+            { id: 'F27-L-002', title: 'Algebra', subject: 'Mathematics', summary: '', done: false, completedAt: null }
+          ]
+        },
+        quizzes: { submitted: 1, average: 75, best: 3, lastAt: 1700000000000 }
+      });
+    },
+    completeLesson: function (id) { calls.api.push(['completeLesson', id]); return Promise.resolve({ completed: true, already: false }); }
   };
 
   var sandbox = {
@@ -221,6 +239,8 @@ settle(load(w1)).then(function () {
   ok('the page was not moved off the homepage', w1.calls.go.length === 0 || w1.calls.go[w1.calls.go.length - 1] === 'landing', w1.calls.go.join(','));
   ok('the edition\'s screens were not opened', w1.calls.go.indexOf('free-home') < 0);
   ok('GOC.freeUI reports Original Mode', w1.sandbox.GOC.freeUI.mode().mode === 'original');
+  /* the statistics card is NO LONGER a hidden admin entrance (PR #9) */
+  ok('no gateClick handler remains in Original Mode', w1.sandbox.GOC.freeUI.gateClick === undefined);
 
   console.log('\nA server that cannot be reached also leaves the hub alone');
   w2 = makeWorld({ healthFails: true });
@@ -233,7 +253,7 @@ settle(load(w1)).then(function () {
   w3 = makeWorld({});
   var ctx3 = load(w3); return settle(w3).then(function () {
     ok('the body carries the edition class', w3.doc.body.classList.contains('f27-mode'));
-    ok('the homepage screen is the one shown', w3.calls.go.indexOf('free-home') > -1, w3.calls.go.join(','));
+    ok('the original homepage remains the initial screen in Free Tutorial mode', w3.els.landing.classList.contains('active') && w3.calls.go.indexOf('free-home') < 0, w3.calls.go.join(','));
     ok('the course list was filled from the server', /Medicine and Surgery/.test(w3.els.freeCourseList.innerHTML));
     ok('the mode is named on the page', /2027 Free Tutorial Mode/.test(w3.els.freeHomeMode.textContent), w3.els.freeHomeMode.textContent);
     /* What the CSS must say, read as statements about the page rather than as
@@ -241,8 +261,9 @@ settle(load(w1)).then(function () {
     var flat = css.replace(/\s+/g, ' ');
     var hidesAll = /body\.f27-mode \.screen \{ display: none !important; \}/.test(flat);
     var showsEdition = /body\.f27-mode \.screen\.active\.f27, body\.f27-mode #landing\.active,/.test(flat);
-    ok('the CSS hides every original screen', hidesAll, flat.slice(0, 120));
-    ok('and shows only the edition\'s screens, the homepage and the console', showsEdition);
+    ok('Free Tutorial mode disables unrelated original app screens', hidesAll, flat.slice(0, 120));
+    ok('the homepage, edition screens and console sign-in remain available', showsEdition);
+    ok('Free Tutorial mode does not hide the original homepage sections', !/body\.f27-mode #landing \.lp-sec/.test(flat));
     ok('the original chrome (tab bar, sidebar) is hidden, not deleted', /body\.f27-mode \.tabbar, body\.f27-mode \.side \{ display: none !important; \}/.test(flat) || /body\.f27-mode \.tabbar,/.test(flat));
     ok('every hiding rule is scoped to the mode class', (function () {
       var blocks = flat.split('}').filter(function (b) { return /display: none !important/.test(b); });
@@ -261,35 +282,20 @@ settle(load(w1)).then(function () {
     ok('and switching on again is the same one class', w3.doc.body.classList.contains('f27-mode'));
   });
 }).then(function () {
-  console.log('\nThe hidden entrance: five clicks on the "4 Science subjects" card');
+  console.log('\nThe statistics card is a plain stat — the hidden admin entrance is removed (PR #9)');
   var w = makeWorld({});
   load(w);
   return settle().then(function () {
     var card = w.els.lpStat4;
-    ok('the card is the one the page marks, and it is not restyled', card && html.indexOf('id="lpStat4"') > -1 && !/lpStat4[^{]*\{/.test(css));
+    ok('the statistics card is still on the homepage but carries no gate attribute', card && html.indexOf('id="lpStat4"') > -1 && !/data-f27-gate/.test(html));
     ok('the card still reads exactly "4" and "Science subjects"', /<b>4<\/b><span>Science subjects<\/span>/.test(html));
-    ok('the click is handled by a delegated listener, not a visible button', /closest\('\[data-f27-gate\]'\)/.test(uiSrc));
-    var click = function () { w.sandbox.GOC.freeUI.gateClick(); };
-    click(); click(); click(); click();
-    ok('four clicks open nothing', w.calls.go.indexOf('free-admin') < 0, w.calls.go.join(','));
-    ok('the counter is at four', w.sandbox.GOC.freeUI.gateClicks() === 4, w.sandbox.GOC.freeUI.gateClicks());
-    ok('the hub is still on the homepage', w.els['free-home'].classList.contains('active') || w.calls.go.indexOf('free-admin') < 0);
-    click();
-    /* KNOWN GAP (see FREE-2027-REMAINING.md, item 1): five clicks are counted
-       correctly, but revealAdminGate() refuses to open while #landing is not
-       the active screen — and in 2027 Free Tutorial Mode the visitor is on
-       #free-home. The count is asserted; the reveal is not, yet. */
-    ok('the fifth click counts as a complete sequence', w.sandbox.GOC.freeUI.gateClicks() === 0, w.sandbox.GOC.freeUI.gateClicks());
-    ok('and the sign-in is the hub\'s own administrator form', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
-    /* a pause restarts the count */
-    w.sandbox.advance(5000);
-    click(); click(); click(); click();
-    ok('after a pause, four slow clicks leave the count at four',
-      w.sandbox.GOC.freeUI.gateClicks() === 4, w.sandbox.GOC.freeUI.gateClicks());
-    w.sandbox.advance(4000);
-    click();
-    ok('and a click after a long pause starts the count again, at one',
-      w.sandbox.GOC.freeUI.gateClicks() === 1, w.sandbox.GOC.freeUI.gateClicks());
+    ok('the edition script wires no click handler to the card', !/data-f27-gate/.test(uiSrc) && w.sandbox.GOC.freeUI.gateClick === undefined);
+    ok('clicking the card opens nothing', (function () { w.calls.go.length = 0; w.sandbox.document.listeners.click && w.sandbox.document.listeners.click({ target: card }); return w.calls.go.indexOf('free-admin') < 0 && w.calls.go.indexOf('admin-gate') < 0; })(), w.calls.go.join(','));
+    ok('the homepage has no other Admin Console entry point', (function () { var landing = html.slice(html.indexOf('id="landing"'), html.indexOf('id="landing"') + 60000); return !/onclick="[^"]*(?:free-admin|admin-gate|go\('admin')/i.test(landing); })());
+    ok('the gate no longer writes a hint into the admin-login note', !/own passcode/i.test(w.els.freeAdminNote.textContent || ''), w.els.freeAdminNote.textContent);
+    ok('the sign-in uses the existing administrator form', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
+    ok('the stylesheet shows the login screen without requiring Free mode',
+      /#free-admin\.active/.test(css.replace(/\s+/g, ' ')));
 
     console.log('\nThe administrator sign-in keeps the server authorisation');
     w.els.freeAdminId.value = 'GOC-A-001';
@@ -312,15 +318,25 @@ settle(load(w1)).then(function () {
     ok('no request was sent', w.calls.api.length === before);
     ok('the reason is shown beside the field', /valid email/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
     w.els.freeEmail.value = 'ada@example.com';
+    var n0 = w.calls.api.length;
+    w.sandbox.freeRegisterStart();
+    ok('a missing password is refused before it is sent', w.calls.api.length === n0 && /password/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
+    w.els.freePassword.value = 'AdaPass-2027';
     w.sandbox.freeRegisterStart();
     return settle().then(function () {
       if (process.env.F27_DEBUG) console.log('REGERR', JSON.stringify(w.els.freeRegErr.textContent), w.calls.api.length, JSON.stringify(w.calls.api));
     ok('a good form sends one request', w.calls.api.filter(function (c) { return c[0] === 'registerStart'; }).length === 1);
       ok('the address is lower-cased and trimmed before it is sent',
         w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].email === 'ada@example.com');
+      ok('the chosen password is sent with the registration',
+        w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].password === 'AdaPass-2027');
       ok('the first step is hidden and the code step is shown', w.els.freeRegStep1.hidden === true && w.els.freeRegStep2.hidden === false);
       ok('the address is named on the code step', w.els.freeOtpTo.textContent === 'ada@example.com');
-      ok('with no mail sender the code is shown to the person registering', !w.els.freeOtpDev.hidden && /123456/.test(w.els.freeOtpDev.textContent));
+      ok('the verification code is never displayed in the browser UI', w.els.freeOtpDev.hidden && !/123456/.test(w.els.freeOtpDev.textContent));
+      ok('the page offers a resend action', /freeRegisterResend/.test(html));
+      w.sandbox.freeRegisterResend();
+      return settle().then(function () {
+      ok('resend asks the server to send a new email to the same address', w.calls.api.filter(function (c) { return c[0] === 'registerStart'; }).length === 2);
       w.els.freeOtp.value = '12';
       var n = w.calls.api.length;
       w.sandbox.freeRegisterVerify();
@@ -331,6 +347,7 @@ settle(load(w1)).then(function () {
     }).then(function () {
       ok('the right-length code is sent to the server', w.calls.api.some(function (c) { return c[0] === 'registerVerify' && c[1].code === '123456'; }));
       ok('and the candidate lands in the CBT Portal', w.calls.go[w.calls.go.length - 1] === 'free-portal', w.calls.go.join(','));
+      });
     });
   });
 }).then(function () {
@@ -374,6 +391,81 @@ settle(load(w1)).then(function () {
     });
   });
 }).then(function () {
+  console.log('\nThe portal shows the candidate their own programme');
+  var w = makeWorld({ token: 'T1' });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freeProgrammeLoad();
+    return settle().then(function () {
+      var out = w.els.freeProgramme.innerHTML;
+      ok('the card is shown once a candidate has a token', w.els.freeProgramme.hidden === false);
+      ok('it names the candidate and their participant ID', /Ada/.test(out) && /GOC-F-001/.test(out), out.slice(0, 160));
+      ok('it shows the course they enrolled on', /Law/.test(out));
+      ok('it says their access is active', /Access active/.test(out));
+      ok('it counts the lessons done', /1 of 2/.test(out), out.slice(0, 220));
+      ok('it paints a progress bar at that percentage', /aria-valuenow="50"/.test(out) && /width:50%/.test(out));
+      ok('a completed lesson is ticked, not offered again', /Cell biology/.test(out) && /✓ Done/.test(out));
+      ok('an unfinished lesson can be marked done', /Algebra/.test(out) && /freeLessonDone\('F27-L-002'\)/.test(out), out.slice(-260));
+      ok('the candidate\'s quiz record is shown', /quizzes submitted/.test(out) && /75%/.test(out));
+      w.sandbox.freeLessonDone('F27-L-002');
+      return settle().then(function () {
+        ok('marking a lesson done calls the server',
+          JSON.stringify(w.calls.api).indexOf('["completeLesson","F27-L-002"]') > -1, JSON.stringify(w.calls.api));
+        ok('and the programme is re-read afterwards',
+          w.calls.api.filter(function (c) { return c[0] === 'programme'; }).length === 2, JSON.stringify(w.calls.api));
+      });
+    });
+  });
+}).then(function () {
+  console.log('\nThe homepage tells the truth about the email sender');
+  function noteFor(delivery) {
+    var w = makeWorld({
+      config: { on: true, mode: 'free2027', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10, otpDelivery: delivery }
+    });
+    load(w);
+    return settle(w).then(function () { return w.els.freeHomeNote.textContent; });
+  }
+  return noteFor({ available: true }).then(function (note) {
+    ok('with a working sender the page says the code is emailed',
+      /one-time code sent to your email address/.test(note), note);
+    return noteFor({ available: false });
+  }).then(function (note) {
+    ok('with no sender it says registration is unavailable until mail is configured',
+      /temporarily unavailable/.test(note) && /configures email verification/.test(note) && !/shown on screen/.test(note), note);
+    return noteFor({ available: false });
+  }).then(function (note) {
+    ok('with no sender the same truthful configuration message is shown in every environment',
+      /temporarily unavailable/.test(note) && !/shown on screen/.test(note), note);
+  });
+}).then(function () {
+  console.log('\nThe CBT Portal asks for a login when there is no session, and logs in with email + password');
+  var w = makeWorld({});
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freePortalEnter();
+    return settle().then(function () {
+      ok('Enter CBT Portal with no session shows the login interface', w.calls.go[w.calls.go.length - 1] === 'free-login', w.calls.go.join(','));
+      w.els.freeLoginEmail.value = 'ada@example.com';
+      w.els.freeLoginPassword.value = 'AdaPass-2027';
+      w.sandbox.freeLogin();
+      return settle().then(function () {
+        ok('login sends email + password to the edition route', w.calls.api.some(function (c) { return c[0] === 'login' && c[1].email === 'ada@example.com' && c[1].password === 'AdaPass-2027'; }), JSON.stringify(w.calls.api.filter(function (c) { return c[0] === 'login'; })));
+        ok('a successful login opens the CBT dashboard', w.calls.go[w.calls.go.length - 1] === 'free-portal', w.calls.go.join(','));
+        var w2 = makeWorld({ loginFails: true });
+        load(w2);
+        return settle(w2).then(function () {
+          w2.els.freeLoginEmail.value = 'ada@example.com';
+          w2.els.freeLoginPassword.value = 'wrong-pass-1';
+          w2.sandbox.freeLogin();
+          return settle().then(function () {
+            ok('a failed login stays on the login screen with the server\'s message',
+              w2.calls.go.indexOf('free-portal') < 0 && /not right/.test(w2.els.freeLoginErr.textContent), w2.els.freeLoginErr.textContent);
+          });
+        });
+      });
+    });
+  });
+}).then(function () {
   console.log('\nThe client API sends the right token to the right route');
   function world(fetchSpy) {
     var sb = { console: console, document: { getElementById: function () { return null; }, readyState: 'complete' }, Promise: Promise,
@@ -398,6 +490,18 @@ settle(load(w1)).then(function () {
     return w.api.adminOverview();
   }).then(function () {
     ok('a console route carries the management token instead', seen[2].init.headers.Authorization === 'Bearer ADMIN-TOKEN', JSON.stringify(seen[2].init.headers));
+    return w.api.programme();
+  }).then(function () {
+    ok('the programme record is a participant route', /^api\/free2027\/programme$/.test(seen[3].url) &&
+      seen[3].init.headers.Authorization === 'Bearer PART-TOKEN', seen[3].url + ' ' + JSON.stringify(seen[3].init.headers));
+    return w.api.completeLesson('F27-L-002');
+  }).then(function () {
+    ok('a lesson is completed by POST to its own route', /^api\/free2027\/lessons\/F27-L-002\/complete$/.test(seen[4].url) && seen[4].init.method === 'POST',
+      seen[4].init.method + ' ' + seen[4].url);
+    return w.api.adminQuestions('Biology');
+  }).then(function () {
+    ok('the console question picker is the edition\'s own route', /^api\/free2027\/admin\/questions/.test(seen[5].url) &&
+      seen[5].init.headers.Authorization === 'Bearer ADMIN-TOKEN', seen[5].url);
     ok('and it is the same route the server guards', /^api\/free2027\/admin\/overview$/.test(seen[2].url), seen[2].url);
     ok('a refused request surfaces the server\'s own message', (function () {
       var w2 = world(function () { return Promise.resolve({ ok: false, status: 403, text: function () { return Promise.resolve('{"error":"Your role does not include this."}'); } }); });

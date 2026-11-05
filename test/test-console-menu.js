@@ -59,7 +59,7 @@ ok('every section in the rule has a tile, so it can be reached', core.allConsole
    core.allConsoleSections().filter(function (k) { return tileKeys.indexOf(k) < 0; }).join(','));
 ok('the Founder sees every section', core.consoleSectionsFor('GOC-A-009', 'founder').length === SECTIONS);
 ok('GOC-A-001 sees every section', core.consoleSectionsFor('GOC-A-001', 'founder').length === SECTIONS);
-ok('GOC-A-002 keeps full access', core.consoleSectionsFor('GOC-A-002', 'academic-director').length === SECTIONS);
+ok('GOC-A-002 is limited to academic/reporting sections, not Founder account/system controls', core.consoleSectionsFor('GOC-A-002', 'academic-director').length < SECTIONS && core.consoleSectionsFor('GOC-A-002', 'academic-director').indexOf('questions') > -1 && core.consoleSectionsFor('GOC-A-002', 'academic-director').indexOf('managers') < 0 && core.consoleSectionsFor('GOC-A-002', 'academic-director').indexOf('access') < 0);
 var fin = core.consoleSectionsFor('GOC-A-003', 'finance');
 ok('Finance sees Overview and Students only', fin.join() === 'overview,students', fin.join());
 var pub = core.consoleSectionsFor('GOC-A-004', 'publicity');

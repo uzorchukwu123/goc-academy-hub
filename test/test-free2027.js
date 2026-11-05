@@ -21,7 +21,7 @@ ok('switched OFF the site is in Original Mode whatever is stored', f.activeMode(
 ok('switched ON the stored mode is used', f.activeMode({ enabled: true, mode: 'free2027' }, true) === 'free2027');
 ok('a corrupt stored mode cannot leave the site without a homepage', f.activeMode({ enabled: true, mode: '???' }, true) === 'original');
 ok('when the feature is off there is no edition at all', f.activeMode({ enabled: true, mode: 'free2027' }, false) === 'original');
-ok('six free-tutorial screens are declared', f.SCREENS.length === 6 && f.isFreeScreen('free-portal') && !f.isFreeScreen('home'));
+ok('seven free-tutorial screens are declared', f.SCREENS.length === 7 && f.isFreeScreen('free-portal') && f.isFreeScreen('free-login') && !f.isFreeScreen('home'));
 
 head('participant records and the email rule');
 ok('a name is required', f.cleanName('').error && f.cleanName('A').error, 'short name accepted');
@@ -33,11 +33,19 @@ ok('a good address is accepted and lower-cased', f.cleanEmail(' Ada.Obi@Example.
 });
 ok('a course is required', !!f.cleanCourse('').error && f.cleanCourse('Law').course === 'Law');
 ok('the console course list is de-duplicated and trimmed', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join() === 'Law,Physics', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join());
-ok('participant IDs are issued as GOC-F27-nnnn', f.participantId(7) === 'GOC-F27-0007' && f.participantId(1234) === 'GOC-F27-1234');
-ok('only that shape is a participant ID', f.isParticipantId('GOC-F27-0001') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-x'));
-var pub = f.publicParticipant({ id: 'GOC-F27-0001', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
+ok('student identifiers are sequential GOC-F-NNN from 001', f.studentId(1) === 'GOC-F-001' && f.studentId(2) === 'GOC-F-002' && f.studentId(12) === 'GOC-F-012' && f.studentId(1234) === 'GOC-F-1234' && f.participantId(3) === 'GOC-F-003');
+ok('only the sequential GOC-F-NNN shape is accepted', f.isParticipantId('GOC-F-001') && f.isParticipantId('GOC-F-1234') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-0001') && !f.isParticipantId('GOC-F-1') && !f.isParticipantId('ada@example.com'));
+ok('the sequence number is recovered from an identifier', f.idSeqOf('GOC-F-007') === 7 && f.idSeqOf('GOC-F27-ABC') === 0 && f.idSeqOf('') === 0);
+var pub = f.publicParticipant({ id: 'GOC-F-001', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
 ok('a public participant carries no email address and no code', JSON.stringify(pub).indexOf('@') < 0 && !pub.otp, JSON.stringify(pub));
 ok('the address is masked even for the candidate themselves', f.maskEmail('ada.obi@example.com').indexOf('ada.obi') < 0 && /@example\.com$/.test(f.maskEmail('ada.obi@example.com')), f.maskEmail('ada.obi@example.com'));
+
+head('registration passwords');
+ok('a password shorter than 8 is rejected with the exact message', f.cleanPassword('').error === 'Your password must contain at least 8 characters.' && f.cleanPassword('ab1').error === 'Your password must contain at least 8 characters.' && f.cleanPassword('Abcdefg').error === 'Your password must contain at least 8 characters.', JSON.stringify(f.cleanPassword('Abcdefg')));
+ok('a password with no letter is rejected with the exact message', f.cleanPassword('12345678').error === 'Use a password containing both letters and numbers.');
+ok('a password with no number is rejected with the exact message', f.cleanPassword('onlyletters').error === 'Use a password containing both letters and numbers.');
+ok('a valid alphanumeric password of 8+ characters is accepted', f.cleanPassword('ada2027obi').password === 'ada2027obi' && f.cleanPassword('Abcd1234').password === 'Abcd1234' && !f.cleanPassword('a1'.repeat(36)).error);
+ok('an over-long password is refused', !!f.cleanPassword('a1' + 'x'.repeat(100)).error);
 
 head('one-time codes');
 ok('a code is exactly six digits', f.OTP_LENGTH === 6 && f.cleanOtp('123456').code === '123456');
@@ -136,6 +144,41 @@ ok('a new session has fresh records', s.id === 'F27-S3' && s.participants.length
 ok('the archive file name is derived from the session', f.archiveName('F27-S3') === 'free2027-archive-F27-S3.json');
 ok('the archive name cannot escape its folder', f.archiveName('../../etc/passwd').indexOf('/') < 0, f.archiveName('../../etc/passwd'));
 ok('a session label is trimmed and capped', f.cleanSessionLabel('  Term  Two  ') === 'Term Two' && f.cleanSessionLabel('').length > 0);
+
+head('programme lessons, progress and the audit trail');
+ok('a new session has an empty lesson catalogue and audit trail',
+  Array.isArray(s.lessons) && s.lessons.length === 0 && Array.isArray(s.audit) && s.audit.length === 0);
+ok('lesson ids are issued by the programme, never chosen by the client',
+  f.lessonId(1) === 'F27-L-001' && f.lessonId(12) === 'F27-L-012' && f.lessonId(120) === 'F27-L-120' && f.isLessonId('F27-L-001') && !f.isLessonId('lesson-1'));
+ok('a lesson needs a real title', !f.cleanLesson({ title: '' }).error === false && !!f.cleanLesson({ title: '  ' }).error && !!f.cleanLesson({ title: 'ab' }).error);
+ok('a good lesson is trimmed and capped',
+  f.cleanLesson({ title: '  Cell   biology  ', subject: ' Biology ', summary: ' x '.repeat(500) }).lesson.title === 'Cell biology' &&
+  f.cleanLesson({ title: 'Cell biology', subject: ' Biology ' }).lesson.subject === 'Biology' &&
+  f.cleanLesson({ title: 'Cell biology', summary: 'x'.repeat(500) }).lesson.summary.length === f.LESSON_SUMMARY_MAX);
+ok('only live lessons are shown, in the administrator\'s order',
+  f.liveLessons([
+    { id: 'F27-L-002', title: 'Second', order: 2 },
+    { id: 'F27-L-001', title: 'First', order: 1 },
+    { id: 'F27-L-003', title: 'Hidden', order: 3, active: false }
+  ]).map(function (l) { return l.id; }).join(',') === 'F27-L-001,F27-L-002');
+var sheet = f.progressOf({ progress: { lessons: { 'F27-L-001': 1700000000000 } } }, [
+  { id: 'F27-L-001', title: 'One', order: 1 }, { id: 'F27-L-002', title: 'Two', order: 2 }
+]);
+ok('progress counts only what is done, out of what is live', sheet.completed === 1 && sheet.total === 2 && sheet.percent === 50, JSON.stringify(sheet));
+ok('a completion keeps the time it was marked', sheet.lessons[0].done === true && sheet.lessons[0].completedAt === 1700000000000);
+ok('a candidate with no programme record still reads as zero progress',
+  f.progressOf({}, [{ id: 'F27-L-001', title: 'One' }]).percent === 0);
+ok('no lessons means no division by zero', f.progressOf({}, []).percent === 0 && f.progressOf({}, []).total === 0);
+var entry = f.auditEntry({ id: 'GOC-A-001', role: 'founder' }, 'lesson.create', 'F27-L-001', 'Cell biology', 1700000000000);
+ok('an audit entry names the administrator and the action',
+  entry.actorId === 'GOC-A-001' && entry.actorRole === 'founder' && entry.action === 'lesson.create' && entry.target === 'F27-L-001' && entry.at === 1700000000000);
+ok('an audit entry cannot carry a long free-text body', f.auditEntry({ id: 'x' }, 'a', 'b', 'z'.repeat(500)).detail.length <= 80);
+ok('an anonymous change is recorded as the system', f.auditEntry(null, 'x').actorId === 'system');
+var trail = { audit: [] };
+for (var ai = 0; ai < f.AUDIT_MAX + 5; ai++) f.pushAudit(trail, f.auditEntry({ id: 'GOC-A-001' }, 'action' + ai));
+ok('the audit trail is bounded, newest first',
+  trail.audit.length === f.AUDIT_MAX && trail.audit[0].action === 'action' + (f.AUDIT_MAX + 4),
+  trail.audit.length + ' ' + (trail.audit[0] || {}).action);
 
 console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
 process.exit(fails ? 1 : 0);

@@ -47,6 +47,9 @@
   A.archive = null;
 
   function $(id) { return document.getElementById(id); }
+  function roleKey() { return global.admMe && String(global.admMe.roleKey || ''); }
+  function isFounder() { return roleKey() === 'founder' || (global.admMe && global.admMe.id === 'GOC-A-001'); }
+  function mayManageProgramme() { return isFounder() || roleKey() === 'academic-director'; }
   function esc(v) {
     return String(v == null ? '' : v)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -98,14 +101,28 @@
   function panel() {
     return '<div class="ad-card"><div class="ad-h">2027 Free Tutorial Management</div>' +
       '<p class="ad-p">The temporary 2027 Free Tutorial Edition runs beside the hub, on its own records ' +
-      '(<b>GOC-F27-…</b> participants), its own activities and its own sessions. Nothing here reads or changes a ' +
-      'G.O.C student, attempt or staff record.</p>' +
+      '(<b>GOC-F-…</b> students), its own activities and its own sessions. Nothing here reads or changes a ' +
+      'G.O.C student, attempt or staff record. The website mode itself is switched from the separate ' +
+      '<b>Website Mode Control</b> function.</p>' +
       '<div class="ad-seg" id="f27AdmTabs">' + tabsHtml() + '</div>' +
       '<div id="f27AdmBody"><div class="ad-loading">Reading the programme…</div></div></div>';
   }
+  /* The SEPARATE Website Mode Control function: one panel, one job — switching
+     the public site between Original G.O.C Academy Hub and the 2027 Free
+     Tutorial Edition. Founder only (the server refuses the route for every
+     other role as well). */
+  function modePanel() {
+    return '<div class="ad-card"><div class="ad-h">Website Mode Control</div>' +
+      '<p class="ad-p">Switch the whole website between the original G.O.C Academy Hub and the 2027 Free ' +
+      'Tutorial Edition. The switch is stored with the site data and survives server restarts; it changes ' +
+      'nothing else — every G.O.C record, question and setting stays exactly where it is, and switching back ' +
+      'restores the complete original experience.</p>' +
+      '<div id="f27ModeBody"><div class="ad-loading">Reading the mode…</div></div></div>';
+  }
   function tabsHtml() {
-    var tabs = [['mode', 'Website mode'], ['participants', 'Participants'], ['activities', 'Activities'],
-      ['results', 'Results'], ['leaderboards', 'Leaderboards'], ['records', 'Session records'], ['sessions', 'Sessions & archive']];
+    var tabs = [['mode', 'Programme settings'], ['participants', 'Participants'], ['activities', 'Activities'],
+      ['banks', 'Question Banks'], ['results', 'Results'], ['leaderboards', 'Leaderboards'], ['records', 'Session records']];
+    if (isFounder()) tabs.push(['sessions', 'Sessions & archive']);
     return tabs.map(function (t) {
       return '<button data-f27adm="' + t[0] + '"' + (A.tab === t[0] ? ' class="on"' : '') +
         ' onclick="f27AdmTab(\'' + t[0] + '\')">' + t[1] + '</button>';
@@ -124,20 +141,30 @@
      and the tile is added to the console's tile list. Both are additive: the
      hub's other twenty-seven sections are untouched. */
   A.mount = function () {
-    /* One extra tile, drawn beside the console's own twenty-seven. It is added
-       at runtime rather than to ADM_TILE_META so that the hub's section rule,
-       its tile grid and the tests that pin their number stay exactly as they
-       are: the edition's records are not a console section in the capability
-       map, they are a temporary programme, and every one of its routes carries
-       its own guard on the server. */
+    /* Two extra tiles, drawn beside the console's own twenty-seven, are added at
+       runtime rather than to ADM_TILE_META so that the hub's section rule, its
+       tile grid and the tests that pin their number stay exactly as they are:
+       the edition's records are not console sections in the capability map,
+       they are a temporary programme, and every one of its routes carries its
+       own guard on the server.
+
+       ROOT-CAUSE FIX: the wrappers must be installed UNCONDITIONALLY. The
+       previous version bailed out here when nobody was signed in yet — which
+       is exactly the state at DOMContentLoaded, before the administrator has
+       logged in — so the wrappers were never installed and the tiles never
+       appeared in the running console. The role checks now happen inside the
+       wrappers, at the moment the menu is painted or a tile is clicked, when
+       global.admMe is populated. */
     var open = global.admOpen;
     if (typeof open === 'function' && !open.__f27) {
       var wrapped = function (section) {
-        if (section === 'free2027') {
+        if (section === 'free2027' || section === 'websitemode') {
+          if (section === 'free2027' && !mayManageProgramme()) { say('The 2027 Free Tutorial Management console is for the Founder and Academic Director.'); return; }
+          if (section === 'websitemode' && !isFounder()) { say('Website Mode Control is for the Founder only.'); return; }
           var b = $('admSheetBody'), back = $('admSheetBack'), sheet = $('admSheet'), title = $('admSheetTitle');
           if (b) {
-            if (title) title.textContent = '2027 Free Tutorial';
-            b.innerHTML = panel();
+            if (title) title.textContent = section === 'websitemode' ? 'Website Mode Control' : '2027 Free Tutorial Management';
+            b.innerHTML = section === 'websitemode' ? modePanel() : panel();
             b.scrollTop = 0;
             if (back) back.classList.add('show');
             if (sheet) sheet.classList.add('show');
@@ -147,9 +174,10 @@
           if (nav) {
             var tiles = nav.querySelectorAll('.adm-tile');
             for (var i = 0; i < tiles.length; i++) {
-              tiles[i].classList.toggle('active', tiles[i].getAttribute('data-section') === 'free2027');
+              tiles[i].classList.toggle('active', tiles[i].getAttribute('data-section') === section);
             }
           }
+          if (section === 'websitemode') { global.f27ModeLoad(); return; }
           A.tab = 'mode';
           global.f27AdmLoad();
           return;
@@ -164,11 +192,21 @@
     if (typeof apply === 'function' && !apply.__f27) {
       var painted = function () {
         var out = apply.apply(this, arguments);
+        /* admMenuApply rebuilds the tile grid from scratch on every call, so the
+           edition's tiles are re-added on every paint — but only for a role
+           that may see them, checked NOW, not at boot. */
         var nav = $('admTileNav');
-        if (nav && nav.innerHTML.indexOf('data-section="free2027"') < 0) {
-          nav.insertAdjacentHTML('beforeend',
-            '<button class="adm-tile" data-section="free2027" onclick="admOpen(\'free2027\')" aria-label="2027 Free Tutorial">' +
-            '<span class="at-label">2027 Free Tutorial</span></button>');
+        if (nav) {
+          if (mayManageProgramme() && nav.innerHTML.indexOf('data-section="free2027"') < 0) {
+            nav.insertAdjacentHTML('beforeend',
+              '<button class="adm-tile" data-section="free2027" onclick="admOpen(\'free2027\')" aria-label="2027 Free Tutorial Management">' +
+              '<span class="at-label">2027 Free Tutorial Management</span></button>');
+          }
+          if (isFounder() && nav.innerHTML.indexOf('data-section="websitemode"') < 0) {
+            nav.insertAdjacentHTML('beforeend',
+              '<button class="adm-tile" data-section="websitemode" onclick="admOpen(\'websitemode\')" aria-label="Website Mode Control">' +
+              '<span class="at-label">Website Mode Control</span></button>');
+          }
         }
         return out;
       };
@@ -192,6 +230,7 @@
     if (A.tab === 'mode') return loadMode();
     if (A.tab === 'participants') return loadParticipants();
     if (A.tab === 'activities') return loadActivities();
+    if (A.tab === 'banks') return loadBanks();
     if (A.tab === 'results') return loadResults();
     if (A.tab === 'leaderboards') return loadLeaderboards();
     if (A.tab === 'records') return loadRecords();
@@ -212,15 +251,10 @@
         '<div class="ad-metric"><span>2027 edition</span><b>' + (on ? 'Active' : 'Switched off') + '</b></div>' +
         '<div class="ad-metric"><span>Delivery of one-time codes</span><b>' +
           (o.otpDelivery && o.otpDelivery.available ? 'Email (SMTP configured)' :
-            (o.otpDelivery && o.otpDelivery.devAllowed ? 'No email — codes shown on screen (development)' : 'No email sender configured yet')) +
+            'Email verification not configured — registration is unavailable') +
         '</b></div>' +
-        '<p class="ad-note">Original Mode restores the full G.O.C Academy Hub and every one of its features. ' +
-        '2027 Free Tutorial Mode shows the homepage and the CBT Portal only — weekly assessments, competitions and the ' +
-        'competition leaderboard. Switching either way deletes nothing: every G.O.C record, question and setting stays exactly where it is.</p>' +
-        '<div class="ad-actions">' +
-          '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
-          '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
-        '</div>' +
+        '<p class="ad-note">The website mode is switched from the separate <b>Website Mode Control</b> console ' +
+        'function, which only the Founder may use. Academic programme content and reports remain available here.</p>' +
         '<div class="ad-grid2" style="margin-top:14px">' +
           '<div class="ad-field"><label>Course list (one per line)</label>' +
             '<textarea id="f27Courses" rows="7">' + esc((o.courses || []).join('\n')) + '</textarea></div>' +
@@ -242,15 +276,17 @@
   }
 
   global.f27AdmSetMode = function (mode) {
+    if (!isFounder()) { say('Only the Founder can change Free Tutorial site settings.'); return; }
     var label = rules.modeLabel(mode);
     var free = mode === rules.MODE_FREE;
     /* The confirmation step. The server insists on `confirm:true` too, so this
        is not the only thing standing between a mis-click and the switch. */
     if (!confirmDo('Switch the website to ' + label + '?' + (free
-      ? '\n\nThe full hub is hidden (nothing is deleted) and the public site becomes the 2027 Free Tutorial homepage and CBT Portal.'
+      ? '\n\nThe original G.O.C Academy Hub homepage remains public; unrelated student modules are disabled and the 2027 Free Tutorial student experience is enabled.'
       : '\n\nEvery feature of the G.O.C Academy Hub comes straight back, exactly as it was.'))) return;
     api.setMode(mode, true).then(function (r) {
       say('Website is now in ' + r.label);
+      global.f27ModeLoad();
       loadMode();
       if (global.GOC && GOC.freeUI && GOC.freeUI.applyMode) {
         /* The console is looking at the site it just changed, so the new mode is
@@ -259,6 +295,40 @@
       }
     }, function (er) {
       say(er.message || 'The mode could not be changed.');
+    });
+  };
+
+  /* The Website Mode Control panel: the current mode, and the two switch
+     buttons. Rendered only for the Founder — the tile itself is only injected
+     for the Founder, and the server route refuses every other role. */
+  global.f27ModeLoad = function () {
+    var host = $('f27ModeBody');
+    if (!host) return;
+    if (!isFounder()) {
+      host.innerHTML = '<p class="ad-warn">Website Mode Control is for the Founder only.</p>';
+      return;
+    }
+    host.innerHTML = '<div class="ad-loading">Reading the mode…</div>';
+    api.adminOverview().then(function (o) {
+      A.overview = o;
+      var on = o.enabled === true;
+      var free = o.mode === rules.MODE_FREE && on;
+      host.innerHTML =
+        '<div class="ad-metric"><span>Current website mode</span><b>' + esc(rules.modeLabel(o.mode)) + '</b></div>' +
+        '<div class="ad-metric"><span>2027 edition</span><b>' + (on ? 'Active' : 'Switched off') + '</b></div>' +
+        '<p class="ad-note">Original Mode restores the full G.O.C Academy Hub and every one of its features. ' +
+        '2027 Free Tutorial Mode shows the homepage and the CBT Portal only — weekly assessments, competitions and the ' +
+        'competition leaderboard. Switching either way deletes nothing: every G.O.C record, question and setting stays exactly where it is, ' +
+        'and the switch is stored with the site data, so it survives server restarts.</p>' +
+        '<div class="ad-actions">' +
+          '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
+          '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
+        '</div>' +
+        '<div class="ad-actions" style="margin-top:6px">' +
+          '<button class="ad-btn" onclick="f27AdmReloadSite()">Reload the public site</button>' +
+        '</div>';
+    }, function (er) {
+      host.innerHTML = failText(er);
     });
   };
 
@@ -316,7 +386,8 @@
     host.innerHTML = list.length ? list.map(function (p) {
       return '<div class="f27-admin-row"><div><b>' + esc(p.name) + ' <span class="f27-chip ' + (p.verified ? 'ok' : 'warn') + '">' +
         (p.verified ? 'verified' : 'unverified') + '</span>' + (p.active === false ? ' <span class="f27-chip no">off</span>' : '') + '</b>' +
-        '<span>' + esc(p.id) + ' · ' + esc(p.course) + ' · ' + esc(p.email) + '</span></div>' +
+        '<span>' + esc(p.id) + ' · ' + esc(p.course) + ' · ' + esc(p.email) +
+        (p.lessonsTotal ? ' · lessons ' + Number(p.lessonsDone || 0) + '/' + Number(p.lessonsTotal) : '') + '</span></div>' +
         '<button class="ad-btn" onclick="f27AdmToggleParticipant(\'' + esc(p.id) + '\',' + (p.active === false) + ')">' +
         (p.active === false ? 'Switch on' : 'Switch off') + '</button>' +
         '<button class="ad-btn danger" onclick="f27AdmRemoveParticipant(\'' + esc(p.id) + '\')">Remove</button></div>';
@@ -365,9 +436,53 @@
     api.adminActivities().then(function (r) {
       A.activities = r.activities || [];
       if (A.editing) return paintEditor();
-      body(activityListHtml() + '<div id="f27Editor"></div>');
+      return api.adminLessons().then(function (lr) {
+        A.lessons = (lr && lr.lessons) || [];
+        body(activityListHtml() + '<div id="f27Editor"></div>' + lessonsHtml());
+      }, function () {
+        /* A lessons fault must not hide the activities. */
+        A.lessons = [];
+        body(activityListHtml() + '<div id="f27Editor"></div>' + lessonsHtml());
+      });
     }, function (er) { body(failText(er)); });
   }
+
+  /* ---- programme lessons: the candidate marks them done in the portal ------ */
+  function lessonsHtml() {
+    var rows = (A.lessons || []).map(function (l) {
+      return '<div class="f27-admin-row"><div><b>' + esc(l.title) + '</b>' +
+        '<span>' + esc(l.subject || 'General') + ' · #' + esc(l.id) + (l.active === false ? ' · hidden' : '') + '</span>' +
+        (l.summary ? '<span>' + esc(l.summary) + '</span>' : '') + '</div>' +
+        '<button class="ad-btn danger" onclick="f27AdmDeleteLesson(\'' + esc(l.id) + '\')">Remove</button></div>';
+    }).join('');
+    return '<div class="ad-card" style="margin-top:18px"><div class="ad-h">Programme lessons</div>' +
+      '<p class="ad-note">Lessons the candidate can tick off in the CBT Portal. They belong to this session and are ' +
+      'archived with it; deleting one never rewrites a candidate\'s own completion record.</p>' +
+      '<div class="f27-admin-row"><div class="ad-field" style="flex:1"><label>Title</label><input id="f27LessonTitle" placeholder="e.g. Cell biology — the basics"></div>' +
+      '<div class="ad-field" style="flex:1"><label>Subject</label><input id="f27LessonSubject" placeholder="Biology"></div></div>' +
+      '<div class="ad-field"><label>One-line summary (optional)</label><input id="f27LessonSummary" placeholder="What this lesson covers"></div>' +
+      '<div class="ad-actions"><button class="ad-btn pri" onclick="f27AdmAddLesson()">Add lesson</button></div>' +
+      '<div>' + (rows || '<div class="ad-empty">No lessons yet. Add the first one above.</div>') + '</div></div>';
+  }
+
+  global.f27AdmAddLesson = function () {
+    var title = String(($('f27LessonTitle') || {}).value || '').trim();
+    var subject = String(($('f27LessonSubject') || {}).value || '').trim();
+    var summary = String(($('f27LessonSummary') || {}).value || '').trim();
+    if (title.length < 3) return say('Give the lesson a title of at least 3 characters.');
+    api.saveLesson({ title: title, subject: subject, summary: summary }).then(function () {
+      say('Lesson added');
+      loadActivities();
+    }, function (er) { say(er.message || 'That lesson could not be saved.'); });
+  };
+
+  global.f27AdmDeleteLesson = function (id) {
+    if (!confirmDo('Remove lesson ' + id + ' from the catalogue?\n\nCandidates keep their own completion marks.')) return;
+    api.deleteLesson(id).then(function () {
+      say('Lesson removed');
+      loadActivities();
+    }, function (er) { say(er.message || 'That lesson could not be removed.'); });
+  };
 
   function activityListHtml() {
     var rows = A.activities.map(function (a) {
@@ -436,8 +551,9 @@
         '<div class="ad-field"><label>Maximum attempts</label><input id="f27Max" type="number" min="' + rules.MIN_ATTEMPTS + '" max="' + rules.MAX_ATTEMPTS + '" value="' + Number(a.maxAttempts) + '"></div>' +
       '</div>' +
       '<div class="ad-field"><label>Questions (' + (a.questionIds || []).length + ' chosen)</label>' +
-        '<p class="ad-note">The activity draws on the academy\'s own question bank, exactly as a CBT paper does. ' +
-        'Pick a subject below, then add or remove questions.</p>' +
+        '<p class="ad-note">Questions come from this activity\'s OWN bank — ' +
+        (a.kind === rules.KIND_COMPETITION ? 'the Competition Question Bank' : 'the Weekly Assessment Question Bank') +
+        ' (managed under the Question Banks tab). Pick a subject below, then add or remove questions.</p>' +
         '<div class="ad-grid2 two">' +
           '<div class="ad-field"><label>Subject</label><select id="f27QSubj">' +
             (GOC.core && GOC.core.ALL_SUBJECTS ? GOC.core.ALL_SUBJECTS : ['Use of English', 'Physics', 'Chemistry', 'Biology', 'Mathematics'])
@@ -474,15 +590,19 @@
     loadActivities();
   };
 
-  /* The question picker reads the hub's own bank through the hub's own API —
-     the same rows the Question bank panel shows. Nothing is copied. */
+  /* The question picker reads the bank through the EDITION's own route
+     (/api/free2027/admin/questions), which reads the hub's local data file and
+     never Appwrite. The hub's /api/questions is not used here on purpose: on a
+     deployment where the Appwrite Database API is unavailable that route fails,
+     and no activity could be built at all. Nothing is copied. */
   global.f27AdmFontLoad = function () {
     var host = $('f27QList');
     if (!host) return;
     var subject = ($('f27QSubj') || {}).value || '';
-    host.innerHTML = '<div class="ad-loading">Reading the question bank…</div>';
+    var bank = A.editing && A.editing.kind === rules.KIND_COMPETITION ? 'competition' : 'weekly';
+    host.innerHTML = '<div class="ad-loading">Reading the ' + (bank === 'competition' ? 'Competition' : 'Weekly Assessment') + ' Question Bank…</div>';
     GOC.api.ready.then(function () {
-      return GOC.api.listQuestions({ all: true });
+      return api.adminQuestions(subject, bank);
     }).then(function (r) {
       var rows = (r.questions || []).filter(function (q) {
         return q.kind === 'objective' && !q.archived && q.active !== false && (!subject || q.subject === subject);
@@ -713,6 +833,16 @@
   function loadRecords() {
     loading('Reading the session records…');
     api.records().then(function (r) {
+      var auditRows = '';
+      api.adminAudit().then(function (a) {
+        auditRows = ((a && a.entries) || []).map(function (x) {
+          return '<div class="f27-admin-row"><div><b>' + esc(x.action) + (x.target ? ' · ' + esc(x.target) : '') + '</b>' +
+            '<span>' + esc(x.actorId) + (x.actorRole ? ' (' + esc(x.actorRole) + ')' : '') + '</span></div>' +
+            '<span class="f27-chip">' + esc(when(x.at)) + '</span></div>';
+        }).join('');
+        var host = $('f27AuditList');
+        if (host) host.innerHTML = auditRows || '<div class="ad-empty">No administrative changes in this session yet.</div>';
+      }, function () { /* the audit is supplementary: never hide the records */ });
       var rows = (r.records || []).map(function (x) {
         return '<div class="f27-admin-row"><div><b>' + esc(x.name || x.participantId) + '</b>' +
           '<span>' + esc(x.participantId) + ' · ' + esc(x.kind) + (x.activityId ? ' · ' + esc(x.activityId) : '') + '</span></div>' +
@@ -722,6 +852,10 @@
         'These are the free tutorial\'s own records — no G.O.C student record appears here.</p>' +
         '<div class="ad-metric"><span>Session</span><b>' + esc(r.session.label) + ' (' + esc(r.session.id) + ')</b></div>' +
         '<div>' + (rows || '<div class="ad-empty">Nothing has happened in this session yet.</div>') + '</div>' +
+        '<div class="ad-card" style="margin-top:18px"><div class="ad-h">Programme audit records</div>' +
+        '<p class="ad-note">Who changed what in the programme — the administrator and the action only. ' +
+        'No address and no secret is ever written here.</p>' +
+        '<div id="f27AuditList"><div class="ad-loading">Reading the audit trail…</div></div></div>' +
         '<div class="ad-actions"><button class="ad-btn" onclick="f27AdmLoad()">Refresh</button></div>');
     }, function (er) { body(failText(er)); });
   }
@@ -729,6 +863,7 @@
   /* ================================================ 7. SESSIONS & ARCHIVE */
 
   function loadSessions() {
+    if (!isFounder()) { body('<p class="ad-warn">Only the Founder can access programme session archives.</p>'); return; }
     loading('Reading this session and the archives…');
     api.adminOverview().then(function (o) {
       A.overview = o;
@@ -759,6 +894,7 @@
   }
 
   global.f27AdmNewSession = function (btn) {
+    if (!isFounder()) { say('Only the Founder can archive programme sessions.'); return; }
     var label = String(($('f27NewLabel') || {}).value || '').trim();
     /* Two confirmations: one states what is archived, the second is the
        server's own acknowledgement, which the request carries. */
@@ -777,6 +913,7 @@
   };
 
   global.f27AdmReadArchive = function (file) {
+    if (!isFounder()) { say('Only the Founder can read programme archives.'); return; }
     var host = $('f27ArchiveView');
     if (!host) return;
     host.innerHTML = '<div class="ad-loading">Opening the archive…</div>';
@@ -797,6 +934,219 @@
     }, function (er) {
       host.innerHTML = failText(er);
     });
+  };
+
+  /* ============================================================ 7. QUESTION BANKS
+     Two completely independent banks: Weekly Assessment Question Bank and
+     Competition Question Bank. Each panel states its destination, shows its
+     own count, search, subject filter, CSV import (with preview + report),
+     manual add/edit, individual delete, bulk delete and delete-all. */
+  var BANK_LABEL = { weekly: 'Weekly Assessment Question Bank', competition: 'Competition Question Bank' };
+  var BANK_DESC = {
+    weekly: 'Serves Weekly Assessments only. Import one mixed-subject CSV (all five subjects in one file) or add questions manually.',
+    competition: 'Serves Competitions only. Completely separate from the Weekly bank — imports, edits and deletions here never touch Weekly questions.'
+  };
+  A.banks = { weekly: { q: '', subject: '', sel: {}, rows: [], count: 0 }, competition: { q: '', subject: '', sel: {}, rows: [], count: 0 } };
+
+  function loadBanks() {
+    loading('Reading the question banks…');
+    GOC.api.ready.then(function () { return api.adminBanks(); }).then(function (ov) {
+      A.bankOverview = ov;
+      body(banksHtml());
+      ['weekly', 'competition'].forEach(function (b) { loadBankRows(b); });
+    }, function (er) { body(failText(er)); });
+  }
+
+  function banksHtml() {
+    return '<div class="ad-actions" style="margin-bottom:12px"><button class="ad-btn" onclick="f27AdmLoad()">Refresh</button>' +
+      '<p class="ad-note">Two independent banks: Weekly Assessment questions never serve Competitions, and vice versa. ' +
+      'Deleting a question still used by an activity is refused by the server.</p></div>' +
+      ['weekly', 'competition'].map(bankPanelHtml).join('');
+  }
+
+  function bankPanelHtml(bank) {
+    var st = A.banks[bank];
+    var ov = (A.bankOverview && A.bankOverview.banks && A.bankOverview.banks[bank]) || { count: 0, bySubject: {} };
+    var subj = (A.bankOverview && A.bankOverview.subjects) || ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+    var subjChips = Object.keys(ov.bySubject || {}).map(function (s) {
+      return '<span class="f27-chip">' + esc(s) + ' ' + ov.bySubject[s] + '</span>';
+    }).join(' ');
+    return '<div class="ad-card" style="margin-bottom:14px" id="f27Bank-' + bank + '">' +
+      '<div class="ad-h">' + BANK_LABEL[bank] + ' <span class="f27-chip ok">' + ov.count + ' question' + (ov.count === 1 ? '' : 's') + '</span></div>' +
+      '<p class="ad-note">' + esc(BANK_DESC[bank]) + '</p>' +
+      (subjChips ? '<p class="ad-note">' + subjChips + '</p>' : '') +
+      '<div class="ad-grid2 two">' +
+        '<div class="ad-field"><label>Search</label><input id="f27Q-' + bank + '" value="' + esc(st.q) + '" placeholder="Search question text or topic" oninput="f27BankFilter(\'' + bank + '\')"></div>' +
+        '<div class="ad-field"><label>Subject</label><select id="f27Subj-' + bank + '" onchange="f27BankFilter(\'' + bank + '\')">' +
+          '<option value="">All five subjects</option>' +
+          subj.map(function (s) { return '<option value="' + esc(s) + '"' + (st.subject === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+        '</select></div>' +
+      '</div>' +
+      '<div class="ad-actions" style="margin:10px 0">' +
+        '<button class="ad-btn pri" onclick="f27BankAdd(\'' + bank + '\')">Add question</button>' +
+        '<button class="ad-btn" onclick="document.getElementById(\'f27Csv-' + bank + '\').click()">Import CSV into THIS bank</button>' +
+        '<input type="file" id="f27Csv-' + bank + '" accept=".csv,text/csv" style="display:none" onchange="f27BankCsvPicked(\'' + bank + '\',this)">' +
+        '<button class="ad-btn danger" onclick="f27BankDeleteSel(\'' + bank + '\')">Delete selected</button>' +
+        '<button class="ad-btn danger" onclick="f27BankDeleteAll(\'' + bank + '\')">Delete all ' + (bank === 'weekly' ? 'Weekly' : 'Competition') + ' questions</button>' +
+      '</div>' +
+      '<div id="f27CsvBox-' + bank + '"></div>' +
+      '<div id="f27BankList-' + bank + '"><div class="ad-loading">Loading…</div></div>' +
+      '<div id="f27BankEdit-' + bank + '"></div>' +
+    '</div>';
+  }
+
+  function loadBankRows(bank) {
+    var st = A.banks[bank];
+    var host = $('f27BankList-' + bank);
+    if (host) host.innerHTML = '<div class="ad-loading">Loading…</div>';
+    api.adminBankQuestions(bank, { q: st.q, subject: st.subject }).then(function (r) {
+      st.rows = r.questions || [];
+      st.count = r.total;
+      renderBankRows(bank);
+    }, function (er) {
+      if (host) host.innerHTML = failText(er);
+    });
+  }
+
+  function renderBankRows(bank) {
+    var st = A.banks[bank];
+    var host = $('f27BankList-' + bank);
+    if (!host) return;
+    if (!st.rows.length) { host.innerHTML = '<div class="ad-empty">No questions in this bank yet — import a CSV or add one manually.</div>'; return; }
+    host.innerHTML = st.rows.map(function (q) {
+      var on = !!st.sel[q.id];
+      return '<div class="f27-admin-row"><div>' +
+        '<label style="font-weight:700"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="f27BankToggle(\'' + bank + '\',\'' + esc(q.id) + '\',this.checked)"> ' +
+        '<b>' + esc(q.subject) + ' · ' + esc(q.topic || 'General') + '</b></label>' +
+        '<span>' + esc(String(q.text || '').slice(0, 180)) + '</span>' +
+        '<span>#' + esc(q.id) + ' · ' + esc(q.difficulty || 'medium') + '</span></div>' +
+        '<div class="ad-actions"><button class="ad-btn" onclick="f27BankAdd(\'' + bank + '\',\'' + esc(q.id) + '\')">Edit</button>' +
+        '<button class="ad-btn danger" onclick="f27BankDeleteOne(\'' + bank + '\',\'' + esc(q.id) + '\')">Delete</button></div></div>';
+    }).join('');
+  }
+
+  global.f27BankFilter = function (bank) {
+    var st = A.banks[bank];
+    st.q = (($('f27Q-' + bank) || {}).value || '');
+    st.subject = (($('f27Subj-' + bank) || {}).value || '');
+    loadBankRows(bank);
+  };
+  global.f27BankToggle = function (bank, id, on) {
+    A.banks[bank].sel[id] = !!on;
+  };
+
+  /* ---- manual add / edit ---- */
+  global.f27BankAdd = function (bank, id) {
+    var st = A.banks[bank];
+    var q = id ? st.rows.filter(function (x) { return String(x.id) === String(id); })[0] : null;
+    var host = $('f27BankEdit-' + bank);
+    if (!host) return;
+    var subj = (A.bankOverview && A.bankOverview.subjects) || ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+    host.innerHTML = '<div class="ad-card" style="border-color:var(--red)"><div class="ad-h">' +
+      (q ? 'Edit question in ' + BANK_LABEL[bank] : 'Add question to ' + BANK_LABEL[bank]) + '</div>' +
+      '<div class="ad-grid2 two">' +
+        '<div class="ad-field"><label>Subject</label><select id="f27NQ-subj">' +
+          subj.map(function (s) { return '<option value="' + esc(s) + '"' + (q && q.subject === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="ad-field"><label>Topic</label><input id="f27NQ-topic" value="' + esc((q && q.topic) || 'General') + '"></div>' +
+      '</div>' +
+      '<div class="ad-field"><label>Question text</label><textarea id="f27NQ-text" rows="3">' + esc((q && q.text) || '') + '</textarea></div>' +
+      '<div class="ad-field"><label>Options (one per line, 2–5)</label><textarea id="f27NQ-opts" rows="5">' + esc(((q && q.options) || []).join('\n')) + '</textarea></div>' +
+      '<div class="ad-grid2 two">' +
+        '<div class="ad-field"><label>Correct option (1-based)</label><input id="f27NQ-ans" type="number" min="1" max="5" value="' + (q ? Number(q.answer) + 1 : 1) + '"></div>' +
+        '<div class="ad-field"><label>Difficulty</label><select id="f27NQ-diff">' +
+          ['easy', 'medium', 'hard'].map(function (d) { return '<option value="' + d + '"' + (q && q.difficulty === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="ad-field"><label>Explanation (optional)</label><textarea id="f27NQ-expl" rows="2">' + esc((q && q.explanation) || '') + '</textarea></div>' +
+      '<div class="ad-actions"><button class="ad-btn pri" onclick="f27BankSave(\'' + bank + '\',\'' + esc(id || '') + '\')">' + (q ? 'Save changes' : 'Add to ' + (bank === 'weekly' ? 'Weekly' : 'Competition') + ' bank') + '</button>' +
+      '<button class="ad-btn" onclick="document.getElementById(\'f27BankEdit-' + bank + '\').innerHTML=\'\'">Cancel</button></div></div>';
+  };
+
+  global.f27BankSave = function (bank, id) {
+    var g = function (x) { return (($('f27NQ-' + x) || {}).value); };
+    var d = {
+      subject: g('subj'), topic: g('topic'), text: g('text'),
+      options: String(g('opts') || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean),
+      answer: Math.max(0, Number(g('ans')) - 1),
+      explanation: g('expl'), difficulty: g('diff')
+    };
+    var p = id ? api.adminBankUpdate(bank, id, d) : api.adminBankCreate(bank, d);
+    p.then(function () {
+      say(id ? 'Question updated in the ' + BANK_LABEL[bank] + '.' : 'Question added to the ' + BANK_LABEL[bank] + '.');
+      var host = $('f27BankEdit-' + bank); if (host) host.innerHTML = '';
+      loadBanks();
+    }, function (er) { say((er && er.message) || 'Could not save the question.', true); });
+  };
+
+  /* ---- CSV import with preview and report ---- */
+  global.f27BankCsvPicked = function (bank, input) {
+    var box = $('f27CsvBox-' + bank);
+    var f = input && input.files && input.files[0];
+    if (!box) return;
+    if (!f) return;
+    box.innerHTML = '<div class="ad-loading">Reading ' + esc(f.name) + '…</div>';
+    var rd = new FileReader();
+    rd.onload = function () {
+      var csv = String(rd.result || '');
+      A.banks[bank].csv = csv;
+      A.banks[bank].csvName = f.name;
+      api.adminBankImport(bank, csv, true).then(function (r) {
+        var rows = (r.rows || []).map(function (x) {
+          return '<div class="f27-admin-row"><div><b>' + esc(x.subject || '') + ' · ' + esc(x.topic || 'General') + '</b><span>' + esc(String(x.text || '').slice(0, 140)) + '</span></div></div>';
+        }).join('');
+        var errs = (r.errors || []).map(function (e) { return '<div class="ad-note" style="color:var(--red)">Line ' + e.line + ': ' + esc(e.error) + '</div>'; }).join('');
+        box.innerHTML = '<div class="ad-card"><div class="ad-h">Import preview — destination: ' + BANK_LABEL[bank] + '</div>' +
+          '<p class="ad-note">File ' + esc(f.name) + ': ' + r.read + ' row(s) read, <b>' + r.wouldImport + '</b> would be imported, <b>' + r.skipped + '</b> skipped.</p>' +
+          (rows || '<div class="ad-empty">No new questions in this file.</div>') + errs +
+          '<div class="ad-actions"><button class="ad-btn pri" onclick="f27BankImportGo(\'' + bank + '\')">Import ' + r.wouldImport + ' question(s) into ' + (bank === 'weekly' ? 'Weekly' : 'Competition') + ' bank</button>' +
+          '<button class="ad-btn" onclick="document.getElementById(\'f27CsvBox-' + bank + '\').innerHTML=\'\'">Cancel</button></div></div>';
+      }, function (er) {
+        box.innerHTML = '<div class="ad-card">' + failText(er) + '</div>';
+      });
+    };
+    rd.readAsText(f);
+  };
+
+  global.f27BankImportGo = function (bank) {
+    var st = A.banks[bank];
+    var box = $('f27CsvBox-' + bank);
+    if (box) box.innerHTML = '<div class="ad-loading">Importing into ' + BANK_LABEL[bank] + '…</div>';
+    api.adminBankImport(bank, st.csv, false).then(function (r) {
+      var errs = (r.errors || []).map(function (e) { return '<div class="ad-note" style="color:var(--red)">Line ' + e.line + ': ' + esc(e.error) + '</div>'; }).join('');
+      if (box) box.innerHTML = '<div class="ad-card"><div class="ad-h">Import complete — ' + BANK_LABEL[bank] + '</div>' +
+        '<p class="ad-note">' + r.read + ' row(s) read · <b>' + r.imported + ' imported</b> · ' + r.skipped + ' skipped' +
+        (r.questions && r.questions.length ? ' (first ID ' + esc(r.questions[0].id) + ')' : '') + '</p>' + errs + '</div>';
+      loadBanks();
+    }, function (er) {
+      if (box) box.innerHTML = '<div class="ad-card">' + failText(er) + '</div>';
+    });
+  };
+
+  /* ---- deletion (individual, bulk, all) — always confirmed in the UI, and
+     the server requires confirm:true as well ---- */
+  function bankDelete(bank, ids) {
+    var label = BANK_LABEL[bank];
+    var n = ids.length;
+    if (!global.confirm('Delete ' + n + ' selected question' + (n === 1 ? '' : 's') + ' from the ' + label + '?\n\nThis is destructive. Questions already used by an activity are refused by the server.')) return;
+    api.adminBankDelete(bank, ids, true).then(function (r) {
+      say('Deleted ' + r.deleted + ' question(s) from the ' + label + '.');
+      A.banks[bank].sel = {};
+      loadBanks();
+    }, function (er) { say((er && er.message) || 'Delete refused.', true); });
+  }
+  global.f27BankDeleteOne = function (bank, id) { bankDelete(bank, [id]); };
+  global.f27BankDeleteSel = function (bank) {
+    var ids = Object.keys(A.banks[bank].sel).filter(function (k) { return A.banks[bank].sel[k]; });
+    if (!ids.length) { say('Select at least one question first.', true); return; }
+    bankDelete(bank, ids);
+  };
+  global.f27BankDeleteAll = function (bank) {
+    var label = BANK_LABEL[bank];
+    var count = A.banks[bank].count || 0;
+    if (!global.confirm('DELETE ALL ' + count + ' question(s) in the ' + label + '?\n\nThis is destructive and cannot be undone. The other bank is not affected. Questions used by an activity are refused by the server.')) return;
+    api.adminBankDeleteAll(bank, true).then(function (r) {
+      say('Deleted all ' + r.deleted + ' question(s) from the ' + label + '. The ' + (bank === 'weekly' ? 'Competition' : 'Weekly Assessment') + ' bank is untouched.');
+      loadBanks();
+    }, function (er) { say((er && er.message) || 'Delete-all refused.', true); });
   };
 
   /* ============================================================ 8. MOUNTING

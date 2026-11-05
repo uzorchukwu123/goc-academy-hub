@@ -33,6 +33,7 @@ function head(t) { console.log('\n' + t); }
 
 var SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-f27-test-'));
 var DATA = path.join(SANDBOX, 'data');
+var MAIL_FILE = path.join(DATA, 'mail-capture.jsonl');
 fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(path.join(SANDBOX, 'server'), { recursive: true });
 fs.cpSync(path.join(APP, 'server'), path.join(SANDBOX, 'server'), { recursive: true });
@@ -49,15 +50,19 @@ var child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')],
   cwd: SANDBOX,
   env: Object.assign({}, process.env, {
     PORT: String(PORT),
-    NODE_PATH: path.join(APP, 'node_modules'),
+    NODE_PATH: [path.join(APP, 'test', 'stubs'), path.join(APP, 'node_modules')].join(path.delimiter),
+    GOC_TEST_MAIL_FILE: MAIL_FILE,
+    GOC_FREE_2027_OTP_SECRET: 'local-test-otp-secret-0123456789abcdef',
+    GOC_SMTP_HOST: 'mailpit-test',
+    GOC_SMTP_FROM: 'G.O.C Academy Hub <verification@gocacademy.test>',
     GOC_FOUNDER_PW: 'founder2027',
     GOC_ACADDIR_PW: 'acaddir2027',
     GOC_PASSCODE: '2027',
     GOC_DATA_DIR: DATA,
     /* the central switch: this deployment opens in the edition */
     GOC_FREE_2027: '1',
-    /* no SMTP in a test, so the one-time code is handed back to the caller */
-    GOC_FREE_2027_DEV_OTP: '1'
+    /* Test-only SMTP capture exercises the real delivery hook without exposing
+       the message/code through the public API. */
   }),
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -93,11 +98,24 @@ function waitForBoot(tries) {
   });
 }
 function dataFile() { return JSON.parse(fs.readFileSync(path.join(DATA, 'data.json'), 'utf8')); }
-function register(name, email) {
-  return call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Medicine and Surgery' })
+function mailRows() {
+  if (!fs.existsSync(MAIL_FILE)) return [];
+  return fs.readFileSync(MAIL_FILE, 'utf8').trim().split('\n').filter(Boolean).map(function (x) { return JSON.parse(x); });
+}
+function latestMail(email) {
+  return mailRows().filter(function (x) { return x.message && x.message.to === email; }).slice(-1)[0] || null;
+}
+function mailedCode(email) {
+  var mail = latestMail(email);
+  var match = mail && String(mail.message.text || '').match(/verification code is (\d{6})/i);
+  return match ? match[1] : null;
+}
+function register(name, email, password) {
+  return call('POST', '/api/free2027/register/start', { name: name, email: email, password: password || 'Passw0rd-123', course: 'Medicine and Surgery' })
     .then(function (r) {
-      if (!r.body || !r.body.devCode) return Promise.reject(new Error('no code: ' + r.raw));
-      return call('POST', '/api/free2027/register/verify', { email: email, code: r.body.devCode });
+      var code = mailedCode(email);
+      if (r.status !== 200 || !code) return Promise.reject(new Error('verification email missing: ' + r.raw));
+      return call('POST', '/api/free2027/register/verify', { email: email, code: code });
     });
 }
 
@@ -110,8 +128,11 @@ waitForBoot(40).then(async function (h) {
   ok('the server is up', h.status === 200, h.raw);
   ok('the health check names the mode', h.body && h.body.free2027 && h.body.free2027.on === true && h.body.free2027.mode === 'free2027', h.raw);
   var cfg = await call('GET', '/api/free2027/config');
-  ok('the public config lists both modes and the six screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 6, cfg.raw.slice(0, 120));
+  ok('the public config lists both modes and the seven screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 7, cfg.raw.slice(0, 120));
   ok('the config carries no participant, address or code', cfg.raw.indexOf('@') < 0 && cfg.raw.indexOf('otpCode') < 0);
+  ok('the test mail provider is configured and the public config exposes availability only',
+    cfg.body.otpDelivery && cfg.body.otpDelivery.available === true && cfg.body.otpDelivery.devAllowed === undefined,
+    JSON.stringify(cfg.body.otpDelivery));
 
   head('the console signs in (unchanged) and unlocks (unchanged)');
   var lin = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
@@ -124,32 +145,114 @@ waitForBoot(40).then(async function (h) {
   head('registration: a code is required before anything exists');
   var noCode = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: '123456' });
   ok('verifying without ever asking for a code is refused', noCode.status === 400, noCode.status);
-  var badEmail = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'not-an-email', course: 'Law' });
+  var badEmail = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'not-an-email', password: 'Passw0rd-123', course: 'Law' });
   ok('a malformed address is refused', badEmail.status === 400, badEmail.raw);
-  var start1 = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
-  ok('asking for a code succeeds and hands one back only because this run has no mail sender', start1.status === 200 && !!start1.body.devCode, start1.raw);
+  var start1 = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', password: 'AdaPass-2027', course: 'Medicine and Surgery' });
+  var code1 = mailedCode('ada@example.com');
+  ok('registration sends a real verification email to the submitted address', start1.status === 200 && start1.body.delivered === true && !!code1 && latestMail('ada@example.com').message.to === 'ada@example.com', start1.raw);
+  ok('the public response never contains the verification code', start1.raw.indexOf(code1) < 0 && start1.body.devCode === undefined && start1.body.code === undefined, start1.raw);
+  ok('the email has the academy identity and expiry guidance', /G\.O\.C Academy Hub/.test(latestMail('ada@example.com').message.text) && /expires in \d+ minutes/.test(latestMail('ada@example.com').message.text), latestMail('ada@example.com').message.text);
   ok('nothing was created by asking for a code', dataFile().free2027.sessions[0].participants.length === 0);
-  var again = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
-  ok('a second code within a minute is refused', again.status === 429, again.raw);
-  var wrong = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: '000000' });
+  var again = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', password: 'AdaPass-2027', course: 'Medicine and Surgery' });
+  ok('a second code within the resend window is rate limited', again.status === 429, again.raw);
+  /* Advance only the persisted resend timestamp so this test remains fast. */
+  var otpDb = dataFile(); otpDb.free2027.otps[otpDb.free2027.otps.length - 1].createdAt = Date.now() - 61000;
+  fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(otpDb));
+  var resent = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', password: 'AdaPass-2027', course: 'Medicine and Surgery' });
+  var code2 = mailedCode('ada@example.com');
+  ok('resending after the cooldown sends a fresh email', resent.status === 200 && resent.body.delivered === true && !!code2, resent.raw);
+  var wrongCode = code2 === '000000' ? '000001' : '000000';
+  var wrong = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: wrongCode });
   ok('a wrong code is refused', wrong.status === 403, wrong.raw);
-  var good = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: start1.body.devCode });
-  ok('the right code verifies and issues a participant ID', good.status === 200 && /^GOC-F27-\d{4}$/.test(good.body.participant.id), good.raw.slice(0, 160));
+  var old = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code1 });
+  ok('the older code is rejected after a resend', old.status === 403, old.raw);
+  var good = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code2 });
+  ok('the emailed code verifies and issues the first sequential student ID GOC-F-001', good.status === 200 && good.body.participant.id === 'GOC-F-001', good.raw.slice(0, 160));
   ok('the candidate is told their own address only masked', good.body.participant.email.indexOf('ada@') < 0 && /@example\.com$/.test(good.body.participant.email), good.body.participant.email);
-  ok('the code cannot be used twice', (await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: start1.body.devCode })).status === 400);
+  ok('the code cannot be used twice', (await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code2 })).status === 400);
   ada = { token: good.body.token, participant: good.body.participant };
+  var stored = dataFile();
+  ok('verification codes are stored only as salted hashes', stored.free2027.otps.every(function (o) { return o.hash && String(o.hash).length === 64; }) && JSON.stringify(stored.free2027.otps).indexOf(code2) < 0);
   ben = await register('Ben Eze', 'ben@example.com').then(function (r) { return { token: r.body.token, participant: r.body.participant }; });
   cat = await register('Cat Musa', 'cat@example.com').then(function (r) { return { token: r.body.token, participant: r.body.participant }; });
-  ok('each verified participant gets their own ID', ada.participant.id !== ben.participant.id && ben.participant.id !== cat.participant.id);
+  ok('each verified participant gets their own sequential ID', ada.participant.id === 'GOC-F-001' && ben.participant.id === 'GOC-F-002' && cat.participant.id === 'GOC-F-003',
+    [ada.participant.id, ben.participant.id, cat.participant.id].join(','));
+  ok('the password is stored only as a scrypt hash, never plaintext', (function () {
+    var p = dataFile().free2027.sessions[0].participants.filter(function (x) { return x.email === 'ada@example.com'; })[0];
+    return !!p && /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(p.passwordHash || '') && JSON.stringify(dataFile().free2027).indexOf('AdaPass-2027') < 0;
+  })());
+
+  head('login with email and password, and logout');
+  var wrongPw = await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'WrongPass-999' });
+  ok('a wrong password is refused', wrongPw.status === 403 && /not right/.test(wrongPw.raw), wrongPw.raw);
+  var unknownMail = await call('POST', '/api/free2027/login', { email: 'nobody@example.com', password: 'Whatever-1' });
+  ok('an unknown address gets the same answer (no enumeration)', unknownMail.status === 403 && unknownMail.raw === wrongPw.raw, unknownMail.raw);
+  var noPw = await call('POST', '/api/free2027/login', { email: 'ada@example.com' });
+  ok('a missing password is refused', noPw.status === 400, noPw.raw);
+  var dup = await call('POST', '/api/free2027/register/start', { name: 'Ada Again', email: 'ada@example.com', password: 'Another-2027', course: 'Law' });
+  ok('a duplicate registration for a verified address is refused', dup.status === 409, dup.raw);
+  var login1 = await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'AdaPass-2027' });
+  ok('email + password logs in and issues a session', login1.status === 200 && !!login1.body.token && login1.body.participant.id === 'GOC-F-001', login1.raw.slice(0, 160));
+  ok('the session opens the dashboard and keeps the permanent identifier', (await call('GET', '/api/free2027/me', undefined, login1.body.token)).body.participant.id === 'GOC-F-001');
+  ok('the session is persisted in db.free2027 (survives refresh/restart)', (function () {
+    var s = dataFile().free2027.authSessions || [];
+    return s.length >= 1 && s.every(function (x) { return /^[a-f0-9]{64}$/.test(x.tokenHash); }) && JSON.stringify(s).indexOf(login1.body.token) < 0;
+  })());
+  var out1 = await call('POST', '/api/free2027/logout', {}, login1.body.token);
+  ok('logout succeeds', out1.status === 200, out1.raw);
+  ok('after logout the old session token is dead (no automatic re-login)', (await call('GET', '/api/free2027/me', undefined, login1.body.token)).status === 401);
+  ok('and only that session record was destroyed (the registration session is untouched)', (function () {
+    var crypto = require('crypto');
+    var s = dataFile().free2027.authSessions || [];
+    var dead = crypto.createHash('sha256').update(login1.body.token).digest('hex');
+    return s.every(function (x) { return x.tokenHash !== dead; });
+  })());
+  var login2 = await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'AdaPass-2027' });
+  ok('fresh authentication after logout works', login2.status === 200 && !!login2.body.token && login2.body.token !== login1.body.token, login2.status + ' ' + login2.raw.slice(0, 120));
+  ok('the identifier is unchanged across logout and re-login', !!(login2.body && login2.body.participant && login2.body.participant.id === 'GOC-F-001'), login2.raw.slice(0, 160));
   var stored = dataFile();
   ok('the stored record keeps the address (it is private, not absent)', /ada@example\.com/.test(JSON.stringify(stored.free2027)));
-  ok('no readable one-time code is stored, only a hash', JSON.stringify(stored.free2027.otps || []).indexOf(start1.body.devCode) < 0 || (stored.free2027.otps || []).every(function (o) { return o.hash && String(o.hash).length === 64; }));
+  ok('the permanent ID is associated with the student email in the Free Tutorial registry', stored.free2027.studentIds.indexOf(ada.participant.id) > -1 && stored.free2027.studentIdsByEmail['ada@example.com'] === ada.participant.id);
+  var expiredStart = await call('POST', '/api/free2027/register/start', { name: 'Zed Obi', email: 'zed@example.com', password: 'Passw0rd-123', course: 'Law' });
+  var expiredCode = mailedCode('zed@example.com');
+  var expiredDb = dataFile();
+  expiredDb.free2027.otps.filter(function (o) { return o.email === 'zed@example.com'; }).forEach(function (o) { o.expiresAt = Date.now() - 1; });
+  fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(expiredDb));
+  var expiredVerify = await call('POST', '/api/free2027/register/verify', { email: 'zed@example.com', code: expiredCode });
+  ok('an expired email verification code is rejected', expiredStart.status === 200 && expiredVerify.status === 400, expiredVerify.raw);
+  var burstOk = true;
+  for (var oi = 0; oi < 6; oi++) {
+    var br = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', password: 'Passw0rd-123', course: 'Law' });
+    if (br.status !== 200) burstOk = false;
+    var burstDb = dataFile();
+    var burstRows = burstDb.free2027.otps.filter(function (o) { return o.email === 'limit@example.com'; });
+    if (burstRows.length) burstRows[burstRows.length - 1].createdAt = Date.now() - 61000;
+    fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(burstDb));
+  }
+  var limited = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', password: 'Passw0rd-123', course: 'Law' });
+  ok('verification email requests have an hourly per-address cap', burstOk && limited.status === 429, limited.raw);
 
-  head('the administrator creates and schedules the activities');
-  var qbank = await call('GET', '/api/questions?section=practice&kind=objective', undefined, adm);
-  var qs = (qbank.body.questions || []).filter(function (q) { return q.kind === 'objective'; });
-  ok('the activity draws on the hub\'s own question bank', qs.length >= 8, qs.length);
-  var ids = qs.slice(0, 4).map(function (q) { return q.id; });
+  head('the administrator imports the two independent question banks and schedules activities');
+  /* One mixed-subject CSV per bank; the subject column decides the category. */
+  function csvRows(prefix, subjects, n) {
+    var rows = ['subject,section,topic,text,optionA,optionB,optionC,optionD,optionE,answer,expected,maxMark,difficulty,explanation,active,year,passageId'];
+    for (var i = 1; i <= n; i++) {
+      var s = subjects[(i - 1) % subjects.length];
+      rows.push([s, 'objective', 'Topic ' + i, prefix + ' question number ' + i + ': which option is correct?',
+        'Alpha ' + i, 'Beta ' + i, 'Gamma ' + i, 'Delta ' + i, '', 'B', '', 1, 'easy', 'Beta is correct.', 'yes', '', ''].join(','));
+    }
+    return rows.join('\n');
+  }
+  var SUBJ5 = ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+  var impW = await call('POST', '/api/free2027/admin/question-banks/weekly/import', { csv: csvRows('Weekly', SUBJ5, 8) }, adm);
+  ok('a mixed-subject CSV imports into the Weekly bank (all five subjects)', impW.status === 200 && impW.body.imported === 8, impW.raw.slice(0, 200));
+  var impC = await call('POST', '/api/free2027/admin/question-banks/competition/import', { csv: csvRows('Comp', SUBJ5, 4) }, adm);
+  ok('a mixed-subject CSV imports into the Competition bank', impC.status === 200 && impC.body.imported === 4, impC.raw.slice(0, 200));
+  var wq = await call('GET', '/api/free2027/admin/questions?bank=weekly', undefined, adm);
+  var cq = await call('GET', '/api/free2027/admin/questions?bank=competition', undefined, adm);
+  ok('the picker reads the edition banks, not the shared db.questions', wq.body.source === 'free2027-question-bank' && wq.body.questions.length === 8 && cq.body.questions.length === 4, wq.body.source + '/' + wq.body.questions.length + '/' + cq.body.questions.length);
+  var ids = wq.body.questions.slice(0, 4).map(function (q) { return q.id; });
+  var compIds = cq.body.questions.map(function (q) { return q.id; });
   var t = Date.now();
   var draft = await call('POST', '/api/free2027/admin/activities', {
     kind: 'weekly', title: 'Week 1 — Foundations', questionIds: ids,
@@ -157,7 +260,7 @@ waitForBoot(40).then(async function (h) {
   }, adm);
   ok('an activity is created as a draft', draft.status === 200 && draft.body.activity.status === 'draft' && /^F27-Q\d+$/.test(draft.body.activity.id), draft.raw.slice(0, 160));
   weeklyId = draft.body.activity.id;
-  ok('a draft is not on a candidate\'s list', (await call('GET', '/api/free2027/activities', undefined, ada.token)).body.activities.length === 0);
+  var dbgAct = await call('GET', '/api/free2027/activities', undefined, ada.token); ok('a draft is not on a candidate\'s list', dbgAct.status === 200 && dbgAct.body.activities.length === 0, dbgAct.status + ' ' + dbgAct.raw.slice(0,200));
   var noQuestions = await call('POST', '/api/free2027/admin/activities', { kind: 'weekly', title: 'Empty', opensAt: t, closesAt: t + 1000, durationMin: 10, maxAttempts: 1, questionIds: [] }, adm);
   ok('an activity with no questions cannot be created', noQuestions.status === 400, noQuestions.raw);
   var badWindow = await call('POST', '/api/free2027/admin/activities', { kind: 'weekly', title: 'Backwards', opensAt: t + 5000, closesAt: t + 1000, durationMin: 10, maxAttempts: 1, questionIds: ids }, adm);
@@ -211,7 +314,7 @@ waitForBoot(40).then(async function (h) {
 
   head('a competition, its ranking and its leaderboard');
   var comp = await call('POST', '/api/free2027/admin/activities', {
-    kind: 'competition', title: 'Term Cup', questionIds: ids,
+    kind: 'competition', title: 'Term Cup', questionIds: compIds,
     opensAt: t - 60000, closesAt: t + 3600000, durationMin: 5, maxAttempts: 1
   }, adm);
   compId = comp.body.activity.id;
@@ -222,7 +325,7 @@ waitForBoot(40).then(async function (h) {
      than hopeful. */
   function correctAnswers() {
     var bank = {};
-    (dataFile().questions || []).forEach(function (q) { bank[String(q.id)] = Number(q.answer); });
+    ((dataFile().free2027 || {}).questionBanks || {}).competition.questions.forEach(function (q) { bank[String(q.id)] = Number(q.answer); });
     return bank;
   }
   var answers = correctAnswers();
@@ -245,6 +348,25 @@ waitForBoot(40).then(async function (h) {
   }
   for (var j = 0; j < extra.length; j++) await sit(extra[j], j < 7 ? 1 : 0);
   ok('the competition field is now larger than ten', extra.length === 8);
+
+  head('simultaneous registrations still get unique sequential identifiers');
+  await (function () {
+    var starts = [];
+    for (var ci = 0; ci < 5; ci++) {
+      starts.push(call('POST', '/api/free2027/register/start', { name: 'Conc ' + ci, email: 'conc' + ci + '@example.com', password: 'Concpass-1', course: 'Law' }));
+    }
+    return Promise.all(starts).then(function (rs) {
+      var codes = rs.map(function (r, i) { return { email: 'conc' + i + '@example.com', code: mailedCode('conc' + i + '@example.com') }; });
+      return Promise.all(codes.map(function (c) {
+        return call('POST', '/api/free2027/register/verify', { email: c.email, code: c.code });
+      })).then(function (vs) {
+        var ids = vs.map(function (v) { return v.body && v.body.participant && v.body.participant.id; }).sort();
+        ok('five simultaneous registrations all verify', vs.every(function (v) { return v.status === 200; }), vs.map(function (v) { return v.status; }).join(','));
+        ok('and receive five distinct sequential IDs GOC-F-012…GOC-F-016',
+          ids.join(',') === 'GOC-F-012,GOC-F-013,GOC-F-014,GOC-F-015,GOC-F-016', ids.join(','));
+      });
+    });
+  })();
   var results = await call('GET', '/api/free2027/admin/activities/' + compId + '/results', undefined, adm);
   ok('the console lists every submitted paper with a rank', results.status === 200 && results.body.rows.length === 11, results.raw.slice(0, 160));
   ok('the ranking puts the highest score first', results.body.top[0].participantId === ada.participant.id && results.body.top[0].score === 4, JSON.stringify(results.body.top[0]));
@@ -305,8 +427,83 @@ waitForBoot(40).then(async function (h) {
   ok('and the health check agrees, so the page restores the hub', h2.body.free2027.mode === 'original' && h2.body.free2027.on === true);
   ok('the original hub still answers while the edition is in Original Mode',
     (await call('GET', '/api/updates')).status === 200);
-  ok('the edition\'s own data is untouched by the switch', dataFile().free2027.sessions[0].participants.length === 11);
+  ok('the edition\'s own data is untouched by the switch', dataFile().free2027.sessions[0].participants.length === 16);
   ok('switching back is one call', (await call('PUT', '/api/free2027/admin/mode', { mode: 'free2027', confirm: true }, adm)).body.mode === 'free2027');
+
+  head('programme records: lessons, progress and the audit trail');
+  var lp = await call('GET', '/api/free2027/programme', undefined, ada.token);
+  ok('a candidate reads their own programme record', lp.status === 200 && lp.body.profile.id === ada.participant.id, lp.raw.slice(0, 220));
+  ok('it carries the course enrolment', lp.body.enrolment.course === 'Medicine and Surgery' && lp.body.enrolment.status === 'enrolled', JSON.stringify(lp.body.enrolment));
+  ok('it carries the programme access', lp.body.access.status === 'active' && /free-tutorial/.test(lp.body.access.programme), JSON.stringify(lp.body.access));
+  ok('and their quiz record', lp.body.quizzes.submitted >= 1 && typeof lp.body.quizzes.average === 'number', JSON.stringify(lp.body.quizzes));
+  ok('no programme route without a token', (await call('GET', '/api/free2027/programme')).status === 401);
+  ok('a console token is not a candidate token', (await call('GET', '/api/free2027/programme', undefined, adm)).status === 401);
+
+  /* The Academic Director, signed in and unlocked: the second programme
+     administrator, through the same console authentication as always. */
+  var acadLogin = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
+  var acadT = acadLogin.body && acadLogin.body.token;
+  await call('POST', '/api/auth/unlock', { passcode: '2027' }, acadT);
+  var mk1 = await call('POST', '/api/free2027/admin/lessons', { title: 'Cell biology — the basics', subject: 'Biology', summary: 'Membranes and division' }, adm);
+  ok('the Founder adds a lesson', mk1.status === 200 && /^F27-L-\d{3}$/.test(mk1.body.lesson.id) && mk1.body.created === true, mk1.raw.slice(0, 200));
+  var mk2 = await call('POST', '/api/free2027/admin/lessons', { title: 'Algebra — quadratics', subject: 'Mathematics' }, acadT);
+  ok('the Academic Director adds a lesson too', mk2.status === 200 && mk2.body.lesson.id !== mk1.body.lesson.id, mk2.raw.slice(0, 200));
+  ok('a lesson with no real title is refused', (await call('POST', '/api/free2027/admin/lessons', { title: 'ab' }, adm)).status === 400);
+  ok('a candidate cannot create a lesson', (await call('POST', '/api/free2027/admin/lessons', { title: 'Sneaky one' }, cat.token)).status === 401);
+  ok('a console token cannot create a lesson either', (await call('POST', '/api/free2027/admin/lessons', { title: 'Sneaky one' }, ada.token)).status === 401);
+  var edited = await call('PUT', '/api/free2027/admin/lessons/' + mk2.body.lesson.id, { title: 'Algebra — quadratics and graphs' }, acadT);
+  ok('a lesson can be edited', edited.status === 200 && /graphs/.test(edited.body.lesson.title) && edited.body.created === false, edited.raw.slice(0, 200));
+  ok('an unknown lesson cannot be edited', (await call('PUT', '/api/free2027/admin/lessons/F27-L-999', { title: 'Ghost lesson' }, adm)).status === 404);
+  var all2 = await call('GET', '/api/free2027/admin/lessons', undefined, acadT);
+  ok('both administrators read the same catalogue', all2.status === 200 && all2.body.lessons.length === 2, all2.raw.slice(0, 200));
+  ok('the Academic Director cannot change the Free Tutorial site mode',
+    (await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, acadT)).status === 403);
+  ok('the Academic Director cannot archive programme/system data',
+    (await call('GET', '/api/free2027/admin/archives', undefined, acadT)).status === 403);
+  var finMade = await call('POST', '/api/managers', { name: 'Local Finance', role: 'finance', password: 'starter123', passcode: '4821' }, adm);
+  var finLogin = await call('POST', '/api/auth/login', { id: finMade.body.manager.id, password: 'starter123' });
+  var finToken = finLogin.body.token;
+  await call('POST', '/api/auth/password', { currentPassword: 'starter123', newPassword: 'finance-1234' }, finToken);
+  await call('POST', '/api/auth/unlock', { passcode: '4821' }, finToken);
+  ok('a non-academic management role cannot open Free Tutorial administration',
+    (await call('GET', '/api/free2027/admin/overview', undefined, finToken)).status === 403);
+
+  head('a candidate works through the lessons, and the console sees it');
+  var before = await call('GET', '/api/free2027/programme', undefined, ada.token);
+  ok('the candidate starts at nought of two', before.body.progress.completed === 0 && before.body.progress.total === 2, JSON.stringify(before.body.progress));
+  var d1 = await call('POST', '/api/free2027/lessons/' + mk1.body.lesson.id + '/complete', {}, ada.token);
+  ok('marking a lesson done is accepted', d1.status === 200 && d1.body.completed === true && d1.body.already === false, d1.raw.slice(0, 200));
+  ok('progress moves to one of two, fifty per cent', d1.body.progress.completed === 1 && d1.body.progress.percent === 50, JSON.stringify(d1.body.progress));
+  var d2 = await call('POST', '/api/free2027/lessons/' + mk1.body.lesson.id + '/complete', {}, ada.token);
+  ok('marking the same lesson again changes nothing', d2.body.already === true && d2.body.progress.completed === 1, d2.raw.slice(0, 200));
+  ok('another candidate keeps their own sheet', (await call('GET', '/api/free2027/programme', undefined, ben.token)).body.progress.completed === 0);
+  ok('an unknown lesson is refused', (await call('POST', '/api/free2027/lessons/F27-L-999/complete', {}, ada.token)).status === 404);
+  ok('a lesson cannot be completed without a token', (await call('POST', '/api/free2027/lessons/' + mk1.body.lesson.id + '/complete', {})).status === 401);
+  ok('the completion is in the session records', (await call('GET', '/api/free2027/admin/records', undefined, adm)).body.records.some(function (r) { return r.kind === 'lesson' && r.participantId === ada.participant.id; }));
+
+  var plist = await call('GET', '/api/free2027/admin/participants', undefined, adm);
+  var adaRow = (plist.body.participants || []).filter(function (p) { return p.id === ada.participant.id; })[0];
+  ok('the participant list carries each candidate\'s lesson progress', !!adaRow && adaRow.lessonsDone === 1 && adaRow.lessonsTotal === 2, JSON.stringify(adaRow && { d: adaRow.lessonsDone, t: adaRow.lessonsTotal }));
+  var prog = await call('GET', '/api/free2027/admin/progress', undefined, acadT);
+  ok('the progress view lists every candidate', prog.status === 200 && prog.body.participants.length === 16 && prog.body.lessons === 2, prog.raw.slice(0, 220));
+  var adaProg = prog.body.participants.filter(function (x) { return x.id === ada.participant.id; })[0];
+  ok('with their lessons, quizzes and average',
+    !!adaProg && adaProg.lessonsDone === 1 && adaProg.quizzes >= 1 && typeof adaProg.average === 'number', JSON.stringify(adaProg));
+  ok('and no address is carried into the progress view', prog.raw.indexOf('@') < 0, prog.raw.slice(0, 160));
+
+  head('the programme keeps its own audit trail');
+  var audit = await call('GET', '/api/free2027/admin/audit', undefined, adm);
+  var acts = ((audit.body && audit.body.entries) || []).map(function (e) { return e.action; });
+  ok('administrative changes are recorded', audit.status === 200 && acts.indexOf('lesson.create') > -1 && acts.indexOf('lesson.edit') > -1,
+    acts.slice(0, 12).join(','));
+  ok('and the activity and leaderboard changes with them',
+    acts.indexOf('activity.create') > -1 && acts.indexOf('activity.publish') > -1 && acts.indexOf('leaderboard.publish') > -1, acts.join(','));
+  ok('each entry names the administrator and their role',
+    audit.body.entries.every(function (e) { return !!e.actorId && !!e.actorRole; }), JSON.stringify(audit.body.entries.slice(0, 2)));
+  ok('no address, passcode or code is ever written to it',
+    audit.raw.indexOf('@') < 0 && audit.raw.indexOf('2027') < 0 && audit.raw.indexOf('ada') < 0, audit.raw.slice(0, 200));
+  ok('a candidate cannot read the audit trail', (await call('GET', '/api/free2027/admin/audit', undefined, ada.token)).status === 401);
+  ok('getting a list is not an administrative change', acts.filter(function (a) { return /^(questions|progress|audit)\./.test(a); }).length === 0);
 
   head('archiving a session, and starting fresh');
   ok('archiving without a confirmation is refused', (await call('POST', '/api/free2027/admin/sessions/new', { label: 'Term Two' }, adm)).status === 400);
@@ -315,11 +512,11 @@ waitForBoot(40).then(async function (h) {
   var gocAttemptsBefore = (before.attempts || []).length;
   var newSession = await call('POST', '/api/free2027/admin/sessions/new', { label: 'Term Two', confirm: true }, adm);
   ok('the session is archived and a new one starts', newSession.status === 200 && /^F27-S2$/.test(newSession.body.session.id), newSession.raw.slice(0, 200));
-  ok('the archive reports what it holds', newSession.body.archive.counts.participants === 11 && newSession.body.archive.counts.submissions === 12, JSON.stringify(newSession.body.archive.counts));
+  ok('the archive reports what it holds', newSession.body.archive.counts.participants === 16 && newSession.body.archive.counts.submissions === 12, JSON.stringify(newSession.body.archive.counts));
   var archiveFile = path.join(DATA, 'free2027-archives', newSession.body.archive.file);
   ok('the archive is a real JSON file on disk', fs.existsSync(archiveFile), archiveFile);
   var archiveJson = JSON.parse(fs.readFileSync(archiveFile, 'utf8'));
-  ok('it holds the participants, activities, attempts and rankings', archiveJson.session.participants.length === 11 && archiveJson.session.activities.length >= 3 && archiveJson.session.attempts.length >= 12);
+  ok('it holds the participants, activities, attempts and rankings', archiveJson.session.participants.length === 16 && archiveJson.session.activities.length >= 3 && archiveJson.session.attempts.length >= 12);
   ok('nothing in the original hub was touched by the archive',
     (function () { var after = dataFile(); return (after.students || []).length === gocStudentsBefore && (after.attempts || []).length === gocAttemptsBefore; })());
   ok('the new session starts with no participants or activities',
@@ -351,12 +548,50 @@ waitForBoot(40).then(async function (h) {
 }).catch(function (e) {
   fails++;
   console.log('  FAIL  ' + (e && e.stack ? e.stack.split('\n')[0] : e));
-}).then(phaseTwo).then(function () {
+}).then(phaseTwo).then(phaseThree).then(function () {
   try { fs.rmSync(SANDBOX, { recursive: true, force: true }); } catch (e) {}
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
   if (fails) console.log('\nserver log tail:\n' + serverLog.slice(-2000));
   process.exit(fails ? 1 : 0);
 });
+
+/* Phase three: with no SMTP sender, production must expose a clear config
+   error and must not pretend that an email was sent or return a code. */
+async function phaseThree() {
+  head('missing SMTP is an explicit configuration error in production');
+  var DATA2 = path.join(SANDBOX, 'data-prod');
+  fs.mkdirSync(DATA2, { recursive: true });
+  var child3 = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')], {
+    cwd: SANDBOX,
+    env: Object.assign({}, process.env, {
+      PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'),
+      /* a production-like run refuses to boot on the published demo secrets,
+         so this one is given real ones (and no SMTP). */
+      GOC_FOUNDER_PW: 'prod-founder-2027', GOC_ACADDIR_PW: 'prod-acaddir-2027', GOC_PASSCODE: '918273',
+      GOC_DATA_DIR: DATA2, GOC_FREE_2027: '1',
+      NODE_ENV: 'production'
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  var prodLog = '';
+  child3.stdout.on('data', function (c) { prodLog += c; });
+  child3.stderr.on('data', function (c) { prodLog += c; });
+  try {
+    var r = await waitForBoot(40);
+    ok('the edition still opens in production', r.body && r.body.free2027 && r.body.free2027.on === true, r.raw + ' ' + prodLog.slice(-300));
+    var c = await call('GET', '/api/free2027/config');
+    ok('the public config says SMTP is unavailable without advertising a bypass',
+      c.body.otpDelivery && c.body.otpDelivery.available === false && c.body.otpDelivery.devAllowed === undefined,
+      JSON.stringify(c.body.otpDelivery));
+    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', password: 'Passw0rd-123', course: 'Law' });
+    ok('registration fails clearly instead of pretending to send an email', reg.status === 503 && /email verification is not configured/i.test(reg.body.error || reg.body.message || ''), reg.raw.slice(0, 200));
+    ok('no verification code is handed back in the error response', !/\b\d{6}\b/.test(reg.raw), reg.raw.slice(0, 200));
+    ok('nothing was created from an unproved address', ((JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027 || {}).sessions || [{}])[0].participants === undefined ||
+      (JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027.sessions[0].participants || []).length === 0);
+  } finally {
+    try { child3.kill(); } catch (e) {}
+  }
+}
 
 /* Phase two: the SAME data folder, opened by a server whose deployment has the
    central switch off. Nothing about the edition is reachable, and the original
@@ -381,11 +616,13 @@ async function phaseTwo() {
     ok('GOC_FREE_2027=0 switches the edition off completely', r.body && r.body.free2027 && r.body.free2027.on === false, r.raw);
     var c = await call('GET', '/api/free2027/config');
     ok('the config says so, so the page stays in Original Mode', c.body.on === false);
-    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', course: 'Law' });
+    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', password: 'Passw0rd-123', course: 'Law' });
     ok('registration is refused while the switch is off', reg.status === 404, reg.status);
     var health = await call('GET', '/api/health');
     ok('the hub itself is untouched and still serving', health.status === 200 && health.body.service === 'goc-academy-hub');
   } finally {
     try { child2.kill(); } catch (e) {}
+    /* let the port be released before phase three binds it again */
+    await new Promise(function (r) { setTimeout(r, 700); });
   }
 }

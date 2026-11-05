@@ -76,6 +76,28 @@ function ensureEdition(db, opts) {
   if (!Array.isArray(ed.sessions)) ed.sessions = [];
   if (!Array.isArray(ed.archives)) ed.archives = [];
   if (!Array.isArray(ed.otps)) ed.otps = [];
+  /* Permanent identifier registry is scoped to this programme and survives
+     session archiving/deletion. */
+  if (!Array.isArray(ed.studentIds)) ed.studentIds = [];
+  if (!ed.studentIdsByEmail || typeof ed.studentIdsByEmail !== 'object' || Array.isArray(ed.studentIdsByEmail)) ed.studentIdsByEmail = {};
+  /* The sequential student-identifier counter. It lives on the edition record
+     (not on a session) so it survives archiving, and it is seeded from every
+     identifier already issued, so an older data file resumes exactly where it
+     left off. Deleted identifiers stay in ed.studentIds, so they are never
+     re-issued: the counter only ever moves forward. */
+  if (typeof ed.studentIdSeq !== 'number' || !isFinite(ed.studentIdSeq)) {
+    var maxSeq = 0;
+    (ed.studentIds || []).forEach(function (id) { maxSeq = Math.max(maxSeq, rules.idSeqOf(id)); });
+    (ed.sessions || []).forEach(function (s) {
+      (s && s.participants || []).forEach(function (p) { if (p && p.id) maxSeq = Math.max(maxSeq, rules.idSeqOf(p.id)); });
+    });
+    ed.studentIdSeq = maxSeq;
+  }
+  /* Authenticated sessions, persisted with the rest of the programme data so
+     a normal browser refresh (and even a server restart) keeps a signed-in
+     student signed in. Only a SHA-256 digest of each token is stored, so the
+     data file never holds a usable session credential. */
+  if (!Array.isArray(ed.authSessions)) ed.authSessions = [];
   if (typeof ed.rev !== 'number') ed.rev = 0;
 
   /* One session always exists, so every route has somewhere to write. */
@@ -86,16 +108,60 @@ function ensureEdition(db, opts) {
   }
   var cur = ed.sessions.filter(function (s) { return s && s.id === ed.currentSessionId; })[0];
   if (!cur) { cur = ed.sessions[ed.sessions.length - 1]; ed.currentSessionId = cur.id; }
-  ['participants', 'activities', 'attempts', 'records'].forEach(function (k) {
+  (ed.sessions || []).forEach(function (session) {
+    (session && session.participants || []).forEach(function (p) {
+      if (!p || !p.id) return;
+      if (ed.studentIds.indexOf(String(p.id)) < 0) ed.studentIds.push(String(p.id));
+      if (p.email && !ed.studentIdsByEmail[String(p.email).toLowerCase()]) ed.studentIdsByEmail[String(p.email).toLowerCase()] = String(p.id);
+    });
+  });
+  ['participants', 'activities', 'attempts', 'records', 'lessons', 'audit'].forEach(function (k) {
     if (!Array.isArray(cur[k])) cur[k] = [];
   });
-  ['participantSeq', 'activitySeq', 'attemptSeq'].forEach(function (k) {
+  ['participantSeq', 'activitySeq', 'attemptSeq', 'lessonSeq'].forEach(function (k) {
     if (typeof cur[k] !== 'number') cur[k] = 0;
+  });
+
+  /* The two INDEPENDENT question banks (PR #9): db.free2027.questionBanks.
+     'weekly' serves Weekly Assessments, 'competition' serves Competitions.
+     They are separate storages with separate ID sequences, never aliases of
+     db.questions, and never shared with each other. Initialised additively:
+     an older data file simply gains empty banks, existing records untouched. */
+  if (!ed.questionBanks || typeof ed.questionBanks !== 'object' || Array.isArray(ed.questionBanks)) ed.questionBanks = {};
+  BANKS.forEach(function (b) {
+    var bank = ed.questionBanks[b];
+    if (!bank || typeof bank !== 'object' || Array.isArray(bank)) bank = {};
+    if (!Array.isArray(bank.questions)) bank.questions = [];
+    if (typeof bank.questionSeq !== 'number' || !isFinite(bank.questionSeq)) {
+      /* seed the per-bank sequence from any IDs already present, so a restart
+         never re-issues an ID */
+      var m = 0;
+      bank.questions.forEach(function (q) { if (q && q.id) m = Math.max(m, rules.idSeqOf(String(q.id)) || 0); });
+      bank.questionSeq = m;
+    }
+    ed.questionBanks[b] = bank;
   });
 
   db.free2027 = ed;
   return ed;
 }
+
+/* The only bank identifiers the API will ever accept — an explicit allowlist,
+   so no request can point at an arbitrary path or collection. */
+var BANKS = ['weekly', 'competition'];
+/* The five subjects the edition's banks support (a subset of the hub's own
+   ALL_SUBJECTS, which is exactly these five). */
+var BANK_SUBJECTS = ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+/* The activity kind decides the bank — enforced server-side, never inferred
+   from a subject, a filename or the client. */
+function bankForKind(kind) {
+  return kind === rules.KIND_COMPETITION ? 'competition' : 'weekly';
+}
+function cleanBank(b) {
+  b = String(b == null ? '' : b).trim().toLowerCase();
+  return BANKS.indexOf(b) > -1 ? b : null;
+}
+function bankPrefix(bank) { return bank === 'competition' ? 'CQ' : 'WQ'; }
 
 /* ---------------------------------------------------------------------------
    createFree2027(deps) — the service.
@@ -104,7 +170,7 @@ function ensureEdition(db, opts) {
      readData, writeData,        the hub's own data-file accessors
      withDataLock,               the hub's read-modify-write queue
      listQuestions,              the hub's question-bank reader
-     deliverOtp,                 async ({email,name,code}) -> {delivered,dev,devCode}
+     deliverOtp,                 async ({email,name,code}) -> {delivered}
      now,                        () -> ms (injected so tests own the clock)
      log                         (optional) message sink
    }
@@ -116,10 +182,13 @@ function createFree2027(deps) {
   var archiveDir = path.join(dataDir, 'free2027-archives');
   var log = typeof d.log === 'function' ? d.log : function () {};
 
-  /* participant tokens are memory-only, like the hub's own sessions: a restart
-     signs free-tutorial candidates out and they verify again with a code. */
-  var tokens = new Map();
+  /* Participant sessions are PERSISTED in db.free2027.authSessions (only the
+     SHA-256 digest of each token is stored). A normal browser refresh therefore
+     keeps a signed-in student signed in — even across a server restart — while
+     logout deletes the stored record, so a logged-out student is never silently
+     signed back in and an expired/invalid token requires fresh authentication. */
   var TOKEN_HOURS = 8;
+  var AUTH_SESSION_MAX = 5000;
 
   function readData() { return d.readData(); }
   function writeData(db) { d.writeData(db); }
@@ -143,9 +212,55 @@ function createFree2027(deps) {
 
   /* ------------------------------------------------------------- utilities */
 
-  function codeHash(salt, code) { return crypto.createHmac('sha256', String(salt)).update(String(code)).digest('hex'); }
+  function codeHash(salt, code) {
+    var secret = String(d.otpSecret || (d.env || process.env).GOC_FREE_2027_OTP_SECRET || '');
+    return crypto.createHmac('sha256', secret).update(String(salt) + ':' + String(code)).digest('hex');
+  }
+  function otpSecretAvailable() {
+    return String(d.otpSecret || (d.env || process.env).GOC_FREE_2027_OTP_SECRET || '').length >= 32;
+  }
   function sixDigits() { return String(crypto.randomInt ? crypto.randomInt(0, 1000000) : Math.floor(Math.random() * 1000000)).padStart(6, '0'); }
   function token() { return crypto.randomBytes(24).toString('hex'); }
+  function tokenDigest(t) { return crypto.createHash('sha256').update(String(t)).digest('hex'); }
+
+  /* The one place a student identifier is allocated. Called ONLY from inside
+     the data lock (verifyRegistration), so two simultaneous registrations are
+     serialized and can never receive the same number. The counter is stored
+     on the edition record and only ever moves forward; every previously issued
+     identifier (including ones whose student was later deleted) is in
+     ed.studentIds, and the loop skips any that are somehow still present, so a
+     number is guaranteed unique and is never reused. */
+  function nextStudentId(ed) {
+    var used = new Set((ed.studentIds || []).map(function (id) { return String(id).toUpperCase(); }));
+    (ed.sessions || []).forEach(function (session) {
+      (session && session.participants || []).forEach(function (p) { if (p && p.id) used.add(String(p.id).toUpperCase()); });
+    });
+    var n = Math.max(Number(ed.studentIdSeq) || 0, (ed.studentIds || []).reduce(function (m, id) { return Math.max(m, rules.idSeqOf(id)); }, 0));
+    var id;
+    do {
+      n++;
+      id = rules.studentId(n);
+    } while (used.has(id.toUpperCase()));
+    ed.studentIdSeq = n;
+    return id;
+  }
+
+  /* Passwords are hashed with scrypt + a per-password random salt, the same
+     scheme the hub's own staff accounts use. Only the hash is ever stored. */
+  function hashPassword(plain) {
+    var salt = crypto.randomBytes(16).toString('hex');
+    var key = crypto.scryptSync(String(plain), salt, 64).toString('hex');
+    return 'scrypt$' + salt + '$' + key;
+  }
+  function verifyPassword(plain, stored) {
+    var parts = String(stored || '').split('$');
+    if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
+    try {
+      var key = crypto.scryptSync(String(plain), parts[1], 64);
+      var want = Buffer.from(parts[2], 'hex');
+      return key.length === want.length && crypto.timingSafeEqual(key, want);
+    } catch (e) { return false; }
+  }
 
   function findParticipant(session, id) {
     var want = String(id || '').toUpperCase();
@@ -186,9 +301,44 @@ function createFree2027(deps) {
     if (session.records.length > 2000) session.records = session.records.slice(0, 2000);
   }
 
+  /* Every participant carries a programme record of their own: the course they
+     enrolled on, the access the academy granted, and their progress. A record
+     written before these fields existed acquires them the first time it is
+     read (and is then saved with the next write) — additive, so nothing that
+     is already stored is rewritten or lost. */
+  function ensureParticipantProgramme(p) {
+    if (!p || typeof p !== 'object') return p;
+    var seen = Number(p.verifiedAt || p.createdAt) || now();
+    if (!p.enrolment || typeof p.enrolment !== 'object') {
+      p.enrolment = { course: String(p.course || ''), enrolledAt: seen, status: 'enrolled' };
+    }
+    if (!p.access || typeof p.access !== 'object') {
+      p.access = {
+        programme: '2027-free-tutorial',
+        grantedAt: seen,
+        status: p.active === false ? 'suspended' : 'active'
+      };
+    }
+    if (!p.progress || typeof p.progress !== 'object') p.progress = { lessons: {}, lastAt: null };
+    if (!p.progress.lessons || typeof p.progress.lessons !== 'object') p.progress.lessons = {};
+    return p;
+  }
+
   /* Question records for an activity, read-only out of the hub's bank. */
-  async function questionRecords(db, ids) {
-    var all = await d.listQuestions({ all: true }, db);
+  /* Question records for an activity, read from the activity's OWN bank:
+     weekly assessments draw on db.free2027.questionBanks.weekly, competitions
+     on db.free2027.questionBanks.competition. The shared db.questions is never
+     consulted for the edition, and a question ID from the other bank simply
+     does not resolve here (callers treat that as a forged ID). */
+  function bankQuestionsSync(db, bank) {
+    var ed = edition(db);
+    ensureEdition(db);
+    var b = (ed.questionBanks || {})[bank];
+    return (b && Array.isArray(b.questions)) ? b.questions : [];
+  }
+  async function questionRecords(db, ids, kind) {
+    var bank = bankForKind(kind);
+    var all = bankQuestionsSync(db, bank);
     var byId = {};
     all.forEach(function (q) { byId[String(q.id)] = q; });
     var out = [];
@@ -200,32 +350,71 @@ function createFree2027(deps) {
   }
 
   /* ---------------------------------------------------------------- sessions
-     A free-tutorial candidate's token. Memory only; expiry checked on use. */
+     A free-tutorial candidate's token, persisted as a digest in the edition's
+     own record. issueToken() must be called inside the data lock (both call
+     sites are); sessionFromReq() checks expiry on every use. */
   function issueToken(participantId, sessionId) {
     var t = token();
-    tokens.set(t, { participantId: String(participantId), sessionId: String(sessionId), expires: now() + TOKEN_HOURS * 3600 * 1000 });
+    var db = readData();
+    var ed = edition(db);
+    if (!Array.isArray(ed.authSessions)) ed.authSessions = [];
+    var t0 = now();
+    ed.authSessions.push({
+      tokenHash: tokenDigest(t),
+      participantId: String(participantId),
+      sessionId: String(sessionId),
+      createdAt: t0,
+      lastSeenAt: t0,
+      expiresAt: t0 + TOKEN_HOURS * 3600 * 1000
+    });
+    /* Bound the list: drop expired records first, then the oldest. */
+    ed.authSessions = ed.authSessions.filter(function (s) { return s && s.expiresAt > t0 - 86400000; });
+    if (ed.authSessions.length > AUTH_SESSION_MAX) ed.authSessions = ed.authSessions.slice(-AUTH_SESSION_MAX);
+    writeData(db);
     return t;
-  }
-  function pruneTokens() {
-    var t = now();
-    tokens.forEach(function (v, k) { if (!v || v.expires < t) tokens.delete(k); });
   }
   /* What the dispatcher calls for a `need: 'free'` route. Returns a sess-shaped
      object ({ token, data: { role:'free', id, sessionId } }) or null. */
   function sessionFromReq(req) {
-    pruneTokens();
     var auth = (req && req.headers && req.headers.authorization) || '';
     if (auth.indexOf('Bearer ') !== 0) return null;
     var t = auth.slice(7);
-    var rec = tokens.get(t);
+    if (!t) return null;
+    var db = readData();
+    var ed = edition(db);
+    var list = ed.authSessions || [];
+    var digest = tokenDigest(t);
+    var t0 = now();
+    var rec = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].tokenHash === digest) { rec = list[i]; break; }
+    }
     if (!rec) return null;
-    if (rec.expires < now()) { tokens.delete(t); return null; }
+    if (rec.expiresAt < t0) return null;   /* expired: fresh authentication required */
     return { token: t, data: { role: 'free', id: rec.participantId, sessionId: rec.sessionId } };
   }
+  /* Logout / deactivation helpers. Both run inside the data lock at every call
+     site. dropToken removes ONE session (the one being logged out); dropTokensFor
+     removes every persisted session of a participant (deactivation, deletion). */
+  function dropToken(t) {
+    if (!t) return;
+    var db = readData();
+    var ed = edition(db);
+    if (!Array.isArray(ed.authSessions)) return;
+    var digest = tokenDigest(t);
+    var before = ed.authSessions.length;
+    ed.authSessions = ed.authSessions.filter(function (s) { return !(s && s.tokenHash === digest); });
+    if (ed.authSessions.length !== before) writeData(db);
+  }
   function dropTokensFor(participantId) {
-    tokens.forEach(function (v, k) {
-      if (v && String(v.participantId) === String(participantId)) tokens.delete(k);
+    var db = readData();
+    var ed = edition(db);
+    if (!Array.isArray(ed.authSessions)) return;
+    var before = ed.authSessions.length;
+    ed.authSessions = ed.authSessions.filter(function (s) {
+      return !(s && String(s.participantId) === String(participantId));
     });
+    if (ed.authSessions.length !== before) writeData(db);
   }
 
   /* --------------------------------------------------------------- public */
@@ -256,17 +445,27 @@ function createFree2027(deps) {
     return locked(async function () {
       var db = readData();
       var ed = requireOn(edition(db));
+      if (!otpSecretAvailable()) throw FreeError(503, 'Email verification is not configured. Contact the academy before registering.');
       var name = rules.cleanName(body.name);
       if (name.error) throw FreeError(400, name.error);
       var email = rules.cleanEmail(body.email);
       if (email.error) throw FreeError(400, email.error);
       var course = rules.cleanCourse(body.course, ed.courses);
       if (course.error) throw FreeError(400, course.error);
+      /* A password is chosen at registration and kept only as a scrypt hash;
+         it is what the student will log in with after the email is verified. */
+      var password = rules.cleanPassword(body.password);
+      if (password.error) throw FreeError(400, password.error);
 
       var session = currentSession(ed);
       var existing = findParticipantByEmail(session, email.email);
       if (existing && existing.active === false) {
         throw FreeError(403, 'This email address has been switched off for this programme. Contact the academy.');
+      }
+      if (existing && existing.verified === true) {
+        /* No duplicate registrations: an address that already holds a verified
+           account must log in with its password instead. */
+        throw FreeError(409, 'That email address is already registered. Log in with your password instead.');
       }
 
       var t = now();
@@ -287,6 +486,10 @@ function createFree2027(deps) {
       ed.otps.push({
         email: email.email, salt: salt, hash: codeHash(salt, code),
         name: name.name, course: course.course,
+        /* The chosen password travels with the pending code as a hash, so the
+           account can only be created once the address is proved AND the
+           password is already safely hashed. */
+        pwHash: hashPassword(password.password),
         createdAt: t, expiresAt: t + rules.OTP_TTL_MIN * 60000, tries: 0, usedAt: null
       });
       /* keep the list bounded: newest 500, and drop anything useless */
@@ -302,21 +505,18 @@ function createFree2027(deps) {
         log('[free2027] OTP delivery failed: ' + (e && e.message ? e.message : e));
         delivery = { delivered: false, dev: false };
       }
-      var out = {
+      if (delivery.delivered !== true) {
+        /* Do not turn a missing or failed sender into a fake success. The
+           stored digest remains unusable unless the code reached the inbox;
+           the resend window also bounds repeated delivery attempts. */
+        throw FreeError(503, 'Email delivery is not configured or is temporarily unavailable. Please contact the academy or try again later.');
+      }
+      return {
         sent: true,
-        delivered: delivery.delivered === true,
+        delivered: true,
         expiresInMin: rules.OTP_TTL_MIN,
         resendInSec: rules.OTP_RESEND_SEC,
-        returning: !!existing
       };
-      /* The code comes back only when the delivery hook says this deployment
-         has deliberately opted into that (no SMTP, development, and
-         GOC_FREE_2027_DEV_OTP=1). server.js is the only place that decides. */
-      if (!out.delivered && delivery.dev === true) {
-        out.dev = true;
-        out.devCode = code;
-      }
-      return out;
     });
   }
 
@@ -349,23 +549,45 @@ function createFree2027(deps) {
         throw FreeError(403, 'That code is not right. Check your email and try again.');
       }
 
-      otp.usedAt = t;
+      /* All issued codes for the address are invalidated when any current one
+         succeeds. This prevents an older resent code being replayed later. */
+      (ed.otps || []).forEach(function (o) {
+        if (o && o.email === email.email && !o.usedAt) o.usedAt = t;
+      });
       var session = currentSession(ed);
       var p = findParticipantByEmail(session, email.email);
       if (p && p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
       if (!p) {
         session.participantSeq = (session.participantSeq || 0) + 1;
+        var emailKey = email.email.toLowerCase();
+        /* A permanent, sequential identifier (GOC-F-001, GOC-F-002, …),
+           allocated inside this lock so concurrent registrations can never
+           collide and a removed student's number is never re-issued. An email
+           that already holds an identifier in the permanent registry (for
+           example a returning student after a session archive) keeps it. */
+        var permanentId = ed.studentIdsByEmail[emailKey] || nextStudentId(ed);
+        if (ed.studentIds.indexOf(permanentId) < 0) ed.studentIds.push(permanentId);
+        ed.studentIdsByEmail[emailKey] = permanentId;
         p = {
-          id: rules.participantId(session.participantSeq),
+          id: permanentId,
           name: otp.name || rules.cleanName(body.name).name || 'Candidate',
           email: email.email,
           course: otp.course || rules.cleanCourse(body.course, ed.courses).course || 'Other',
+          /* Never plaintext: only the scrypt hash of the chosen password. */
+          passwordHash: otp.pwHash || null,
           verified: true,
           active: true,
           createdAt: t,
           verifiedAt: t,
-          lastSeenAt: t
+          lastSeenAt: t,
+          /* The programme record travels with the candidate from the moment
+             the address is proved: what they enrolled on, the access that was
+             granted, and an empty progress sheet to fill in. */
+          enrolment: { course: null, enrolledAt: t, status: 'enrolled' },
+          access: { programme: '2027-free-tutorial', grantedAt: t, status: 'active' },
+          progress: { lessons: {}, lastAt: null }
         };
+        p.enrolment.course = String(p.course || '');
         session.participants.push(p);
         pushRecord(session, { participantId: p.id, kind: 'register' });
       } else {
@@ -373,8 +595,42 @@ function createFree2027(deps) {
         p.lastSeenAt = t;
         p.verifiedAt = p.verifiedAt || t;
         if (!p.course && otp.course) p.course = otp.course;
+        /* A record from before passwords existed acquires the hash of the
+           password that was just proved with the code. */
+        if (!p.passwordHash && otp.pwHash) p.passwordHash = otp.pwHash;
+        ensureParticipantProgramme(p);
         pushRecord(session, { participantId: p.id, kind: 'login' });
       }
+      writeData(db);
+      return {
+        token: issueToken(p.id, session.id),
+        participant: rules.selfParticipant(p),
+        session: { id: session.id, label: session.label }
+      };
+    });
+  }
+
+  /* login: the REAL authentication mechanism. Email + the password chosen at
+     registration; the email verification code alone never authenticates anyone
+     permanently. Answers identically whether the address is unknown or the
+     password is wrong, so the route cannot be used to enumerate accounts. */
+  function login(input) {
+    var body = input || {};
+    return locked(async function () {
+      var db = readData();
+      var ed = requireOn(edition(db));
+      var email = rules.cleanEmail(body.email);
+      if (email.error) throw FreeError(400, email.error);
+      var pw = String(body.password == null ? '' : body.password);
+      if (!pw) throw FreeError(400, 'Enter your password.');
+      var session = currentSession(ed);
+      var p = findParticipantByEmail(session, email.email);
+      var fail = function () { throw FreeError(403, 'That email address or password is not right.'); };
+      if (!p || p.verified !== true || p.active === false) fail();
+      if (!p.passwordHash || !verifyPassword(pw, p.passwordHash)) fail();
+      var t = now();
+      p.lastSeenAt = t;
+      pushRecord(session, { participantId: p.id, kind: 'login' });
       writeData(db);
       return {
         token: issueToken(p.id, session.id),
@@ -412,9 +668,17 @@ function createFree2027(deps) {
     return { ed: ed, session: session };
   }
 
-  function logout(data) {
-    dropTokensFor(data && data.id);
-    return { ok: true };
+  /* Logout destroys THE authenticated session in use: the persisted record for
+     this token is deleted, so no refresh, restart or replay of this token can
+     sign the student back in — clicking Enter CBT Portal again shows the login
+     interface. The client also drops its stored token, so it cannot silently
+     re-authenticate either. (Deactivation/deletion by an administrator still
+     removes every session of the student via dropTokensFor.) */
+  function logout(data, token) {
+    return locked(async function () {
+      dropToken(token || (data && data.token));
+      return { ok: true };
+    });
   }
 
   /* The portal's list: weekly assessments and competitions only, each with
@@ -474,7 +738,7 @@ function createFree2027(deps) {
          paper honest: the clock cannot be dodged by walking away. */
       var stale = mine.filter(function (a) { return !a.submittedAt && rules.attemptExpired(a, t); });
       if (stale.length) {
-        var qs = await questionRecords(db, stale[0].questionIds || []);
+        var qs = await questionRecords(db, stale[0].questionIds || [], activity.kind);
         stale.forEach(function (a) { finaliseAttempt(a, qs, t, true); });
         writeData(db);
         mine = attemptsFor(ctx.session, activity.id, p.id);
@@ -485,19 +749,25 @@ function createFree2027(deps) {
       }
       var open = rules.openAttempt(mine, t);
       if (open) {
-        var openQs = await questionRecords(db, open.questionIds || []);
+        var openQs = await questionRecords(db, open.questionIds || [], activity.kind);
         return attemptPayload(ctx.session, activity, open, openQs, p, t, true);
       }
       if (rules.attemptsLeft(activity, mine) <= 0) {
         throw FreeError(403, 'You have used all ' + activity.maxAttempts + ' attempt(s) for this activity.');
       }
-      var paperQs = await questionRecords(db, activity.questionIds || []);
+      var paperQs = await questionRecords(db, activity.questionIds || [], activity.kind);
+      /* Every chosen ID must resolve in THIS activity's bank: an ID from the
+         other bank (or a forged one) is rejected, not silently dropped. */
+      if (paperQs.length !== (activity.questionIds || []).length) {
+        throw FreeError(400, 'Some questions of this activity are not in its own question bank.');
+      }
       if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
       ctx.session.attemptSeq = (ctx.session.attemptSeq || 0) + 1;
       var attempt = {
         id: 'F27-A' + ctx.session.attemptSeq + '-' + crypto.randomBytes(3).toString('hex'),
         activityId: activity.id,
         participantId: p.id,
+        bank: bankForKind(activity.kind),
         questionIds: paperQs.map(function (q) { return String(q.id); }),
         responses: {},
         startedAt: t,
@@ -552,9 +822,9 @@ function createFree2027(deps) {
 
       var qid = String((body && body.questionId) || '');
       if ((attempt.questionIds || []).indexOf(qid) < 0) throw FreeError(400, 'That question is not part of this paper.');
-      var qs = await questionRecords(db, [qid]);
+      var qs = await questionRecords(db, [qid], attempt.bank || (activity && activity.kind));
       var q = qs[0];
-      if (!q) throw FreeError(404, 'That question is no longer available.');
+      if (!q) throw FreeError(404, 'That question is not in this paper\'s question bank.');
       var value = body ? body.choice : null;
       if (value === null || value === undefined || value === '') {
         delete attempt.responses[qid];
@@ -584,7 +854,7 @@ function createFree2027(deps) {
     }
     var activity = findActivity(ctx.session, attempt.activityId);
     if (!activity) throw FreeError(404, 'That activity was not found.');
-    var qs = await questionRecords(db, attempt.questionIds || []);
+    var qs = await questionRecords(db, attempt.questionIds || [], attempt.bank || activity.kind);
     if (rules.attemptExpired(attempt, t)) {
       /* Closing it out here rather than on the next start keeps the result
          available on a device that comes back after the clock ran out. */
@@ -593,7 +863,8 @@ function createFree2027(deps) {
         var ctx2 = sessionForCallerWithDb(db2, data);
         var a2 = findAttempt(ctx2.session, attemptId);
         if (a2 && !a2.submittedAt) {
-          var qs2 = await questionRecords(db2, a2.questionIds || []);
+          var act2 = findActivity(ctx2.session, a2.activityId);
+          var qs2 = await questionRecords(db2, a2.questionIds || [], a2.bank || (act2 && act2.kind));
           finaliseAttempt(a2, qs2, t, true);
           writeData(db2);
         }
@@ -665,7 +936,7 @@ function createFree2027(deps) {
       if (attempt.submittedAt) return { alreadySubmitted: true, result: resultOf(attempt, ctx.session) };
       var activity = findActivity(ctx.session, attempt.activityId);
       if (!activity) throw FreeError(404, 'That activity was not found.');
-      var qs = await questionRecords(db, attempt.questionIds || []);
+      var qs = await questionRecords(db, attempt.questionIds || [], attempt.bank || activity.kind);
 
       /* Answers sent with the submit are only ever used to fill gaps: the
          server's own copy wins, and each value is validated the same way an
@@ -699,6 +970,82 @@ function createFree2027(deps) {
       .sort(function (a, b) { return (b.submittedAt || 0) - (a.submittedAt || 0); })
       .map(function (a) { return resultOf(a, ctx.session); });
     return { results: rows };
+  }
+
+  /* ------------------------------------------- the candidate's programme
+     One call for the portal: who they are, what they enrolled on, the access
+     they hold, how far through the lessons they are, and what their own
+     quizzes add up to. Everything is read from the participant's own record
+     and this session, so it survives a restart unchanged. */
+  function programme(data) {
+    var db = readData();
+    var ctx = sessionForCallerWithDb(db, data);
+    var p = findParticipant(ctx.session, data.id);
+    if (!p) throw FreeError(401, 'Your registration was not found. Please verify your email again.');
+    if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
+    ensureParticipantProgramme(p);
+    var submissions = ctx.session.attempts.filter(function (a) {
+      return a && String(a.participantId) === String(p.id) && a.submittedAt;
+    });
+    var percentSum = submissions.reduce(function (n, a) { return n + (Number(a.percent) || 0); }, 0);
+    return {
+      participant: rules.selfParticipant(p),
+      profile: {
+        id: p.id,
+        name: String(p.name || ''),
+        course: String(p.course || ''),
+        joinedAt: Number(p.createdAt) || null,
+        verifiedAt: Number(p.verifiedAt) || null,
+        lastSeenAt: Number(p.lastSeenAt) || null
+      },
+      enrolment: {
+        course: String((p.enrolment && p.enrolment.course) || p.course || ''),
+        enrolledAt: Number(p.enrolment && p.enrolment.enrolledAt) || null,
+        status: String((p.enrolment && p.enrolment.status) || 'enrolled')
+      },
+      access: {
+        programme: String((p.access && p.access.programme) || '2027-free-tutorial'),
+        grantedAt: Number(p.access && p.access.grantedAt) || null,
+        status: String((p.access && p.access.status) || (p.active === false ? 'suspended' : 'active'))
+      },
+      progress: rules.progressOf(p, ctx.session.lessons),
+      quizzes: {
+        submitted: submissions.length,
+        average: submissions.length ? Math.round(percentSum / submissions.length) : null,
+        best: submissions.length ? submissions.reduce(function (m, a) { return Math.max(m, Number(a.score) || 0); }, 0) : null,
+        lastAt: submissions.length ? submissions.reduce(function (m, a) { return Math.max(m, Number(a.submittedAt) || 0); }, 0) : null
+      },
+      session: { id: ctx.session.id, label: ctx.session.label },
+      mode: rules.activeMode(ctx.ed, ctx.ed.enabled)
+    };
+  }
+
+  /* A candidate marks a lesson done. Idempotent: marking it twice changes
+     nothing and consumes nothing, so a double tap or a reload is harmless. */
+  function completeLesson(data, lessonId) {
+    return locked(async function () {
+      var db = readData();
+      var ctx = sessionForCallerWithDb(db, data);
+      var p = findParticipant(ctx.session, data.id);
+      if (!p) throw FreeError(401, 'Your registration was not found. Please verify your email again.');
+      if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
+      ensureParticipantProgramme(p);
+      var id = String(lessonId == null ? '' : lessonId).trim();
+      var lesson = (ctx.session.lessons || []).filter(function (l) {
+        return l && String(l.id) === id && l.active !== false;
+      })[0];
+      if (!lesson) throw FreeError(404, 'That lesson is not part of this programme.');
+      if (p.progress.lessons[lesson.id]) {
+        return { completed: true, already: true, lesson: rules.publicLesson(lesson), progress: rules.progressOf(p, ctx.session.lessons) };
+      }
+      var t = now();
+      p.progress.lessons[lesson.id] = t;
+      p.progress.lastAt = t;
+      p.lastSeenAt = t;
+      pushRecord(ctx.session, { participantId: p.id, kind: 'lesson', lessonId: lesson.id });
+      writeData(db);
+      return { completed: true, already: false, lesson: rules.publicLesson(lesson), progress: rules.progressOf(p, ctx.session.lessons) };
+    });
   }
 
   /* --------------------------------------------------------- leaderboards */
@@ -791,7 +1138,9 @@ function createFree2027(deps) {
         activities: session.activities.length,
         published: published.length,
         attempts: session.attempts.length,
-        submitted: session.attempts.filter(function (a) { return a && a.submittedAt; }).length
+        submitted: session.attempts.filter(function (a) { return a && a.submittedAt; }).length,
+        lessons: (session.lessons || []).length,
+        audit: (session.audit || []).length
       },
       archives: (ed.archives || []).length,
       courses: (ed.courses || []).slice(),
@@ -860,8 +1209,11 @@ function createFree2027(deps) {
       })
       .map(function (p) {
         var mine = session.attempts.filter(function (a) { return a && String(a.participantId) === String(p.id) && a.submittedAt; });
+        ensureParticipantProgramme(p);
+        var prog = rules.progressOf(p, session.lessons);
         return {
           id: p.id, name: p.name,
+          lessonsDone: prog.completed, lessonsTotal: prog.total, progressPercent: prog.percent,
           /* The console shows the address masked, the same as the candidate
              sees it. The CSV export is the deliberate way to obtain addresses. */
           email: rules.maskEmail(p.email),
@@ -905,6 +1257,128 @@ function createFree2027(deps) {
       writeData(db);
       return { ok: true };
     });
+  }
+
+  /* ------------------------------------------------------ programme lessons
+     Managed by the administrator (Founder and Academic Director through the
+     existing question-bank capability). Lessons are the programme's own
+     records; nothing is copied from the hub and nothing in the hub is written. */
+  function adminLessons() {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var rows = (session.lessons || []).map(rules.publicLesson);
+    return { lessons: rows, total: rows.length, session: { id: session.id, label: session.label } };
+  }
+
+  function saveLesson(body, id) {
+    return locked(async function () {
+      var db = readData();
+      var ed = edition(db);
+      var session = currentSession(ed);
+      var clean = rules.cleanLesson(body);
+      if (clean.error) throw FreeError(400, clean.error);
+      var t = now();
+      var existing = id ? (session.lessons || []).filter(function (l) { return l && String(l.id) === String(id); })[0] : null;
+      if (id && !existing) throw FreeError(404, 'That lesson was not found.');
+      var lesson;
+      if (existing) {
+        existing.title = clean.lesson.title;
+        existing.subject = clean.lesson.subject;
+        existing.summary = clean.lesson.summary;
+        if (body && body.active !== undefined) existing.active = body.active !== false;
+        existing.updatedAt = t;
+        lesson = existing;
+      } else {
+        if ((session.lessons || []).length >= rules.LESSON_MAX) {
+          throw FreeError(409, 'This session already holds the maximum of ' + rules.LESSON_MAX + ' lessons.');
+        }
+        session.lessonSeq = (session.lessonSeq || 0) + 1;
+        lesson = {
+          id: rules.lessonId(session.lessonSeq),
+          title: clean.lesson.title,
+          subject: clean.lesson.subject,
+          summary: clean.lesson.summary,
+          order: (session.lessons || []).length + 1,
+          active: true,
+          createdAt: t,
+          updatedAt: t
+        };
+        session.lessons.push(lesson);
+      }
+      writeData(db);
+      return { lesson: rules.publicLesson(lesson), created: !existing };
+    });
+  }
+
+  function deleteLesson(id) {
+    return locked(async function () {
+      var db = readData();
+      var ed = edition(db);
+      var session = currentSession(ed);
+      var lesson = (session.lessons || []).filter(function (l) { return l && String(l.id) === String(id); })[0];
+      if (!lesson) throw FreeError(404, 'That lesson was not found.');
+      /* Removed from the catalogue only: a candidate's completion stamp stays
+         on their own record, so deleting a lesson never rewrites history. */
+      session.lessons = session.lessons.filter(function (l) { return String(l.id) !== String(lesson.id); });
+      writeData(db);
+      return { ok: true, id: String(lesson.id) };
+    });
+  }
+
+  /* Every candidate's progress in one place, for the console. */
+
+  function adminProgress() {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var lessons = session.lessons || [];
+    var rows = session.participants.filter(Boolean).map(function (p) {
+      ensureParticipantProgramme(p);
+      var prog = rules.progressOf(p, lessons);
+      var mine = session.attempts.filter(function (a) {
+        return a && String(a.participantId) === String(p.id) && a.submittedAt;
+      });
+      var percentSum = mine.reduce(function (n, a) { return n + (Number(a.percent) || 0); }, 0);
+      return {
+        id: p.id, name: String(p.name || ''), course: String(p.course || ''),
+        active: p.active !== false,
+        lessonsDone: prog.completed, lessonsTotal: prog.total, percent: prog.percent,
+        quizzes: mine.length,
+        average: mine.length ? Math.round(percentSum / mine.length) : null,
+        lastAt: Number((p.progress && p.progress.lastAt) || p.lastSeenAt) || null
+      };
+    });
+    return {
+      participants: rows, total: rows.length, lessons: lessons.length,
+      session: { id: session.id, label: session.label }
+    };
+  }
+
+  /* -------------------------------------------------- programme audit records
+     Written by the server after an administrative change succeeds. The actor
+     is the staff account that made the call; nothing secret is ever stored. */
+  function recordAudit(actor, action, target, detail) {
+    /* Synchronous on purpose, and called from the server's response hook after
+       the handler's own write has finished — exactly the pattern the hub's
+       manager log already uses. A logging fault must never break the request,
+       so the caller wraps it; here we only ever append. */
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var entry = rules.auditEntry(actor, action, target, detail, now());
+    rules.pushAudit(session, entry);
+    writeData(db);
+    return entry;
+  }
+
+  function auditLog(query) {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var limit = Math.max(1, Math.min(500, Number((query && query.limit) || 100)));
+    var rows = (session.audit || []).slice(0, limit);
+    return { entries: rows, total: (session.audit || []).length, session: { id: session.id, label: session.label } };
   }
 
   /* Deliberate, administrator-only export. This is the one place a full email
@@ -970,6 +1444,18 @@ function createFree2027(deps) {
       if (existing && existing.status === rules.STATUS_ARCHIVED) throw FreeError(409, 'That activity belongs to an archived session.');
       var v = rules.validateActivity(body, existing || {});
       if (v.error) throw FreeError(400, v.error);
+      /* Bank binding enforced at save time: every chosen question ID must
+         exist in the activity's OWN bank (weekly assessment -> weekly bank,
+         competition -> competition bank). An ID from the other bank, or a
+         forged one, is rejected outright. */
+      var bank = bankForKind(v.rec.kind);
+      var bankIds = {};
+      bankQuestionsSync(db, bank).forEach(function (q) { if (q && q.id) bankIds[String(q.id)] = true; });
+      var bad = (v.rec.questionIds || []).filter(function (id) { return !bankIds[String(id)]; });
+      if (bad.length) {
+        throw FreeError(400, 'Question ' + bad[0] + ' is not in the ' +
+          (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank.');
+      }
       var t = now();
       if (existing) {
         Object.assign(existing, v.rec, { updatedAt: t });
@@ -1183,6 +1669,12 @@ function createFree2027(deps) {
         throw FreeError(500, 'The previous session could not be archived, so nothing was changed. Check the data folder is writable.');
       }
 
+      /* Retain permanent student IDs when session records move to the archive. */
+      (session.participants || []).forEach(function (p) {
+        if (!p || !p.id) return;
+        if (ed.studentIds.indexOf(String(p.id)) < 0) ed.studentIds.push(String(p.id));
+        if (p.email && !ed.studentIdsByEmail[String(p.email).toLowerCase()]) ed.studentIdsByEmail[String(p.email).toLowerCase()] = String(p.id);
+      });
       /* Record the archive, then start the new session with fresh records. */
       ed.archives = (ed.archives || []).filter(function (a) { return a && a.file !== file; });
       ed.archives.unshift({
@@ -1260,6 +1752,238 @@ function createFree2027(deps) {
     return { on: ed.enabled === true, mode: rules.activeMode(ed, ed.enabled), label: rules.modeLabel(rules.activeMode(ed, ed.enabled)) };
   }
 
+  /* =======================================================================
+     THE TWO INDEPENDENT QUESTION BANKS (PR #9)
+     db.free2027.questionBanks.weekly       -> Weekly Assessments only
+     db.free2027.questionBanks.competition  -> Competitions only
+     Separate storage, separate ID sequences (WQ-nnn / CQ-nnn), separate
+     CRUD, separate CSV imports, separate deletion. Never db.questions.
+
+     Deletion safety policy: a question referenced by ANY activity (current
+     or archived session) is refused — deletion and editing both — so
+     attempts, results, leaderboards and attempt details can never be
+     corrupted by a bank change. Destructive calls additionally require
+     confirm: true on the server, not just in the UI.
+     ===================================================================== */
+  function activitiesReferencing(db, qid) {
+    var ed = edition(db);
+    var refs = [];
+    (ed.sessions || []).forEach(function (s) {
+      ((s && s.activities) || []).forEach(function (a) {
+        if (a && (a.questionIds || []).map(String).indexOf(String(qid)) > -1) {
+          refs.push({ sessionId: s.id, activityId: a.id, title: a.title || '', kind: a.kind, status: a.status });
+        }
+      });
+    });
+    return refs;
+  }
+
+  function bankOverview() {
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var out = { banks: {}, subjects: BANK_SUBJECTS.slice() };
+      BANKS.forEach(function (b) {
+        var rows = bankQuestionsSync(db, b);
+        var bySubject = {};
+        rows.forEach(function (q) { bySubject[q.subject] = (bySubject[q.subject] || 0) + 1; });
+        out.banks[b] = { bank: b, label: b === 'weekly' ? 'Weekly Assessment Question Bank' : 'Competition Question Bank', count: rows.length, questionSeq: (db.free2027.questionBanks[b] || {}).questionSeq || 0, bySubject: bySubject };
+      });
+      return out;
+    });
+  }
+
+  function listBankQuestions(bank, q) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    q = q || {};
+    return locked(async function () {
+      var db = readData();
+      var rows = bankQuestionsSync(db, bank).slice();
+      if (q.subject) rows = rows.filter(function (r) { return String(r.subject) === String(q.subject); });
+      if (q.q) {
+        var needle = String(q.q).toLowerCase();
+        rows = rows.filter(function (r) {
+          return String(r.text || '').toLowerCase().indexOf(needle) > -1 || String(r.topic || '').toLowerCase().indexOf(needle) > -1;
+        });
+      }
+      rows.sort(function (a, b) { return String(a.id).localeCompare(String(b.id), undefined, { numeric: true }); });
+      return { bank: bank, total: bankQuestionsSync(db, bank).length, count: rows.length, subjects: BANK_SUBJECTS.slice(), questions: rows };
+    });
+  }
+
+  /* Manual create/edit share one validator: the hub's own validateQuestion,
+     restricted to the five bank subjects and to objective questions (the
+     edition's papers are multiple-choice), then stamped with the bank's own
+     sequential ID. */
+  function cleanBankQuestion(bank, body) {
+    var b = (body && typeof body === 'object') ? body : {};
+    var subject = String(b.subject || '').trim();
+    if (BANK_SUBJECTS.indexOf(subject) < 0) {
+      return { error: 'Choose one of the five supported subjects: ' + BANK_SUBJECTS.join(', ') + '.' };
+    }
+    var options = Array.isArray(b.options) ? b.options : String(b.options || '').split('\n');
+    var draft = {
+      subject: subject,
+      section: 'objective',
+      topic: b.topic,
+      text: b.text,
+      options: options,
+      answer: b.answer,
+      explanation: b.explanation,
+      difficulty: b.difficulty,
+      active: b.active === undefined ? true : !!b.active
+    };
+    var v = core.validateQuestion(draft);
+    if (v.error) return { error: v.error };
+    v.rec.kind = 'objective';
+    v.rec.section = 'objective';
+    return { rec: v.rec };
+  }
+
+  function createBankQuestion(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var v = cleanBankQuestion(bank, body);
+      if (v.error) throw FreeError(400, v.error);
+      var b = db.free2027.questionBanks[bank];
+      b.questionSeq = (b.questionSeq || 0) + 1;
+      var rec = Object.assign({}, v.rec, {
+        id: bankPrefix(bank) + '-' + String(b.questionSeq).padStart(3, '0'),
+        bank: bank, createdAt: now(), updatedAt: now()
+      });
+      b.questions.push(rec);
+      writeData(db);
+      return { bank: bank, question: rec };
+    });
+  }
+
+  function updateBankQuestion(bank, id, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var b = db.free2027.questionBanks[bank];
+      var q = (b.questions || []).filter(function (x) { return x && String(x.id) === String(id); })[0];
+      if (!q) throw FreeError(404, 'That question is not in the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank.');
+      var refs = activitiesReferencing(db, q.id);
+      if (refs.length) {
+        throw FreeError(409, 'That question is used by ' + refs.length + ' activity(ies) (e.g. ' + (refs[0].title || refs[0].activityId) + '), so it cannot be edited — attempts and results must stay intact.');
+      }
+      var v = cleanBankQuestion(bank, Object.assign({}, q, body));
+      if (v.error) throw FreeError(400, v.error);
+      Object.assign(q, v.rec, { id: q.id, bank: bank, updatedAt: now() });
+      writeData(db);
+      return { bank: bank, question: q };
+    });
+  }
+
+  /* Bulk delete of selected questions from ONE bank. Requires confirm:true on
+     the server; refuses any question referenced by an activity. */
+  function deleteBankQuestions(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      if (!body || body.confirm !== true) {
+        throw FreeError(400, 'Deleting questions is destructive. Confirm it explicitly (confirm: true) — the response names the bank and the number of questions.');
+      }
+      var b = db.free2027.questionBanks[bank];
+      var ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
+      if (!ids.length) throw FreeError(400, 'Select at least one question to delete.');
+      var blocked = [];
+      ids.forEach(function (id) {
+        var refs = activitiesReferencing(db, id);
+        if (refs.length) blocked.push({ id: id, refs: refs });
+      });
+      if (blocked.length) {
+        throw FreeError(409, blocked.length + ' selected question(s) are used by existing activities and cannot be deleted (first: ' + blocked[0].id + ').');
+      }
+      var before = b.questions.length;
+      b.questions = b.questions.filter(function (q) { return ids.indexOf(String(q && q.id)) < 0; });
+      writeData(db);
+      return { bank: bank, requested: ids.length, deleted: before - b.questions.length, remaining: b.questions.length };
+    });
+  }
+
+  /* Delete ALL questions of ONE bank. Never touches the other bank; the bank
+     parameter is validated against the allowlist, so no request can name an
+     arbitrary path. Requires confirm:true; refuses while any question in the
+     bank is referenced by an activity. */
+  function deleteAllBankQuestions(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      if (!body || body.confirm !== true) {
+        var n0 = bankQuestionsSync(db, bank).length;
+        throw FreeError(400, 'Delete-all on the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank would remove ' + n0 + ' question(s). This is destructive — confirm explicitly (confirm: true).');
+      }
+      var b = db.free2027.questionBanks[bank];
+      var rows = b.questions || [];
+      var blocked = 0;
+      rows.forEach(function (q) { if (q && activitiesReferencing(db, q.id).length) blocked++; });
+      if (blocked) {
+        throw FreeError(409, blocked + ' of the ' + rows.length + ' question(s) in the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank are used by existing activities and cannot be deleted.');
+      }
+      var n = rows.length;
+      b.questions = [];
+      /* the sequence keeps moving forward, so deleted IDs are never re-issued */
+      writeData(db);
+      return { bank: bank, deleted: n, remaining: 0 };
+    });
+  }
+
+  /* CSV import into ONE bank. Reuses the hub's own parser/validator
+     (core.importCSV — quoted commas, escaped quotes, multiline fields, UTF-8
+     BOM, header normalisation, answer/difficulty validation, duplicate and
+     row-level error reporting, 500-row cap, preview mode). The destination
+     is the explicitly selected bank and nothing else: duplicates are checked
+     against THIS bank only, and rows keep the subject named in their own
+     subject column (one mixed-subject file is fine). */
+  function importBankCsv(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var b = db.free2027.questionBanks[bank];
+      var text = String((body && body.csv) || '');
+      if (!text.trim()) throw FreeError(400, 'Choose a CSV file to import first.');
+      var preview = !!(body && body.preview);
+      var out = core.importCSV('questions', text, {}, b.questions, null, { preview: preview });
+      if (out.error) throw FreeError(400, out.error);
+      /* Belt and braces: only the five bank subjects may enter the bank,
+         regardless of what the shared validator allows. */
+      out.records = (out.records || []).filter(function (r) { return BANK_SUBJECTS.indexOf(r.subject) > -1; });
+      if (preview) {
+        return { bank: bank, preview: true, read: out.read, wouldImport: out.records.length, skipped: (out.errors || []).length, errors: (out.errors || []).slice(0, 100), rows: out.preview || [] };
+      }
+      var imported = [];
+      out.records.forEach(function (r) {
+        b.questionSeq = (b.questionSeq || 0) + 1;
+        var rec = Object.assign({}, r, {
+          id: bankPrefix(bank) + '-' + String(b.questionSeq).padStart(3, '0'),
+          bank: bank, importedAt: now(), updatedAt: now()
+        });
+        b.questions.push(rec);
+        imported.push({ id: rec.id, subject: rec.subject, topic: rec.topic, text: rec.text });
+      });
+      writeData(db);
+      return {
+        bank: bank, read: out.read, imported: imported.length,
+        skipped: (out.errors || []).length, errors: (out.errors || []).slice(0, 100),
+        questions: imported
+      };
+    });
+  }
+
   return {
     rules: rules,
     ensureEdition: ensureEdition,
@@ -1269,6 +1993,7 @@ function createFree2027(deps) {
     /* registration */
     startRegistration: startRegistration,
     verifyRegistration: verifyRegistration,
+    login: login,
     /* participant */
     sessionFromReq: sessionFromReq,
     me: me,
@@ -1284,6 +2009,15 @@ function createFree2027(deps) {
     publishedLeaderboards: publishedLeaderboards,
     /* admin */
     adminOverview: adminOverview,
+    /* programme records: the candidate's own view, lessons, progress, audit */
+    programme: programme,
+    completeLesson: completeLesson,
+    adminLessons: adminLessons,
+    saveLesson: saveLesson,
+    deleteLesson: deleteLesson,
+    adminProgress: adminProgress,
+    recordAudit: recordAudit,
+    auditLog: auditLog,
     setMode: setMode,
     setEdition: setEdition,
     setCourses: setCourses,
@@ -1299,6 +2033,17 @@ function createFree2027(deps) {
     activityResults: activityResults,
     attemptDetail: attemptDetail,
     sessionRecords: sessionRecords,
+    /* the two independent question banks */
+    BANKS: BANKS,
+    BANK_SUBJECTS: BANK_SUBJECTS,
+    bankForKind: bankForKind,
+    bankOverview: bankOverview,
+    listBankQuestions: listBankQuestions,
+    createBankQuestion: createBankQuestion,
+    updateBankQuestion: updateBankQuestion,
+    deleteBankQuestions: deleteBankQuestions,
+    deleteAllBankQuestions: deleteAllBankQuestions,
+    importBankCsv: importBankCsv,
     startSession: startSession,
     listArchives: listArchives,
     readArchive: readArchive,

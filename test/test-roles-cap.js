@@ -311,7 +311,8 @@ function notCapRefused(r) {
   ok('AD cannot add a student (students.add)',            isCapRefused(adAdd), adAdd.raw);
 
   /* ========================================================
-     FOUNDER and ACADEMIC DIRECTOR (seeded) keep full access
+     The Founder is unrestricted; the seeded Academic Director uses their
+     academic/reporting capability set and is denied system controls.
      ======================================================== */
   head('seeded Founder still reaches everything');
   var fQ = await call('GET', '/api/questions', undefined, ftok);
@@ -323,14 +324,14 @@ function notCapRefused(r) {
   var fBc= await call('GET', '/api/broadcasts',undefined,ftok);
   ok('Founder reads broadcasts',             notCapRefused(fBc), fBc.raw);
 
-  head('seeded Academic Director (GOC-A-002) still reaches everything');
+  head('seeded Academic Director is limited to the academic role');
   var a2tok = await staffToken('GOC-A-002', 'acaddir2027', '2027');
   var a2Q  = await call('GET', '/api/questions',undefined, a2tok);
   ok('seeded AD reads question bank',        notCapRefused(a2Q),  a2Q.raw);
   var a2T  = await call('GET', '/api/tutors',undefined, a2tok);
-  ok('seeded AD lists tutors',               notCapRefused(a2T),  a2T.raw);
+  ok('seeded AD cannot list tutors (Founder-only)', isCapRefused(a2T), a2T.raw);
   var a2Bc = await call('GET', '/api/broadcasts',undefined, a2tok);
-  ok('seeded AD reads broadcasts',           notCapRefused(a2Bc), a2Bc.raw);
+  ok('seeded AD cannot read broadcasts outside their role', isCapRefused(a2Bc), a2Bc.raw);
 
   /* ========================================================
      Cross-checks: a student and an unlocked-but-student session

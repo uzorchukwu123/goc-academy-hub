@@ -67,7 +67,7 @@
   /* The free-tutorial screens. In 2027 Free Tutorial Mode a browser may sit on
      one of these and nothing else (plus the homepage, the admin gate and the
      password-change screen a manager is forced through). */
-  var SCREENS = ['free-home', 'free-register', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard'];
+  var SCREENS = ['free-home', 'free-register', 'free-login', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard'];
   function isFreeScreen(id) { return SCREENS.indexOf(String(id)) > -1; }
 
   /* ------------------------------------------------- 2. participant records */
@@ -134,14 +134,43 @@
     return out.slice(0, 60);
   }
 
-  /* A participant ID is issued by the server, never chosen by the client:
-     GOC-F27-0001 upward. It identifies a candidate across every activity of
-     the session and is the only handle the public leaderboard ever shows. */
-  var ID_RE = /^GOC-F27-\d{3,6}$/;
+  /* A student identifier is SEQUENTIAL and permanent: the first registered
+     student of the programme is GOC-F-001, the next GOC-F-002, and so on.
+     The sequence is allocated on the server inside the data lock (so two
+     simultaneous registrations can never receive the same number), the issued
+     numbers are remembered forever in db.free2027.studentIds (so a deleted
+     student's number is never handed out again), and the identifier never
+     changes for the life of the programme. It carries no personal data and
+     is never an email address or an internal database ID. */
+  var ID_RE = /^GOC-F-\d{3,}$/;
   function isParticipantId(v) { return ID_RE.test(String(v == null ? '' : v).trim().toUpperCase()); }
-  function participantId(n) {
+  function studentId(n) {
     var k = Math.max(1, Math.floor(Number(n) || 1));
-    return 'GOC-F27-' + (k < 10 ? '000' + k : k < 100 ? '00' + k : k < 1000 ? '0' + k : String(k));
+    var s = String(k);
+    while (s.length < 3) s = '0' + s;
+    return 'GOC-F-' + s;
+  }
+  /* The highest sequence number already represented by an identifier. */
+  function idSeqOf(id) {
+    var m = /^GOC-F-(\d+)$/.exec(String(id == null ? '' : id).trim().toUpperCase());
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  /* Kept as an alias: the old name of studentId(). */
+  function participantId(n) { return studentId(n); }
+
+  /* The registration password. It is stored only as a salted scrypt hash on
+     the server; this rule just makes sure a real password was chosen. */
+  var PASSWORD_MIN = 8;
+  var PASSWORD_MAX = 72;
+  /* One rule, shared by the page and the server so they can never disagree.
+     The messages name the exact failure: too short, or missing a letter or a
+     number. */
+  function cleanPassword(v) {
+    var s = String(v == null ? '' : v);
+    if (s.length < PASSWORD_MIN) return { error: 'Your password must contain at least ' + PASSWORD_MIN + ' characters.' };
+    if (s.length > PASSWORD_MAX) return { error: 'Your password cannot be longer than ' + PASSWORD_MAX + ' characters.' };
+    if (!/[a-zA-Z]/.test(s) || !/\d/.test(s)) return { error: 'Use a password containing both letters and numbers.' };
+    return { password: s };
   }
 
   /* The shape the PUBLIC side of the site may hold. No email address, no OTP,
@@ -486,8 +515,112 @@
       participants: [],
       activities: [],
       attempts: [],
+      /* Programme lessons belong to the session, like the activities: they are
+         created by the administrator and archived with it. */
+      lessons: [],
+      lessonSeq: 0,
+      /* Who changed what in the programme (administrators only). Bounded, and
+         never a password, a passcode or a one-time code. */
+      audit: [],
       archives: []
     };
+  }
+
+  /* ------------------------------------------- 8. programme lessons
+     A lesson is a short teaching item the candidate marks as done. It is
+     programme-owned (nothing is copied from the hub's own lesson material and
+     nothing in the hub is written), so the edition never needs Appwrite to
+     show progress. */
+  var LESSON_TITLE_MIN = 3;
+  var LESSON_TITLE_MAX = 120;
+  var LESSON_SUMMARY_MAX = 300;
+  var LESSON_SUBJECT_MAX = 40;
+  var LESSON_MAX = 200;
+  var LESSON_ID_RE = /^F27-L-\d{3,6}$/;
+
+  function lessonId(n) {
+    var k = Math.max(1, Math.floor(Number(n) || 1));
+    return 'F27-L-' + (k < 10 ? '00' + k : k < 100 ? '0' + k : String(k));
+  }
+  function isLessonId(v) { return LESSON_ID_RE.test(String(v == null ? '' : v).trim().toUpperCase()); }
+
+  function cleanLesson(input) {
+    var b = input || {};
+    var title = String(b.title == null ? '' : b.title).replace(/\s+/g, ' ').trim().slice(0, LESSON_TITLE_MAX);
+    if (title.length < LESSON_TITLE_MIN) return { error: 'Give the lesson a title of at least ' + LESSON_TITLE_MIN + ' characters.' };
+    var subject = String(b.subject == null ? '' : b.subject).replace(/\s+/g, ' ').trim().slice(0, LESSON_SUBJECT_MAX);
+    var summary = String(b.summary == null ? '' : b.summary).replace(/\s+/g, ' ').trim().slice(0, LESSON_SUMMARY_MAX);
+    return { lesson: { title: title, subject: subject, summary: summary } };
+  }
+
+  function publicLesson(l) {
+    var r = l || {};
+    return {
+      id: String(r.id || ''),
+      title: String(r.title || ''),
+      subject: String(r.subject || ''),
+      summary: String(r.summary || ''),
+      order: Number(r.order) || 0,
+      active: r.active !== false
+    };
+  }
+
+  /* The lessons a candidate may see: live ones, in the administrator's order. */
+  function liveLessons(lessons) {
+    return (Array.isArray(lessons) ? lessons : [])
+      .filter(function (l) { return l && l.active !== false; })
+      .slice()
+      .sort(function (a, b) { return (Number(a.order) || 0) - (Number(b.order) || 0); });
+  }
+
+  /* A candidate's own progress. It is derived from the completion map that is
+     stored on the participant, so a reload, a restart or an archive can never
+     disagree with what the candidate sees. */
+  function progressOf(participant, lessons) {
+    var p = participant || {};
+    var done = (p.progress && p.progress.lessons) || {};
+    var live = liveLessons(lessons);
+    var rows = live.map(function (l) {
+      var at = done[String(l.id)];
+      return Object.assign(publicLesson(l), { done: !!at, completedAt: at ? Number(at) : null });
+    });
+    var completed = rows.filter(function (r) { return r.done; }).length;
+    var total = rows.length;
+    return {
+      lessons: rows,
+      completed: completed,
+      total: total,
+      percent: total ? Math.round((completed / total) * 100) : 0,
+      lastAt: (p.progress && Number(p.progress.lastAt)) || null
+    };
+  }
+
+  /* --------------------------------------------- 9. programme audit records
+     One entry per administrative change, written by the server after the
+     change succeeded. It names the administrator (staff ID and role) and what
+     was changed — never a password, passcode or one-time code. */
+  var AUDIT_MAX = 1000;
+  var AUDIT_ACTOR_MAX = 40;
+  var AUDIT_ACTION_MAX = 60;
+  var AUDIT_TARGET_MAX = 80;
+
+  function auditEntry(actor, action, target, detail, at) {
+    var a = actor || {};
+    function cut(v, n) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n); }
+    return {
+      at: Number(at) || Date.now(),
+      actorId: cut(a.id, AUDIT_ACTOR_MAX) || 'system',
+      actorRole: cut(a.role, AUDIT_ACTOR_MAX) || '',
+      action: cut(action, AUDIT_ACTION_MAX) || 'unknown',
+      target: cut(target, AUDIT_TARGET_MAX),
+      detail: cut(detail, AUDIT_TARGET_MAX)
+    };
+  }
+  function pushAudit(session, entry) {
+    if (!Array.isArray(session.audit)) session.audit = [];
+    session.audit.unshift(entry);
+    if (session.audit.length > AUDIT_MAX) session.audit = session.audit.slice(0, AUDIT_MAX);
+    return entry;
   }
 
   return {
@@ -513,7 +646,12 @@
     cleanCourse: cleanCourse,
     cleanCourseList: cleanCourseList,
     isParticipantId: isParticipantId,
+    studentId: studentId,
     participantId: participantId,
+    idSeqOf: idSeqOf,
+    PASSWORD_MIN: PASSWORD_MIN,
+    PASSWORD_MAX: PASSWORD_MAX,
+    cleanPassword: cleanPassword,
     publicParticipant: publicParticipant,
     selfParticipant: selfParticipant,
     maskEmail: maskEmail,
@@ -568,6 +706,20 @@
     SESSION_LABEL_MAX: SESSION_LABEL_MAX,
     cleanSessionLabel: cleanSessionLabel,
     archiveName: archiveName,
-    emptySession: emptySession
+    emptySession: emptySession,
+    /* programme lessons and progress */
+    LESSON_MAX: LESSON_MAX,
+    LESSON_TITLE_MAX: LESSON_TITLE_MAX,
+    LESSON_SUMMARY_MAX: LESSON_SUMMARY_MAX,
+    lessonId: lessonId,
+    isLessonId: isLessonId,
+    cleanLesson: cleanLesson,
+    publicLesson: publicLesson,
+    liveLessons: liveLessons,
+    progressOf: progressOf,
+    /* programme audit records */
+    AUDIT_MAX: AUDIT_MAX,
+    auditEntry: auditEntry,
+    pushAudit: pushAudit
   };
 }));

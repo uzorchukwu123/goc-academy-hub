@@ -20,9 +20,8 @@
         enforced on the server, which is the authority: this side exists so the
         page behaves sensibly, not so it can be trusted.
 
-     3. THE HIDDEN ENTRANCE. Five clicks, quickly, on the "4 Science subjects"
-        card reveal the administrator sign-in. The card itself is untouched: the
-        script only listens. A pause longer than the window restarts the count.
+     3. THE ADMIN ENTRY. One click on the existing "4 Science subjects" card
+        opens the administrator sign-in. It is the only public console entry.
 
    Loading order: js/goc-free-2027.js (rules), js/api.js, js/app.js, then this
    file. Requires js/free2027-api.js. */
@@ -44,14 +43,6 @@
   F.tab = 'weekly';
   F.exam = null;                    // { attempt, questions, index, answers, tick }
   F.saveQueue = {};
-  F.gateClicks = 0;
-  F.gateAt = 0;
-
-  /* The click window and the number of clicks that opens the gate. Five
-     clicks "within a short time window"; a pause longer than GATE_WINDOW_MS
-     between two clicks restarts the count. */
-  var GATE_CLICKS = 5;
-  var GATE_WINDOW_MS = 2500;
 
   function $(id) { return document.getElementById(id); }
   function esc(v) {
@@ -99,14 +90,13 @@
     if (note) note.textContent = rules.modeLabel(mode);
     var fine = $('freeHomeNote');
     if (fine && F.config) {
-      fine.textContent = (F.config.otpDelivery && F.config.otpDelivery.available === false)
-        ? 'Registration is verified by a one-time email code. The academy has not connected its email sender yet, so codes are shown on screen for now.'
+      var del = F.config.otpDelivery || null;
+      fine.textContent = del && del.available === false
+        ? 'Email verification is required. Registration is temporarily unavailable until the academy configures email verification.'
         : 'Registration is verified by a one-time code sent to your email address.';
     }
     if (free) {
-      wireLanding(0);
       freeHomeLoad();
-      if (!o.stay && typeof global.go === 'function') global.go('free-home');
     }
   }
   F.applyMode = applyMode;
@@ -191,6 +181,85 @@
     global.go('free-register');
   };
 
+  /* "Enter the CBT Portal": with no valid authenticated session the student
+     gets the LOGIN interface first; only a valid session opens the dashboard.
+     After a logout the token is gone, so this shows the login again — nobody
+     is ever silently logged back in. */
+  F.freePortalEnter = function () {
+    if (api.hasToken()) {
+      api.me().then(function (r) {
+        F.me = r.participant;
+        paintWho();
+        global.go('free-portal');
+        F.freePortalLoad();
+      }, function () {
+        /* expired or invalid session: fresh authentication required */
+        api.logout();
+        F.me = null;
+        global.go('free-login');
+      });
+      return;
+    }
+    global.go('free-login');
+  };
+
+  /* Email + password login. On success the session token is stored and the
+     CBT dashboard opens; refreshing the browser keeps that session. */
+  F.freeLogin = function () {
+    var err = $('freeLoginErr');
+    if (err) err.textContent = '';
+    var email = (($('freeLoginEmail') || {}).value || '').trim();
+    var password = ($('freeLoginPassword') || {}).value || '';
+    var e = rules.cleanEmail(email);
+    if (e.error) { if (err) err.textContent = e.error; return; }
+    if (!password) { if (err) err.textContent = 'Enter your password.'; return; }
+    var btn = $('freeLoginBtn');
+    busy(btn, true);
+    api.login({ email: e.email, password: password }).then(function (r) {
+      busy(btn, false);
+      F.me = r.participant;
+      paintWho();
+      say('Welcome back, ' + r.participant.name + ' (' + r.participant.id + ')');
+      global.go('free-portal');
+      F.freePortalLoad();
+    }, function (er) {
+      busy(btn, false);
+      if (err) err.textContent = (er && er.message) || 'That email address or password is not right.';
+    });
+  };
+
+  /* Internal navigation history. Back NEVER calls window.history.back(): a
+     browser history entry can point at an external website, and a direct URL
+     or refresh leaves no useful internal entry — either would take the
+     student out of the hub. Instead every free screen shown is pushed onto
+     F.navStack; Back pops to the previous internal screen and falls back to
+     the main G.O.C Academy Hub homepage when nothing valid remains. Home is
+     a separate control that always goes straight to that homepage. */
+  F.navStack = ['landing'];
+  function trackScreen(id) {
+    if (!F.on || F.mode !== rules.MODE_FREE) return;
+    if (rules.SCREENS.indexOf(id) < 0 && id !== 'landing') return;
+    var s = F.navStack;
+    if (s[s.length - 1] !== id) s.push(id);
+    if (s.length > 50) s.splice(0, s.length - 50);
+  }
+  F.freeNavBack = function () {
+    var s = F.navStack;
+    if (s.length > 1) { s.pop(); global.go(s[s.length - 1]); return; }
+    s.length = 0; s.push('landing');
+    global.go('landing');
+  };
+  F.freeNavHome = function () { F.navStack = ['landing']; global.go('landing'); };
+
+  /* The navigation drawer's CBT Portal action (Free Tutorial Mode only — the
+     button is hidden by CSS in Original Mode). Closes the drawer, then runs
+     the same entry chain as the homepage button: login when there is no valid
+     session, dashboard when there is. */
+  F.dwFreePortal = function () {
+    if (typeof global.closeDrawer === 'function') global.closeDrawer();
+    setTimeout(function () { F.freePortalEnter(); }, 180);
+  };
+
   /* ================================================= 3. REGISTRATION (OTP) */
 
   F.freeRegisterStart = function () {
@@ -198,40 +267,51 @@
     if (err) err.textContent = '';
     var name = (($('freeName') || {}).value || '').trim();
     var email = (($('freeEmail') || {}).value || '').trim();
+    var password = ($('freePassword') || {}).value || '';
     var course = (($('freeCourse') || {}).value || '').trim();
     var n = rules.cleanName(name); if (n.error) return showErr('freeRegErr', n.error);
     var e = rules.cleanEmail(email); if (e.error) return showErr('freeRegErr', e.error);
+    var pw = rules.cleanPassword(password); if (pw.error) return showErr('freeRegErr', pw.error);
     var c = rules.cleanCourse(course, F.config && F.config.courses);
     if (c.error) return showErr('freeRegErr', c.error);
 
     var btn = $('freeRegBtn');
     busy(btn, true);
-    api.registerStart({ name: n.name, email: e.email, course: c.course }).then(function (r) {
+    F.pendingName = n.name;
+    F.pendingEmail = e.email;
+    F.pendingPassword = pw.password;
+    F.pendingCourse = c.course;
+    api.registerStart({ name: n.name, email: e.email, password: pw.password, course: c.course }).then(function (r) {
       busy(btn, false);
-      F.pendingEmail = e.email;
       var step1 = $('freeRegStep1'), step2 = $('freeRegStep2');
       if (step1) step1.hidden = true;
       if (step2) step2.hidden = false;
       var to = $('freeOtpTo');
       if (to) to.textContent = e.email;
       var dev = $('freeOtpDev');
-      if (dev) {
-        if (r.devCode) {
-          dev.hidden = false;
-          dev.textContent = 'This site has no email sender configured yet, so your code is shown here: ' + r.devCode;
-        } else {
-          dev.hidden = true;
-          dev.textContent = '';
-        }
-      }
+      if (dev) { dev.hidden = true; dev.textContent = ''; }
       var otp = $('freeOtp');
       if (otp) { otp.value = ''; otp.focus(); }
-      if (r.delivered === false && !r.devCode) {
-        showErr('freeOtpErr', 'The code could not be emailed from this site yet. Ask the academy to finish setting up its email sender, or try again later.');
-      }
+      showErr('freeOtpErr', '');
     }, function (er) {
       busy(btn, false);
       showErr('freeRegErr', er.message || 'Could not send the code.');
+    });
+  };
+
+  F.freeRegisterResend = function () {
+    if (!F.pendingEmail || !F.pendingName || !F.pendingCourse) {
+      showErr('freeOtpErr', 'Start registration again to request a verification code.');
+      return;
+    }
+    var btn = $('freeOtpResendBtn');
+    busy(btn, true);
+    api.registerStart({ name: F.pendingName, email: F.pendingEmail, password: F.pendingPassword, course: F.pendingCourse }).then(function () {
+      busy(btn, false);
+      showErr('freeOtpErr', 'A new verification code has been emailed. Older codes are no longer valid.');
+    }, function (er) {
+      busy(btn, false);
+      showErr('freeOtpErr', er.message || 'Could not resend the code.');
     });
   };
 
@@ -287,13 +367,71 @@
     F.freePortalLoad();
   };
 
+  /* ---------------------------------------------------- the programme card
+     The candidate's own record: who they are, what they enrolled on, the access
+     the academy granted, and the lessons with their completion marks. It is
+     read from the server's local data file, so a restart never loses it. */
+  F.freeProgrammeLoad = function () {
+    var host = $('freeProgramme');
+    if (!host) return;
+    if (!api.hasToken()) { host.hidden = true; host.innerHTML = ''; return; }
+    host.hidden = false;
+    host.innerHTML = '<div class="ad-loading">Loading your programme…</div>';
+    api.programme().then(function (r) {
+      paintProgramme(host, r || {});
+    }, function (er) {
+      host.innerHTML = '<p class="f27-fine">' + esc((er && er.message) || 'Your programme could not be read just now.') + '</p>';
+    });
+  };
+
+  function paintProgramme(host, r) {
+    var p = r.profile || {};
+    var prog = r.progress || { lessons: [], completed: 0, total: 0, percent: 0 };
+    var access = r.access || {};
+    var enrol = r.enrolment || {};
+    var rows = (prog.lessons || []).map(function (l) {
+      return '<div class="f27-lesson' + (l.done ? ' done' : '') + '">' +
+        '<div class="f27-lesson-main"><b>' + esc(l.title) + '</b>' +
+        (l.subject ? '<span>' + esc(l.subject) + '</span>' : '') +
+        (l.summary ? '<span>' + esc(l.summary) + '</span>' : '') + '</div>' +
+        (l.done
+          ? '<span class="f27-tick" title="Completed">✓ Done</span>'
+          : '<button class="btn btn-outline f27-small" onclick="freeLessonDone(\'' + esc(l.id) + '\')">Mark done</button>') +
+        '</div>';
+    }).join('');
+    host.innerHTML =
+      '<div class="f27-prog-head"><div><b>' + esc(p.name || 'Candidate') + '</b>' +
+        '<span>' + esc(p.id || '') + ' · ' + esc(enrol.course || p.course || '') + '</span></div>' +
+        '<span class="f27-chip">' + esc(access.status === 'suspended' ? 'Access paused' : 'Access active') + '</span></div>' +
+      '<div class="f27-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + (prog.percent || 0) + '">' +
+        '<i style="width:' + (prog.percent || 0) + '%"></i></div>' +
+      '<p class="f27-fine">Lessons completed: <b>' + (prog.completed || 0) + ' of ' + (prog.total || 0) + '</b>' +
+        ((r.quizzes && r.quizzes.submitted) ? ' · quizzes submitted: <b>' + r.quizzes.submitted + '</b>' +
+          (r.quizzes.average == null ? '' : ' · your average: <b>' + r.quizzes.average + '%</b>') : '') + '</p>' +
+      (rows || '<p class="f27-fine">No lessons have been published for this session yet.</p>');
+  }
+
+  /* Marking a lesson done. Idempotent on the server, so a double tap is safe. */
+  F.freeLessonDone = function (id) {
+    var lessonId = String(id || '');
+    if (!lessonId) return;
+    api.completeLesson(lessonId).then(function () {
+      F.freeProgrammeLoad();
+      say('Lesson marked done');
+    }, function (er) {
+      say((er && er.message) || 'That lesson could not be marked just now.');
+    });
+  };
+
   F.freePortalLoad = function () {
     var host = $('freePortalList');
     var mine = $('freePortalResults');
     if (!host) return;
+    F.freeProgrammeLoad();
     if (!api.hasToken()) {
-      host.innerHTML = '<div class="f27-empty"><p>Register first — it takes a minute and needs no password.</p>' +
-        '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button></div>';
+      host.innerHTML = '<div class="f27-empty"><p>Log in with your email and password to open your CBT dashboard.</p>' +
+        '<button class="btn btn-red btn-block" onclick="freeGo(\'free-login\')">Log in</button>' +
+        '<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="freeGo(\'free-register\')">Register free</button></div>';
       if (mine) mine.innerHTML = '';
       paintWho();
       return;
@@ -524,12 +662,30 @@
 
   /* Leaving keeps the attempt open on the server, with every answer already
      saved: coming back resumes it rather than starting again. */
+  /* Leaving an active examination never silently destroys the attempt: the
+     answers and the remaining time are already on the server, and the student
+     is asked first. Coming back resumes the same paper. */
   F.freeExamLeave = function () {
+    if (!F.exam) { global.go('free-portal'); return; }
+    if (typeof global.confirm === 'function' && !global.confirm(
+      'Leave this paper? Your answers and remaining time are saved — you can resume it from the CBT Portal.')) return;
     stopClock();
     F.exam = null;
     say('Your paper is saved. Open it again from the portal to carry on.');
-    global.go('free-portal');
-    F.freePortalLoad();
+    /* Internal-history back: the previous free screen (normally the portal),
+       never the browser history — answers and remaining time stay on the
+       server either way. */
+    F.freeNavBack();
+    if (F.navStack.indexOf('free-portal') > -1) F.freePortalLoad();
+  };
+  /* Home during an examination asks first for the same reason. */
+  F.freeExamHome = function () {
+    if (!F.exam) { F.freeNavHome(); return; }
+    if (typeof global.confirm === 'function' && !global.confirm(
+      'Leave this paper for the homepage? Your answers and remaining time are saved.')) return;
+    stopClock();
+    F.exam = null;
+    F.freeNavHome();
   };
 
   F.freeExamSubmit = function () {
@@ -667,33 +823,15 @@
     });
   };
 
-  /* =================================================== 9. HIDDEN ADMIN GATE
-     Exactly GATE_CLICKS clicks on the "4 Science subjects" card, each within
-     GATE_WINDOW_MS of the one before. The card is not restyled, renamed or
-     given a hint; the only thing that changes after the fifth click is that the
-     administrator sign-in is shown. A pause longer than the window resets the
-     count to one (the click that broke the pause still counts as a fresh
-     first click, so a slow tap-tap-tap-tap-tap never opens it by accident). */
-  F.freeGateClick = function () {
-    var now = Date.now();
-    if (!F.gateAt || now - F.gateAt > GATE_WINDOW_MS) F.gateClicks = 1;
-    else F.gateClicks += 1;
-    F.gateAt = now;
-    if (F.gateClicks >= GATE_CLICKS) {
-      F.gateClicks = 0;
-      F.gateAt = 0;
-      revealAdminGate();
-    }
-  };
-  function revealAdminGate() {
-    /* Only from the homepage, and only while the edition is showing it. */
-    if (!F.on || F.mode !== rules.MODE_FREE) return;
-    var landing = $('landing');
-    if (landing && landing.classList && !landing.classList.contains('active')) return;
-    global.go('free-admin');
-    var note = $('freeAdminNote');
-    if (note) note.textContent = 'The console keeps its own passcode. Attempts are limited and logged.';
-  }
+  /* =================================================== 9. ADMIN ENTRY
+     The existing homepage statistic is the single public console gateway.
+     It opens the existing staff sign-in; authentication and the console's
+     passcode gate remain enforced by the original server mechanisms. */
+  /* The homepage statistics card is NO LONGER a hidden admin entrance (PR #9):
+     the Founder reaches the console through the Get-in-Touch contact form with
+     the exact message "GOC FOUNDER", which the server checks against the
+     configured Founder account and then routes to the existing staff sign-in.
+     The card is a plain statistic again — no gate, no hidden handler. */
 
   /* The administrator signs in with the hub's own login (js/app.js loginNow),
      which the server authorises exactly as it always did. This only feeds the
@@ -723,21 +861,6 @@
     });
   };
 
-  /* Wire the card once the landing page exists. The listener is attached to the
-     card itself as well as delegated on the document, because the landing page
-     is rebuilt by some of the hub's own animations — a delegated listener is
-     what keeps the entrance working across that. */
-  /* The card is found (never modified) so the entrance is only armed once the
-     homepage markup is really there. The click itself is handled by the one
-     delegated listener in hydrate(), which survives the landing page being
-     re-rendered by the hub's own animations. */
-  var wired = false;
-  function wireLanding(tries) {
-    if (wired) return;
-    if ($('lpStat4')) { wired = true; return; }
-    if ((tries || 0) < 20) setTimeout(function () { wireLanding((tries || 0) + 1); }, 150);
-  }
-
   /* ====================================================== 10. HYDRATION */
   /* Fill the course list from the server's own copy, so the console's list and
      the page's list are the same list. */
@@ -750,16 +873,6 @@
   }
 
   function hydrate() {
-    wireLanding(0);
-    /* Delegated listener: five quick clicks anywhere on the card, even if the
-       landing markup is re-rendered underneath. */
-    document.addEventListener('click', function (ev) {
-      var t = ev.target;
-      if (!t || !t.closest) return;
-      var card = t.closest('[data-f27-gate]');
-      if (card) F.freeGateClick();
-    }, true);
-
     /* `ready` is the one boot promise: the page awaits it, and so can a test. */
     F.ready = boot().then(function () {
       /* The original hub's `go()` is wrapped, not replaced: every screen, the
@@ -772,10 +885,9 @@
     return F.ready;
   }
 
-  /* In 2027 Free Tutorial Mode the hub's own screens are not reachable by a
-     visitor: a stray call to go('home') lands on the edition's homepage
-     instead. The administrator's own screens (the gate and the console) stay
-     reachable, and only after the server has accepted the sign-in. */
+  /* The original public homepage always remains the initial page. In Free
+     Tutorial mode, legacy student routes resolve to that edition's portal, but
+     no mode switch hides or replaces the G.O.C Academy Hub homepage. */
   function hookGo() {
     if (!global.go || global.go.__f27) return;
     var original = global.go;
@@ -783,6 +895,7 @@
       if (F.on && F.mode === rules.MODE_FREE) {
         var allowed = rules.SCREENS.concat(['landing', 'admin-gate', 'admin', 'staff-change-password', 'free-admin']);
         if (allowed.indexOf(id) < 0) id = 'free-home';
+        trackScreen(id);
       }
       return original(id);
     };
@@ -793,8 +906,9 @@
   /* Expose the handful of names the markup calls. */
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
-    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
-    'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freePortalLoad', 'applyMode'];
+    'freeExamPanelClose', 'freeExamLeave', 'freeExamHome', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
+    'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
+    'freeProgrammeLoad', 'freeLessonDone', 'freeLogin', 'freePortalEnter', 'freeNavBack', 'freeNavHome', 'dwFreePortal'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });
@@ -803,16 +917,13 @@
   GOC.freeUI = {
     applyMode: applyMode,
     mode: function () { return { on: F.on, mode: F.mode }; },
-    gateClick: function () { return F.freeGateClick(); },
-    gateClicks: function () { return F.gateClicks; },
     config: function () { return F.config; },
     /* The boot promise, so a caller can wait for the mode to be settled. */
     ready: function () { return F.ready || Promise.resolve(); },
     boot: boot
   };
 
-  /* Run once the document is ready. js/app.js has already painted the landing
-     page at this point, so the card exists; wireLanding retries if it is late. */
+  /* Run once the document is ready. */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', hydrate);
   } else {
