@@ -1497,6 +1497,10 @@
           <button class="f27-tab" data-f27tab="competition" onclick="freePortalTab('competition')">Competitions</button>
           <button class="f27-tab" data-f27tab="leaderboard" onclick="freePortalTab('leaderboard')">Competition Leaderboard</button>
         </div>
+        <!-- The candidate's own programme record: profile, course enrolment,
+             access and lesson completion. Drawn by js/free2027-ui.js from
+             /api/free2027/programme; nothing here is public. -->
+        <div id="freeProgramme" class="f27-programme" hidden></div>
         <div id="freePortalList" class="f27-list"><div class="ad-loading">Loading this session's programme…</div></div>
         <div id="freePortalResults" class="f27-mine"></div>
       </div>

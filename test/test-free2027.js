@@ -137,5 +137,40 @@ ok('the archive file name is derived from the session', f.archiveName('F27-S3') 
 ok('the archive name cannot escape its folder', f.archiveName('../../etc/passwd').indexOf('/') < 0, f.archiveName('../../etc/passwd'));
 ok('a session label is trimmed and capped', f.cleanSessionLabel('  Term  Two  ') === 'Term Two' && f.cleanSessionLabel('').length > 0);
 
+head('programme lessons, progress and the audit trail');
+ok('a new session has an empty lesson catalogue and audit trail',
+  Array.isArray(s.lessons) && s.lessons.length === 0 && Array.isArray(s.audit) && s.audit.length === 0);
+ok('lesson ids are issued by the programme, never chosen by the client',
+  f.lessonId(1) === 'F27-L-001' && f.lessonId(12) === 'F27-L-012' && f.lessonId(120) === 'F27-L-120' && f.isLessonId('F27-L-001') && !f.isLessonId('lesson-1'));
+ok('a lesson needs a real title', !f.cleanLesson({ title: '' }).error === false && !!f.cleanLesson({ title: '  ' }).error && !!f.cleanLesson({ title: 'ab' }).error);
+ok('a good lesson is trimmed and capped',
+  f.cleanLesson({ title: '  Cell   biology  ', subject: ' Biology ', summary: ' x '.repeat(500) }).lesson.title === 'Cell biology' &&
+  f.cleanLesson({ title: 'Cell biology', subject: ' Biology ' }).lesson.subject === 'Biology' &&
+  f.cleanLesson({ title: 'Cell biology', summary: 'x'.repeat(500) }).lesson.summary.length === f.LESSON_SUMMARY_MAX);
+ok('only live lessons are shown, in the administrator\'s order',
+  f.liveLessons([
+    { id: 'F27-L-002', title: 'Second', order: 2 },
+    { id: 'F27-L-001', title: 'First', order: 1 },
+    { id: 'F27-L-003', title: 'Hidden', order: 3, active: false }
+  ]).map(function (l) { return l.id; }).join(',') === 'F27-L-001,F27-L-002');
+var sheet = f.progressOf({ progress: { lessons: { 'F27-L-001': 1700000000000 } } }, [
+  { id: 'F27-L-001', title: 'One', order: 1 }, { id: 'F27-L-002', title: 'Two', order: 2 }
+]);
+ok('progress counts only what is done, out of what is live', sheet.completed === 1 && sheet.total === 2 && sheet.percent === 50, JSON.stringify(sheet));
+ok('a completion keeps the time it was marked', sheet.lessons[0].done === true && sheet.lessons[0].completedAt === 1700000000000);
+ok('a candidate with no programme record still reads as zero progress',
+  f.progressOf({}, [{ id: 'F27-L-001', title: 'One' }]).percent === 0);
+ok('no lessons means no division by zero', f.progressOf({}, []).percent === 0 && f.progressOf({}, []).total === 0);
+var entry = f.auditEntry({ id: 'GOC-A-001', role: 'founder' }, 'lesson.create', 'F27-L-001', 'Cell biology', 1700000000000);
+ok('an audit entry names the administrator and the action',
+  entry.actorId === 'GOC-A-001' && entry.actorRole === 'founder' && entry.action === 'lesson.create' && entry.target === 'F27-L-001' && entry.at === 1700000000000);
+ok('an audit entry cannot carry a long free-text body', f.auditEntry({ id: 'x' }, 'a', 'b', 'z'.repeat(500)).detail.length <= 80);
+ok('an anonymous change is recorded as the system', f.auditEntry(null, 'x').actorId === 'system');
+var trail = { audit: [] };
+for (var ai = 0; ai < f.AUDIT_MAX + 5; ai++) f.pushAudit(trail, f.auditEntry({ id: 'GOC-A-001' }, 'action' + ai));
+ok('the audit trail is bounded, newest first',
+  trail.audit.length === f.AUDIT_MAX && trail.audit[0].action === 'action' + (f.AUDIT_MAX + 4),
+  trail.audit.length + ' ' + (trail.audit[0] || {}).action);
+
 console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
 process.exit(fails ? 1 : 0);

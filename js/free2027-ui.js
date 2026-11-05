@@ -295,10 +295,67 @@
     F.freePortalLoad();
   };
 
+  /* ---------------------------------------------------- the programme card
+     The candidate's own record: who they are, what they enrolled on, the access
+     the academy granted, and the lessons with their completion marks. It is
+     read from the server's local data file, so a restart never loses it. */
+  F.freeProgrammeLoad = function () {
+    var host = $('freeProgramme');
+    if (!host) return;
+    if (!api.hasToken()) { host.hidden = true; host.innerHTML = ''; return; }
+    host.hidden = false;
+    host.innerHTML = '<div class="ad-loading">Loading your programme…</div>';
+    api.programme().then(function (r) {
+      paintProgramme(host, r || {});
+    }, function (er) {
+      host.innerHTML = '<p class="f27-fine">' + esc((er && er.message) || 'Your programme could not be read just now.') + '</p>';
+    });
+  };
+
+  function paintProgramme(host, r) {
+    var p = r.profile || {};
+    var prog = r.progress || { lessons: [], completed: 0, total: 0, percent: 0 };
+    var access = r.access || {};
+    var enrol = r.enrolment || {};
+    var rows = (prog.lessons || []).map(function (l) {
+      return '<div class="f27-lesson' + (l.done ? ' done' : '') + '">' +
+        '<div class="f27-lesson-main"><b>' + esc(l.title) + '</b>' +
+        (l.subject ? '<span>' + esc(l.subject) + '</span>' : '') +
+        (l.summary ? '<span>' + esc(l.summary) + '</span>' : '') + '</div>' +
+        (l.done
+          ? '<span class="f27-tick" title="Completed">✓ Done</span>'
+          : '<button class="btn btn-outline f27-small" onclick="freeLessonDone(\'' + esc(l.id) + '\')">Mark done</button>') +
+        '</div>';
+    }).join('');
+    host.innerHTML =
+      '<div class="f27-prog-head"><div><b>' + esc(p.name || 'Candidate') + '</b>' +
+        '<span>' + esc(p.id || '') + ' · ' + esc(enrol.course || p.course || '') + '</span></div>' +
+        '<span class="f27-chip">' + esc(access.status === 'suspended' ? 'Access paused' : 'Access active') + '</span></div>' +
+      '<div class="f27-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + (prog.percent || 0) + '">' +
+        '<i style="width:' + (prog.percent || 0) + '%"></i></div>' +
+      '<p class="f27-fine">Lessons completed: <b>' + (prog.completed || 0) + ' of ' + (prog.total || 0) + '</b>' +
+        ((r.quizzes && r.quizzes.submitted) ? ' · quizzes submitted: <b>' + r.quizzes.submitted + '</b>' +
+          (r.quizzes.average == null ? '' : ' · your average: <b>' + r.quizzes.average + '%</b>') : '') + '</p>' +
+      (rows || '<p class="f27-fine">No lessons have been published for this session yet.</p>');
+  }
+
+  /* Marking a lesson done. Idempotent on the server, so a double tap is safe. */
+  F.freeLessonDone = function (id) {
+    var lessonId = String(id || '');
+    if (!lessonId) return;
+    api.completeLesson(lessonId).then(function () {
+      F.freeProgrammeLoad();
+      say('Lesson marked done');
+    }, function (er) {
+      say((er && er.message) || 'That lesson could not be marked just now.');
+    });
+  };
+
   F.freePortalLoad = function () {
     var host = $('freePortalList');
     var mine = $('freePortalResults');
     if (!host) return;
+    F.freeProgrammeLoad();
     if (!api.hasToken()) {
       host.innerHTML = '<div class="f27-empty"><p>Register first — it takes a minute and needs no password.</p>' +
         '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button></div>';
@@ -802,7 +859,8 @@
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
-    'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freePortalLoad', 'applyMode'];
+    'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freePortalLoad', 'applyMode',
+    'freeProgrammeLoad', 'freeLessonDone'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

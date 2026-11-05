@@ -314,6 +314,70 @@ waitForBoot(40).then(async function (h) {
   ok('the edition\'s own data is untouched by the switch', dataFile().free2027.sessions[0].participants.length === 11);
   ok('switching back is one call', (await call('PUT', '/api/free2027/admin/mode', { mode: 'free2027', confirm: true }, adm)).body.mode === 'free2027');
 
+  head('programme records: lessons, progress and the audit trail');
+  var lp = await call('GET', '/api/free2027/programme', undefined, ada.token);
+  ok('a candidate reads their own programme record', lp.status === 200 && lp.body.profile.id === ada.participant.id, lp.raw.slice(0, 220));
+  ok('it carries the course enrolment', lp.body.enrolment.course === 'Medicine and Surgery' && lp.body.enrolment.status === 'enrolled', JSON.stringify(lp.body.enrolment));
+  ok('it carries the programme access', lp.body.access.status === 'active' && /free-tutorial/.test(lp.body.access.programme), JSON.stringify(lp.body.access));
+  ok('and their quiz record', lp.body.quizzes.submitted >= 1 && typeof lp.body.quizzes.average === 'number', JSON.stringify(lp.body.quizzes));
+  ok('no programme route without a token', (await call('GET', '/api/free2027/programme')).status === 401);
+  ok('a console token is not a candidate token', (await call('GET', '/api/free2027/programme', undefined, adm)).status === 401);
+
+  /* The Academic Director, signed in and unlocked: the second programme
+     administrator, through the same console authentication as always. */
+  var acadLogin = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
+  var acadT = acadLogin.body && acadLogin.body.token;
+  await call('POST', '/api/auth/unlock', { passcode: '2027' }, acadT);
+  var mk1 = await call('POST', '/api/free2027/admin/lessons', { title: 'Cell biology — the basics', subject: 'Biology', summary: 'Membranes and division' }, adm);
+  ok('the Founder adds a lesson', mk1.status === 200 && /^F27-L-\d{3}$/.test(mk1.body.lesson.id) && mk1.body.created === true, mk1.raw.slice(0, 200));
+  var mk2 = await call('POST', '/api/free2027/admin/lessons', { title: 'Algebra — quadratics', subject: 'Mathematics' }, acadT);
+  ok('the Academic Director adds a lesson too', mk2.status === 200 && mk2.body.lesson.id !== mk1.body.lesson.id, mk2.raw.slice(0, 200));
+  ok('a lesson with no real title is refused', (await call('POST', '/api/free2027/admin/lessons', { title: 'ab' }, adm)).status === 400);
+  ok('a candidate cannot create a lesson', (await call('POST', '/api/free2027/admin/lessons', { title: 'Sneaky one' }, cat.token)).status === 401);
+  ok('a console token cannot create a lesson either', (await call('POST', '/api/free2027/admin/lessons', { title: 'Sneaky one' }, ada.token)).status === 401);
+  var edited = await call('PUT', '/api/free2027/admin/lessons/' + mk2.body.lesson.id, { title: 'Algebra — quadratics and graphs' }, acadT);
+  ok('a lesson can be edited', edited.status === 200 && /graphs/.test(edited.body.lesson.title) && edited.body.created === false, edited.raw.slice(0, 200));
+  ok('an unknown lesson cannot be edited', (await call('PUT', '/api/free2027/admin/lessons/F27-L-999', { title: 'Ghost lesson' }, adm)).status === 404);
+  var all2 = await call('GET', '/api/free2027/admin/lessons', undefined, acadT);
+  ok('both administrators read the same catalogue', all2.status === 200 && all2.body.lessons.length === 2, all2.raw.slice(0, 200));
+
+  head('a candidate works through the lessons, and the console sees it');
+  var before = await call('GET', '/api/free2027/programme', undefined, ada.token);
+  ok('the candidate starts at nought of two', before.body.progress.completed === 0 && before.body.progress.total === 2, JSON.stringify(before.body.progress));
+  var d1 = await call('POST', '/api/free2027/lessons/' + mk1.body.lesson.id + '/complete', {}, ada.token);
+  ok('marking a lesson done is accepted', d1.status === 200 && d1.body.completed === true && d1.body.already === false, d1.raw.slice(0, 200));
+  ok('progress moves to one of two, fifty per cent', d1.body.progress.completed === 1 && d1.body.progress.percent === 50, JSON.stringify(d1.body.progress));
+  var d2 = await call('POST', '/api/free2027/lessons/' + mk1.body.lesson.id + '/complete', {}, ada.token);
+  ok('marking the same lesson again changes nothing', d2.body.already === true && d2.body.progress.completed === 1, d2.raw.slice(0, 200));
+  ok('another candidate keeps their own sheet', (await call('GET', '/api/free2027/programme', undefined, ben.token)).body.progress.completed === 0);
+  ok('an unknown lesson is refused', (await call('POST', '/api/free2027/lessons/F27-L-999/complete', {}, ada.token)).status === 404);
+  ok('a lesson cannot be completed without a token', (await call('POST', '/api/free2027/lessons/' + mk1.body.lesson.id + '/complete', {})).status === 401);
+  ok('the completion is in the session records', (await call('GET', '/api/free2027/admin/records', undefined, adm)).body.records.some(function (r) { return r.kind === 'lesson' && r.participantId === ada.participant.id; }));
+
+  var plist = await call('GET', '/api/free2027/admin/participants', undefined, adm);
+  var adaRow = (plist.body.participants || []).filter(function (p) { return p.id === ada.participant.id; })[0];
+  ok('the participant list carries each candidate\'s lesson progress', !!adaRow && adaRow.lessonsDone === 1 && adaRow.lessonsTotal === 2, JSON.stringify(adaRow && { d: adaRow.lessonsDone, t: adaRow.lessonsTotal }));
+  var prog = await call('GET', '/api/free2027/admin/progress', undefined, acadT);
+  ok('the progress view lists every candidate', prog.status === 200 && prog.body.participants.length === 11 && prog.body.lessons === 2, prog.raw.slice(0, 220));
+  var adaProg = prog.body.participants.filter(function (x) { return x.id === ada.participant.id; })[0];
+  ok('with their lessons, quizzes and average',
+    !!adaProg && adaProg.lessonsDone === 1 && adaProg.quizzes >= 1 && typeof adaProg.average === 'number', JSON.stringify(adaProg));
+  ok('and no address is carried into the progress view', prog.raw.indexOf('@') < 0, prog.raw.slice(0, 160));
+
+  head('the programme keeps its own audit trail');
+  var audit = await call('GET', '/api/free2027/admin/audit', undefined, adm);
+  var acts = ((audit.body && audit.body.entries) || []).map(function (e) { return e.action; });
+  ok('administrative changes are recorded', audit.status === 200 && acts.indexOf('lesson.create') > -1 && acts.indexOf('lesson.edit') > -1,
+    acts.slice(0, 12).join(','));
+  ok('and the activity and leaderboard changes with them',
+    acts.indexOf('activity.create') > -1 && acts.indexOf('activity.publish') > -1 && acts.indexOf('leaderboard.publish') > -1, acts.join(','));
+  ok('each entry names the administrator and their role',
+    audit.body.entries.every(function (e) { return !!e.actorId && !!e.actorRole; }), JSON.stringify(audit.body.entries.slice(0, 2)));
+  ok('no address, passcode or code is ever written to it',
+    audit.raw.indexOf('@') < 0 && audit.raw.indexOf('2027') < 0 && audit.raw.indexOf('ada') < 0, audit.raw.slice(0, 200));
+  ok('a candidate cannot read the audit trail', (await call('GET', '/api/free2027/admin/audit', undefined, ada.token)).status === 401);
+  ok('getting a list is not an administrative change', acts.filter(function (a) { return /^(questions|progress|audit)\./.test(a); }).length === 0);
+
   head('archiving a session, and starting fresh');
   ok('archiving without a confirmation is refused', (await call('POST', '/api/free2027/admin/sessions/new', { label: 'Term Two' }, adm)).status === 400);
   var before = dataFile();

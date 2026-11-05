@@ -36,7 +36,12 @@ var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
    the roster, the question bank, results, leaderboards and session archiving).
    They are counted here deliberately, so a change to that guard is as visible as
    a change to any other console route. */
-var CONSOLE_ROUTES = 110 + 20;
+/* 130 + 7: the 2027 Free Tutorial Edition's programme records added seven
+   console routes — the local question picker (admin/questions), lessons
+   (list, add, edit, delete), progress and the programme audit trail. Every one
+   still carries a capability from the existing map, so the capability system
+   itself is unchanged. */
+var CONSOLE_ROUTES = 110 + 27;
 var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
 ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));

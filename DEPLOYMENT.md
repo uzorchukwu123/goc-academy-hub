@@ -213,6 +213,19 @@ the code is never shown on screen, whatever that variable says. The console's
 **2027 Free Tutorial** panel shows whether a sender is configured, so check it
 once after deploying.
 
+Working on the edition locally, in Chrome, with no Appwrite access at all? See
+[`LOCAL-DEVELOPMENT.md`](./LOCAL-DEVELOPMENT.md) for the exact commands
+(`GOC_FREE_2027=1`, `GOC_DATA_DIR=./local-test-data`, `PORT=8080`,
+`GOC_APPWRITE_OFF=1`) and the click-through for both the candidate and the two
+programme administrators.
+
+The edition's records never leave the local file: `/api/health` reports
+`free2027.storage: "local-json"` and the exact path in use. The console's question
+picker reads `db.questions` **locally** (`/api/free2027/admin/questions`) rather
+than the Appwrite-backed `/api/questions`, so papers can be built and marked even
+while the Database API is unavailable. `GOC_APPWRITE_OFF=1` makes the whole
+process local for a development run and must never be set in production.
+
 `GOC_DATA_DIR` decides where everything is written, the edition included:
 
 ```text
@@ -402,6 +415,8 @@ stays green offline.
       refuse to start at all until this is clean, so this should be automatic,
       but check the deploy log once anyway.
 - [ ] Study reminders: `GOC_PUBLIC_URL` and SMTP set, boot log shows "study reminders: checking every ..." (not "idle"), and a dry run (or one real test scholar) produced a sensible email whose opt-out link works.
+- [ ] `GOC_APPWRITE_OFF` is **not** set in production (it is a local-development
+      switch that stops the hub contacting Appwrite entirely).
 - [ ] 2027 Free Tutorial Edition, if this deployment opens it: `GOC_FREE_2027=1`, a real SMTP
       sender configured (the console's *2027 Free Tutorial* panel says whether one is), no
       `GOC_FREE_2027_DEV_OTP` in production, `GOC_DATA_DIR` persistent, and the archive folder

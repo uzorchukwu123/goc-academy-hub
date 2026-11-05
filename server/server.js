@@ -516,23 +516,39 @@ function docToAttempt(doc) {
    tutor numbers all read through here, so a question awaiting approval (or returned) can never
    reach them by a route that forgot to ask. The console's bank, imports and approval queue ask
    for all of them. A question with no status is live. */
+/* The same filtering the local branch has always done, extracted so the 2027
+   Free Tutorial Edition can read the bank without ever asking Appwrite. */
+function filterLocalQuestions(rows, filter, localDb) {
+  filter = filter || {};
+  const keep = list => filter.all ? list : list.filter(core.questionIsLive);
+  const src = rows !== undefined ? rows : ((localDb ? localDb.questions : readData().questions) || []);
+  let list = src || [];
+  /* Phase 4 — archived questions (soft-deleted) are excluded from every view
+     unless the caller explicitly asks for them. Student pools, blueprint
+     counts, and the normal admin bank never see archived questions.
+     { all: true } still excludes archived unless showArchived is also set,
+     so even the approval queue does not resurface soft-deleted records. */
+  if (!filter.showArchived) list = list.filter(q => !q.archived);
+  if (filter.subject) list = list.filter(q => q.subject === filter.subject);
+  if (filter.section) list = list.filter(q => q.section === filter.section);
+  if (filter.kind) list = list.filter(q => q.kind === filter.kind);
+  if (filter.activeOnly) list = list.filter(q => q.active !== false);
+  return keep(list).map(q => JSON.parse(JSON.stringify(q)));
+}
+
+/* Local-only question reader for the 2027 Free Tutorial Edition. It never
+   touches Appwrite, even on a deployment where APPWRITE_* is configured and
+   the Database API is unavailable — the edition's papers, marking and console
+   picker read db.questions in the hub's own data file. */
+function listLocalQuestions(filter, localDb) {
+  const db = localDb || readData();
+  return Promise.resolve(filterLocalQuestions((db && db.questions) || [], filter));
+}
+
 async function listQuestions(filter, localDb) {
   filter = filter || {};
+  if (!appwriteDatabases) return filterLocalQuestions(undefined, filter, localDb);
   const keep = rows => filter.all ? rows : rows.filter(core.questionIsLive);
-  if (!appwriteDatabases) {
-    let rows = (localDb ? localDb.questions : readData().questions) || [];
-    /* Phase 4 — archived questions (soft-deleted) are excluded from every view
-       unless the caller explicitly asks for them. Student pools, blueprint
-       counts, and the normal admin bank never see archived questions.
-       { all: true } still excludes archived unless showArchived is also set,
-       so even the approval queue does not resurface soft-deleted records. */
-    if (!filter.showArchived) rows = rows.filter(q => !q.archived);
-    if (filter.subject) rows = rows.filter(q => q.subject === filter.subject);
-    if (filter.section) rows = rows.filter(q => q.section === filter.section);
-    if (filter.kind) rows = rows.filter(q => q.kind === filter.kind);
-    if (filter.activeOnly) rows = rows.filter(q => q.active !== false);
-    return keep(rows).map(q => JSON.parse(JSON.stringify(q)));
-  }
   const Query = appwriteQuery();
   const baseQueries = [];
   if (filter.subject) baseQueries.push(Query.equal('subject', filter.subject));
@@ -2034,11 +2050,50 @@ const free2027 = free2027Lib.createFree2027({
   readData: () => readData(),
   writeData: db => writeData(db),
   withDataLock: fn => withDataLock(fn),
-  listQuestions: (filter, localDb) => listQuestions(filter, localDb),
+  /* The edition's own papers and marking read the LOCAL question bank, never
+     Appwrite (see listLocalQuestions). GOC_FREE_2027_STORAGE is reported by
+     /api/health so a deployment can be checked without guessing. */
+  listQuestions: (filter, localDb) => listLocalQuestions(filter, localDb),
   deliverOtp: deliverFreeOtp,
   log: m => console.warn(m)
 });
 const FREE2027 = free2027.rules;
+
+/* One programme audit entry per successful administrative change, written by the
+   response hook in the dispatcher (the same place the hub's manager log is
+   written). Only the method, path and the resulting target are recorded; a body
+   is never copied, so no passcode or address can reach the audit trail. */
+const FREE_AUDIT_RULES = [
+  ['PUT', /^\/api\/free2027\/admin\/mode$/, 'mode.change'],
+  ['PUT', /^\/api\/free2027\/admin\/edition$/, 'edition.change'],
+  ['PUT', /^\/api\/free2027\/admin\/courses$/, 'courses.change'],
+  ['POST', /^\/api\/free2027\/admin\/activities$/, 'activity.create'],
+  ['PUT', /^\/api\/free2027\/admin\/activities\/([^/]+)$/, 'activity.edit'],
+  ['DELETE', /^\/api\/free2027\/admin\/activities\/([^/]+)$/, 'activity.delete'],
+  ['POST', /^\/api\/free2027\/admin\/activities\/([^/]+)\/(publish|close|reopen)$/, 'activity.verb'],
+  ['POST', /^\/api\/free2027\/admin\/activities\/([^/]+)\/leaderboard\/(approve|publish|unpublish|revoke)$/, 'leaderboard.verb'],
+  ['POST', /^\/api\/free2027\/admin\/lessons$/, 'lesson.create'],
+  ['PUT', /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, 'lesson.edit'],
+  ['DELETE', /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, 'lesson.delete'],
+  ['PUT', /^\/api\/free2027\/admin\/participants\/([^/]+)$/, 'participant.update'],
+  ['DELETE', /^\/api\/free2027\/admin\/participants\/([^/]+)$/, 'participant.delete'],
+  ['POST', /^\/api\/free2027\/admin\/sessions\/new$/, 'session.archive']
+];
+function freeAuditSpec(method, urlPath) {
+  const m = String(method || '').toUpperCase();
+  const p = String(urlPath || '').split('?')[0];
+  for (const rule of FREE_AUDIT_RULES) {
+    if (rule[0] !== m) continue;
+    const hit = rule[1].exec(p);
+    if (!hit) continue;
+    let action = rule[2];
+    let target = hit[1] ? String(hit[1]) : '';
+    if (action === 'activity.verb') action = 'activity.' + String(hit[2] || 'change');
+    if (action === 'leaderboard.verb') action = 'leaderboard.' + String(hit[2] || 'change');
+    return { action: action, target: target };
+  }
+  return null;
+}
 
 /* A console route needs the edition to be switched on; the two mode routes
    themselves work either way, so the administrator can switch the edition back
@@ -3014,7 +3069,16 @@ const ROUTES = [
       okJson(res, {
         service: 'goc-academy-hub', version: 1,
         passcodeLength: Number(db.settings.consolePasscodeLength) || 4,
-        free2027: { on: fed.enabled === true, mode: fmode }
+        free2027: {
+          on: fed.enabled === true,
+          mode: fmode,
+          /* Where the edition keeps its records. Always the local data file:
+             the edition never reads or writes the Appwrite Database, even on a
+             deployment that has it configured. */
+          storage: 'local-json',
+          storageFile: DATA_FILE,
+          archiveDir: path.join(DATA_DIR, 'free2027-archives')
+        }
       });
     } },
 
@@ -8853,6 +8917,16 @@ const ROUTES = [
       okJson(res, free2027.myResults(req.free2027.data));
     }) },
 
+  /* The candidate's own programme: profile, enrolment, access, progress and
+     the lesson catalogue with their completion marks. Read from the local data
+     file, so it works on a box where Appwrite is unreachable. */
+  { method: 'GET', path: /^\/api\/free2027\/programme$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.programme(req.free2027.data));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/lessons\/([^/]+)\/complete$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.completeLesson(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+
   /* Competitions only, and only once the administrator has approved AND
      published. Public on purpose: a leaderboard is meant to be seen. */
   { method: 'GET', path: /^\/api\/free2027\/leaderboards$/, need: null, handler: freeRoute((req, res, body) => {
@@ -8942,6 +9016,44 @@ const ROUTES = [
     }) },
   { method: 'GET', path: /^\/api\/free2027\/admin\/records$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
       okJson(res, free2027.sessionRecords());
+    }) },
+
+  /* ---- console: the edition's own question picker ----
+     The hub's /api/questions reads Appwrite when it is configured; the
+     edition's picker must not, or no activity could be built on a box where
+     the Database API is unavailable. Same rows, read from db.questions. */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess) => {
+      return listLocalQuestions({ all: true }).then(rows => okJson(res, {
+        questions: rows.map(q => ({
+          id: q.id, subject: q.subject, topic: q.topic, kind: q.kind, section: q.section,
+          difficulty: q.difficulty, status: q.status, archived: q.archived === true, active: q.active !== false,
+          text: String(q.text == null ? '' : q.text).slice(0, 240)
+        })),
+        total: rows.length,
+        source: 'local-data-file'
+      }));
+    }) },
+
+  /* ---- console: programme lessons ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/lessons$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res) => {
+      okJson(res, free2027.adminLessons());
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/lessons$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body) => {
+      return free2027.saveLesson(body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.saveLesson(body, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'DELETE', path: /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteLesson(params[0]).then(r => okJson(res, r));
+    }) },
+
+  /* ---- console: programme progress and audit records ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/progress$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
+      okJson(res, free2027.adminProgress());
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/audit$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
+      okJson(res, free2027.auditLog(null));
     }) },
 
   /* ---- console: session archiving ---- */
@@ -9309,6 +9421,19 @@ const server = http.createServer(async (req, res) => {
             writeData(db);
           }
         }
+        /* The 2027 Free Tutorial Edition keeps its own audit trail with the rest
+           of its records (db.free2027), so the programme can be archived and
+           read on its own. Same rule as the manager log: a failed request is
+           never recorded, and a logging fault never breaks the request. */
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const freeSpec = freeAuditSpec(req.method, urlPath);
+          if (freeSpec && readData().free2027 && readData().free2027.enabled === true) {
+            free2027.recordAudit(
+              { id: sess.data.id, role: sess.data.roleKey || 'admin' },
+              freeSpec.action, freeSpec.target, ''
+            );
+          }
+        }
       } catch (e) { console.error('[goc] manager log write failed:', e && e.message ? e.message : e); }
       return origEnd.apply(this, arguments);
     };
@@ -9552,6 +9677,12 @@ function start() {
       console.log('  Bound to ' + HOST + ' (reachable from the network / internet — use HTTPS).');
     }
     console.log('  Storage: ' + (appwriteDatabases ? 'Appwrite Database (cloud)' : 'local file (server/data.json)'));
+    /* The edition always uses the local file; say so, and say where, so a local
+       run is never in doubt about where programme records are going. */
+    if (free2027.modeInfo().on) {
+      console.log('  2027 Free Tutorial: ON — records in ' + DATA_FILE + ' (no Appwrite Database).');
+      console.log('  Free tutorial archives: ' + path.join(DATA_DIR, 'free2027-archives'));
+    }
     console.log('  Console passcode: ' + (process.env.GOC_PASSCODE ? '(from GOC_PASSCODE)' : '2027'));
     if (DOOR_WORD) console.log('  Tutor entrance: open (word from GOC_TUTOR_DOOR).');
     else if (DOOR_WORD_RAW) console.log('  Tutor entrance: CLOSED. GOC_TUTOR_DOOR must be at least ' + DOOR_WORD_MIN + ' characters.');
@@ -9568,7 +9699,19 @@ function start() {
 // On a clean shutdown (a redeploy sends SIGTERM), flush any pending save first.
 process.on('SIGTERM', () => { appwriteSaveChain.finally(() => process.exit(0)); });
 
-if (hasAppwriteConfig()) {
+/* GOC_APPWRITE_OFF=1 — a deliberate local-only run.
+   The .env may still carry Appwrite credentials (a production copy), but the
+   Database API can be suspended, exhausted or simply unreachable. With this
+   switch set the server never builds an Appwrite client at all: every read and
+   write stays in the local data file, no Storage mirror is attempted, and the
+   2027 Free Tutorial Edition — which is local-only by design — can be developed
+   and tested in Chrome without waiting for a billing cycle. It changes nothing
+   unless a deployment asks for it, and production must not set it. */
+const APPWRITE_OFF = ['1', 'true', 'on', 'yes'].indexOf(String(process.env.GOC_APPWRITE_OFF || '').trim().toLowerCase()) > -1;
+if (APPWRITE_OFF) {
+  console.log('[goc] GOC_APPWRITE_OFF is set — running fully local. Appwrite is not contacted at all.');
+}
+if (hasAppwriteConfig() && !APPWRITE_OFF) {
   initAppwrite()
     .then(async () => {
       // Pull the durable blob down from Appwrite Storage before deciding

@@ -316,7 +316,8 @@
     host.innerHTML = list.length ? list.map(function (p) {
       return '<div class="f27-admin-row"><div><b>' + esc(p.name) + ' <span class="f27-chip ' + (p.verified ? 'ok' : 'warn') + '">' +
         (p.verified ? 'verified' : 'unverified') + '</span>' + (p.active === false ? ' <span class="f27-chip no">off</span>' : '') + '</b>' +
-        '<span>' + esc(p.id) + ' · ' + esc(p.course) + ' · ' + esc(p.email) + '</span></div>' +
+        '<span>' + esc(p.id) + ' · ' + esc(p.course) + ' · ' + esc(p.email) +
+        (p.lessonsTotal ? ' · lessons ' + Number(p.lessonsDone || 0) + '/' + Number(p.lessonsTotal) : '') + '</span></div>' +
         '<button class="ad-btn" onclick="f27AdmToggleParticipant(\'' + esc(p.id) + '\',' + (p.active === false) + ')">' +
         (p.active === false ? 'Switch on' : 'Switch off') + '</button>' +
         '<button class="ad-btn danger" onclick="f27AdmRemoveParticipant(\'' + esc(p.id) + '\')">Remove</button></div>';
@@ -365,9 +366,53 @@
     api.adminActivities().then(function (r) {
       A.activities = r.activities || [];
       if (A.editing) return paintEditor();
-      body(activityListHtml() + '<div id="f27Editor"></div>');
+      return api.adminLessons().then(function (lr) {
+        A.lessons = (lr && lr.lessons) || [];
+        body(activityListHtml() + '<div id="f27Editor"></div>' + lessonsHtml());
+      }, function () {
+        /* A lessons fault must not hide the activities. */
+        A.lessons = [];
+        body(activityListHtml() + '<div id="f27Editor"></div>' + lessonsHtml());
+      });
     }, function (er) { body(failText(er)); });
   }
+
+  /* ---- programme lessons: the candidate marks them done in the portal ------ */
+  function lessonsHtml() {
+    var rows = (A.lessons || []).map(function (l) {
+      return '<div class="f27-admin-row"><div><b>' + esc(l.title) + '</b>' +
+        '<span>' + esc(l.subject || 'General') + ' · #' + esc(l.id) + (l.active === false ? ' · hidden' : '') + '</span>' +
+        (l.summary ? '<span>' + esc(l.summary) + '</span>' : '') + '</div>' +
+        '<button class="ad-btn danger" onclick="f27AdmDeleteLesson(\'' + esc(l.id) + '\')">Remove</button></div>';
+    }).join('');
+    return '<div class="ad-card" style="margin-top:18px"><div class="ad-h">Programme lessons</div>' +
+      '<p class="ad-note">Lessons the candidate can tick off in the CBT Portal. They belong to this session and are ' +
+      'archived with it; deleting one never rewrites a candidate\'s own completion record.</p>' +
+      '<div class="f27-admin-row"><div class="ad-field" style="flex:1"><label>Title</label><input id="f27LessonTitle" placeholder="e.g. Cell biology — the basics"></div>' +
+      '<div class="ad-field" style="flex:1"><label>Subject</label><input id="f27LessonSubject" placeholder="Biology"></div></div>' +
+      '<div class="ad-field"><label>One-line summary (optional)</label><input id="f27LessonSummary" placeholder="What this lesson covers"></div>' +
+      '<div class="ad-actions"><button class="ad-btn pri" onclick="f27AdmAddLesson()">Add lesson</button></div>' +
+      '<div>' + (rows || '<div class="ad-empty">No lessons yet. Add the first one above.</div>') + '</div></div>';
+  }
+
+  global.f27AdmAddLesson = function () {
+    var title = String(($('f27LessonTitle') || {}).value || '').trim();
+    var subject = String(($('f27LessonSubject') || {}).value || '').trim();
+    var summary = String(($('f27LessonSummary') || {}).value || '').trim();
+    if (title.length < 3) return say('Give the lesson a title of at least 3 characters.');
+    api.saveLesson({ title: title, subject: subject, summary: summary }).then(function () {
+      say('Lesson added');
+      loadActivities();
+    }, function (er) { say(er.message || 'That lesson could not be saved.'); });
+  };
+
+  global.f27AdmDeleteLesson = function (id) {
+    if (!confirmDo('Remove lesson ' + id + ' from the catalogue?\n\nCandidates keep their own completion marks.')) return;
+    api.deleteLesson(id).then(function () {
+      say('Lesson removed');
+      loadActivities();
+    }, function (er) { say(er.message || 'That lesson could not be removed.'); });
+  };
 
   function activityListHtml() {
     var rows = A.activities.map(function (a) {
@@ -474,15 +519,18 @@
     loadActivities();
   };
 
-  /* The question picker reads the hub's own bank through the hub's own API —
-     the same rows the Question bank panel shows. Nothing is copied. */
+  /* The question picker reads the bank through the EDITION's own route
+     (/api/free2027/admin/questions), which reads the hub's local data file and
+     never Appwrite. The hub's /api/questions is not used here on purpose: on a
+     deployment where the Appwrite Database API is unavailable that route fails,
+     and no activity could be built at all. Nothing is copied. */
   global.f27AdmFontLoad = function () {
     var host = $('f27QList');
     if (!host) return;
     var subject = ($('f27QSubj') || {}).value || '';
-    host.innerHTML = '<div class="ad-loading">Reading the question bank…</div>';
+    host.innerHTML = '<div class="ad-loading">Reading the local question bank…</div>';
     GOC.api.ready.then(function () {
-      return GOC.api.listQuestions({ all: true });
+      return api.adminQuestions(subject);
     }).then(function (r) {
       var rows = (r.questions || []).filter(function (q) {
         return q.kind === 'objective' && !q.archived && q.active !== false && (!subject || q.subject === subject);
@@ -713,6 +761,16 @@
   function loadRecords() {
     loading('Reading the session records…');
     api.records().then(function (r) {
+      var auditRows = '';
+      api.adminAudit().then(function (a) {
+        auditRows = ((a && a.entries) || []).map(function (x) {
+          return '<div class="f27-admin-row"><div><b>' + esc(x.action) + (x.target ? ' · ' + esc(x.target) : '') + '</b>' +
+            '<span>' + esc(x.actorId) + (x.actorRole ? ' (' + esc(x.actorRole) + ')' : '') + '</span></div>' +
+            '<span class="f27-chip">' + esc(when(x.at)) + '</span></div>';
+        }).join('');
+        var host = $('f27AuditList');
+        if (host) host.innerHTML = auditRows || '<div class="ad-empty">No administrative changes in this session yet.</div>';
+      }, function () { /* the audit is supplementary: never hide the records */ });
       var rows = (r.records || []).map(function (x) {
         return '<div class="f27-admin-row"><div><b>' + esc(x.name || x.participantId) + '</b>' +
           '<span>' + esc(x.participantId) + ' · ' + esc(x.kind) + (x.activityId ? ' · ' + esc(x.activityId) : '') + '</span></div>' +
@@ -722,6 +780,10 @@
         'These are the free tutorial\'s own records — no G.O.C student record appears here.</p>' +
         '<div class="ad-metric"><span>Session</span><b>' + esc(r.session.label) + ' (' + esc(r.session.id) + ')</b></div>' +
         '<div>' + (rows || '<div class="ad-empty">Nothing has happened in this session yet.</div>') + '</div>' +
+        '<div class="ad-card" style="margin-top:18px"><div class="ad-h">Programme audit records</div>' +
+        '<p class="ad-note">Who changed what in the programme — the administrator and the action only. ' +
+        'No address and no secret is ever written here.</p>' +
+        '<div id="f27AuditList"><div class="ad-loading">Reading the audit trail…</div></div></div>' +
         '<div class="ad-actions"><button class="ad-btn" onclick="f27AdmLoad()">Refresh</button></div>');
     }, function (er) { body(failText(er)); });
   }

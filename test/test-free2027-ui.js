@@ -99,7 +99,7 @@ function makeWorld(opts) {
    'freeOtpBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
    'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeResultBody', 'freeBoardBody',
-   'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing',
+   'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing', 'freeProgramme',
    'free-admin', 'free-home', 'free-portal', 'free-result', 'free-exam', 'free-leaderboard', 'admin-gate', 'admin'
   ].forEach(el);
   el('freeRegStep2').hidden = true;
@@ -135,7 +135,24 @@ function makeWorld(opts) {
     submit: function (a, r) { calls.api.push(['submit', a, r]); return Promise.resolve(o.submitReply || { result: { title: 'Week 1', kind: 'weekly', score: 2, maxScore: 4, private: true, timeUsedSec: 30 } }); },
     results: function () { return Promise.resolve({ results: [] }); },
     leaderboards: function () { return Promise.resolve({ leaderboards: [] }); },
-    leaderboard: function () { return Promise.resolve({ leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); }
+    leaderboard: function () { return Promise.resolve({ leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); },
+    programme: function () {
+      calls.api.push(['programme']);
+      return Promise.resolve(o.programmeReply || {
+        profile: { id: 'GOC-F27-0001', name: 'Ada', course: 'Law' },
+        enrolment: { course: 'Law', status: 'enrolled', enrolledAt: 1 },
+        access: { programme: '2027-free-tutorial', status: 'active', grantedAt: 1 },
+        progress: {
+          completed: 1, total: 2, percent: 50,
+          lessons: [
+            { id: 'F27-L-001', title: 'Cell biology', subject: 'Biology', summary: 'Membranes', done: true, completedAt: 1700000000000 },
+            { id: 'F27-L-002', title: 'Algebra', subject: 'Mathematics', summary: '', done: false, completedAt: null }
+          ]
+        },
+        quizzes: { submitted: 1, average: 75, best: 3, lastAt: 1700000000000 }
+      });
+    },
+    completeLesson: function (id) { calls.api.push(['completeLesson', id]); return Promise.resolve({ completed: true, already: false }); }
   };
 
   var sandbox = {
@@ -388,6 +405,32 @@ settle(load(w1)).then(function () {
     });
   });
 }).then(function () {
+  console.log('\nThe portal shows the candidate their own programme');
+  var w = makeWorld({ token: 'T1' });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freeProgrammeLoad();
+    return settle().then(function () {
+      var out = w.els.freeProgramme.innerHTML;
+      ok('the card is shown once a candidate has a token', w.els.freeProgramme.hidden === false);
+      ok('it names the candidate and their participant ID', /Ada/.test(out) && /GOC-F27-0001/.test(out), out.slice(0, 160));
+      ok('it shows the course they enrolled on', /Law/.test(out));
+      ok('it says their access is active', /Access active/.test(out));
+      ok('it counts the lessons done', /1 of 2/.test(out), out.slice(0, 220));
+      ok('it paints a progress bar at that percentage', /aria-valuenow="50"/.test(out) && /width:50%/.test(out));
+      ok('a completed lesson is ticked, not offered again', /Cell biology/.test(out) && /✓ Done/.test(out));
+      ok('an unfinished lesson can be marked done', /Algebra/.test(out) && /freeLessonDone\('F27-L-002'\)/.test(out), out.slice(-260));
+      ok('the candidate\'s quiz record is shown', /quizzes submitted/.test(out) && /75%/.test(out));
+      w.sandbox.freeLessonDone('F27-L-002');
+      return settle().then(function () {
+        ok('marking a lesson done calls the server',
+          JSON.stringify(w.calls.api).indexOf('["completeLesson","F27-L-002"]') > -1, JSON.stringify(w.calls.api));
+        ok('and the programme is re-read afterwards',
+          w.calls.api.filter(function (c) { return c[0] === 'programme'; }).length === 2, JSON.stringify(w.calls.api));
+      });
+    });
+  });
+}).then(function () {
   console.log('\nThe homepage tells the truth about the email sender');
   function noteFor(delivery) {
     var w = makeWorld({
@@ -433,6 +476,18 @@ settle(load(w1)).then(function () {
     return w.api.adminOverview();
   }).then(function () {
     ok('a console route carries the management token instead', seen[2].init.headers.Authorization === 'Bearer ADMIN-TOKEN', JSON.stringify(seen[2].init.headers));
+    return w.api.programme();
+  }).then(function () {
+    ok('the programme record is a participant route', /^api\/free2027\/programme$/.test(seen[3].url) &&
+      seen[3].init.headers.Authorization === 'Bearer PART-TOKEN', seen[3].url + ' ' + JSON.stringify(seen[3].init.headers));
+    return w.api.completeLesson('F27-L-002');
+  }).then(function () {
+    ok('a lesson is completed by POST to its own route', /^api\/free2027\/lessons\/F27-L-002\/complete$/.test(seen[4].url) && seen[4].init.method === 'POST',
+      seen[4].init.method + ' ' + seen[4].url);
+    return w.api.adminQuestions('Biology');
+  }).then(function () {
+    ok('the console question picker is the edition\'s own route', /^api\/free2027\/admin\/questions/.test(seen[5].url) &&
+      seen[5].init.headers.Authorization === 'Bearer ADMIN-TOKEN', seen[5].url);
     ok('and it is the same route the server guards', /^api\/free2027\/admin\/overview$/.test(seen[2].url), seen[2].url);
     ok('a refused request surfaces the server\'s own message', (function () {
       var w2 = world(function () { return Promise.resolve({ ok: false, status: 403, text: function () { return Promise.resolve('{"error":"Your role does not include this."}'); } }); });

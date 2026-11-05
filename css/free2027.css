@@ -185,3 +185,19 @@ body.f27-mode #landing .lp-actions::after {
 .f27-chip.ok { background: #ECFDF3; color: #027A48; }
 .f27-chip.warn { background: #FFFAEB; color: #B54708; }
 .f27-chip.no { background: #FEF2F2; color: #B91C1C; }
+
+/* ---- the candidate's programme card (lessons, progress, access) ---------- */
+.f27-programme { background: #fff; border: 1px solid #E4E7EC; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+.f27-prog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.f27-prog-head b { display: block; font-size: 15px; font-weight: 800; }
+.f27-prog-head span { font-size: 12px; color: #667085; }
+.f27-bar { height: 8px; border-radius: 999px; background: #F2F4F7; overflow: hidden; margin: 12px 0 8px; }
+.f27-bar i { display: block; height: 100%; background: linear-gradient(90deg, #DC2626, #F59E0B); border-radius: 999px; }
+.f27-programme .f27-fine { margin-bottom: 8px; }
+.f27-lesson { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid #F2F4F7; }
+.f27-lesson-main { flex: 1; min-width: 0; }
+.f27-lesson-main b { display: block; font-size: 13.5px; font-weight: 700; }
+.f27-lesson-main span { display: block; font-size: 11.5px; color: #667085; }
+.f27-lesson.done .f27-lesson-main b { color: #047857; }
+.f27-tick { font-size: 11.5px; font-weight: 800; color: #047857; white-space: nowrap; }
+.f27-small { font-size: 12px; padding: 6px 10px; }

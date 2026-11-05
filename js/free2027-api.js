@@ -99,6 +99,12 @@
       return request('POST', '/attempts/' + encodeURIComponent(String(attemptId)) + '/submit', { responses: responses || {} });
     },
     results: function () { return request('GET', '/results'); },
+    /* The candidate's own programme record: profile, enrolment, access, the
+       lesson catalogue and how far through it they are. */
+    programme: function () { return request('GET', '/programme'); },
+    completeLesson: function (id) {
+      return request('POST', '/lessons/' + encodeURIComponent(String(id)) + '/complete', {});
+    },
     leaderboards: function () { return request('GET', '/leaderboards'); },
     leaderboard: function (id) { return request('GET', '/leaderboards/' + encodeURIComponent(String(id))); },
 
@@ -134,6 +140,21 @@
     },
     attemptDetail: function (id) { return request('GET', '/admin/attempts/' + encodeURIComponent(String(id)), undefined, { admin: true }); },
     records: function () { return request('GET', '/admin/records', undefined, { admin: true }); },
+    /* The edition's own question picker. It reads the LOCAL bank on the server
+       (/api/free2027/admin/questions), never Appwrite — so activities can be
+       built on a box where the Appwrite Database API is unavailable. */
+    adminQuestions: function (subject) {
+      return request('GET', '/admin/questions' + (subject ? '?subject=' + encodeURIComponent(String(subject)) : ''), undefined, { admin: true });
+    },
+    adminLessons: function () { return request('GET', '/admin/lessons', undefined, { admin: true }); },
+    saveLesson: function (d, id) {
+      return id
+        ? request('PUT', '/admin/lessons/' + encodeURIComponent(String(id)), d || {}, { admin: true })
+        : request('POST', '/admin/lessons', d || {}, { admin: true });
+    },
+    deleteLesson: function (id) { return request('DELETE', '/admin/lessons/' + encodeURIComponent(String(id)), undefined, { admin: true }); },
+    adminProgress: function () { return request('GET', '/admin/progress', undefined, { admin: true }); },
+    adminAudit: function () { return request('GET', '/admin/audit', undefined, { admin: true }); },
     newSession: function (label, confirm) {
       return request('POST', '/admin/sessions/new', { label: label, confirm: confirm === true }, { admin: true });
     },

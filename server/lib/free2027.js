@@ -86,10 +86,10 @@ function ensureEdition(db, opts) {
   }
   var cur = ed.sessions.filter(function (s) { return s && s.id === ed.currentSessionId; })[0];
   if (!cur) { cur = ed.sessions[ed.sessions.length - 1]; ed.currentSessionId = cur.id; }
-  ['participants', 'activities', 'attempts', 'records'].forEach(function (k) {
+  ['participants', 'activities', 'attempts', 'records', 'lessons', 'audit'].forEach(function (k) {
     if (!Array.isArray(cur[k])) cur[k] = [];
   });
-  ['participantSeq', 'activitySeq', 'attemptSeq'].forEach(function (k) {
+  ['participantSeq', 'activitySeq', 'attemptSeq', 'lessonSeq'].forEach(function (k) {
     if (typeof cur[k] !== 'number') cur[k] = 0;
   });
 
@@ -184,6 +184,29 @@ function createFree2027(deps) {
     if (!Array.isArray(session.records)) session.records = [];
     session.records.unshift(Object.assign({ at: now() }, rec));
     if (session.records.length > 2000) session.records = session.records.slice(0, 2000);
+  }
+
+  /* Every participant carries a programme record of their own: the course they
+     enrolled on, the access the academy granted, and their progress. A record
+     written before these fields existed acquires them the first time it is
+     read (and is then saved with the next write) — additive, so nothing that
+     is already stored is rewritten or lost. */
+  function ensureParticipantProgramme(p) {
+    if (!p || typeof p !== 'object') return p;
+    var seen = Number(p.verifiedAt || p.createdAt) || now();
+    if (!p.enrolment || typeof p.enrolment !== 'object') {
+      p.enrolment = { course: String(p.course || ''), enrolledAt: seen, status: 'enrolled' };
+    }
+    if (!p.access || typeof p.access !== 'object') {
+      p.access = {
+        programme: '2027-free-tutorial',
+        grantedAt: seen,
+        status: p.active === false ? 'suspended' : 'active'
+      };
+    }
+    if (!p.progress || typeof p.progress !== 'object') p.progress = { lessons: {}, lastAt: null };
+    if (!p.progress.lessons || typeof p.progress.lessons !== 'object') p.progress.lessons = {};
+    return p;
   }
 
   /* Question records for an activity, read-only out of the hub's bank. */
@@ -364,8 +387,15 @@ function createFree2027(deps) {
           active: true,
           createdAt: t,
           verifiedAt: t,
-          lastSeenAt: t
+          lastSeenAt: t,
+          /* The programme record travels with the candidate from the moment
+             the address is proved: what they enrolled on, the access that was
+             granted, and an empty progress sheet to fill in. */
+          enrolment: { course: null, enrolledAt: t, status: 'enrolled' },
+          access: { programme: '2027-free-tutorial', grantedAt: t, status: 'active' },
+          progress: { lessons: {}, lastAt: null }
         };
+        p.enrolment.course = String(p.course || '');
         session.participants.push(p);
         pushRecord(session, { participantId: p.id, kind: 'register' });
       } else {
@@ -373,6 +403,7 @@ function createFree2027(deps) {
         p.lastSeenAt = t;
         p.verifiedAt = p.verifiedAt || t;
         if (!p.course && otp.course) p.course = otp.course;
+        ensureParticipantProgramme(p);
         pushRecord(session, { participantId: p.id, kind: 'login' });
       }
       writeData(db);
@@ -701,6 +732,82 @@ function createFree2027(deps) {
     return { results: rows };
   }
 
+  /* ------------------------------------------- the candidate's programme
+     One call for the portal: who they are, what they enrolled on, the access
+     they hold, how far through the lessons they are, and what their own
+     quizzes add up to. Everything is read from the participant's own record
+     and this session, so it survives a restart unchanged. */
+  function programme(data) {
+    var db = readData();
+    var ctx = sessionForCallerWithDb(db, data);
+    var p = findParticipant(ctx.session, data.id);
+    if (!p) throw FreeError(401, 'Your registration was not found. Please verify your email again.');
+    if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
+    ensureParticipantProgramme(p);
+    var submissions = ctx.session.attempts.filter(function (a) {
+      return a && String(a.participantId) === String(p.id) && a.submittedAt;
+    });
+    var percentSum = submissions.reduce(function (n, a) { return n + (Number(a.percent) || 0); }, 0);
+    return {
+      participant: rules.selfParticipant(p),
+      profile: {
+        id: p.id,
+        name: String(p.name || ''),
+        course: String(p.course || ''),
+        joinedAt: Number(p.createdAt) || null,
+        verifiedAt: Number(p.verifiedAt) || null,
+        lastSeenAt: Number(p.lastSeenAt) || null
+      },
+      enrolment: {
+        course: String((p.enrolment && p.enrolment.course) || p.course || ''),
+        enrolledAt: Number(p.enrolment && p.enrolment.enrolledAt) || null,
+        status: String((p.enrolment && p.enrolment.status) || 'enrolled')
+      },
+      access: {
+        programme: String((p.access && p.access.programme) || '2027-free-tutorial'),
+        grantedAt: Number(p.access && p.access.grantedAt) || null,
+        status: String((p.access && p.access.status) || (p.active === false ? 'suspended' : 'active'))
+      },
+      progress: rules.progressOf(p, ctx.session.lessons),
+      quizzes: {
+        submitted: submissions.length,
+        average: submissions.length ? Math.round(percentSum / submissions.length) : null,
+        best: submissions.length ? submissions.reduce(function (m, a) { return Math.max(m, Number(a.score) || 0); }, 0) : null,
+        lastAt: submissions.length ? submissions.reduce(function (m, a) { return Math.max(m, Number(a.submittedAt) || 0); }, 0) : null
+      },
+      session: { id: ctx.session.id, label: ctx.session.label },
+      mode: rules.activeMode(ctx.ed, ctx.ed.enabled)
+    };
+  }
+
+  /* A candidate marks a lesson done. Idempotent: marking it twice changes
+     nothing and consumes nothing, so a double tap or a reload is harmless. */
+  function completeLesson(data, lessonId) {
+    return locked(async function () {
+      var db = readData();
+      var ctx = sessionForCallerWithDb(db, data);
+      var p = findParticipant(ctx.session, data.id);
+      if (!p) throw FreeError(401, 'Your registration was not found. Please verify your email again.');
+      if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
+      ensureParticipantProgramme(p);
+      var id = String(lessonId == null ? '' : lessonId).trim();
+      var lesson = (ctx.session.lessons || []).filter(function (l) {
+        return l && String(l.id) === id && l.active !== false;
+      })[0];
+      if (!lesson) throw FreeError(404, 'That lesson is not part of this programme.');
+      if (p.progress.lessons[lesson.id]) {
+        return { completed: true, already: true, lesson: rules.publicLesson(lesson), progress: rules.progressOf(p, ctx.session.lessons) };
+      }
+      var t = now();
+      p.progress.lessons[lesson.id] = t;
+      p.progress.lastAt = t;
+      p.lastSeenAt = t;
+      pushRecord(ctx.session, { participantId: p.id, kind: 'lesson', lessonId: lesson.id });
+      writeData(db);
+      return { completed: true, already: false, lesson: rules.publicLesson(lesson), progress: rules.progressOf(p, ctx.session.lessons) };
+    });
+  }
+
   /* --------------------------------------------------------- leaderboards */
 
   /* Submitted attempts of one competition, as ranking rows. */
@@ -791,7 +898,9 @@ function createFree2027(deps) {
         activities: session.activities.length,
         published: published.length,
         attempts: session.attempts.length,
-        submitted: session.attempts.filter(function (a) { return a && a.submittedAt; }).length
+        submitted: session.attempts.filter(function (a) { return a && a.submittedAt; }).length,
+        lessons: (session.lessons || []).length,
+        audit: (session.audit || []).length
       },
       archives: (ed.archives || []).length,
       courses: (ed.courses || []).slice(),
@@ -860,8 +969,11 @@ function createFree2027(deps) {
       })
       .map(function (p) {
         var mine = session.attempts.filter(function (a) { return a && String(a.participantId) === String(p.id) && a.submittedAt; });
+        ensureParticipantProgramme(p);
+        var prog = rules.progressOf(p, session.lessons);
         return {
           id: p.id, name: p.name,
+          lessonsDone: prog.completed, lessonsTotal: prog.total, progressPercent: prog.percent,
           /* The console shows the address masked, the same as the candidate
              sees it. The CSV export is the deliberate way to obtain addresses. */
           email: rules.maskEmail(p.email),
@@ -905,6 +1017,128 @@ function createFree2027(deps) {
       writeData(db);
       return { ok: true };
     });
+  }
+
+  /* ------------------------------------------------------ programme lessons
+     Managed by the administrator (Founder and Academic Director through the
+     existing question-bank capability). Lessons are the programme's own
+     records; nothing is copied from the hub and nothing in the hub is written. */
+  function adminLessons() {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var rows = (session.lessons || []).map(rules.publicLesson);
+    return { lessons: rows, total: rows.length, session: { id: session.id, label: session.label } };
+  }
+
+  function saveLesson(body, id) {
+    return locked(async function () {
+      var db = readData();
+      var ed = edition(db);
+      var session = currentSession(ed);
+      var clean = rules.cleanLesson(body);
+      if (clean.error) throw FreeError(400, clean.error);
+      var t = now();
+      var existing = id ? (session.lessons || []).filter(function (l) { return l && String(l.id) === String(id); })[0] : null;
+      if (id && !existing) throw FreeError(404, 'That lesson was not found.');
+      var lesson;
+      if (existing) {
+        existing.title = clean.lesson.title;
+        existing.subject = clean.lesson.subject;
+        existing.summary = clean.lesson.summary;
+        if (body && body.active !== undefined) existing.active = body.active !== false;
+        existing.updatedAt = t;
+        lesson = existing;
+      } else {
+        if ((session.lessons || []).length >= rules.LESSON_MAX) {
+          throw FreeError(409, 'This session already holds the maximum of ' + rules.LESSON_MAX + ' lessons.');
+        }
+        session.lessonSeq = (session.lessonSeq || 0) + 1;
+        lesson = {
+          id: rules.lessonId(session.lessonSeq),
+          title: clean.lesson.title,
+          subject: clean.lesson.subject,
+          summary: clean.lesson.summary,
+          order: (session.lessons || []).length + 1,
+          active: true,
+          createdAt: t,
+          updatedAt: t
+        };
+        session.lessons.push(lesson);
+      }
+      writeData(db);
+      return { lesson: rules.publicLesson(lesson), created: !existing };
+    });
+  }
+
+  function deleteLesson(id) {
+    return locked(async function () {
+      var db = readData();
+      var ed = edition(db);
+      var session = currentSession(ed);
+      var lesson = (session.lessons || []).filter(function (l) { return l && String(l.id) === String(id); })[0];
+      if (!lesson) throw FreeError(404, 'That lesson was not found.');
+      /* Removed from the catalogue only: a candidate's completion stamp stays
+         on their own record, so deleting a lesson never rewrites history. */
+      session.lessons = session.lessons.filter(function (l) { return String(l.id) !== String(lesson.id); });
+      writeData(db);
+      return { ok: true, id: String(lesson.id) };
+    });
+  }
+
+  /* Every candidate's progress in one place, for the console. */
+
+  function adminProgress() {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var lessons = session.lessons || [];
+    var rows = session.participants.filter(Boolean).map(function (p) {
+      ensureParticipantProgramme(p);
+      var prog = rules.progressOf(p, lessons);
+      var mine = session.attempts.filter(function (a) {
+        return a && String(a.participantId) === String(p.id) && a.submittedAt;
+      });
+      var percentSum = mine.reduce(function (n, a) { return n + (Number(a.percent) || 0); }, 0);
+      return {
+        id: p.id, name: String(p.name || ''), course: String(p.course || ''),
+        active: p.active !== false,
+        lessonsDone: prog.completed, lessonsTotal: prog.total, percent: prog.percent,
+        quizzes: mine.length,
+        average: mine.length ? Math.round(percentSum / mine.length) : null,
+        lastAt: Number((p.progress && p.progress.lastAt) || p.lastSeenAt) || null
+      };
+    });
+    return {
+      participants: rows, total: rows.length, lessons: lessons.length,
+      session: { id: session.id, label: session.label }
+    };
+  }
+
+  /* -------------------------------------------------- programme audit records
+     Written by the server after an administrative change succeeds. The actor
+     is the staff account that made the call; nothing secret is ever stored. */
+  function recordAudit(actor, action, target, detail) {
+    /* Synchronous on purpose, and called from the server's response hook after
+       the handler's own write has finished — exactly the pattern the hub's
+       manager log already uses. A logging fault must never break the request,
+       so the caller wraps it; here we only ever append. */
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var entry = rules.auditEntry(actor, action, target, detail, now());
+    rules.pushAudit(session, entry);
+    writeData(db);
+    return entry;
+  }
+
+  function auditLog(query) {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var limit = Math.max(1, Math.min(500, Number((query && query.limit) || 100)));
+    var rows = (session.audit || []).slice(0, limit);
+    return { entries: rows, total: (session.audit || []).length, session: { id: session.id, label: session.label } };
   }
 
   /* Deliberate, administrator-only export. This is the one place a full email
@@ -1284,6 +1518,15 @@ function createFree2027(deps) {
     publishedLeaderboards: publishedLeaderboards,
     /* admin */
     adminOverview: adminOverview,
+    /* programme records: the candidate's own view, lessons, progress, audit */
+    programme: programme,
+    completeLesson: completeLesson,
+    adminLessons: adminLessons,
+    saveLesson: saveLesson,
+    deleteLesson: deleteLesson,
+    adminProgress: adminProgress,
+    recordAudit: recordAudit,
+    auditLog: auditLog,
     setMode: setMode,
     setEdition: setEdition,
     setCourses: setCourses,
