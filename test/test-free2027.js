@@ -21,7 +21,7 @@ ok('switched OFF the site is in Original Mode whatever is stored', f.activeMode(
 ok('switched ON the stored mode is used', f.activeMode({ enabled: true, mode: 'free2027' }, true) === 'free2027');
 ok('a corrupt stored mode cannot leave the site without a homepage', f.activeMode({ enabled: true, mode: '???' }, true) === 'original');
 ok('when the feature is off there is no edition at all', f.activeMode({ enabled: true, mode: 'free2027' }, false) === 'original');
-ok('six free-tutorial screens are declared', f.SCREENS.length === 6 && f.isFreeScreen('free-portal') && !f.isFreeScreen('home'));
+ok('seven free-tutorial screens are declared', f.SCREENS.length === 7 && f.isFreeScreen('free-portal') && f.isFreeScreen('free-login') && !f.isFreeScreen('home'));
 
 head('participant records and the email rule');
 ok('a name is required', f.cleanName('').error && f.cleanName('A').error, 'short name accepted');
@@ -33,9 +33,10 @@ ok('a good address is accepted and lower-cased', f.cleanEmail(' Ada.Obi@Example.
 });
 ok('a course is required', !!f.cleanCourse('').error && f.cleanCourse('Law').course === 'Law');
 ok('the console course list is de-duplicated and trimmed', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join() === 'Law,Physics', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join());
-ok('participant IDs preserve a random non-sequential identifier', f.participantId('0123456789abcdefabcd') === 'GOC-F27-0123456789ABCDEFABCD');
-ok('only the 80-bit random ID shape is accepted', f.isParticipantId('GOC-F27-0123456789ABCDEFABCD') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-0001'));
-var pub = f.publicParticipant({ id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
+ok('student identifiers are sequential GOC-F-NNN from 001', f.studentId(1) === 'GOC-F-001' && f.studentId(2) === 'GOC-F-002' && f.studentId(12) === 'GOC-F-012' && f.studentId(1234) === 'GOC-F-1234' && f.participantId(3) === 'GOC-F-003');
+ok('only the sequential GOC-F-NNN shape is accepted', f.isParticipantId('GOC-F-001') && f.isParticipantId('GOC-F-1234') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-0001') && !f.isParticipantId('GOC-F-1') && !f.isParticipantId('ada@example.com'));
+ok('the sequence number is recovered from an identifier', f.idSeqOf('GOC-F-007') === 7 && f.idSeqOf('GOC-F27-ABC') === 0 && f.idSeqOf('') === 0);
+var pub = f.publicParticipant({ id: 'GOC-F-001', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
 ok('a public participant carries no email address and no code', JSON.stringify(pub).indexOf('@') < 0 && !pub.otp, JSON.stringify(pub));
 ok('the address is masked even for the candidate themselves', f.maskEmail('ada.obi@example.com').indexOf('ada.obi') < 0 && /@example\.com$/.test(f.maskEmail('ada.obi@example.com')), f.maskEmail('ada.obi@example.com'));
 

@@ -79,6 +79,16 @@
         return r;
       });
     },
+    /* Email + password login. The token this returns is the authenticated
+       session; it is kept in sessionStorage, so a normal browser refresh
+       keeps the student signed in (the server persists it too). Logout removes
+       it on both sides. */
+    login: function (d) {
+      return request('POST', '/login', d || {}).then(function (r) {
+        if (r && r.token) rememberToken(r.token);
+        return r;
+      });
+    },
 
     /* ---- the participant's own side -------------------------------------- */
     hasToken: function () { return !!participantToken; },

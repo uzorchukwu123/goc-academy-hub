@@ -67,7 +67,7 @@
   /* The free-tutorial screens. In 2027 Free Tutorial Mode a browser may sit on
      one of these and nothing else (plus the homepage, the admin gate and the
      password-change screen a manager is forced through). */
-  var SCREENS = ['free-home', 'free-register', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard'];
+  var SCREENS = ['free-home', 'free-register', 'free-login', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard'];
   function isFreeScreen(id) { return SCREENS.indexOf(String(id)) > -1; }
 
   /* ------------------------------------------------- 2. participant records */
@@ -134,16 +134,41 @@
     return out.slice(0, 60);
   }
 
-  /* A participant ID is generated on the server from cryptographically random
-     bytes. It is deliberately non-sequential and carries no personal data or
-     registration count. The server checks persisted IDs before accepting it;
-     this helper only formats/validates its public shape. */
-  var ID_RE = /^GOC-F27-[A-F0-9]{20}$/;
+  /* A student identifier is SEQUENTIAL and permanent: the first registered
+     student of the programme is GOC-F-001, the next GOC-F-002, and so on.
+     The sequence is allocated on the server inside the data lock (so two
+     simultaneous registrations can never receive the same number), the issued
+     numbers are remembered forever in db.free2027.studentIds (so a deleted
+     student's number is never handed out again), and the identifier never
+     changes for the life of the programme. It carries no personal data and
+     is never an email address or an internal database ID. */
+  var ID_RE = /^GOC-F-\d{3,}$/;
   function isParticipantId(v) { return ID_RE.test(String(v == null ? '' : v).trim().toUpperCase()); }
-  function participantId(randomHex) {
-    var value = String(randomHex == null ? '' : randomHex).toUpperCase();
-    if (!/^[A-F0-9]{20}$/.test(value)) throw new Error('A 20-character cryptographic ID value is required.');
-    return 'GOC-F27-' + value;
+  function studentId(n) {
+    var k = Math.max(1, Math.floor(Number(n) || 1));
+    var s = String(k);
+    while (s.length < 3) s = '0' + s;
+    return 'GOC-F-' + s;
+  }
+  /* The highest sequence number already represented by an identifier. */
+  function idSeqOf(id) {
+    var m = /^GOC-F-(\d+)$/.exec(String(id == null ? '' : id).trim().toUpperCase());
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  /* Kept as an alias: the old name of studentId(). */
+  function participantId(n) { return studentId(n); }
+
+  /* The registration password. It is stored only as a salted scrypt hash on
+     the server; this rule just makes sure a real password was chosen. */
+  var PASSWORD_MIN = 8;
+  var PASSWORD_MAX = 72;
+  function cleanPassword(v) {
+    var s = String(v == null ? '' : v);
+    if (!s) return { error: 'Choose a password of at least ' + PASSWORD_MIN + ' characters.' };
+    if (s.length < PASSWORD_MIN) return { error: 'Choose a password of at least ' + PASSWORD_MIN + ' characters.' };
+    if (s.length > PASSWORD_MAX) return { error: 'A password cannot be longer than ' + PASSWORD_MAX + ' characters.' };
+    if (!/[a-zA-Z]/.test(s) || !/\d/.test(s)) return { error: 'Use a password with both letters and numbers.' };
+    return { password: s };
   }
 
   /* The shape the PUBLIC side of the site may hold. No email address, no OTP,
@@ -619,7 +644,12 @@
     cleanCourse: cleanCourse,
     cleanCourseList: cleanCourseList,
     isParticipantId: isParticipantId,
+    studentId: studentId,
     participantId: participantId,
+    idSeqOf: idSeqOf,
+    PASSWORD_MIN: PASSWORD_MIN,
+    PASSWORD_MAX: PASSWORD_MAX,
+    cleanPassword: cleanPassword,
     publicParticipant: publicParticipant,
     selfParticipant: selfParticipant,
     maskEmail: maskEmail,

@@ -101,10 +101,23 @@
   function panel() {
     return '<div class="ad-card"><div class="ad-h">2027 Free Tutorial Management</div>' +
       '<p class="ad-p">The temporary 2027 Free Tutorial Edition runs beside the hub, on its own records ' +
-      '(<b>GOC-F27-…</b> participants), its own activities and its own sessions. Nothing here reads or changes a ' +
-      'G.O.C student, attempt or staff record.</p>' +
+      '(<b>GOC-F-…</b> students), its own activities and its own sessions. Nothing here reads or changes a ' +
+      'G.O.C student, attempt or staff record. The website mode itself is switched from the separate ' +
+      '<b>Website Mode Control</b> function.</p>' +
       '<div class="ad-seg" id="f27AdmTabs">' + tabsHtml() + '</div>' +
       '<div id="f27AdmBody"><div class="ad-loading">Reading the programme…</div></div></div>';
+  }
+  /* The SEPARATE Website Mode Control function: one panel, one job — switching
+     the public site between Original G.O.C Academy Hub and the 2027 Free
+     Tutorial Edition. Founder only (the server refuses the route for every
+     other role as well). */
+  function modePanel() {
+    return '<div class="ad-card"><div class="ad-h">Website Mode Control</div>' +
+      '<p class="ad-p">Switch the whole website between the original G.O.C Academy Hub and the 2027 Free ' +
+      'Tutorial Edition. The switch is stored with the site data and survives server restarts; it changes ' +
+      'nothing else — every G.O.C record, question and setting stays exactly where it is, and switching back ' +
+      'restores the complete original experience.</p>' +
+      '<div id="f27ModeBody"><div class="ad-loading">Reading the mode…</div></div></div>';
   }
   function tabsHtml() {
     var tabs = [['mode', 'Programme settings'], ['participants', 'Participants'], ['activities', 'Activities'],
@@ -128,22 +141,30 @@
      and the tile is added to the console's tile list. Both are additive: the
      hub's other twenty-seven sections are untouched. */
   A.mount = function () {
-    /* One extra tile, drawn beside the console's own twenty-seven. It is added
-       at runtime rather than to ADM_TILE_META so that the hub's section rule,
-       its tile grid and the tests that pin their number stay exactly as they
-       are: the edition's records are not a console section in the capability
-       map, they are a temporary programme, and every one of its routes carries
-       its own guard on the server. */
-    if (!mayManageProgramme()) return;
+    /* Two extra tiles, drawn beside the console's own twenty-seven, are added at
+       runtime rather than to ADM_TILE_META so that the hub's section rule, its
+       tile grid and the tests that pin their number stay exactly as they are:
+       the edition's records are not console sections in the capability map,
+       they are a temporary programme, and every one of its routes carries its
+       own guard on the server.
+
+       ROOT-CAUSE FIX: the wrappers must be installed UNCONDITIONALLY. The
+       previous version bailed out here when nobody was signed in yet — which
+       is exactly the state at DOMContentLoaded, before the administrator has
+       logged in — so the wrappers were never installed and the tiles never
+       appeared in the running console. The role checks now happen inside the
+       wrappers, at the moment the menu is painted or a tile is clicked, when
+       global.admMe is populated. */
     var open = global.admOpen;
     if (typeof open === 'function' && !open.__f27) {
       var wrapped = function (section) {
-        if (section === 'free2027') {
-          if (!mayManageProgramme()) { say('The Free Tutorial Console is for the Founder and Academic Director.'); return; }
+        if (section === 'free2027' || section === 'websitemode') {
+          if (section === 'free2027' && !mayManageProgramme()) { say('The 2027 Free Tutorial Management console is for the Founder and Academic Director.'); return; }
+          if (section === 'websitemode' && !isFounder()) { say('Website Mode Control is for the Founder only.'); return; }
           var b = $('admSheetBody'), back = $('admSheetBack'), sheet = $('admSheet'), title = $('admSheetTitle');
           if (b) {
-            if (title) title.textContent = '2027 Free Tutorial';
-            b.innerHTML = panel();
+            if (title) title.textContent = section === 'websitemode' ? 'Website Mode Control' : '2027 Free Tutorial Management';
+            b.innerHTML = section === 'websitemode' ? modePanel() : panel();
             b.scrollTop = 0;
             if (back) back.classList.add('show');
             if (sheet) sheet.classList.add('show');
@@ -153,9 +174,10 @@
           if (nav) {
             var tiles = nav.querySelectorAll('.adm-tile');
             for (var i = 0; i < tiles.length; i++) {
-              tiles[i].classList.toggle('active', tiles[i].getAttribute('data-section') === 'free2027');
+              tiles[i].classList.toggle('active', tiles[i].getAttribute('data-section') === section);
             }
           }
+          if (section === 'websitemode') { global.f27ModeLoad(); return; }
           A.tab = 'mode';
           global.f27AdmLoad();
           return;
@@ -170,12 +192,21 @@
     if (typeof apply === 'function' && !apply.__f27) {
       var painted = function () {
         var out = apply.apply(this, arguments);
-        if (!mayManageProgramme()) return out;
+        /* admMenuApply rebuilds the tile grid from scratch on every call, so the
+           edition's tiles are re-added on every paint — but only for a role
+           that may see them, checked NOW, not at boot. */
         var nav = $('admTileNav');
-        if (nav && nav.innerHTML.indexOf('data-section="free2027"') < 0) {
-          nav.insertAdjacentHTML('beforeend',
-            '<button class="adm-tile" data-section="free2027" onclick="admOpen(\'free2027\')" aria-label="2027 Free Tutorial">' +
-            '<span class="at-label">2027 Free Tutorial</span></button>');
+        if (nav) {
+          if (mayManageProgramme() && nav.innerHTML.indexOf('data-section="free2027"') < 0) {
+            nav.insertAdjacentHTML('beforeend',
+              '<button class="adm-tile" data-section="free2027" onclick="admOpen(\'free2027\')" aria-label="2027 Free Tutorial Management">' +
+              '<span class="at-label">2027 Free Tutorial Management</span></button>');
+          }
+          if (isFounder() && nav.innerHTML.indexOf('data-section="websitemode"') < 0) {
+            nav.insertAdjacentHTML('beforeend',
+              '<button class="adm-tile" data-section="websitemode" onclick="admOpen(\'websitemode\')" aria-label="Website Mode Control">' +
+              '<span class="at-label">Website Mode Control</span></button>');
+          }
         }
         return out;
       };
@@ -221,15 +252,8 @@
           (o.otpDelivery && o.otpDelivery.available ? 'Email (SMTP configured)' :
             'Email verification not configured — registration is unavailable') +
         '</b></div>' +
-        '<p class="ad-note">Original Mode restores the full G.O.C Academy Hub and every one of its features. ' +
-        '2027 Free Tutorial Mode shows the homepage and the CBT Portal only — weekly assessments, competitions and the ' +
-        'competition leaderboard. Switching either way deletes nothing: every G.O.C record, question and setting stays exactly where it is.</p>' +
-        (isFounder()
-          ? '<div class="ad-actions">' +
-              '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
-              '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
-            '</div>'
-          : '<p class="ad-note">Only the Founder can change site mode or edition-wide settings. Academic programme content and reports remain available to you.</p>') +
+        '<p class="ad-note">The website mode is switched from the separate <b>Website Mode Control</b> console ' +
+        'function, which only the Founder may use. Academic programme content and reports remain available here.</p>' +
         '<div class="ad-grid2" style="margin-top:14px">' +
           '<div class="ad-field"><label>Course list (one per line)</label>' +
             '<textarea id="f27Courses" rows="7">' + esc((o.courses || []).join('\n')) + '</textarea></div>' +
@@ -261,6 +285,7 @@
       : '\n\nEvery feature of the G.O.C Academy Hub comes straight back, exactly as it was.'))) return;
     api.setMode(mode, true).then(function (r) {
       say('Website is now in ' + r.label);
+      global.f27ModeLoad();
       loadMode();
       if (global.GOC && GOC.freeUI && GOC.freeUI.applyMode) {
         /* The console is looking at the site it just changed, so the new mode is
@@ -269,6 +294,40 @@
       }
     }, function (er) {
       say(er.message || 'The mode could not be changed.');
+    });
+  };
+
+  /* The Website Mode Control panel: the current mode, and the two switch
+     buttons. Rendered only for the Founder — the tile itself is only injected
+     for the Founder, and the server route refuses every other role. */
+  global.f27ModeLoad = function () {
+    var host = $('f27ModeBody');
+    if (!host) return;
+    if (!isFounder()) {
+      host.innerHTML = '<p class="ad-warn">Website Mode Control is for the Founder only.</p>';
+      return;
+    }
+    host.innerHTML = '<div class="ad-loading">Reading the mode…</div>';
+    api.adminOverview().then(function (o) {
+      A.overview = o;
+      var on = o.enabled === true;
+      var free = o.mode === rules.MODE_FREE && on;
+      host.innerHTML =
+        '<div class="ad-metric"><span>Current website mode</span><b>' + esc(rules.modeLabel(o.mode)) + '</b></div>' +
+        '<div class="ad-metric"><span>2027 edition</span><b>' + (on ? 'Active' : 'Switched off') + '</b></div>' +
+        '<p class="ad-note">Original Mode restores the full G.O.C Academy Hub and every one of its features. ' +
+        '2027 Free Tutorial Mode shows the homepage and the CBT Portal only — weekly assessments, competitions and the ' +
+        'competition leaderboard. Switching either way deletes nothing: every G.O.C record, question and setting stays exactly where it is, ' +
+        'and the switch is stored with the site data, so it survives server restarts.</p>' +
+        '<div class="ad-actions">' +
+          '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
+          '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
+        '</div>' +
+        '<div class="ad-actions" style="margin-top:6px">' +
+          '<button class="ad-btn" onclick="f27AdmReloadSite()">Reload the public site</button>' +
+        '</div>';
+    }, function (er) {
+      host.innerHTML = failText(er);
     });
   };
 

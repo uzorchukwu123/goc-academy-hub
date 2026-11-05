@@ -110,8 +110,8 @@ function mailedCode(email) {
   var match = mail && String(mail.message.text || '').match(/verification code is (\d{6})/i);
   return match ? match[1] : null;
 }
-function register(name, email) {
-  return call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Medicine and Surgery' })
+function register(name, email, password) {
+  return call('POST', '/api/free2027/register/start', { name: name, email: email, password: password || 'Passw0rd-123', course: 'Medicine and Surgery' })
     .then(function (r) {
       var code = mailedCode(email);
       if (r.status !== 200 || !code) return Promise.reject(new Error('verification email missing: ' + r.raw));
@@ -128,7 +128,7 @@ waitForBoot(40).then(async function (h) {
   ok('the server is up', h.status === 200, h.raw);
   ok('the health check names the mode', h.body && h.body.free2027 && h.body.free2027.on === true && h.body.free2027.mode === 'free2027', h.raw);
   var cfg = await call('GET', '/api/free2027/config');
-  ok('the public config lists both modes and the six screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 6, cfg.raw.slice(0, 120));
+  ok('the public config lists both modes and the seven screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 7, cfg.raw.slice(0, 120));
   ok('the config carries no participant, address or code', cfg.raw.indexOf('@') < 0 && cfg.raw.indexOf('otpCode') < 0);
   ok('the test mail provider is configured and the public config exposes availability only',
     cfg.body.otpDelivery && cfg.body.otpDelivery.available === true && cfg.body.otpDelivery.devAllowed === undefined,
@@ -145,20 +145,20 @@ waitForBoot(40).then(async function (h) {
   head('registration: a code is required before anything exists');
   var noCode = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: '123456' });
   ok('verifying without ever asking for a code is refused', noCode.status === 400, noCode.status);
-  var badEmail = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'not-an-email', course: 'Law' });
+  var badEmail = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'not-an-email', password: 'Passw0rd-123', course: 'Law' });
   ok('a malformed address is refused', badEmail.status === 400, badEmail.raw);
-  var start1 = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
+  var start1 = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', password: 'AdaPass-2027', course: 'Medicine and Surgery' });
   var code1 = mailedCode('ada@example.com');
   ok('registration sends a real verification email to the submitted address', start1.status === 200 && start1.body.delivered === true && !!code1 && latestMail('ada@example.com').message.to === 'ada@example.com', start1.raw);
   ok('the public response never contains the verification code', start1.raw.indexOf(code1) < 0 && start1.body.devCode === undefined && start1.body.code === undefined, start1.raw);
   ok('the email has the academy identity and expiry guidance', /G\.O\.C Academy Hub/.test(latestMail('ada@example.com').message.text) && /expires in \d+ minutes/.test(latestMail('ada@example.com').message.text), latestMail('ada@example.com').message.text);
   ok('nothing was created by asking for a code', dataFile().free2027.sessions[0].participants.length === 0);
-  var again = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
+  var again = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', password: 'AdaPass-2027', course: 'Medicine and Surgery' });
   ok('a second code within the resend window is rate limited', again.status === 429, again.raw);
   /* Advance only the persisted resend timestamp so this test remains fast. */
   var otpDb = dataFile(); otpDb.free2027.otps[otpDb.free2027.otps.length - 1].createdAt = Date.now() - 61000;
   fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(otpDb));
-  var resent = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Medicine and Surgery' });
+  var resent = await call('POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', password: 'AdaPass-2027', course: 'Medicine and Surgery' });
   var code2 = mailedCode('ada@example.com');
   ok('resending after the cooldown sends a fresh email', resent.status === 200 && resent.body.delivered === true && !!code2, resent.raw);
   var wrongCode = code2 === '000000' ? '000001' : '000000';
@@ -167,7 +167,7 @@ waitForBoot(40).then(async function (h) {
   var old = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code1 });
   ok('the older code is rejected after a resend', old.status === 403, old.raw);
   var good = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code2 });
-  ok('the emailed code verifies and issues a cryptographically random student ID', good.status === 200 && /^GOC-F27-[A-F0-9]{20}$/.test(good.body.participant.id), good.raw.slice(0, 160));
+  ok('the emailed code verifies and issues the first sequential student ID GOC-F-001', good.status === 200 && good.body.participant.id === 'GOC-F-001', good.raw.slice(0, 160));
   ok('the candidate is told their own address only masked', good.body.participant.email.indexOf('ada@') < 0 && /@example\.com$/.test(good.body.participant.email), good.body.participant.email);
   ok('the code cannot be used twice', (await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: code2 })).status === 400);
   ada = { token: good.body.token, participant: good.body.participant };
@@ -175,11 +175,45 @@ waitForBoot(40).then(async function (h) {
   ok('verification codes are stored only as salted hashes', stored.free2027.otps.every(function (o) { return o.hash && String(o.hash).length === 64; }) && JSON.stringify(stored.free2027.otps).indexOf(code2) < 0);
   ben = await register('Ben Eze', 'ben@example.com').then(function (r) { return { token: r.body.token, participant: r.body.participant }; });
   cat = await register('Cat Musa', 'cat@example.com').then(function (r) { return { token: r.body.token, participant: r.body.participant }; });
-  ok('each verified participant gets their own ID', ada.participant.id !== ben.participant.id && ben.participant.id !== cat.participant.id);
+  ok('each verified participant gets their own sequential ID', ada.participant.id === 'GOC-F-001' && ben.participant.id === 'GOC-F-002' && cat.participant.id === 'GOC-F-003',
+    [ada.participant.id, ben.participant.id, cat.participant.id].join(','));
+  ok('the password is stored only as a scrypt hash, never plaintext', (function () {
+    var p = dataFile().free2027.sessions[0].participants.filter(function (x) { return x.email === 'ada@example.com'; })[0];
+    return !!p && /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(p.passwordHash || '') && JSON.stringify(dataFile().free2027).indexOf('AdaPass-2027') < 0;
+  })());
+
+  head('login with email and password, and logout');
+  var wrongPw = await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'WrongPass-999' });
+  ok('a wrong password is refused', wrongPw.status === 403 && /not right/.test(wrongPw.raw), wrongPw.raw);
+  var unknownMail = await call('POST', '/api/free2027/login', { email: 'nobody@example.com', password: 'Whatever-1' });
+  ok('an unknown address gets the same answer (no enumeration)', unknownMail.status === 403 && unknownMail.raw === wrongPw.raw, unknownMail.raw);
+  var noPw = await call('POST', '/api/free2027/login', { email: 'ada@example.com' });
+  ok('a missing password is refused', noPw.status === 400, noPw.raw);
+  var dup = await call('POST', '/api/free2027/register/start', { name: 'Ada Again', email: 'ada@example.com', password: 'Another-2027', course: 'Law' });
+  ok('a duplicate registration for a verified address is refused', dup.status === 409, dup.raw);
+  var login1 = await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'AdaPass-2027' });
+  ok('email + password logs in and issues a session', login1.status === 200 && !!login1.body.token && login1.body.participant.id === 'GOC-F-001', login1.raw.slice(0, 160));
+  ok('the session opens the dashboard and keeps the permanent identifier', (await call('GET', '/api/free2027/me', undefined, login1.body.token)).body.participant.id === 'GOC-F-001');
+  ok('the session is persisted in db.free2027 (survives refresh/restart)', (function () {
+    var s = dataFile().free2027.authSessions || [];
+    return s.length >= 1 && s.every(function (x) { return /^[a-f0-9]{64}$/.test(x.tokenHash); }) && JSON.stringify(s).indexOf(login1.body.token) < 0;
+  })());
+  var out1 = await call('POST', '/api/free2027/logout', {}, login1.body.token);
+  ok('logout succeeds', out1.status === 200, out1.raw);
+  ok('after logout the old session token is dead (no automatic re-login)', (await call('GET', '/api/free2027/me', undefined, login1.body.token)).status === 401);
+  ok('and only that session record was destroyed (the registration session is untouched)', (function () {
+    var crypto = require('crypto');
+    var s = dataFile().free2027.authSessions || [];
+    var dead = crypto.createHash('sha256').update(login1.body.token).digest('hex');
+    return s.every(function (x) { return x.tokenHash !== dead; });
+  })());
+  var login2 = await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'AdaPass-2027' });
+  ok('fresh authentication after logout works', login2.status === 200 && !!login2.body.token && login2.body.token !== login1.body.token, login2.status + ' ' + login2.raw.slice(0, 120));
+  ok('the identifier is unchanged across logout and re-login', !!(login2.body && login2.body.participant && login2.body.participant.id === 'GOC-F-001'), login2.raw.slice(0, 160));
   var stored = dataFile();
   ok('the stored record keeps the address (it is private, not absent)', /ada@example\.com/.test(JSON.stringify(stored.free2027)));
   ok('the permanent ID is associated with the student email in the Free Tutorial registry', stored.free2027.studentIds.indexOf(ada.participant.id) > -1 && stored.free2027.studentIdsByEmail['ada@example.com'] === ada.participant.id);
-  var expiredStart = await call('POST', '/api/free2027/register/start', { name: 'Zed Obi', email: 'zed@example.com', course: 'Law' });
+  var expiredStart = await call('POST', '/api/free2027/register/start', { name: 'Zed Obi', email: 'zed@example.com', password: 'Passw0rd-123', course: 'Law' });
   var expiredCode = mailedCode('zed@example.com');
   var expiredDb = dataFile();
   expiredDb.free2027.otps.filter(function (o) { return o.email === 'zed@example.com'; }).forEach(function (o) { o.expiresAt = Date.now() - 1; });
@@ -188,14 +222,14 @@ waitForBoot(40).then(async function (h) {
   ok('an expired email verification code is rejected', expiredStart.status === 200 && expiredVerify.status === 400, expiredVerify.raw);
   var burstOk = true;
   for (var oi = 0; oi < 6; oi++) {
-    var br = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', course: 'Law' });
+    var br = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', password: 'Passw0rd-123', course: 'Law' });
     if (br.status !== 200) burstOk = false;
     var burstDb = dataFile();
     var burstRows = burstDb.free2027.otps.filter(function (o) { return o.email === 'limit@example.com'; });
     if (burstRows.length) burstRows[burstRows.length - 1].createdAt = Date.now() - 61000;
     fs.writeFileSync(path.join(DATA, 'data.json'), JSON.stringify(burstDb));
   }
-  var limited = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', course: 'Law' });
+  var limited = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', password: 'Passw0rd-123', course: 'Law' });
   ok('verification email requests have an hourly per-address cap', burstOk && limited.status === 429, limited.raw);
 
   head('the administrator creates and schedules the activities');
@@ -210,7 +244,7 @@ waitForBoot(40).then(async function (h) {
   }, adm);
   ok('an activity is created as a draft', draft.status === 200 && draft.body.activity.status === 'draft' && /^F27-Q\d+$/.test(draft.body.activity.id), draft.raw.slice(0, 160));
   weeklyId = draft.body.activity.id;
-  ok('a draft is not on a candidate\'s list', (await call('GET', '/api/free2027/activities', undefined, ada.token)).body.activities.length === 0);
+  var dbgAct = await call('GET', '/api/free2027/activities', undefined, ada.token); ok('a draft is not on a candidate\'s list', dbgAct.status === 200 && dbgAct.body.activities.length === 0, dbgAct.status + ' ' + dbgAct.raw.slice(0,200));
   var noQuestions = await call('POST', '/api/free2027/admin/activities', { kind: 'weekly', title: 'Empty', opensAt: t, closesAt: t + 1000, durationMin: 10, maxAttempts: 1, questionIds: [] }, adm);
   ok('an activity with no questions cannot be created', noQuestions.status === 400, noQuestions.raw);
   var badWindow = await call('POST', '/api/free2027/admin/activities', { kind: 'weekly', title: 'Backwards', opensAt: t + 5000, closesAt: t + 1000, durationMin: 10, maxAttempts: 1, questionIds: ids }, adm);
@@ -298,6 +332,25 @@ waitForBoot(40).then(async function (h) {
   }
   for (var j = 0; j < extra.length; j++) await sit(extra[j], j < 7 ? 1 : 0);
   ok('the competition field is now larger than ten', extra.length === 8);
+
+  head('simultaneous registrations still get unique sequential identifiers');
+  await (function () {
+    var starts = [];
+    for (var ci = 0; ci < 5; ci++) {
+      starts.push(call('POST', '/api/free2027/register/start', { name: 'Conc ' + ci, email: 'conc' + ci + '@example.com', password: 'Concpass-1', course: 'Law' }));
+    }
+    return Promise.all(starts).then(function (rs) {
+      var codes = rs.map(function (r, i) { return { email: 'conc' + i + '@example.com', code: mailedCode('conc' + i + '@example.com') }; });
+      return Promise.all(codes.map(function (c) {
+        return call('POST', '/api/free2027/register/verify', { email: c.email, code: c.code });
+      })).then(function (vs) {
+        var ids = vs.map(function (v) { return v.body && v.body.participant && v.body.participant.id; }).sort();
+        ok('five simultaneous registrations all verify', vs.every(function (v) { return v.status === 200; }), vs.map(function (v) { return v.status; }).join(','));
+        ok('and receive five distinct sequential IDs GOC-F-012…GOC-F-016',
+          ids.join(',') === 'GOC-F-012,GOC-F-013,GOC-F-014,GOC-F-015,GOC-F-016', ids.join(','));
+      });
+    });
+  })();
   var results = await call('GET', '/api/free2027/admin/activities/' + compId + '/results', undefined, adm);
   ok('the console lists every submitted paper with a rank', results.status === 200 && results.body.rows.length === 11, results.raw.slice(0, 160));
   ok('the ranking puts the highest score first', results.body.top[0].participantId === ada.participant.id && results.body.top[0].score === 4, JSON.stringify(results.body.top[0]));
@@ -358,7 +411,7 @@ waitForBoot(40).then(async function (h) {
   ok('and the health check agrees, so the page restores the hub', h2.body.free2027.mode === 'original' && h2.body.free2027.on === true);
   ok('the original hub still answers while the edition is in Original Mode',
     (await call('GET', '/api/updates')).status === 200);
-  ok('the edition\'s own data is untouched by the switch', dataFile().free2027.sessions[0].participants.length === 11);
+  ok('the edition\'s own data is untouched by the switch', dataFile().free2027.sessions[0].participants.length === 16);
   ok('switching back is one call', (await call('PUT', '/api/free2027/admin/mode', { mode: 'free2027', confirm: true }, adm)).body.mode === 'free2027');
 
   head('programme records: lessons, progress and the audit trail');
@@ -416,7 +469,7 @@ waitForBoot(40).then(async function (h) {
   var adaRow = (plist.body.participants || []).filter(function (p) { return p.id === ada.participant.id; })[0];
   ok('the participant list carries each candidate\'s lesson progress', !!adaRow && adaRow.lessonsDone === 1 && adaRow.lessonsTotal === 2, JSON.stringify(adaRow && { d: adaRow.lessonsDone, t: adaRow.lessonsTotal }));
   var prog = await call('GET', '/api/free2027/admin/progress', undefined, acadT);
-  ok('the progress view lists every candidate', prog.status === 200 && prog.body.participants.length === 11 && prog.body.lessons === 2, prog.raw.slice(0, 220));
+  ok('the progress view lists every candidate', prog.status === 200 && prog.body.participants.length === 16 && prog.body.lessons === 2, prog.raw.slice(0, 220));
   var adaProg = prog.body.participants.filter(function (x) { return x.id === ada.participant.id; })[0];
   ok('with their lessons, quizzes and average',
     !!adaProg && adaProg.lessonsDone === 1 && adaProg.quizzes >= 1 && typeof adaProg.average === 'number', JSON.stringify(adaProg));
@@ -443,11 +496,11 @@ waitForBoot(40).then(async function (h) {
   var gocAttemptsBefore = (before.attempts || []).length;
   var newSession = await call('POST', '/api/free2027/admin/sessions/new', { label: 'Term Two', confirm: true }, adm);
   ok('the session is archived and a new one starts', newSession.status === 200 && /^F27-S2$/.test(newSession.body.session.id), newSession.raw.slice(0, 200));
-  ok('the archive reports what it holds', newSession.body.archive.counts.participants === 11 && newSession.body.archive.counts.submissions === 12, JSON.stringify(newSession.body.archive.counts));
+  ok('the archive reports what it holds', newSession.body.archive.counts.participants === 16 && newSession.body.archive.counts.submissions === 12, JSON.stringify(newSession.body.archive.counts));
   var archiveFile = path.join(DATA, 'free2027-archives', newSession.body.archive.file);
   ok('the archive is a real JSON file on disk', fs.existsSync(archiveFile), archiveFile);
   var archiveJson = JSON.parse(fs.readFileSync(archiveFile, 'utf8'));
-  ok('it holds the participants, activities, attempts and rankings', archiveJson.session.participants.length === 11 && archiveJson.session.activities.length >= 3 && archiveJson.session.attempts.length >= 12);
+  ok('it holds the participants, activities, attempts and rankings', archiveJson.session.participants.length === 16 && archiveJson.session.activities.length >= 3 && archiveJson.session.attempts.length >= 12);
   ok('nothing in the original hub was touched by the archive',
     (function () { var after = dataFile(); return (after.students || []).length === gocStudentsBefore && (after.attempts || []).length === gocAttemptsBefore; })());
   ok('the new session starts with no participants or activities',
@@ -514,7 +567,7 @@ async function phaseThree() {
     ok('the public config says SMTP is unavailable without advertising a bypass',
       c.body.otpDelivery && c.body.otpDelivery.available === false && c.body.otpDelivery.devAllowed === undefined,
       JSON.stringify(c.body.otpDelivery));
-    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', course: 'Law' });
+    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', password: 'Passw0rd-123', course: 'Law' });
     ok('registration fails clearly instead of pretending to send an email', reg.status === 503 && /email verification is not configured/i.test(reg.body.error || reg.body.message || ''), reg.raw.slice(0, 200));
     ok('no verification code is handed back in the error response', !/\b\d{6}\b/.test(reg.raw), reg.raw.slice(0, 200));
     ok('nothing was created from an unproved address', ((JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027 || {}).sessions || [{}])[0].participants === undefined ||
@@ -547,7 +600,7 @@ async function phaseTwo() {
     ok('GOC_FREE_2027=0 switches the edition off completely', r.body && r.body.free2027 && r.body.free2027.on === false, r.raw);
     var c = await call('GET', '/api/free2027/config');
     ok('the config says so, so the page stays in Original Mode', c.body.on === false);
-    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', course: 'Law' });
+    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', password: 'Passw0rd-123', course: 'Law' });
     ok('registration is refused while the switch is off', reg.status === 404, reg.status);
     var health = await call('GET', '/api/health');
     ok('the hub itself is untouched and still serving', health.status === 200 && health.body.service === 'goc-academy-hub');

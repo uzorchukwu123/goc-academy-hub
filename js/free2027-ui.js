@@ -184,6 +184,62 @@
     global.go('free-register');
   };
 
+  /* "Enter the CBT Portal": with no valid authenticated session the student
+     gets the LOGIN interface first; only a valid session opens the dashboard.
+     After a logout the token is gone, so this shows the login again — nobody
+     is ever silently logged back in. */
+  F.freePortalEnter = function () {
+    if (api.hasToken()) {
+      api.me().then(function (r) {
+        F.me = r.participant;
+        paintWho();
+        global.go('free-portal');
+        F.freePortalLoad();
+      }, function () {
+        /* expired or invalid session: fresh authentication required */
+        api.logout();
+        F.me = null;
+        global.go('free-login');
+      });
+      return;
+    }
+    global.go('free-login');
+  };
+
+  /* Email + password login. On success the session token is stored and the
+     CBT dashboard opens; refreshing the browser keeps that session. */
+  F.freeLogin = function () {
+    var err = $('freeLoginErr');
+    if (err) err.textContent = '';
+    var email = (($('freeLoginEmail') || {}).value || '').trim();
+    var password = ($('freeLoginPassword') || {}).value || '';
+    var e = rules.cleanEmail(email);
+    if (e.error) { if (err) err.textContent = e.error; return; }
+    if (!password) { if (err) err.textContent = 'Enter your password.'; return; }
+    var btn = $('freeLoginBtn');
+    busy(btn, true);
+    api.login({ email: e.email, password: password }).then(function (r) {
+      busy(btn, false);
+      F.me = r.participant;
+      paintWho();
+      say('Welcome back, ' + r.participant.name + ' (' + r.participant.id + ')');
+      global.go('free-portal');
+      F.freePortalLoad();
+    }, function (er) {
+      busy(btn, false);
+      if (err) err.textContent = (er && er.message) || 'That email address or password is not right.';
+    });
+  };
+
+  /* Back: the previous page/screen (browser history when there is one, the
+     edition home otherwise). Home: the main G.O.C Academy Hub homepage. Both
+     are plain buttons, so they work on mobile as ordinary taps. */
+  F.freeNavBack = function () {
+    if (global.history && global.history.length > 1) { global.history.back(); return; }
+    global.go('free-home');
+  };
+  F.freeNavHome = function () { global.go('landing'); };
+
   /* ================================================= 3. REGISTRATION (OTP) */
 
   F.freeRegisterStart = function () {
@@ -191,9 +247,11 @@
     if (err) err.textContent = '';
     var name = (($('freeName') || {}).value || '').trim();
     var email = (($('freeEmail') || {}).value || '').trim();
+    var password = ($('freePassword') || {}).value || '';
     var course = (($('freeCourse') || {}).value || '').trim();
     var n = rules.cleanName(name); if (n.error) return showErr('freeRegErr', n.error);
     var e = rules.cleanEmail(email); if (e.error) return showErr('freeRegErr', e.error);
+    var pw = rules.cleanPassword(password); if (pw.error) return showErr('freeRegErr', pw.error);
     var c = rules.cleanCourse(course, F.config && F.config.courses);
     if (c.error) return showErr('freeRegErr', c.error);
 
@@ -201,8 +259,9 @@
     busy(btn, true);
     F.pendingName = n.name;
     F.pendingEmail = e.email;
+    F.pendingPassword = pw.password;
     F.pendingCourse = c.course;
-    api.registerStart({ name: n.name, email: e.email, course: c.course }).then(function (r) {
+    api.registerStart({ name: n.name, email: e.email, password: pw.password, course: c.course }).then(function (r) {
       busy(btn, false);
       var step1 = $('freeRegStep1'), step2 = $('freeRegStep2');
       if (step1) step1.hidden = true;
@@ -227,7 +286,7 @@
     }
     var btn = $('freeOtpResendBtn');
     busy(btn, true);
-    api.registerStart({ name: F.pendingName, email: F.pendingEmail, course: F.pendingCourse }).then(function () {
+    api.registerStart({ name: F.pendingName, email: F.pendingEmail, password: F.pendingPassword, course: F.pendingCourse }).then(function () {
       busy(btn, false);
       showErr('freeOtpErr', 'A new verification code has been emailed. Older codes are no longer valid.');
     }, function (er) {
@@ -350,8 +409,9 @@
     if (!host) return;
     F.freeProgrammeLoad();
     if (!api.hasToken()) {
-      host.innerHTML = '<div class="f27-empty"><p>Register first — it takes a minute and needs no password.</p>' +
-        '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button></div>';
+      host.innerHTML = '<div class="f27-empty"><p>Log in with your email and password to open your CBT dashboard.</p>' +
+        '<button class="btn btn-red btn-block" onclick="freeGo(\'free-login\')">Log in</button>' +
+        '<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="freeGo(\'free-register\')">Register free</button></div>';
       if (mine) mine.innerHTML = '';
       paintWho();
       return;
@@ -582,12 +642,27 @@
 
   /* Leaving keeps the attempt open on the server, with every answer already
      saved: coming back resumes it rather than starting again. */
+  /* Leaving an active examination never silently destroys the attempt: the
+     answers and the remaining time are already on the server, and the student
+     is asked first. Coming back resumes the same paper. */
   F.freeExamLeave = function () {
+    if (!F.exam) { global.go('free-portal'); return; }
+    if (typeof global.confirm === 'function' && !global.confirm(
+      'Leave this paper? Your answers and remaining time are saved — you can resume it from the CBT Portal.')) return;
     stopClock();
     F.exam = null;
     say('Your paper is saved. Open it again from the portal to carry on.');
     global.go('free-portal');
     F.freePortalLoad();
+  };
+  /* Home during an examination asks first for the same reason. */
+  F.freeExamHome = function () {
+    if (!F.exam) { global.go('landing'); return; }
+    if (typeof global.confirm === 'function' && !global.confirm(
+      'Leave this paper for the homepage? Your answers and remaining time are saved.')) return;
+    stopClock();
+    F.exam = null;
+    global.go('landing');
   };
 
   F.freeExamSubmit = function () {
@@ -834,9 +909,9 @@
   /* Expose the handful of names the markup calls. */
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
-    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
+    'freeExamPanelClose', 'freeExamLeave', 'freeExamHome', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
-    'freeProgrammeLoad', 'freeLessonDone'];
+    'freeProgrammeLoad', 'freeLessonDone', 'freeLogin', 'freePortalEnter', 'freeNavBack', 'freeNavHome'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

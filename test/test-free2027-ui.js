@@ -99,6 +99,7 @@ function makeWorld(opts) {
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
    'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeResultBody', 'freeBoardBody',
    'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing', 'freeProgramme',
+   'freePassword', 'freeLoginEmail', 'freeLoginPassword', 'freeLoginBtn', 'freeLoginErr', 'free-login',
    'free-admin', 'free-home', 'free-portal', 'free-result', 'free-exam', 'free-leaderboard', 'admin-gate', 'admin'
   ].forEach(el);
   el('freeRegStep2').hidden = true;
@@ -124,10 +125,11 @@ function makeWorld(opts) {
         : Promise.resolve(o.config || { on: true, mode: 'free2027', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10 });
     },
     registerStart: function (d) { calls.api.push(['registerStart', d]); return Promise.resolve(o.startReply || { sent: true, delivered: true, expiresInMin: 15, resendInSec: 60 }); },
-    registerVerify: function (d) { calls.api.push(['registerVerify', d]); return Promise.resolve(o.verifyReply || { token: 'T1', participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', email: 'ad••@example.com' } }); },
-    me: function () { return Promise.resolve({ participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law' } }); },
+    registerVerify: function (d) { calls.api.push(['registerVerify', d]); return Promise.resolve(o.verifyReply || { token: 'T1', participant: { id: 'GOC-F-001', name: 'Ada', course: 'Law', email: 'ad••@example.com' } }); },
+    login: function (d) { calls.api.push(['login', d]); return o.loginFails ? Promise.reject(new Error('That email address or password is not right.')) : Promise.resolve(o.loginReply || { token: 'T2', participant: { id: 'GOC-F-001', name: 'Ada', course: 'Law' } }); },
+    me: function () { return Promise.resolve({ participant: { id: 'GOC-F-001', name: 'Ada', course: 'Law' } }); },
     logout: function () { return Promise.resolve({ ok: true }); },
-    activities: function () { return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } }); },
+    activities: function () { return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F-001', name: 'Ada' } }); },
     start: function (id) { calls.api.push(['start', id]); return Promise.resolve(o.startAttempt || { attempt: { id: 'F27-A1', title: 'Week 1', kind: 'weekly', remainingSec: 615, responses: {} }, questions: [], resumed: false }); },
     resume: function () { return Promise.resolve({}); },
     answer: function (a, q, c) { calls.api.push(['answer', a, q, c]); return Promise.resolve({ saved: true }); },
@@ -138,7 +140,7 @@ function makeWorld(opts) {
     programme: function () {
       calls.api.push(['programme']);
       return Promise.resolve(o.programmeReply || {
-        profile: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law' },
+        profile: { id: 'GOC-F-001', name: 'Ada', course: 'Law' },
         enrolment: { course: 'Law', status: 'enrolled', enrolledAt: 1 },
         access: { programme: '2027-free-tutorial', status: 'active', grantedAt: 1 },
         progress: {
@@ -321,12 +323,18 @@ settle(load(w1)).then(function () {
     ok('no request was sent', w.calls.api.length === before);
     ok('the reason is shown beside the field', /valid email/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
     w.els.freeEmail.value = 'ada@example.com';
+    var n0 = w.calls.api.length;
+    w.sandbox.freeRegisterStart();
+    ok('a missing password is refused before it is sent', w.calls.api.length === n0 && /password/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
+    w.els.freePassword.value = 'AdaPass-2027';
     w.sandbox.freeRegisterStart();
     return settle().then(function () {
       if (process.env.F27_DEBUG) console.log('REGERR', JSON.stringify(w.els.freeRegErr.textContent), w.calls.api.length, JSON.stringify(w.calls.api));
     ok('a good form sends one request', w.calls.api.filter(function (c) { return c[0] === 'registerStart'; }).length === 1);
       ok('the address is lower-cased and trimmed before it is sent',
         w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].email === 'ada@example.com');
+      ok('the chosen password is sent with the registration',
+        w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].password === 'AdaPass-2027');
       ok('the first step is hidden and the code step is shown', w.els.freeRegStep1.hidden === true && w.els.freeRegStep2.hidden === false);
       ok('the address is named on the code step', w.els.freeOtpTo.textContent === 'ada@example.com');
       ok('the verification code is never displayed in the browser UI', w.els.freeOtpDev.hidden && !/123456/.test(w.els.freeOtpDev.textContent));
@@ -396,7 +404,7 @@ settle(load(w1)).then(function () {
     return settle().then(function () {
       var out = w.els.freeProgramme.innerHTML;
       ok('the card is shown once a candidate has a token', w.els.freeProgramme.hidden === false);
-      ok('it names the candidate and their participant ID', /Ada/.test(out) && /GOC-F27-0123456789ABCDEFABCD/.test(out), out.slice(0, 160));
+      ok('it names the candidate and their participant ID', /Ada/.test(out) && /GOC-F-001/.test(out), out.slice(0, 160));
       ok('it shows the course they enrolled on', /Law/.test(out));
       ok('it says their access is active', /Access active/.test(out));
       ok('it counts the lessons done', /1 of 2/.test(out), out.slice(0, 220));
@@ -433,6 +441,34 @@ settle(load(w1)).then(function () {
   }).then(function (note) {
     ok('with no sender the same truthful configuration message is shown in every environment',
       /temporarily unavailable/.test(note) && !/shown on screen/.test(note), note);
+  });
+}).then(function () {
+  console.log('\nThe CBT Portal asks for a login when there is no session, and logs in with email + password');
+  var w = makeWorld({});
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freePortalEnter();
+    return settle().then(function () {
+      ok('Enter CBT Portal with no session shows the login interface', w.calls.go[w.calls.go.length - 1] === 'free-login', w.calls.go.join(','));
+      w.els.freeLoginEmail.value = 'ada@example.com';
+      w.els.freeLoginPassword.value = 'AdaPass-2027';
+      w.sandbox.freeLogin();
+      return settle().then(function () {
+        ok('login sends email + password to the edition route', w.calls.api.some(function (c) { return c[0] === 'login' && c[1].email === 'ada@example.com' && c[1].password === 'AdaPass-2027'; }), JSON.stringify(w.calls.api.filter(function (c) { return c[0] === 'login'; })));
+        ok('a successful login opens the CBT dashboard', w.calls.go[w.calls.go.length - 1] === 'free-portal', w.calls.go.join(','));
+        var w2 = makeWorld({ loginFails: true });
+        load(w2);
+        return settle(w2).then(function () {
+          w2.els.freeLoginEmail.value = 'ada@example.com';
+          w2.els.freeLoginPassword.value = 'wrong-pass-1';
+          w2.sandbox.freeLogin();
+          return settle().then(function () {
+            ok('a failed login stays on the login screen with the server\'s message',
+              w2.calls.go.indexOf('free-portal') < 0 && /not right/.test(w2.els.freeLoginErr.textContent), w2.els.freeLoginErr.textContent);
+          });
+        });
+      });
+    });
   });
 }).then(function () {
   console.log('\nThe client API sends the right token to the right route');

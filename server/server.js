@@ -8893,12 +8893,20 @@ const ROUTES = [
       return free2027.verifyRegistration(body).then(r => okJson(res, r));
     }) },
 
+  /* Login: email + the password chosen at registration. This is the
+     authentication mechanism (the verification code only proves the address at
+     sign-up); it issues a persistent session token that survives a browser
+     refresh and a server restart, and is destroyed by logout. */
+  { method: 'POST', path: /^\/api\/free2027\/login$/, need: null, handler: freeRoute((req, res, body) => {
+      return free2027.login(body).then(r => okJson(res, r));
+    }) },
+
   /* The participant's own side. */
   { method: 'GET', path: /^\/api\/free2027\/me$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
       okJson(res, free2027.me(req.free2027.data));
     }) },
   { method: 'POST', path: /^\/api\/free2027\/logout$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
-      okJson(res, free2027.logout(req.free2027.data));
+      okJson(res, free2027.logout(req.free2027.data, req.free2027.token));
     }) },
   { method: 'GET', path: /^\/api\/free2027\/activities$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
       okJson(res, free2027.listActivities(req.free2027.data));
@@ -9353,9 +9361,10 @@ const server = http.createServer(async (req, res) => {
   /* 2027 Free Tutorial Edition. A participant is NOT a G.O.C student account:
      they hold a free-tutorial token issued only after their email address was
      verified, and that token opens the /api/free2027/ routes and nothing else.
-     It lives in its own in-memory table (server/lib/free2027.js), so the hub's
-     `sess` above is null for every one of these requests and no original route
-     below can ever see it. The guards for the original routes are untouched. */
+     It lives in its own persisted table (db.free2027.authSessions, digests
+     only — server/lib/free2027.js), so the hub's `sess` above is null for every
+     one of these requests and no original route below can ever see it. The
+     guards for the original routes are untouched. */
   if (route.need === 'free') {
     const fsess = free2027.sessionFromReq(req);
     if (!fsess) return errJson(res, 401, 'Verify your email to continue.');

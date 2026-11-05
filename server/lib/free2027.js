@@ -80,6 +80,24 @@ function ensureEdition(db, opts) {
      session archiving/deletion. */
   if (!Array.isArray(ed.studentIds)) ed.studentIds = [];
   if (!ed.studentIdsByEmail || typeof ed.studentIdsByEmail !== 'object' || Array.isArray(ed.studentIdsByEmail)) ed.studentIdsByEmail = {};
+  /* The sequential student-identifier counter. It lives on the edition record
+     (not on a session) so it survives archiving, and it is seeded from every
+     identifier already issued, so an older data file resumes exactly where it
+     left off. Deleted identifiers stay in ed.studentIds, so they are never
+     re-issued: the counter only ever moves forward. */
+  if (typeof ed.studentIdSeq !== 'number' || !isFinite(ed.studentIdSeq)) {
+    var maxSeq = 0;
+    (ed.studentIds || []).forEach(function (id) { maxSeq = Math.max(maxSeq, rules.idSeqOf(id)); });
+    (ed.sessions || []).forEach(function (s) {
+      (s && s.participants || []).forEach(function (p) { if (p && p.id) maxSeq = Math.max(maxSeq, rules.idSeqOf(p.id)); });
+    });
+    ed.studentIdSeq = maxSeq;
+  }
+  /* Authenticated sessions, persisted with the rest of the programme data so
+     a normal browser refresh (and even a server restart) keeps a signed-in
+     student signed in. Only a SHA-256 digest of each token is stored, so the
+     data file never holds a usable session credential. */
+  if (!Array.isArray(ed.authSessions)) ed.authSessions = [];
   if (typeof ed.rev !== 'number') ed.rev = 0;
 
   /* One session always exists, so every route has somewhere to write. */
@@ -127,10 +145,13 @@ function createFree2027(deps) {
   var archiveDir = path.join(dataDir, 'free2027-archives');
   var log = typeof d.log === 'function' ? d.log : function () {};
 
-  /* participant tokens are memory-only, like the hub's own sessions: a restart
-     signs free-tutorial candidates out and they verify again with a code. */
-  var tokens = new Map();
+  /* Participant sessions are PERSISTED in db.free2027.authSessions (only the
+     SHA-256 digest of each token is stored). A normal browser refresh therefore
+     keeps a signed-in student signed in — even across a server restart — while
+     logout deletes the stored record, so a logged-out student is never silently
+     signed back in and an expired/invalid token requires fresh authentication. */
   var TOKEN_HOURS = 8;
+  var AUTH_SESSION_MAX = 5000;
 
   function readData() { return d.readData(); }
   function writeData(db) { d.writeData(db); }
@@ -163,16 +184,45 @@ function createFree2027(deps) {
   }
   function sixDigits() { return String(crypto.randomInt ? crypto.randomInt(0, 1000000) : Math.floor(Math.random() * 1000000)).padStart(6, '0'); }
   function token() { return crypto.randomBytes(24).toString('hex'); }
-  function uniqueParticipantId(ed) {
+  function tokenDigest(t) { return crypto.createHash('sha256').update(String(t)).digest('hex'); }
+
+  /* The one place a student identifier is allocated. Called ONLY from inside
+     the data lock (verifyRegistration), so two simultaneous registrations are
+     serialized and can never receive the same number. The counter is stored
+     on the edition record and only ever moves forward; every previously issued
+     identifier (including ones whose student was later deleted) is in
+     ed.studentIds, and the loop skips any that are somehow still present, so a
+     number is guaranteed unique and is never reused. */
+  function nextStudentId(ed) {
     var used = new Set((ed.studentIds || []).map(function (id) { return String(id).toUpperCase(); }));
     (ed.sessions || []).forEach(function (session) {
       (session && session.participants || []).forEach(function (p) { if (p && p.id) used.add(String(p.id).toUpperCase()); });
     });
-    for (var i = 0; i < 10; i++) {
-      var id = rules.participantId(crypto.randomBytes(10).toString('hex'));
-      if (!used.has(id)) return id;
-    }
-    throw FreeError(503, 'Could not allocate a unique student identifier. Please try again.');
+    var n = Math.max(Number(ed.studentIdSeq) || 0, (ed.studentIds || []).reduce(function (m, id) { return Math.max(m, rules.idSeqOf(id)); }, 0));
+    var id;
+    do {
+      n++;
+      id = rules.studentId(n);
+    } while (used.has(id.toUpperCase()));
+    ed.studentIdSeq = n;
+    return id;
+  }
+
+  /* Passwords are hashed with scrypt + a per-password random salt, the same
+     scheme the hub's own staff accounts use. Only the hash is ever stored. */
+  function hashPassword(plain) {
+    var salt = crypto.randomBytes(16).toString('hex');
+    var key = crypto.scryptSync(String(plain), salt, 64).toString('hex');
+    return 'scrypt$' + salt + '$' + key;
+  }
+  function verifyPassword(plain, stored) {
+    var parts = String(stored || '').split('$');
+    if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
+    try {
+      var key = crypto.scryptSync(String(plain), parts[1], 64);
+      var want = Buffer.from(parts[2], 'hex');
+      return key.length === want.length && crypto.timingSafeEqual(key, want);
+    } catch (e) { return false; }
   }
 
   function findParticipant(session, id) {
@@ -251,32 +301,71 @@ function createFree2027(deps) {
   }
 
   /* ---------------------------------------------------------------- sessions
-     A free-tutorial candidate's token. Memory only; expiry checked on use. */
+     A free-tutorial candidate's token, persisted as a digest in the edition's
+     own record. issueToken() must be called inside the data lock (both call
+     sites are); sessionFromReq() checks expiry on every use. */
   function issueToken(participantId, sessionId) {
     var t = token();
-    tokens.set(t, { participantId: String(participantId), sessionId: String(sessionId), expires: now() + TOKEN_HOURS * 3600 * 1000 });
+    var db = readData();
+    var ed = edition(db);
+    if (!Array.isArray(ed.authSessions)) ed.authSessions = [];
+    var t0 = now();
+    ed.authSessions.push({
+      tokenHash: tokenDigest(t),
+      participantId: String(participantId),
+      sessionId: String(sessionId),
+      createdAt: t0,
+      lastSeenAt: t0,
+      expiresAt: t0 + TOKEN_HOURS * 3600 * 1000
+    });
+    /* Bound the list: drop expired records first, then the oldest. */
+    ed.authSessions = ed.authSessions.filter(function (s) { return s && s.expiresAt > t0 - 86400000; });
+    if (ed.authSessions.length > AUTH_SESSION_MAX) ed.authSessions = ed.authSessions.slice(-AUTH_SESSION_MAX);
+    writeData(db);
     return t;
-  }
-  function pruneTokens() {
-    var t = now();
-    tokens.forEach(function (v, k) { if (!v || v.expires < t) tokens.delete(k); });
   }
   /* What the dispatcher calls for a `need: 'free'` route. Returns a sess-shaped
      object ({ token, data: { role:'free', id, sessionId } }) or null. */
   function sessionFromReq(req) {
-    pruneTokens();
     var auth = (req && req.headers && req.headers.authorization) || '';
     if (auth.indexOf('Bearer ') !== 0) return null;
     var t = auth.slice(7);
-    var rec = tokens.get(t);
+    if (!t) return null;
+    var db = readData();
+    var ed = edition(db);
+    var list = ed.authSessions || [];
+    var digest = tokenDigest(t);
+    var t0 = now();
+    var rec = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].tokenHash === digest) { rec = list[i]; break; }
+    }
     if (!rec) return null;
-    if (rec.expires < now()) { tokens.delete(t); return null; }
+    if (rec.expiresAt < t0) return null;   /* expired: fresh authentication required */
     return { token: t, data: { role: 'free', id: rec.participantId, sessionId: rec.sessionId } };
   }
+  /* Logout / deactivation helpers. Both run inside the data lock at every call
+     site. dropToken removes ONE session (the one being logged out); dropTokensFor
+     removes every persisted session of a participant (deactivation, deletion). */
+  function dropToken(t) {
+    if (!t) return;
+    var db = readData();
+    var ed = edition(db);
+    if (!Array.isArray(ed.authSessions)) return;
+    var digest = tokenDigest(t);
+    var before = ed.authSessions.length;
+    ed.authSessions = ed.authSessions.filter(function (s) { return !(s && s.tokenHash === digest); });
+    if (ed.authSessions.length !== before) writeData(db);
+  }
   function dropTokensFor(participantId) {
-    tokens.forEach(function (v, k) {
-      if (v && String(v.participantId) === String(participantId)) tokens.delete(k);
+    var db = readData();
+    var ed = edition(db);
+    if (!Array.isArray(ed.authSessions)) return;
+    var before = ed.authSessions.length;
+    ed.authSessions = ed.authSessions.filter(function (s) {
+      return !(s && String(s.participantId) === String(participantId));
     });
+    if (ed.authSessions.length !== before) writeData(db);
   }
 
   /* --------------------------------------------------------------- public */
@@ -314,11 +403,20 @@ function createFree2027(deps) {
       if (email.error) throw FreeError(400, email.error);
       var course = rules.cleanCourse(body.course, ed.courses);
       if (course.error) throw FreeError(400, course.error);
+      /* A password is chosen at registration and kept only as a scrypt hash;
+         it is what the student will log in with after the email is verified. */
+      var password = rules.cleanPassword(body.password);
+      if (password.error) throw FreeError(400, password.error);
 
       var session = currentSession(ed);
       var existing = findParticipantByEmail(session, email.email);
       if (existing && existing.active === false) {
         throw FreeError(403, 'This email address has been switched off for this programme. Contact the academy.');
+      }
+      if (existing && existing.verified === true) {
+        /* No duplicate registrations: an address that already holds a verified
+           account must log in with its password instead. */
+        throw FreeError(409, 'That email address is already registered. Log in with your password instead.');
       }
 
       var t = now();
@@ -339,6 +437,10 @@ function createFree2027(deps) {
       ed.otps.push({
         email: email.email, salt: salt, hash: codeHash(salt, code),
         name: name.name, course: course.course,
+        /* The chosen password travels with the pending code as a hash, so the
+           account can only be created once the address is proved AND the
+           password is already safely hashed. */
+        pwHash: hashPassword(password.password),
         createdAt: t, expiresAt: t + rules.OTP_TTL_MIN * 60000, tries: 0, usedAt: null
       });
       /* keep the list bounded: newest 500, and drop anything useless */
@@ -409,7 +511,12 @@ function createFree2027(deps) {
       if (!p) {
         session.participantSeq = (session.participantSeq || 0) + 1;
         var emailKey = email.email.toLowerCase();
-        var permanentId = ed.studentIdsByEmail[emailKey] || uniqueParticipantId(ed);
+        /* A permanent, sequential identifier (GOC-F-001, GOC-F-002, …),
+           allocated inside this lock so concurrent registrations can never
+           collide and a removed student's number is never re-issued. An email
+           that already holds an identifier in the permanent registry (for
+           example a returning student after a session archive) keeps it. */
+        var permanentId = ed.studentIdsByEmail[emailKey] || nextStudentId(ed);
         if (ed.studentIds.indexOf(permanentId) < 0) ed.studentIds.push(permanentId);
         ed.studentIdsByEmail[emailKey] = permanentId;
         p = {
@@ -417,6 +524,8 @@ function createFree2027(deps) {
           name: otp.name || rules.cleanName(body.name).name || 'Candidate',
           email: email.email,
           course: otp.course || rules.cleanCourse(body.course, ed.courses).course || 'Other',
+          /* Never plaintext: only the scrypt hash of the chosen password. */
+          passwordHash: otp.pwHash || null,
           verified: true,
           active: true,
           createdAt: t,
@@ -437,9 +546,42 @@ function createFree2027(deps) {
         p.lastSeenAt = t;
         p.verifiedAt = p.verifiedAt || t;
         if (!p.course && otp.course) p.course = otp.course;
+        /* A record from before passwords existed acquires the hash of the
+           password that was just proved with the code. */
+        if (!p.passwordHash && otp.pwHash) p.passwordHash = otp.pwHash;
         ensureParticipantProgramme(p);
         pushRecord(session, { participantId: p.id, kind: 'login' });
       }
+      writeData(db);
+      return {
+        token: issueToken(p.id, session.id),
+        participant: rules.selfParticipant(p),
+        session: { id: session.id, label: session.label }
+      };
+    });
+  }
+
+  /* login: the REAL authentication mechanism. Email + the password chosen at
+     registration; the email verification code alone never authenticates anyone
+     permanently. Answers identically whether the address is unknown or the
+     password is wrong, so the route cannot be used to enumerate accounts. */
+  function login(input) {
+    var body = input || {};
+    return locked(async function () {
+      var db = readData();
+      var ed = requireOn(edition(db));
+      var email = rules.cleanEmail(body.email);
+      if (email.error) throw FreeError(400, email.error);
+      var pw = String(body.password == null ? '' : body.password);
+      if (!pw) throw FreeError(400, 'Enter your password.');
+      var session = currentSession(ed);
+      var p = findParticipantByEmail(session, email.email);
+      var fail = function () { throw FreeError(403, 'That email address or password is not right.'); };
+      if (!p || p.verified !== true || p.active === false) fail();
+      if (!p.passwordHash || !verifyPassword(pw, p.passwordHash)) fail();
+      var t = now();
+      p.lastSeenAt = t;
+      pushRecord(session, { participantId: p.id, kind: 'login' });
       writeData(db);
       return {
         token: issueToken(p.id, session.id),
@@ -477,9 +619,17 @@ function createFree2027(deps) {
     return { ed: ed, session: session };
   }
 
-  function logout(data) {
-    dropTokensFor(data && data.id);
-    return { ok: true };
+  /* Logout destroys THE authenticated session in use: the persisted record for
+     this token is deleted, so no refresh, restart or replay of this token can
+     sign the student back in — clicking Enter CBT Portal again shows the login
+     interface. The client also drops its stored token, so it cannot silently
+     re-authenticate either. (Deactivation/deletion by an administrator still
+     removes every session of the student via dropTokensFor.) */
+  function logout(data, token) {
+    return locked(async function () {
+      dropToken(token || (data && data.token));
+      return { ok: true };
+    });
   }
 
   /* The portal's list: weekly assessments and competitions only, each with
@@ -1543,6 +1693,7 @@ function createFree2027(deps) {
     /* registration */
     startRegistration: startRegistration,
     verifyRegistration: verifyRegistration,
+    login: login,
     /* participant */
     sessionFromReq: sessionFromReq,
     me: me,
