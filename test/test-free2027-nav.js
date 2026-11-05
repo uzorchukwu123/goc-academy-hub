@@ -58,7 +58,15 @@ ok('the drawer keeps the original Log in button (not deleted)', /class="btn btn-
 ok('the drawer has one CBT Portal action with supporting wording', /dw-cbt" onclick="dwFreePortal\(\)">CBT Portal</.test(html) && /Access your weekly assessments and competitions\./.test(html));
 ok('the CBT Portal drawer entry is hidden in Original Mode (default)', /\.dw-cbt, \.dw-cbt-hint, #landing \.dw-cbt-link \{ display: none; \}/.test(flatCss));
 ok('Free Tutorial Mode shows the drawer CBT Portal and hides the original pair', /body\.f27-mode \.dw-btns \.dw-cbt \{ display: block; \}/.test(flatCss) && /body\.f27-mode \.dw-btns \.dw-original \{ display: none !important; \}/.test(flatCss));
-ok('the landing inline bar gets the same mode-specific swap', /body\.f27-mode #landing \.lp-actions \.dw-original \{ display: none !important; \}/.test(flatCss) && /body\.f27-mode #landing \.lp-actions \.dw-cbt-link \{ display: inline-block; \}/.test(flatCss));
+ok('the landing inline bar hides the original actions in free mode', /body\.f27-mode #landing \.lp-actions \.dw-original \{ display: none !important; \}/.test(flatCss));
+ok('desktop (>=900px) shows the inline CBT Portal entry', /@media \(min-width: 900px\) \{\s*body\.f27-mode #landing \.lp-actions \.dw-cbt-link \{ display: inline-block; \}\s*\}/.test(flatCss));
+ok('mobile header has NO duplicate CBT Portal button (drawer-only below 900px)', (function () {
+  var rule = 'dw-cbt-link { display: inline-block';
+  var count = flatCss.split(rule).length - 1;
+  var at = flatCss.indexOf(rule);
+  var media = flatCss.lastIndexOf('@media (min-width: 900px)');
+  return count === 1 && media > -1 && at > media;   /* the only showing rule sits inside the desktop media query */
+})());
 ok('the landing keeps its original Log in / Get started in the markup', /<button class="lp-link dw-original" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
 ok('dwFreePortal is exposed by the edition script', /global\[n\] = F\[n\][\s\S]{0,200}/.test(uiSrc) && /'dwFreePortal'/.test(uiSrc) && /F\.dwFreePortal = function/.test(uiSrc));
 
@@ -137,7 +145,7 @@ function makeWorld(opts) {
     console: console, document: doc, Promise: Promise,
     setTimeout: function (fn) { fn(); return 0; }, setInterval: function () { return 1; }, clearInterval: function () {},
     Date: { now: function () { return 1000000; }, UTC: Date.UTC },
-    fetch: function () { return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ service: 'goc-academy-hub', free2027: { on: true, mode: 'free2027' } })); }, json: function () { return Promise.resolve({}); } }); },
+    fetch: function () { var health = { service: 'goc-academy-hub', free2027: { on: true, mode: 'free2027' } }; return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify(health)); }, json: function () { return Promise.resolve(health); } }); },
     confirm: function (m) { calls.confirms.push(m); return o.confirmAnswer !== false; },
     toast: function (m) { calls.toasts.push(m); },
     history: { length: 2, back: function () { calls.go.push('__historyBack__'); } },
@@ -200,6 +208,7 @@ settle(w1).then(function () {
   var w = makeWorld({ token: 'PT', questions: questions, startAttempt: { attempt: { id: 'F27-A9', title: 'Week 1', kind: 'weekly', remainingSec: 600, responses: {} }, questions: questions, resumed: false } });
   load(w);
   return settle(w).then(function () {
+    w.sandbox.go('free-portal');          /* the real flow: portal -> exam */
     w.sandbox.freeExamOpen('F27-Q1');
     return settle(w).then(function () {
       w.sandbox.freeExamPick(1);
@@ -226,6 +235,27 @@ settle(w1).then(function () {
                   w4.sandbox.dwFreePortal();
                   return settle(w4).then(function () {
                     ok('the drawer CBT Portal action closes the drawer and opens login', w4.calls.api.some(function (c) { return c[0] === 'closeDrawer'; }) && w4.calls.go[w4.calls.go.length - 1] === 'free-login', w4.calls.go.join(','));
+                    /* ---- internal navigation history ---- */
+                    head('behaviour: Back uses internal history, Home goes to the hub homepage');
+                    var w5 = makeWorld({});
+                    load(w5);
+                    return settle(w5).then(function () {
+                      w5.sandbox.go('landing');
+                      w5.sandbox.go('free-home');
+                      w5.sandbox.go('free-register');
+                      w5.sandbox.freeNavBack();
+                      ok('Back from registration returns to the Free Tutorial homepage', w5.calls.go[w5.calls.go.length - 1] === 'free-home', w5.calls.go.join(','));
+                      w5.sandbox.freeNavBack();
+                      ok('Back from the Free Tutorial homepage returns to the main hub homepage', w5.calls.go[w5.calls.go.length - 1] === 'landing', w5.calls.go.join(','));
+                      w5.sandbox.freeNavBack();
+                      ok('Back with no internal previous screen falls back to the hub homepage', w5.calls.go[w5.calls.go.length - 1] === 'landing', w5.calls.go.join(','));
+                      ok('Back never touches browser history (cannot exit to an external site)', w5.calls.go.indexOf('__historyBack__') < 0, w5.calls.go.join(','));
+                      w5.sandbox.go('free-home');
+                      w5.sandbox.go('free-login');
+                      w5.sandbox.freeNavHome();
+                      ok('Home always returns directly to the main hub homepage', w5.calls.go[w5.calls.go.length - 1] === 'landing', w5.calls.go.join(','));
+                      ok('Back and Home remain separate controls', read('index.html').indexOf('freeNavBack()') > -1 && read('index.html').indexOf('freeNavHome()') > -1);
+                    });
                   });
                 });
               });

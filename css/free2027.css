@@ -235,9 +235,10 @@ body.f27-mode .dw-btns .dw-cbt-hint {
 }
 body.f27-mode .dw-btns .dw-original { display: none !important; }
 body.f27-mode #landing .lp-actions .dw-original { display: none !important; }
-body.f27-mode #landing .lp-actions .dw-cbt-link { display: inline-block; }
-/* on phones the inline bar hides .lp-link (the drawer is the nav there), so the
-   CBT Portal entry on mobile lives in the drawer — shown by the rules above. */
+/* Desktop only: the inline CBT Portal entry. Below 900px the hub's own base
+   rule hides .lp-link in the top bar (the drawer is the mobile nav), and this
+   edition deliberately does NOT override that — the mobile CBT Portal entry
+   lives in the sidebar/drawer only, so the two are never duplicated. */
 @media (min-width: 900px) {
   body.f27-mode #landing .lp-actions .dw-cbt-link { display: inline-block; }
 }
