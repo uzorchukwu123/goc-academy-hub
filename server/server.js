@@ -52,6 +52,10 @@ loadEnv();
 const core = require('../js/goc-core.js');
 const { pdfFromModel } = require('./pdf-writer');
 const reminders = require('./lib/reminders');
+/* The 2027 Free Tutorial Edition. One module, mounted below; see
+   server/lib/free2027.js and js/goc-free-2027.js. Removing this require (and the
+   `free2027` block further down) leaves the original hub exactly as it was. */
+const free2027Lib = require('./lib/free2027');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -1051,6 +1055,12 @@ function migrate(db) {
    - An existing empty array is intentional: staff may have deleted every question.
      Never repopulate a question bank that management deliberately emptied. */
 if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
+  /* 2027 Free Tutorial Edition (temporary, switchable). Its records live in
+     their own top-level field so they can never be confused with — or touch —
+     db.students, db.attempts or any other original G.O.C record. A missing
+     field is created once here; an existing one is only ever shaped, never
+     reset. */
+  free2027Lib.ensureEdition(db, { env: process.env });
   /* Phase 3C: tutor accounts live in the data file (no Appwrite collection). */
   if (!Array.isArray(db.tutors)) db.tutors = [];
   /* Phase 3C slice 6.6: alerts for the console home (a tutor saved a fully marked theory script;
@@ -1966,6 +1976,95 @@ async function sendContactEmail(name, email, message) {
     subject: 'New message from the G.O.C Academy Hub website',
     text: 'From: ' + name + ' <' + email + '>\n\n' + message
   });
+}
+
+/* --------------------------------------------- 2027 Free Tutorial Edition
+   The temporary edition is a module of its own (server/lib/free2027.js); this
+   is only the wiring: the hub's own data accessors, the question bank (read
+   only — marking reuses core.markAttempt), the mail transport already built
+   for the contact form and the reminders, and the folder the archives go in.
+
+   Delivery of a one-time code needs SMTP (GOC_SMTP_HOST / GOC_SMTP_USER /
+   GOC_SMTP_PASS — the same three the contact form and the reminders use).
+   With no SMTP configured the edition still works end to end, but the page
+   says plainly that no code was emailed; a deployment may set
+   GOC_FREE_2027_DEV_OTP=1 to let the server hand the code back so the flow can
+   be tried before the mail account is wired up. That is refused whenever
+   NODE_ENV=production. */
+function freeOtpDelivery() {
+  const transport = getMailTransport();
+  return {
+    /* the console shows this, so the administrator knows whether codes can
+       really reach a candidate before the first candidate tries */
+    available: !!transport,
+    devAllowed: !transport && process.env.NODE_ENV !== 'production' && process.env.GOC_FREE_2027_DEV_OTP === '1'
+  };
+}
+async function deliverFreeOtp(m) {
+  const transport = getMailTransport();
+  if (!transport) {
+    console.warn('[free2027] no SMTP configured — the one-time code for ' + m.email + ' was NOT emailed.');
+    /* The code is only ever handed back to the browser when a deployment has
+       deliberately opted in with GOC_FREE_2027_DEV_OTP=1 (and never in
+       production). Otherwise nothing verifies and the page says so. */
+    if (freeOtpDelivery().devAllowed) return { delivered: false, dev: true };
+    return { delivered: false, dev: false };
+  }
+  await transport.sendMail({
+    from: process.env.GOC_SMTP_FROM || process.env.GOC_SMTP_USER,
+    to: m.email,
+    subject: 'Your G.O.C Academy 2027 Free Tutorial verification code',
+    text: 'Hello ' + (m.name || '') + ',\n\n' +
+      'Your verification code is ' + m.code + '.\n\n' +
+      'It expires in ' + FREE2027.OTP_TTL_MIN + ' minutes. If you did not ask for it, ignore this email.\n\n' +
+      '— G.O.C Academy',
+    html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">' +
+      '<p>Hello ' + String(m.name || '').replace(/[<>&"]/g, '') + ',</p>' +
+      '<p>Your G.O.C Academy 2027 Free Tutorial verification code is</p>' +
+      '<p style="font-size:30px;font-weight:800;letter-spacing:6px;margin:18px 0;color:#DC2626">' + m.code + '</p>' +
+      '<p style="color:#6b7280;font-size:13px">It expires in ' + FREE2027.OTP_TTL_MIN +
+      ' minutes. If you did not ask for it, ignore this email.</p>' +
+      '<p style="color:#6b7280;font-size:13px">— G.O.C Academy</p></div>'
+  });
+  return { delivered: true, dev: false };
+}
+const free2027 = free2027Lib.createFree2027({
+  env: process.env,
+  dataDir: DATA_DIR,
+  readData: () => readData(),
+  writeData: db => writeData(db),
+  withDataLock: fn => withDataLock(fn),
+  listQuestions: (filter, localDb) => listQuestions(filter, localDb),
+  deliverOtp: deliverFreeOtp,
+  log: m => console.warn(m)
+});
+const FREE2027 = free2027.rules;
+
+/* A console route needs the edition to be switched on; the two mode routes
+   themselves work either way, so the administrator can switch the edition back
+   ON from Original Mode. */
+function freeOnOrRefuse(res) {
+  const db = readData();
+  const ed = db.free2027 || {};
+  if (ed.enabled !== true) { errJson(res, 404, 'The 2027 Free Tutorial Edition is not active on this site.'); return false; }
+  return true;
+}
+/* Every free-tutorial handler is wrapped here, so a FreeError answers with its
+   own wording and status and anything else is logged and answered generically —
+   the same rule the hub's other routes follow. */
+function freeRoute(fn) {
+  return (req, res, body, sess, params) => {
+    let out;
+    try { out = fn(req, res, body, sess, params); }
+    catch (e) { return freeFail(res, e); }
+    return Promise.resolve(out).catch(e => freeFail(res, e));
+  };
+}
+function freeFail(res, e) {
+  if (res.headersSent) return;
+  if (e && e.expected && e.status) return errJson(res, e.status, e.message);
+  console.error('[free2027]', (e && e.stack) || e);
+  return errJson(res, 500, 'That request could not be completed.');
 }
 
 /* ------------------------------------------------------- study reminders
@@ -2906,7 +3005,17 @@ async function markTheoryScript(attemptId, marks, marker, guard) {
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
       const db = readData();
-      okJson(res, { service: 'goc-academy-hub', version: 1, passcodeLength: Number(db.settings.consolePasscodeLength) || 4 });
+      /* `free2027` is the central switch as the browser sees it: {on, mode}.
+         It only ever names a mode — no record, count or address. The page uses
+         it to decide whether to open the homepage in Original Mode or in 2027
+         Free Tutorial Mode. */
+      const fed = db.free2027 || {};
+      const fmode = FREE2027.activeMode(fed, fed.enabled === true);
+      okJson(res, {
+        service: 'goc-academy-hub', version: 1,
+        passcodeLength: Number(db.settings.consolePasscodeLength) || 4,
+        free2027: { on: fed.enabled === true, mode: fmode }
+      });
     } },
 
   { method: 'POST', path: /^\/api\/auth\/login$/, need: null, handler: async (req, res, body) => {
@@ -8685,6 +8794,160 @@ const ROUTES = [
        Returns aggregated figures for the Founder / Publicity Manager dashboard:
        totalVisits, visitsToday, uniqueLast30, avgTimeSec, topPages[], recentVisits[]. */
 
+  /* ============================================ 2027 FREE TUTORIAL EDITION
+     A temporary, switchable edition of the same platform. Everything below is
+     namespaced under /api/free2027/ so it can be deleted in one block, and the
+     authorisation is decided by the guard in the dispatcher, never here:
+       need: null      — public (the mode, the course list, a one-time code)
+       need: 'free'    — a verified participant's own token
+       need: 'console' — a signed-in, unlocked management account, with the
+                         capability named on the route
+     Nothing in this block reads or writes a G.O.C student, attempt or staff
+     record; see server/lib/free2027.js. */
+
+  /* What the public page needs to know: is the edition on, which mode is the
+     site in, and the course list. Answered with `on:false` rather than an error
+     when the edition is off, so the page can simply stay in Original Mode. */
+  { method: 'GET', path: /^\/api\/free2027\/config$/, need: null, handler: freeRoute((req, res) => {
+      okJson(res, free2027.publicConfig());
+    }) },
+
+  /* Register: prove the address first. Nothing is created by this call. */
+  { method: 'POST', path: /^\/api\/free2027\/register\/start$/, need: null, handler: freeRoute((req, res, body) => {
+      return free2027.startRegistration(body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/register\/verify$/, need: null, handler: freeRoute((req, res, body) => {
+      return free2027.verifyRegistration(body).then(r => okJson(res, r));
+    }) },
+
+  /* The participant's own side. */
+  { method: 'GET', path: /^\/api\/free2027\/me$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.me(req.free2027.data));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/logout$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.logout(req.free2027.data));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/activities$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.listActivities(req.free2027.data));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/activities\/([^/]+)\/start$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.startActivity(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/attempts\/([^/]+)$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.resumeAttempt(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/attempts\/([^/]+)\/answer$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.saveAnswer(req.free2027.data, params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/attempts\/([^/]+)\/submit$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.submitAttempt(req.free2027.data, params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/results$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.myResults(req.free2027.data));
+    }) },
+
+  /* Competitions only, and only once the administrator has approved AND
+     published. Public on purpose: a leaderboard is meant to be seen. */
+  { method: 'GET', path: /^\/api\/free2027\/leaderboards$/, need: null, handler: freeRoute((req, res, body) => {
+      const d = free2027.sessionFromReq(req);
+      okJson(res, free2027.publishedLeaderboards(d ? d.data : null));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/leaderboards\/([^/]+)$/, need: null, handler: freeRoute((req, res, body, sess, params) => {
+      /* A signed-in candidate's own position is attached when their token is
+         present; the public ten never grows to include it. */
+      const d = free2027.sessionFromReq(req);
+      okJson(res, free2027.publicLeaderboardFor(params[0], d ? d.data : null));
+    }) },
+
+  /* ---- console: the edition itself ---- */
+
+  { method: 'GET', path: /^\/api\/free2027\/admin\/overview$/, need: 'console', cap: 'overview.own', handler: freeRoute((req, res) => {
+      const out = free2027.adminOverview();
+      out.otpDelivery = freeOtpDelivery();
+      okJson(res, out);
+    }) },
+
+  /* The switch. `confirm: true` is required by the server as well as the page,
+     so a replayed request without the acknowledgement is refused. */
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/mode$/, need: 'console', cap: 'homepage.edit', handler: freeRoute((req, res, body) => {
+      return free2027.setMode(body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/edition$/, need: 'console', cap: 'homepage.edit', handler: freeRoute((req, res, body) => {
+      return free2027.setEdition(body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/courses$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body) => {
+      return free2027.setCourses(body).then(r => okJson(res, r));
+    }) },
+
+  /* ---- console: participants ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/participants$/, need: 'console', cap: 'roster.view', handler: freeRoute((req, res) => {
+      const q = new URL(req.url, 'http://x').searchParams;
+      okJson(res, free2027.listParticipants({ q: q.get('q') || '' }));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/participants\.csv$/, need: 'console', cap: 'roster.view', handler: freeRoute((req, res) => {
+      /* The one deliberate way a full email address leaves the server: a file
+         the administrator downloads. Never rendered in the console itself. */
+      const csv = free2027.participantsCsv();
+      const name = 'free2027-participants-' + new Date().toISOString().slice(0, 10) + '.csv';
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="' + name + '"',
+        'Content-Length': Buffer.byteLength(csv),
+        'Cache-Control': 'no-store'
+      });
+      res.end(csv);
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/participants\/([^/]+)$/, need: 'console', cap: 'students.deactivate', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.updateParticipant(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'DELETE', path: /^\/api\/free2027\/admin\/participants\/([^/]+)$/, need: 'console', cap: 'students.deactivate', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteParticipant(params[0]).then(r => okJson(res, r));
+    }) },
+
+  /* ---- console: activities ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/activities$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res) => {
+      okJson(res, free2027.adminActivities());
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/activities$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body) => {
+      return free2027.saveActivity(body, null).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/activities\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.saveActivity(body, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'DELETE', path: /^\/api\/free2027\/admin\/activities\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteActivity(params[0]).then(r => okJson(res, r));
+    }) },
+  /* publish / close / reopen — reopening is the only door left open to a
+     latecomer, and it always carries the new closing time. */
+  { method: 'POST', path: /^\/api\/free2027\/admin\/activities\/([^/]+)\/(publish|close|reopen)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.setActivityState(params[0], params[1], body).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/activities\/([^/]+)\/results$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res, body, sess, params) => {
+      okJson(res, free2027.activityResults(params[0]));
+    }) },
+  /* approve / publish / unpublish / revoke a competition leaderboard */
+  { method: 'POST', path: /^\/api\/free2027\/admin\/activities\/([^/]+)\/leaderboard\/(approve|publish|unpublish|revoke)$/, need: 'console', cap: 'leaderboard.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.leaderboardAction(params[0], params[1]).then(r => okJson(res, r));
+    }) },
+
+  { method: 'GET', path: /^\/api\/free2027\/admin\/attempts\/([^/]+)$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res, body, sess, params) => {
+      okJson(res, free2027.attemptDetail(params[0]));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/records$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
+      okJson(res, free2027.sessionRecords());
+    }) },
+
+  /* ---- console: session archiving ---- */
+  { method: 'POST', path: /^\/api\/free2027\/admin\/sessions\/new$/, need: 'console', cap: 'system.migrate', handler: freeRoute((req, res, body) => {
+      return free2027.startSession(body).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/archives$/, need: 'console', cap: 'system.migrate', handler: freeRoute((req, res) => {
+      okJson(res, free2027.listArchives());
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/archives\/([^/]+)$/, need: 'console', cap: 'system.migrate', handler: freeRoute((req, res, body, sess, params) => {
+      okJson(res, free2027.readArchive(params[0]));
+    }) },
+
   { method: 'POST', path: /^\/api\/analytics\/visit$/, need: null, handler: (req, res, body) => {
       /* Validate payload loosely — malformed beacons are silently dropped. */
       if (!body || typeof body !== 'object') return okJson(res, { ok: true });
@@ -8964,6 +9227,27 @@ const server = http.createServer(async (req, res) => {
       return errJson(res, 403, 'Choose a new password before you continue.');
     }
     sess.tutor = tRec;
+  }
+
+  /* 2027 Free Tutorial Edition. A participant is NOT a G.O.C student account:
+     they hold a free-tutorial token issued only after their email address was
+     verified, and that token opens the /api/free2027/ routes and nothing else.
+     It lives in its own in-memory table (server/lib/free2027.js), so the hub's
+     `sess` above is null for every one of these requests and no original route
+     below can ever see it. The guards for the original routes are untouched. */
+  if (route.need === 'free') {
+    const fsess = free2027.sessionFromReq(req);
+    if (!fsess) return errJson(res, 401, 'Verify your email to continue.');
+    const fed = readData().free2027 || {};
+    if (fed.enabled !== true) return errJson(res, 404, 'The 2027 Free Tutorial Edition is not active on this site.');
+    const fsessCur = (fed.sessions || []).find(x => x && x.id === fed.currentSessionId) || { participants: [] };
+    const who = (fsessCur.participants || []).find(p => p && String(p.id) === String(fsess.data.id));
+    if (!who) return errJson(res, 401, 'Your registration was not found. Verify your email again.');
+    if (who.active === false) return errJson(res, 403, 'This email address has been switched off for this programme.');
+    /* Handed to the handler on the request, exactly as `sess` is for the hub's
+       own accounts. Falls through to the same body reading and error handling
+       as every other route; the handlers are wrapped by freeRoute(). */
+    req.free2027 = fsess;
   }
 
   if (route.need === 'student') {

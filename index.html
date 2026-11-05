@@ -15,6 +15,8 @@
 <meta name="application-name" content="GOC Hub">
 <title>G.O.C Academy Hub</title>
 <link rel="stylesheet" href="css/styles.css">
+  <!-- 2027 Free Tutorial Edition styles (temporary; deleting this file leaves the original hub untouched). -->
+  <link rel="stylesheet" href="css/free2027.css">
 <!-- Critical inline guard: hides every screen and the question panel immediately,
      before the external stylesheet loads. This prevents a flash of all screens
      being visible if the service worker serves a stale css/styles.css that is
@@ -91,7 +93,11 @@
       </div>
 
       <div class="lp-stats">
-        <div class="lp-stat"><b>4</b><span>Science subjects</span></div>
+        <!-- Hidden administrator entrance. Clicking this exact card — the one
+             showing the large 4 — five times in quick succession reveals the
+             administrator sign-in. The card's markup and styling are
+             unchanged; js/free2027-ui.js only listens. -->
+        <div class="lp-stat" id="lpStat4" data-f27-gate="1"><b>4</b><span>Science subjects</span></div>
         <div class="lp-stat"><b>2027</b><span>UTME cohort focus</span></div>
         <div class="lp-stat"><b>3-in-1</b><span>Learn · Practise · Test</span></div>
       </div>
@@ -1399,6 +1405,195 @@
       </div>
     </section>
 
+    <!-- ====================================================================
+         2027 FREE TUTORIAL EDITION (temporary, switchable)
+         --------------------------------------------------------------------
+         These six screens exist only while the site is in 2027 Free Tutorial
+         Mode. In Original Mode they are never shown — nothing about them is
+         deleted, and switching back restores the whole hub exactly as it is.
+         All data comes from /api/free2027/*; the markup here holds no records.
+         ==================================================================== -->
+    <section class="screen f27" id="free-home">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeHomeCta()">Register</button>
+          <button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button>
+        </div>
+      </nav>
+      <div class="f27-hero">
+        <span class="f27-kick">2027 UTME · Free Tutorial Edition</span>
+        <h1>Free weekly assessments and competitions for the 2027 UTME</h1>
+        <p class="f27-lead">No account, no password and no fee. Verify your email once, and sit this week's assessment or the current competition on the same engine the academy's own CBT papers run on.</p>
+        <div class="f27-cta">
+          <button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button>
+          <button class="btn btn-outline btn-block" onclick="freeGo('free-portal')">Enter the CBT Portal</button>
+        </div>
+        <p class="f27-fine" id="freeHomeNote">Registration is verified by a one-time code sent to your email address.</p>
+      </div>
+      <div class="f27-cards">
+        <div class="f27-card"><div class="f27-ico">📝</div><h3>Weekly Assessments</h3><p>Sit the week's paper inside its window. Results are immediate and private to you.</p></div>
+        <div class="f27-card"><div class="f27-ico">🏆</div><h3>Competitions</h3><p>Timed competitions ranked on score, then on who finished fastest.</p></div>
+        <div class="f27-card"><div class="f27-ico">📊</div><h3>Competition Leaderboard</h3><p>The top ten are published once the academy approves the board. Everyone else can see their own position.</p></div>
+      </div>
+      <div class="f27-sec">
+        <h2>Open now</h2>
+        <div id="freeHomeOpen" class="f27-open"><div class="ad-loading">Reading this week's programme…</div></div>
+      </div>
+      <p class="f27-foot">Temporary programme · G.O.C Academy · <span id="freeHomeMode">2027 Free Tutorial Mode</span></p>
+    </section>
+
+    <section class="screen f27" id="free-register">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions"><button class="lp-link" onclick="freeGo('free-home')">← Home</button></div>
+      </nav>
+      <div class="f27-form-wrap">
+        <div class="f27-form">
+          <h1>Register for the free tutorial</h1>
+          <p class="f27-lead">Three details and a code. There is no password to remember.</p>
+          <div id="freeRegStep1">
+            <div class="field"><label for="freeName">Full name</label><input id="freeName" type="text" autocomplete="name" placeholder="e.g. Ada Obi"></div>
+            <div class="field"><label for="freeEmail">Email address</label><input id="freeEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+              <p class="field-hint">Used only to verify you and to keep your record. It is never shown publicly.</p></div>
+            <div class="field"><label for="freeCourse">Intended course of study</label><input id="freeCourse" type="text" list="freeCourseList" autocomplete="off" placeholder="e.g. Medicine and Surgery">
+              <datalist id="freeCourseList"></datalist></div>
+            <p class="f27-err" id="freeRegErr" role="alert"></p>
+            <button class="btn btn-red btn-block" id="freeRegBtn" onclick="freeRegisterStart()">Send my verification code</button>
+          </div>
+          <div id="freeRegStep2" hidden>
+            <p class="f27-otp-lead">We sent a <b>6-digit code</b> to <b id="freeOtpTo">your email</b>. Enter it below to finish registering.</p>
+            <div class="field"><label for="freeOtp">Verification code</label>
+              <input id="freeOtp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="f27-otp-input"></div>
+            <p class="f27-err" id="freeOtpErr" role="alert"></p>
+            <p class="f27-dev-note" id="freeOtpDev" hidden></p>
+            <button class="btn btn-red btn-block" id="freeOtpBtn" onclick="freeRegisterVerify()">Verify and continue</button>
+            <button class="btn btn-outline btn-block" style="margin-top:9px" onclick="freeRegisterRestart()">Use a different email</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen f27" id="free-portal">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">CBT Portal</span>
+        </div>
+        <div class="lp-actions">
+          <span class="f27-who" id="freeWho">—</span>
+          <button class="lp-link" onclick="freeSignOut()">Sign out</button>
+        </div>
+      </nav>
+      <div class="f27-sec">
+        <div class="f27-tabs" role="tablist">
+          <button class="f27-tab on" data-f27tab="weekly" onclick="freePortalTab('weekly')">Weekly Assessments</button>
+          <button class="f27-tab" data-f27tab="competition" onclick="freePortalTab('competition')">Competitions</button>
+          <button class="f27-tab" data-f27tab="leaderboard" onclick="freePortalTab('leaderboard')">Competition Leaderboard</button>
+        </div>
+        <div id="freePortalList" class="f27-list"><div class="ad-loading">Loading this session's programme…</div></div>
+        <div id="freePortalResults" class="f27-mine"></div>
+      </div>
+    </section>
+
+    <section class="screen f27 f27-exam" id="free-exam">
+      <div class="cbt-top">
+        <div class="row gap12">
+          <button class="back" style="background:rgba(255,255,255,.14)" aria-label="Leave this examination" onclick="freeExamLeave()">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div><div style="font-weight:800;font-size:14px" id="freeExamTitle">Assessment</div>
+               <div style="font-size:11.5px;color:#cbd2dc" id="freeExamMeta">Loading…</div></div>
+        </div>
+        <div class="timer" id="freeExamTimer"><svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="freeExamTime">--:--</span></div>
+      </div>
+      <div class="exam-body">
+        <div class="q-num" id="freeExamNum">Question 1 of 1</div>
+        <div class="q-passage" id="freeExamPassage" hidden></div>
+        <div class="q-image" id="freeExamImage" hidden></div>
+        <div class="q-text exam-q" id="freeExamQ"></div>
+        <div class="exam-opts" id="freeExamOpts"></div>
+      </div>
+      <div class="exam-bar">
+        <button class="btn btn-ghost exam-nav-btn" onclick="freeExamMove(-1)">Prev</button>
+        <button class="btn exam-qnum-btn" onclick="freeExamPanel()"><span id="freeExamPanelLabel">Q 1 / 1</span> <span class="exam-grid-icon">&#9783;</span></button>
+        <button class="btn btn-outline exam-nav-btn" onclick="freeExamMove(1)">Next</button>
+        <button class="btn btn-red exam-nav-btn" id="freeExamSubmit" onclick="freeExamSubmit()">Submit</button>
+      </div>
+      <div class="qnav" id="freeExamNav" style="display:none"></div>
+      <div class="qpanel-backdrop" id="freeExamPanelBack" onclick="freeExamPanelClose()" hidden></div>
+      <div class="qpanel" id="freeExamPanel" hidden>
+        <div class="qpanel-top">
+          <span class="qpanel-title">Jump to question</span>
+          <button class="qpanel-close" onclick="freeExamPanelClose()" aria-label="Close">&times;</button>
+        </div>
+        <div class="qpanel-grid" id="freeExamPanelGrid"></div>
+      </div>
+    </section>
+
+    <section class="screen f27" id="free-result">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">Your result</span>
+        </div>
+        <div class="lp-actions"><button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button></div>
+      </nav>
+      <div class="f27-sec" id="freeResultBody"><div class="ad-loading">Marking your paper…</div></div>
+    </section>
+
+    <section class="screen f27" id="free-leaderboard">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">Competition Leaderboard</span>
+        </div>
+        <div class="lp-actions"><button class="lp-link" onclick="freeGo('free-portal')">← CBT Portal</button></div>
+      </nav>
+      <div class="f27-sec" id="freeBoardBody"><div class="ad-loading">Loading the board…</div></div>
+    </section>
+
+    <!-- The hidden entrance's gate: the same administrator sign-in the hub
+         already uses, shown here because in 2027 Free Tutorial Mode the
+         landing page's Log in button is gone. Reuses #loginId/#loginPw and
+         login(), so the server-side authorisation is unchanged. -->
+    <section class="screen auth" id="free-admin">
+      <div class="auth-brandbar">
+        <div class="lp-brand"><span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><span class="bt">G.O.C Academy Hub</span></div>
+        <button class="lp-link" onclick="freeGo('free-home')">← Home</button>
+      </div>
+      <div class="auth-scroll">
+        <div class="auth-formwrap">
+          <div class="auth-card">
+            <h1>Administrator sign-in</h1>
+            <p class="tagline">Management accounts only. The console stays locked until you also enter the access passcode.</p>
+            <form onsubmit="freeAdminLogin();return false" style="margin-top:20px">
+              <div class="field">
+                <label for="freeAdminId">Staff ID</label>
+                <input type="text" id="freeAdminId" placeholder="GOC-A-…" value="" autocomplete="username">
+              </div>
+              <div class="field">
+                <label for="freeAdminPw">Password</label>
+                <div class="pw-wrap">
+                  <input type="password" id="freeAdminPw" placeholder="Enter your password" autocomplete="current-password">
+                  <button type="button" class="pw-toggle" onclick="togglePw('freeAdminPw',this)">Show</button>
+                </div>
+              </div>
+              <p class="f27-err" id="freeAdminErr" role="alert"></p>
+              <button class="btn btn-red btn-block" type="submit" id="freeAdminBtn">Log in</button>
+            </form>
+            <p class="f27-fine" id="freeAdminNote"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ ADMIN ACCESS PORTAL (firewall) ============ -->
     <section class="screen" id="admin-gate">
       <div class="gate-wrap">
@@ -1852,8 +2047,12 @@ window.__gocBootTimer = setTimeout(function() {
 }, 5000);
 </script>
 <script src="js/goc-core.js"></script>
+<script src="js/goc-free-2027.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/free2027-api.js"></script>
+<script src="js/free2027-ui.js"></script>
+<script src="js/free2027-admin.js"></script>
 <script src="js/pwa.js"></script>
 <!-- ============ TUTORIAL STYLES ============ -->
 <style>
