@@ -86,12 +86,38 @@ code-display bypass; none exists.
 ## 3. Open the original homepage and Admin Console
 
 Open `http://localhost:8080`. The original G.O.C Academy Hub homepage, branding,
-content, navigation, and Science Subjects Statistics card remain visible.
+content, navigation, and Science Subjects Statistics card remain visible. The
+**4 Science subjects** card is an ordinary statistic — it opens nothing (the old
+hidden entrance was removed in PR #9).
 
-Click the existing **4 Science subjects** statistics card once to open the
-existing staff login. This is the only public Admin Console entry point. There
-is no separate public console link. The login uses the original staff
-credentials; after login the original console passcode is still required.
+### Founder authentication sequence (all layers stay separate)
+
+1. **Founder identity request** — on the homepage, scroll to **Get in Touch
+   with G.O.C** and submit the contact form with your full name, your
+   registered Founder email, and the exact message `GOC FOUNDER`. The server
+   validates the exact phrase, checks the email against the configured Founder
+   account, and rate-limits these attempts. A match only routes you to the
+   staff login — it grants no access by itself.
+2. **Staff login** — sign in with the Founder staff credentials (`GOC-A-001` +
+   `GOC_FOUNDER_PW` locally).
+3. **Admin Console Gate** — enter the console passcode (`GOC_PASSCODE` locally).
+4. **Admin Console** opens.
+
+### Founder email identity source
+
+The Founder account is the seeded staff record `GOC-A-001`. Its verifiable
+identity for the contact-form route is, in order: the `email` field on the
+Founder staff record (if set), then the `GOC_FOUNDER_EMAIL` environment
+variable, then the derived account address `goc-a-001@gocacademy.com`. Set
+`GOC_FOUNDER_EMAIL` in `.env` to pin the real address:
+
+| Variable | Purpose |
+|---|---|
+| `GOC_FOUNDER_EMAIL` | Registered Founder email verified by the contact-form route. Optional locally (the derived address is used); recommended in production. Never commit its value. |
+
+To test the complete flow locally: submit the contact form with message
+`GOC FOUNDER` and email `goc-a-001@gocacademy.com` (or your `GOC_FOUNDER_EMAIL`),
+then sign in with `GOC-A-001` / `GOC_FOUNDER_PW`, then unlock with `GOC_PASSCODE`.
 
 | Local account | Staff ID | Password | Role |
 |---|---|---|---|

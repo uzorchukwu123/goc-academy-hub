@@ -187,10 +187,12 @@ that fails is retried on later sweeps, up to 3 times per student.
 
 The original G.O.C Academy Hub homepage remains the public landing page in every
 mode, with its existing branding, navigation, sections, and Science Subjects
-Statistics card intact. A single click on the existing card marked **4 Science
-subjects** opens the existing staff login; there is no separate public Admin
-Console link. Staff still authenticate with their existing account credentials
-and the console passcode.
+Statistics card intact — the card is an ordinary statistic with no hidden
+behaviour (the old hidden entrance was removed in PR #9). The Founder reaches
+the console through the public **Get in Touch** contact form: submitting the
+exact message `GOC FOUNDER` with the registered Founder email is verified
+server-side and routes to the existing staff login; staff still authenticate
+with their existing account credentials and the console passcode.
 
 The 2027 Free Tutorial registration, courses, lessons, activities, quizzes,
 progress, and audit records are namespaced under `db.free2027`. The mode can

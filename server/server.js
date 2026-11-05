@@ -1499,6 +1499,21 @@ function noteContact(ip) {
   if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) contactAttempts.set(ip, { count: 1, first: Date.now() });
   else rec.count += 1;
 }
+/* Founder-phrase attempts ("GOC FOUNDER") get their own, stricter limit so the
+   identity check cannot be brute-forced through the public form. */
+const FOUNDER_MAX = 3;
+const founderAttempts = new Map();
+function tooManyFounderRequests(ip) {
+  const rec = founderAttempts.get(ip);
+  if (!rec) return false;
+  if (Date.now() - rec.first > CONTACT_WINDOW_MS) { founderAttempts.delete(ip); return false; }
+  return rec.count >= FOUNDER_MAX;
+}
+function noteFounderRequest(ip) {
+  const rec = founderAttempts.get(ip);
+  if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) founderAttempts.set(ip, { count: 1, first: Date.now() });
+  else rec.count += 1;
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -3905,23 +3920,35 @@ const ROUTES = [
 
       /* Founder entry through the contact form (PR #9): the exact phrase
          "GOC FOUNDER" is a REQUEST, never a credential. The submitted email is
-         checked against the actual configured Founder account (GOC-A-001);
-         only a match routes the visitor to the existing staff sign-in. The
-         phrase alone grants nothing, and no token is ever issued here. */
+         checked against the actual configured Founder account (GOC-A-001 —
+         its own email field when present, else GOC_FOUNDER_EMAIL, else the
+         derived account address); only a match routes the visitor to the
+         existing staff sign-in. The phrase alone grants nothing, no token is
+         ever issued here, and a mismatch is answered generically so the route
+         does not confirm which address belongs to the Founder. Founder-phrase
+         attempts get their own, stricter rate limit on top of the general
+         contact limiter. */
       if (message.trim() === 'GOC FOUNDER') {
+        if (tooManyFounderRequests(ip)) return errJson(res, 429, 'Too many requests from this connection. Please try again later.');
+        noteFounderRequest(ip);
         const db0 = readData();
         const founder = (db0.staff || []).find(x => x && x.id === 'GOC-A-001');
-        const founderEmail = String(process.env.GOC_FOUNDER_EMAIL || (founder ? founder.id.toLowerCase() + '@gocacademy.com' : '')).trim().toLowerCase();
-        if (!founder || !founderEmail) {
+        const founderEmail = String(
+          (founder && founder.email) || process.env.GOC_FOUNDER_EMAIL ||
+          (founder ? founder.id.toLowerCase() + '@gocacademy.com' : '')
+        ).trim().toLowerCase();
+        if (!founder || !founderEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(founderEmail)) {
           return errJson(res, 503, 'Founder sign-in is not configured on this deployment. Please use the staff login directly.');
         }
         if (email.trim().toLowerCase() !== founderEmail) {
-          return errJson(res, 403, 'Those details do not match the configured Founder account. The message alone never grants access.');
+          return errJson(res, 403, 'Those details could not be verified. The message alone never grants access.');
         }
         noteContact(ip);
         db0.contactMessages.push({ name, email, message, date: todayLabel(), receivedAt: new Date().toISOString(), founderRequest: true });
         if (db0.contactMessages.length > 500) db0.contactMessages = db0.contactMessages.slice(-500);
         writeData(db0);
+        /* Routes to the EXISTING staff sign-in only — the console passcode gate
+           and staff authentication still apply in full afterwards. */
         okJson(res, { ok: true, founderRequest: true, next: 'admin-gate' });
         sendContactEmail(name, email, message).catch(() => {});
         return;
