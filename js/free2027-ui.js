@@ -20,8 +20,9 @@
         enforced on the server, which is the authority: this side exists so the
         page behaves sensibly, not so it can be trusted.
 
-     3. THE ADMIN ENTRY. One click on the existing "4 Science subjects" card
-        opens the administrator sign-in. It is the only public console entry.
+     3. THE ADMIN ENTRY. The existing homepage contact form can route a
+        server-verified Founder request to the existing staff sign-in. The
+        statistics card is ordinary content, not an entrance.
 
    Loading order: js/goc-free-2027.js (rules), js/api.js, js/app.js, then this
    file. Requires js/free2027-api.js. */
@@ -824,14 +825,11 @@
   };
 
   /* =================================================== 9. ADMIN ENTRY
-     The existing homepage statistic is the single public console gateway.
-     It opens the existing staff sign-in; authentication and the console's
-     passcode gate remain enforced by the original server mechanisms. */
-  /* The homepage statistics card is NO LONGER a hidden admin entrance (PR #9):
-     the Founder reaches the console through the Get-in-Touch contact form with
-     the exact message "GOC FOUNDER", which the server checks against the
-     configured Founder account and then routes to the existing staff sign-in.
-     The card is a plain statistic again — no gate, no hidden handler. */
+     The homepage statistics card is ordinary content (no gate/listener).
+     A Founder request verified by the contact route opens this existing
+     staff sign-in; authentication and the console passcode gate remain
+     enforced by the original server mechanisms. The gate word is never
+     present in this script or fetched from a public configuration endpoint. */
 
   /* The administrator signs in with the hub's own login (js/app.js loginNow),
      which the server authorises exactly as it always did. This only feeds the
@@ -844,17 +842,24 @@
     if (!id) { if (err) err.textContent = 'Enter your Staff ID.'; return; }
     var btn = $('freeAdminBtn');
     busy(btn, true);
-    GOC.api.ready.then(function () { return GOC.api.login(id, pw); }).then(function (user) {
+    return GOC.api.ready.then(function () { return GOC.api.login(id, pw); }).then(function (user) {
       busy(btn, false);
       if (!user || user.role !== 'admin') {
         if (err) err.textContent = 'That is not a management account.';
         return;
       }
       if (typeof global.applyIdentity === 'function') global.applyIdentity(user);
-      /* Into the hub's own secure access portal: the passcode is still asked
-         for, and the console is still locked until the server accepts it. */
-      global.go('admin-gate');
-      say('Staff ID recognised — enter your access passcode');
+      var pwField = $('freeAdminPw'); if (pwField) pwField.value = '';
+      /* A manager still on a starting password keeps the existing forced
+         change step. Otherwise this is the hub's own secure access portal:
+         the console stays locked until the server accepts the passcode. */
+      if (user.mustChangePassword) {
+        global.go('staff-change-password');
+        say('Choose your own password to continue');
+      } else {
+        global.go('admin-gate');
+        say('Staff ID recognised — enter your access passcode');
+      }
     }, function (er) {
       busy(btn, false);
       if (err) err.textContent = (er && er.message) || 'That ID and password do not match.';

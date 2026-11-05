@@ -3274,16 +3274,15 @@ listPublishedVideos: function () {
      GOC.api._drivers, so this adds no behaviour outside the test suite. */
   GOC.api._drivers = { mock: mock, http: http };
 
-  /* Homepage "Talk to G.O.C Academy" form. This is deliberately NOT routed
-     through `active` alone: the academy's inbox (godsowncenterinfo@gmail.com)
-     is reached over the public internet no matter which driver is running,
-     while `active.recordContactMessage` keeps a durable local/server copy so
-     a message is never silently dropped if that relay is unreachable (a
-     school Wi-Fi blocking it, a visitor on a flaky connection, etc). Both
-     legs are attempted; only a validation failure (empty field) rejects —
-     everything else resolves so the visitor always sees a plain "sent"
-     confirmation rather than a scary error for what is, from their side,
-     a one-button form. */
+  /* Homepage "Talk to G.O.C Academy" form.
+     Server mode: ONE authoritative POST /api/contact decides the result. Its
+     response is returned untouched to the form; a Founder validation failure
+     rejects and is never presented as success. A verified Founder request
+     stops here (the server owns its single record/email attempt). Ordinary
+     messages keep the existing FormSubmit relay after the durable record.
+     Offline/mock mode: the original relay + in-memory record fallback stays
+     available, with only a validation failure rejecting. No caller may make
+     a second recordContactMessage() call for the same submission. */
   GOC.api.sendContact = function (data) {
     var name = String((data && data.name) || '').trim();
     var email = String((data && data.email) || '').trim();
@@ -3291,28 +3290,40 @@ listPublishedVideos: function () {
     if (!name) return fail('Please add your name.');
     if (!email || email.indexOf('@') < 1 || email.indexOf('@') === email.length - 1) return fail('Please add a valid email address.');
     if (!message) return fail('Please add a short message.');
+    var payload = { name: name, email: email, message: message };
 
-    function storeCopy() {
-      // Belt-and-braces only — its own failure must never surface as the
-      // form's result, so it is swallowed here rather than in every caller.
-      return active.recordContactMessage({ name: name, email: email, message: message }).catch(function () { return null; });
+    function relay() {
+      if (typeof fetch !== 'function') return ok(false);
+      return fetch('https://formsubmit.co/ajax/godsowncenterinfo@gmail.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          name: name, email: email, message: message,
+          _subject: 'New message from the G.O.C Academy Hub website',
+          _template: 'table',
+          _captcha: 'false'
+        })
+      }).then(function (r) { return !!(r && r.ok); }, function () { return false; });
     }
 
-    if (typeof fetch !== 'function') return storeCopy().then(function () { return { delivered: false }; });
-
-    return fetch('https://formsubmit.co/ajax/godsowncenterinfo@gmail.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        name: name, email: email, message: message,
-        _subject: 'New message from the G.O.C Academy Hub website',
-        _template: 'table',
-        _captcha: 'false'
-      })
-    }).then(function (r) {
-      return storeCopy().then(function () { return { delivered: !!(r && r.ok) }; });
-    }, function () {
-      return storeCopy().then(function () { return { delivered: false }; });
+    return GOC.api.ready.then(function () {
+      if (active === http) {
+        /* Do not swallow this error: the backend may be refusing a Founder
+           identity/configuration check, and the form must show that refusal. */
+        return active.recordContactMessage(payload).then(function (r) {
+          if (r && r.founderRequest === true) return r;
+          return relay().then(function (delivered) {
+            var out = r || { ok: true };
+            out.delivered = delivered;
+            return out;
+          });
+        });
+      }
+      /* No server: preserve the original offline behaviour. */
+      return relay().then(function (delivered) {
+        return active.recordContactMessage(payload).catch(function () { return null; })
+          .then(function () { return { delivered: delivered }; });
+      });
     });
   };
 

@@ -57,6 +57,7 @@ const reminders = require('./lib/reminders');
    `free2027` block further down) leaves the original hub exactly as it was. */
 const free2027Lib = require('./lib/free2027');
 const mailstatus = require('./lib/mailstatus');
+const founderContact = require('./lib/founder-contact');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -1499,8 +1500,8 @@ function noteContact(ip) {
   if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) contactAttempts.set(ip, { count: 1, first: Date.now() });
   else rec.count += 1;
 }
-/* Founder-phrase attempts ("GOC FOUNDER") get their own, stricter limit so the
-   identity check cannot be brute-forced through the public form. */
+/* Attempts using the configured Founder gate word get their own, stricter
+   limit so the identity check cannot be brute-forced through the public form. */
 const FOUNDER_MAX = 3;
 const founderAttempts = new Map();
 function tooManyFounderRequests(ip) {
@@ -3898,58 +3899,51 @@ const ROUTES = [
     } },
 
   /* Homepage "Talk to G.O.C Academy" form. Public on purpose — a visitor
-     hasn't signed in yet when they use it. js/api.js's sendContact() calls
-     the mail relay (FormSubmit, straight to godsowncenterinfo@gmail.com)
-     itself and calls this route in parallel purely to keep a durable copy;
-     this handler ALSO makes its own best-effort attempt to email the
-     academy inbox when SMTP is configured (GOC_SMTP_HOST/PORT/USER/PASS
-     env vars — see DEPLOYMENT.md), so the message still reaches the inbox
-     even from a visitor whose browser/network blocks the third-party
-     relay. Either way the submission is never lost: it is written to
-     data.json before any mail attempt is made. */
+     hasn't signed in yet when they use it. This route is the single
+     authoritative backend request for a submission: it records the message
+     once and makes at most one server-side SMTP attempt. Ordinary messages
+     keep the existing browser FormSubmit relay as well (js/api.js), but a
+     verified Founder request never goes through that third-party relay, so
+     the gate word is not emailed twice or sent to an external form service.
+     The record is written before any mail attempt is made. */
   { method: 'POST', path: /^\/api\/contact$/, need: null, handler: (req, res, body) => {
       const ip = getClientIp(req);
       if (tooManyContacts(ip)) return errJson(res, 429, 'Too many messages sent from this connection. Please try again later.');
 
       const name = clean(body.name, 120);
       const email = clean(body.email, 160);
-      const message = clean(body.message, 4000);
+      /* Keep the raw message for the EXACT gate-word comparison. clean()
+         collapses whitespace and trims, which would change a configured
+         phrase; ordinary messages keep the existing cleaned/capped copy. */
+      const rawMessage = typeof body.message === 'string' ? body.message : '';
+      const message = clean(rawMessage, 4000);
       if (!name) return errJson(res, 400, 'Please add your name.');
       if (!email || email.indexOf('@') < 1 || email.indexOf('@') === email.length - 1) return errJson(res, 400, 'Please add a valid email address.');
       if (!message) return errJson(res, 400, 'Please add a short message.');
 
-      /* Founder entry through the contact form (PR #9): the exact phrase
-         "GOC FOUNDER" is a REQUEST, never a credential. The submitted email is
-         checked against the actual configured Founder account (GOC-A-001 —
-         its own email field when present, else GOC_FOUNDER_EMAIL, else the
-         derived account address); only a match routes the visitor to the
-         existing staff sign-in. The phrase alone grants nothing, no token is
-         ever issued here, and a mismatch is answered generically so the route
-         does not confirm which address belongs to the Founder. Founder-phrase
-         attempts get their own, stricter rate limit on top of the general
-         contact limiter. */
-      if (message.trim() === 'GOC FOUNDER') {
+      /* Founder entry through the contact form. The configured gate word is
+         a REQUEST, never a credential. Only the server knows it; the browser
+         simply submits the message field. The email must match the explicitly
+         configured GOC_FOUNDER_EMAIL — there is no derived-address fallback.
+         A match routes to the existing staff sign-in only; no token is issued
+         and the normal staff login + console passcode still apply afterwards. */
+      const gateWord = founderContact.configuredGateWord(process.env);
+      if (gateWord !== null && founderContact.matchesGateWord(rawMessage, gateWord)) {
         if (tooManyFounderRequests(ip)) return errJson(res, 429, 'Too many requests from this connection. Please try again later.');
         noteFounderRequest(ip);
-        const db0 = readData();
-        const founder = (db0.staff || []).find(x => x && x.id === 'GOC-A-001');
-        const founderEmail = String(
-          (founder && founder.email) || process.env.GOC_FOUNDER_EMAIL ||
-          (founder ? founder.id.toLowerCase() + '@gocacademy.com' : '')
-        ).trim().toLowerCase();
-        if (!founder || !founderEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(founderEmail)) {
-          return errJson(res, 503, 'Founder sign-in is not configured on this deployment. Please use the staff login directly.');
+        const founderEmail = founderContact.configuredEmail(process.env);
+        if (!founderEmail) {
+          return errJson(res, 503, 'Founder sign-in is not configured on this deployment.');
         }
         if (email.trim().toLowerCase() !== founderEmail) {
           return errJson(res, 403, 'Those details could not be verified. The message alone never grants access.');
         }
         noteContact(ip);
+        const db0 = readData();
         db0.contactMessages.push({ name, email, message, date: todayLabel(), receivedAt: new Date().toISOString(), founderRequest: true });
         if (db0.contactMessages.length > 500) db0.contactMessages = db0.contactMessages.slice(-500);
         writeData(db0);
-        /* Routes to the EXISTING staff sign-in only — the console passcode gate
-           and staff authentication still apply in full afterwards. */
-        okJson(res, { ok: true, founderRequest: true, next: 'admin-gate' });
+        okJson(res, { ok: true, founderRequest: true, next: 'free-admin' });
         sendContactEmail(name, email, message).catch(() => {});
         return;
       }
@@ -3957,8 +3951,7 @@ const ROUTES = [
       noteContact(ip);
       const db = readData();
       db.contactMessages.push({ name, email, message, date: todayLabel(), receivedAt: new Date().toISOString() });
-      // Cap the log so an old install's data.json cannot grow forever; the
-      // mail relay is the real delivery path, this is only a safety net.
+      // Cap the log so an old install's data.json cannot grow forever.
       if (db.contactMessages.length > 500) db.contactMessages = db.contactMessages.slice(-500);
       writeData(db);
       okJson(res, { ok: true });
@@ -9824,6 +9817,8 @@ function start() {
     if (DOOR_WORD) console.log('  Tutor entrance: open (word from GOC_TUTOR_DOOR).');
     else if (DOOR_WORD_RAW) console.log('  Tutor entrance: CLOSED. GOC_TUTOR_DOOR must be at least ' + DOOR_WORD_MIN + ' characters.');
     else console.log('  Tutor entrance: closed. Set GOC_TUTOR_DOOR to a secret word to let tutors in.');
+    /* Value-free diagnostic: never print the configured phrase or address. */
+    console.log('  Founder contact entrance: ' + founderContact.configurationStatus(process.env) + '.');
     console.log('');
     if (appwriteDatabases) {
       migrateAppwriteTiers().catch(function(err) {

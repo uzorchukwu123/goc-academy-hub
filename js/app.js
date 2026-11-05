@@ -579,7 +579,7 @@ function go(id){
      refuses the data anyway; this stops the empty shell being shown at all.
      The public screens stay open, because that is where an expired student is
      being sent. */
-  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship'];
+  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship','free-admin'];
   if(openScreens.indexOf(id) < 0 && ssExpired()){ ssEnd(); return; }
   if(id === 'login-v2' && typeof ssClearNotice === 'function' && !(ss && ss.ending)) ssClearNotice();
   // Access guard: the admin console is never reachable as a student, and only
@@ -648,7 +648,7 @@ function go(id){
     clearInterval(wtTimerId); wtTimerId = null;
   }
   // The preview banner belongs only to student-facing screens.
-  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2'){
+  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin'){
     previewing = false;
     document.body.classList.remove('previewing');
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
@@ -661,7 +661,7 @@ function go(id){
   tabbar.style.display = showTabs ? 'flex' : 'none';
   // On desktop: public screens (landing, login, sign-up) are full-bleed, and
   // every in-app screen shows the left sidebar. This class drives that split.
-  var publicScreens = ['landing','login-v2','signup','updates','legal'];
+  var publicScreens = ['landing','login-v2','signup','updates','legal','free-admin'];
   document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
   // highlight tab (map sub-screens to their section)
   var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
@@ -1429,34 +1429,37 @@ function scrollToContact(){
   var c=document.getElementById('contact');
   if(c && c.scrollIntoView) c.scrollIntoView({behavior:'smooth', block:'start'});
 }
+var contactSending = false;
 function sendContact(){
+  if(contactSending) return Promise.resolve();
   var n=document.getElementById('cName'), e=document.getElementById('cEmail'), m=document.getElementById('cMsg');
   var btn=document.getElementById('cSendBtn'), status=document.getElementById('cStatus');
   var firstName=(n&&n.value.trim().split(' ')[0])||'there';
   if(status){ status.className='lp-cstatus'; status.textContent=''; }
+  contactSending = true;
   if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   var nameVal = n && n.value, emailVal = e && e.value, msgVal = m && m.value;
-  GOC.api.sendContact({
+  /* Exactly one API submission. The message field is sent as typed; the
+     configured Founder gate word lives only on the server. The backend's
+     response alone decides whether this was a verified Founder request. */
+  return GOC.api.sendContact({
     name: nameVal, email: emailVal, message: msgVal
-  }).then(function(){
+  }).then(function(r){
     if(n)n.value='';if(e)e.value='';if(m)m.value='';
-    if(status){ status.className='lp-cstatus ok'; status.textContent='Thanks '+firstName+'! Your message has been sent to the G.O.C Academy team — we usually reply within a day.'; }
-    /* Founder entry (PR #9): the exact phrase "GOC FOUNDER" is a request, not a
-       credential. The server checks the submitted email against the configured
-       Founder account and only then routes to the existing staff sign-in. */
-    if (String(msgVal||'').trim() === 'GOC FOUNDER' && GOC.api.recordContactMessage) {
-      GOC.api.recordContactMessage({ name: nameVal, email: emailVal, message: msgVal })
-        .then(function (r) {
-          if (r && r.founderRequest && typeof go === 'function') {
-            if(status){ status.className='lp-cstatus ok'; status.textContent='Founder request received — taking you to the staff sign-in.'; }
-            setTimeout(function(){ go('admin-gate'); }, 600);
-          }
-        })
-        .catch(function () { /* the phrase alone never grants anything; a failed check just stays a normal message */ });
+    if(r && r.founderRequest === true){
+      if(status){ status.className='lp-cstatus ok'; status.textContent='Founder request verified — sign in with your staff ID and password.'; }
+      /* Existing staff login only. role is still the visitor's role here, so
+         admin-gate remains guarded until normal staff authentication succeeds. */
+      go('free-admin');
+      return;
     }
+    if(status){ status.className='lp-cstatus ok'; status.textContent='Thanks '+firstName+'! Your message has been sent to the G.O.C Academy team — we usually reply within a day.'; }
   }).catch(function(err){
+    /* Keep the fields on a refusal so a failed Founder check is visible and
+       can be corrected; never show the ordinary success message for it. */
     if(status){ status.className='lp-cstatus err'; status.textContent=(err&&err.message)||'Please check the form and try again.'; }
   }).then(function(){
+    contactSending = false;
     if(btn){ btn.disabled=false; btn.textContent='Send message'; }
   });
 }
@@ -2595,7 +2598,7 @@ function gateKey(n){
   var attempt = gateBuf;
   // The passcode is checked by the API. A wrong code never reveals anything and
   // the console stays locked until the API says otherwise.
-  GOC.api.unlockConsole(attempt).then(function(){
+  return GOC.api.unlockConsole(attempt).then(function(){
     adminUnlocked = true;
     gateBuf=''; gatePaint();
     return Promise.all([loadStudents(), loadStaff(), loadSettings(), loadUpdates()]);

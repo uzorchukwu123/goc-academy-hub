@@ -40,6 +40,8 @@ function boot(extraEnv) {
       GOC_SMTP_HOST: 'mailpit-test',
       GOC_FOUNDER_PW: 'founder2027',
       GOC_PASSCODE: '2027',
+      GOC_FOUNDER_EMAIL: 'founder@gocacademy.test',
+      GOC_FOUNDER_GATE_WORD: 'banks-founder-entry-2027',
       GOC_DATA_DIR: DATA,
       GOC_FREE_2027: '1'
     }, extraEnv || {}),
@@ -241,12 +243,12 @@ async function registerStudent(email, name) {
   head('E. contact form and Founder entry');
   var normal = await call('POST', '/api/contact', { name: 'Visitor', email: 'visitor@example.com', message: 'Hello, is the bootcamp free?' });
   ok('49. normal contact submissions still work', normal.status === 200 && normal.body.ok === true && !normal.body.founderRequest, normal.raw.slice(0, 120));
-  var phraseOnly = await call('POST', '/api/contact', { name: 'Not The Founder', email: 'someone@example.com', message: 'GOC FOUNDER' });
+  var phraseOnly = await call('POST', '/api/contact', { name: 'Not The Founder', email: 'someone@example.com', message: 'banks-founder-entry-2027' });
   ok('50/51. the phrase alone with a wrong identity is refused', phraseOnly.status === 403 && !phraseOnly.body.founderRequest, phraseOnly.status + ' ' + phraseOnly.raw.slice(0, 120));
-  var phraseLower = await call('POST', '/api/contact', { name: 'x', email: 'goc-a-001@gocacademy.com', message: 'goc founder' });
+  var phraseLower = await call('POST', '/api/contact', { name: 'x', email: 'founder@gocacademy.test', message: 'BANKS-FOUNDER-ENTRY-2027' });
   ok('the phrase must be exact — a different casing is just a normal message', phraseLower.status === 200 && phraseLower.body.ok === true && !phraseLower.body.founderRequest, phraseLower.status);
-  var realFounder = await call('POST', '/api/contact', { name: 'Ernest Uzorchukwu', email: 'goc-a-001@gocacademy.com', message: 'GOC FOUNDER' });
-  ok('52. a verified Founder identity is routed to the existing staff sign-in, with no token', realFounder.status === 200 && realFounder.body.founderRequest === true && realFounder.body.next === 'admin-gate' && !realFounder.body.token && !/founder2027/.test(realFounder.raw), realFounder.raw.slice(0, 160));
+  var realFounder = await call('POST', '/api/contact', { name: 'Ernest Uzorchukwu', email: 'founder@gocacademy.test', message: 'banks-founder-entry-2027' });
+  ok('52. a verified Founder identity is routed to the existing staff sign-in, with no token', realFounder.status === 200 && realFounder.body.founderRequest === true && realFounder.body.next === 'free-admin' && !realFounder.body.token && !/founder2027/.test(realFounder.raw), realFounder.raw.slice(0, 160));
   ok('53. the hidden homepage entrance is gone from the markup', !/data-f27-gate/.test(fs.readFileSync(path.join(APP, 'index.html'), 'utf8')));
 
   /* ------------------------------------------- F. persistence / regression */

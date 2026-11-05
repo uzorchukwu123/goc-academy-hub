@@ -35,6 +35,8 @@ export GOC_APPWRITE_OFF=1              # optional: do not contact configured App
 export GOC_FOUNDER_PW='local-founder-2027'
 export GOC_ACADDIR_PW='local-acaddir-2027'
 export GOC_PASSCODE='481516'
+export GOC_FOUNDER_EMAIL='founder@gocacademy.test'
+export GOC_FOUNDER_GATE_WORD='local-founder-entry-2027'   # throwaway local example; choose your own
 export GOC_SMTP_HOST=127.0.0.1
 export GOC_SMTP_PORT=1025
 export GOC_SMTP_SECURE=false
@@ -49,6 +51,7 @@ Windows PowerShell:
 $env:PORT='8080'; $env:GOC_FREE_2027='1'; $env:GOC_DATA_DIR='./local-test-data'
 $env:GOC_APPWRITE_OFF='1'
 $env:GOC_FOUNDER_PW='local-founder-2027'; $env:GOC_ACADDIR_PW='local-acaddir-2027'; $env:GOC_PASSCODE='481516'
+$env:GOC_FOUNDER_EMAIL='founder@gocacademy.test'; $env:GOC_FOUNDER_GATE_WORD='local-founder-entry-2027'
 $env:GOC_SMTP_HOST='127.0.0.1'; $env:GOC_SMTP_PORT='1025'; $env:GOC_SMTP_SECURE='false'
 $env:GOC_SMTP_FROM='G.O.C Academy Hub <test@gocacademy.test>'
 $env:GOC_FREE_2027_OTP_SECRET='local-test-otp-secret-0123456789abcdef'
@@ -76,6 +79,8 @@ JSON data, or backups should be committed.
 | `GOC_SMTP_USER`, `GOC_SMTP_PASS` | Optional; omit both for a local capture service. Configure both for an authenticated provider. |
 | `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` | Throwaway local passwords for the seeded management accounts. They are hashed in the local data store. |
 | `GOC_PASSCODE` | Throwaway local console unlock passcode. |
+| `GOC_FOUNDER_EMAIL` | Explicit Founder email checked by the contact entrance. Required to enable that entrance; no derived/staff-record fallback. Use a local test address here, never a production address. |
+| `GOC_FOUNDER_GATE_WORD` | Exact, case-sensitive phrase typed into the contact form's Message field. 12–200 characters, no leading/trailing whitespace or control characters. Server-only; never sent to the browser or printed in logs. |
 | `GOC_APPWRITE_OFF=1` | Optional local-only switch to prevent Appwrite calls from this process. |
 
 If SMTP is not configured or delivery fails, registration returns a clear
@@ -93,31 +98,34 @@ hidden entrance was removed in PR #9).
 ### Founder authentication sequence (all layers stay separate)
 
 1. **Founder identity request** — on the homepage, scroll to **Get in Touch
-   with G.O.C** and submit the contact form with your full name, your
-   registered Founder email, and the exact message `GOC FOUNDER`. The server
-   validates the exact phrase, checks the email against the configured Founder
-   account, and rate-limits these attempts. A match only routes you to the
-   staff login — it grants no access by itself.
+   with G.O.C** and submit the contact form with your full name, the exact
+   value of `GOC_FOUNDER_EMAIL`, and the exact value of
+   `GOC_FOUNDER_GATE_WORD` in the Message field. The phrase is case-, space-
+   and punctuation-sensitive. The server validates it, checks the email, and
+   rate-limits these attempts. A match only routes you to the existing staff
+   login (`free-admin`) — it grants no access by itself.
 2. **Staff login** — sign in with the Founder staff credentials (`GOC-A-001` +
    `GOC_FOUNDER_PW` locally).
 3. **Admin Console Gate** — enter the console passcode (`GOC_PASSCODE` locally).
 4. **Admin Console** opens.
 
-### Founder email identity source
+### Founder contact configuration
 
-The Founder account is the seeded staff record `GOC-A-001`. Its verifiable
-identity for the contact-form route is, in order: the `email` field on the
-Founder staff record (if set), then the `GOC_FOUNDER_EMAIL` environment
-variable, then the derived account address `goc-a-001@gocacademy.com`. Set
-`GOC_FOUNDER_EMAIL` in `.env` to pin the real address:
+`GOC_FOUNDER_EMAIL` is the only email identity source for this entrance. There
+is no predictable derived address and no silent fallback to a staff-record
+email. If it is unset or invalid, an exact gate-word request returns a safe
+configuration error and grants nothing. If `GOC_FOUNDER_GATE_WORD` is unset or
+invalid, the Founder entrance is closed (no phrase can match); ordinary
+contact messages still work. Neither value is exposed by `/api/health`,
+`/api/free2027/config`, or any other public configuration endpoint, and
+neither is printed in server logs. Keep production values in the environment
+or secret manager, not in Git or frontend JavaScript.
 
-| Variable | Purpose |
-|---|---|
-| `GOC_FOUNDER_EMAIL` | Registered Founder email verified by the contact-form route. Optional locally (the derived address is used); recommended in production. Never commit its value. |
-
-To test the complete flow locally: submit the contact form with message
-`GOC FOUNDER` and email `goc-a-001@gocacademy.com` (or your `GOC_FOUNDER_EMAIL`),
-then sign in with `GOC-A-001` / `GOC_FOUNDER_PW`, then unlock with `GOC_PASSCODE`.
+To test the complete flow locally, use the two local example values above (or
+your own throwaway values), then sign in with `GOC-A-001` /
+`GOC_FOUNDER_PW`, then unlock with `GOC_PASSCODE`. A failed identity request
+stays on the contact form with an error; it never opens staff login or the
+Admin Console Gate.
 
 | Local account | Staff ID | Password | Role |
 |---|---|---|---|

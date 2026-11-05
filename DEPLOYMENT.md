@@ -94,6 +94,31 @@ screens cannot be opened at all. Tell tutors the word in person or by private me
 place, and change it by editing the variable and restarting. The tutor screens' code lives in
 `server/tutor/` and is never served as a file, so keep that folder with the rest of `server/`.
 
+### Founder contact entrance
+
+Set both variables to enable the Founder identity request through the public
+contact form. Store the real values only in the environment/secret manager:
+
+```text
+GOC_FOUNDER_EMAIL=<real-founder-email>
+GOC_FOUNDER_GATE_WORD=<private-exact-phrase>
+```
+
+- `GOC_FOUNDER_GATE_WORD` is the exact, case-sensitive phrase the Founder types
+  into the contact form's Message field. It must be 12–200 characters with no
+  leading/trailing whitespace or control characters. An unset/invalid value
+  closes the Founder entrance safely; ordinary contact messages still work.
+- `GOC_FOUNDER_EMAIL` is the only email identity accepted by that entrance.
+  It must be explicitly configured and valid. There is no derived-address or
+  staff-record fallback; a missing/invalid address returns a safe
+  configuration error for an exact gate-word request.
+- Neither value is returned by public configuration endpoints, embedded in
+  frontend JavaScript, or printed in server logs. A matching request only
+  opens the existing staff login (`free-admin`). The Founder must still
+  authenticate with `GOC-A-001` and the normal staff password, then unlock the
+  existing Admin Console Gate with the console passcode. The gate word alone
+  never authenticates anyone.
+
 ### Optional environment variables
 
 ```text
@@ -190,9 +215,10 @@ mode, with its existing branding, navigation, sections, and Science Subjects
 Statistics card intact — the card is an ordinary statistic with no hidden
 behaviour (the old hidden entrance was removed in PR #9). The Founder reaches
 the console through the public **Get in Touch** contact form: submitting the
-exact message `GOC FOUNDER` with the registered Founder email is verified
-server-side and routes to the existing staff login; staff still authenticate
-with their existing account credentials and the console passcode.
+exact configured `GOC_FOUNDER_GATE_WORD` with `GOC_FOUNDER_EMAIL` is verified
+server-side and routes to the existing staff login (`free-admin`); staff still
+authenticate with their existing account credentials and the console passcode.
+See **Founder contact entrance** above for the configuration and safety rules.
 
 The 2027 Free Tutorial registration, courses, lessons, activities, quizzes,
 progress, and audit records are namespaced under `db.free2027`. The mode can
