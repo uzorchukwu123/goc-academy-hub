@@ -239,10 +239,8 @@ settle(load(w1)).then(function () {
   ok('the page was not moved off the homepage', w1.calls.go.length === 0 || w1.calls.go[w1.calls.go.length - 1] === 'landing', w1.calls.go.join(','));
   ok('the edition\'s screens were not opened', w1.calls.go.indexOf('free-home') < 0);
   ok('GOC.freeUI reports Original Mode', w1.sandbox.GOC.freeUI.mode().mode === 'original');
-  /* the designated homepage card is the entry in either mode */
-  w1.sandbox.GOC.freeUI.gateClick();
-  ok('the homepage statistics card opens the admin sign-in in Original Mode too',
-    w1.calls.go.indexOf('free-admin') > -1, w1.calls.go.join(','));
+  /* the statistics card is NO LONGER a hidden admin entrance (PR #9) */
+  ok('no gateClick handler remains in Original Mode', w1.sandbox.GOC.freeUI.gateClick === undefined);
 
   console.log('\nA server that cannot be reached also leaves the hub alone');
   w2 = makeWorld({ healthFails: true });
@@ -284,20 +282,17 @@ settle(load(w1)).then(function () {
     ok('and switching on again is the same one class', w3.doc.body.classList.contains('f27-mode'));
   });
 }).then(function () {
-  console.log('\nThe Science Subjects Statistics card is the only Admin Console entry');
+  console.log('\nThe statistics card is a plain stat — the hidden admin entrance is removed (PR #9)');
   var w = makeWorld({});
   load(w);
   return settle().then(function () {
     var card = w.els.lpStat4;
-    ok('the existing homepage statistics card is the marked entry point', card && html.indexOf('id="lpStat4"') > -1 && /data-f27-gate/.test(html));
+    ok('the statistics card is still on the homepage but carries no gate attribute', card && html.indexOf('id="lpStat4"') > -1 && !/data-f27-gate/.test(html));
     ok('the card still reads exactly "4" and "Science subjects"', /<b>4<\/b><span>Science subjects<\/span>/.test(html));
-    ok('the click is handled by the existing card using a delegated listener', /closest\('\[data-f27-gate\]'\)/.test(uiSrc));
-    w.sandbox.GOC.freeUI.gateClick();
-    ok('a single card click immediately opens the existing admin login',
-      w.calls.go.indexOf('free-admin') > -1 && w.els['free-admin'].classList.contains('active'), w.calls.go.join(','));
+    ok('the edition script wires no click handler to the card', !/data-f27-gate/.test(uiSrc) && w.sandbox.GOC.freeUI.gateClick === undefined);
+    ok('clicking the card opens nothing', (function () { w.calls.go.length = 0; w.sandbox.document.listeners.click && w.sandbox.document.listeners.click({ target: card }); return w.calls.go.indexOf('free-admin') < 0 && w.calls.go.indexOf('admin-gate') < 0; })(), w.calls.go.join(','));
     ok('the homepage has no other Admin Console entry point', (function () { var landing = html.slice(html.indexOf('id="landing"'), html.indexOf('id="landing"') + 60000); return !/onclick="[^"]*(?:free-admin|admin-gate|go\('admin')/i.test(landing); })());
-    ok('the admin-login hint says the console still has its passcode',
-      /own passcode/i.test(w.els.freeAdminNote.textContent), w.els.freeAdminNote.textContent);
+    ok('the gate no longer writes a hint into the admin-login note', !/own passcode/i.test(w.els.freeAdminNote.textContent || ''), w.els.freeAdminNote.textContent);
     ok('the sign-in uses the existing administrator form', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
     ok('the stylesheet shows the login screen without requiring Free mode',
       /#free-admin\.active/.test(css.replace(/\s+/g, ' ')));

@@ -232,11 +232,27 @@ waitForBoot(40).then(async function (h) {
   var limited = await call('POST', '/api/free2027/register/start', { name: 'Test Student', email: 'limit@example.com', password: 'Passw0rd-123', course: 'Law' });
   ok('verification email requests have an hourly per-address cap', burstOk && limited.status === 429, limited.raw);
 
-  head('the administrator creates and schedules the activities');
-  var qbank = await call('GET', '/api/questions?section=practice&kind=objective', undefined, adm);
-  var qs = (qbank.body.questions || []).filter(function (q) { return q.kind === 'objective'; });
-  ok('the activity draws on the hub\'s own question bank', qs.length >= 8, qs.length);
-  var ids = qs.slice(0, 4).map(function (q) { return q.id; });
+  head('the administrator imports the two independent question banks and schedules activities');
+  /* One mixed-subject CSV per bank; the subject column decides the category. */
+  function csvRows(prefix, subjects, n) {
+    var rows = ['subject,section,topic,text,optionA,optionB,optionC,optionD,optionE,answer,expected,maxMark,difficulty,explanation,active,year,passageId'];
+    for (var i = 1; i <= n; i++) {
+      var s = subjects[(i - 1) % subjects.length];
+      rows.push([s, 'objective', 'Topic ' + i, prefix + ' question number ' + i + ': which option is correct?',
+        'Alpha ' + i, 'Beta ' + i, 'Gamma ' + i, 'Delta ' + i, '', 'B', '', 1, 'easy', 'Beta is correct.', 'yes', '', ''].join(','));
+    }
+    return rows.join('\n');
+  }
+  var SUBJ5 = ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+  var impW = await call('POST', '/api/free2027/admin/question-banks/weekly/import', { csv: csvRows('Weekly', SUBJ5, 8) }, adm);
+  ok('a mixed-subject CSV imports into the Weekly bank (all five subjects)', impW.status === 200 && impW.body.imported === 8, impW.raw.slice(0, 200));
+  var impC = await call('POST', '/api/free2027/admin/question-banks/competition/import', { csv: csvRows('Comp', SUBJ5, 4) }, adm);
+  ok('a mixed-subject CSV imports into the Competition bank', impC.status === 200 && impC.body.imported === 4, impC.raw.slice(0, 200));
+  var wq = await call('GET', '/api/free2027/admin/questions?bank=weekly', undefined, adm);
+  var cq = await call('GET', '/api/free2027/admin/questions?bank=competition', undefined, adm);
+  ok('the picker reads the edition banks, not the shared db.questions', wq.body.source === 'free2027-question-bank' && wq.body.questions.length === 8 && cq.body.questions.length === 4, wq.body.source + '/' + wq.body.questions.length + '/' + cq.body.questions.length);
+  var ids = wq.body.questions.slice(0, 4).map(function (q) { return q.id; });
+  var compIds = cq.body.questions.map(function (q) { return q.id; });
   var t = Date.now();
   var draft = await call('POST', '/api/free2027/admin/activities', {
     kind: 'weekly', title: 'Week 1 — Foundations', questionIds: ids,
@@ -298,7 +314,7 @@ waitForBoot(40).then(async function (h) {
 
   head('a competition, its ranking and its leaderboard');
   var comp = await call('POST', '/api/free2027/admin/activities', {
-    kind: 'competition', title: 'Term Cup', questionIds: ids,
+    kind: 'competition', title: 'Term Cup', questionIds: compIds,
     opensAt: t - 60000, closesAt: t + 3600000, durationMin: 5, maxAttempts: 1
   }, adm);
   compId = comp.body.activity.id;
@@ -309,7 +325,7 @@ waitForBoot(40).then(async function (h) {
      than hopeful. */
   function correctAnswers() {
     var bank = {};
-    (dataFile().questions || []).forEach(function (q) { bank[String(q.id)] = Number(q.answer); });
+    ((dataFile().free2027 || {}).questionBanks || {}).competition.questions.forEach(function (q) { bank[String(q.id)] = Number(q.answer); });
     return bank;
   }
   var answers = correctAnswers();
@@ -606,5 +622,7 @@ async function phaseTwo() {
     ok('the hub itself is untouched and still serving', health.status === 200 && health.body.service === 'goc-academy-hub');
   } finally {
     try { child2.kill(); } catch (e) {}
+    /* let the port be released before phase three binds it again */
+    await new Promise(function (r) { setTimeout(r, 700); });
   }
 }

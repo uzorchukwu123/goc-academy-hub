@@ -1435,11 +1435,25 @@ function sendContact(){
   var firstName=(n&&n.value.trim().split(' ')[0])||'there';
   if(status){ status.className='lp-cstatus'; status.textContent=''; }
   if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  var nameVal = n && n.value, emailVal = e && e.value, msgVal = m && m.value;
   GOC.api.sendContact({
-    name: n && n.value, email: e && e.value, message: m && m.value
+    name: nameVal, email: emailVal, message: msgVal
   }).then(function(){
     if(n)n.value='';if(e)e.value='';if(m)m.value='';
     if(status){ status.className='lp-cstatus ok'; status.textContent='Thanks '+firstName+'! Your message has been sent to the G.O.C Academy team — we usually reply within a day.'; }
+    /* Founder entry (PR #9): the exact phrase "GOC FOUNDER" is a request, not a
+       credential. The server checks the submitted email against the configured
+       Founder account and only then routes to the existing staff sign-in. */
+    if (String(msgVal||'').trim() === 'GOC FOUNDER' && GOC.api.recordContactMessage) {
+      GOC.api.recordContactMessage({ name: nameVal, email: emailVal, message: msgVal })
+        .then(function (r) {
+          if (r && r.founderRequest && typeof go === 'function') {
+            if(status){ status.className='lp-cstatus ok'; status.textContent='Founder request received — taking you to the staff sign-in.'; }
+            setTimeout(function(){ go('admin-gate'); }, 600);
+          }
+        })
+        .catch(function () { /* the phrase alone never grants anything; a failed check just stays a normal message */ });
+    }
   }).catch(function(err){
     if(status){ status.className='lp-cstatus err'; status.textContent=(err&&err.message)||'Please check the form and try again.'; }
   }).then(function(){

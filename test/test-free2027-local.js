@@ -198,9 +198,16 @@ function adminLogin(id, password, passcode) {
     ok('marking it again changes nothing (idempotent)', again.body.already === true && again.body.progress.completed === 1, again.raw.slice(0, 200));
     ok('an unknown lesson cannot be completed', (await call('POST', '/api/free2027/lessons/F27-L-999/complete', {}, ada)).status === 404);
 
-    head('a paper is built from the LOCAL question bank and marked without Appwrite');
-    var pick = await call('GET', '/api/free2027/admin/questions', undefined, founder);
-    ok('the console picker reads the local bank', pick.status === 200 && pick.body.source === 'local-data-file' && pick.body.questions.length > 0,
+    head('a paper is built from the edition\'s OWN question bank and marked without Appwrite');
+    var imp = await call('POST', '/api/free2027/admin/question-banks/weekly/import', {
+      csv: 'subject,section,topic,text,optionA,optionB,optionC,optionD,optionE,answer,expected,maxMark,difficulty,explanation,active,year,passageId\n' +
+        'Physics,objective,Motion,"A body accelerates uniformly from rest; which value fits a = 2 m/s^2 after 3 s?",3 m/s,6 m/s,9 m/s,12 m/s,,B,,,easy,"v = u + at = 6 m/s.",yes,,\n' +
+        'Mathematics,objective,Algebra,"Solve for x: 2x + 6 = 14",3,4,5,6,,C,,,easy,"2x = 8 so x = 4.",yes,,\n' +
+        'Use of English,objective,Vocabulary,"Choose the word nearest in meaning to CANDID",honest,brave,kind,gentle,,B,,,easy,"Candid means honest.",yes,,'
+    }, founder);
+    ok('questions import into the Weekly bank of the local data file', imp.status === 200 && imp.body.imported === 3, imp.raw.slice(0, 200));
+    var pick = await call('GET', '/api/free2027/admin/questions?bank=weekly', undefined, founder);
+    ok('the console picker reads the edition bank, never Appwrite', pick.status === 200 && pick.body.source === 'free2027-question-bank' && pick.body.questions.length === 3,
       pick.raw.slice(0, 220));
     ok('the picker says nothing about an answer key', !/answer/i.test(pick.raw) || pick.body.questions.every(function (q) { return q.answer === undefined; }));
     var ids = pick.body.questions.slice(0, 3).map(function (q) { return q.id; });
@@ -298,7 +305,7 @@ function adminLogin(id, password, passcode) {
     var f3 = await adminLogin('GOC-A-001', 'local-founder-2027', '481516');
     var q3 = await call('GET', '/api/questions?section=practice&kind=objective', undefined, f3);
     ok('the hub\'s own question route now answers from the local bank too', q3.status === 200 && q3.body.questions.length > 0, q3.status + ' ' + q3.raw.slice(0, 160));
-    ok('the edition still works', (await call('GET', '/api/free2027/admin/questions', undefined, f3)).body.questions.length > 0);
+    ok('the edition still works', (await call('GET', '/api/free2027/admin/questions?bank=weekly', undefined, f3)).body.questions.length > 0);
     await new Promise(function (r) { setTimeout(r, 600); });
     ok('not a single Appwrite request was made in that run', stub.hits === 0, stub.hits + ' — ' + stub.paths.slice(0, 6).join(' | '));
 

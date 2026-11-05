@@ -150,12 +150,29 @@
     },
     attemptDetail: function (id) { return request('GET', '/admin/attempts/' + encodeURIComponent(String(id)), undefined, { admin: true }); },
     records: function () { return request('GET', '/admin/records', undefined, { admin: true }); },
-    /* The edition's own question picker. It reads the LOCAL bank on the server
-       (/api/free2027/admin/questions), never Appwrite — so activities can be
-       built on a box where the Appwrite Database API is unavailable. */
-    adminQuestions: function (subject) {
-      return request('GET', '/admin/questions' + (subject ? '?subject=' + encodeURIComponent(String(subject)) : ''), undefined, { admin: true });
+    /* The edition's own question picker. It reads the edition's LOCAL banks on
+       the server (/api/free2027/admin/questions?bank=…), never Appwrite and
+       never the shared db.questions — so activities can be built on a box
+       where the Appwrite Database API is unavailable. */
+    adminQuestions: function (subject, bank) {
+      var qs = '?bank=' + encodeURIComponent(bank === 'competition' ? 'competition' : 'weekly');
+      if (subject) qs += '&subject=' + encodeURIComponent(String(subject));
+      return request('GET', '/admin/questions' + qs, undefined, { admin: true });
     },
+    /* The two independent question banks (weekly / competition). */
+    adminBanks: function () { return request('GET', '/admin/question-banks', undefined, { admin: true }); },
+    adminBankQuestions: function (bank, params) {
+      params = params || {};
+      var q = [];
+      if (params.q) q.push('q=' + encodeURIComponent(String(params.q)));
+      if (params.subject) q.push('subject=' + encodeURIComponent(String(params.subject)));
+      return request('GET', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions' + (q.length ? '?' + q.join('&') : ''), undefined, { admin: true });
+    },
+    adminBankCreate: function (bank, d) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions', d || {}, { admin: true }); },
+    adminBankUpdate: function (bank, id, d) { return request('PUT', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions/' + encodeURIComponent(String(id)), d || {}, { admin: true }); },
+    adminBankDelete: function (bank, ids, confirm) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/questions/delete', { ids: ids, confirm: confirm === true }, { admin: true }); },
+    adminBankDeleteAll: function (bank, confirm) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/delete-all', { confirm: confirm === true }, { admin: true }); },
+    adminBankImport: function (bank, csv, preview) { return request('POST', '/admin/question-banks/' + encodeURIComponent(String(bank)) + '/import', { csv: csv, preview: preview === true }, { admin: true }); },
     adminLessons: function () { return request('GET', '/admin/lessons', undefined, { admin: true }); },
     saveLesson: function (d, id) {
       return id

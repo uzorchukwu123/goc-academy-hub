@@ -121,7 +121,7 @@
   }
   function tabsHtml() {
     var tabs = [['mode', 'Programme settings'], ['participants', 'Participants'], ['activities', 'Activities'],
-      ['results', 'Results'], ['leaderboards', 'Leaderboards'], ['records', 'Session records']];
+      ['banks', 'Question Banks'], ['results', 'Results'], ['leaderboards', 'Leaderboards'], ['records', 'Session records']];
     if (isFounder()) tabs.push(['sessions', 'Sessions & archive']);
     return tabs.map(function (t) {
       return '<button data-f27adm="' + t[0] + '"' + (A.tab === t[0] ? ' class="on"' : '') +
@@ -230,6 +230,7 @@
     if (A.tab === 'mode') return loadMode();
     if (A.tab === 'participants') return loadParticipants();
     if (A.tab === 'activities') return loadActivities();
+    if (A.tab === 'banks') return loadBanks();
     if (A.tab === 'results') return loadResults();
     if (A.tab === 'leaderboards') return loadLeaderboards();
     if (A.tab === 'records') return loadRecords();
@@ -550,8 +551,9 @@
         '<div class="ad-field"><label>Maximum attempts</label><input id="f27Max" type="number" min="' + rules.MIN_ATTEMPTS + '" max="' + rules.MAX_ATTEMPTS + '" value="' + Number(a.maxAttempts) + '"></div>' +
       '</div>' +
       '<div class="ad-field"><label>Questions (' + (a.questionIds || []).length + ' chosen)</label>' +
-        '<p class="ad-note">The activity draws on the academy\'s own question bank, exactly as a CBT paper does. ' +
-        'Pick a subject below, then add or remove questions.</p>' +
+        '<p class="ad-note">Questions come from this activity\'s OWN bank — ' +
+        (a.kind === rules.KIND_COMPETITION ? 'the Competition Question Bank' : 'the Weekly Assessment Question Bank') +
+        ' (managed under the Question Banks tab). Pick a subject below, then add or remove questions.</p>' +
         '<div class="ad-grid2 two">' +
           '<div class="ad-field"><label>Subject</label><select id="f27QSubj">' +
             (GOC.core && GOC.core.ALL_SUBJECTS ? GOC.core.ALL_SUBJECTS : ['Use of English', 'Physics', 'Chemistry', 'Biology', 'Mathematics'])
@@ -597,9 +599,10 @@
     var host = $('f27QList');
     if (!host) return;
     var subject = ($('f27QSubj') || {}).value || '';
-    host.innerHTML = '<div class="ad-loading">Reading the local question bank…</div>';
+    var bank = A.editing && A.editing.kind === rules.KIND_COMPETITION ? 'competition' : 'weekly';
+    host.innerHTML = '<div class="ad-loading">Reading the ' + (bank === 'competition' ? 'Competition' : 'Weekly Assessment') + ' Question Bank…</div>';
     GOC.api.ready.then(function () {
-      return api.adminQuestions(subject);
+      return api.adminQuestions(subject, bank);
     }).then(function (r) {
       var rows = (r.questions || []).filter(function (q) {
         return q.kind === 'objective' && !q.archived && q.active !== false && (!subject || q.subject === subject);
@@ -931,6 +934,219 @@
     }, function (er) {
       host.innerHTML = failText(er);
     });
+  };
+
+  /* ============================================================ 7. QUESTION BANKS
+     Two completely independent banks: Weekly Assessment Question Bank and
+     Competition Question Bank. Each panel states its destination, shows its
+     own count, search, subject filter, CSV import (with preview + report),
+     manual add/edit, individual delete, bulk delete and delete-all. */
+  var BANK_LABEL = { weekly: 'Weekly Assessment Question Bank', competition: 'Competition Question Bank' };
+  var BANK_DESC = {
+    weekly: 'Serves Weekly Assessments only. Import one mixed-subject CSV (all five subjects in one file) or add questions manually.',
+    competition: 'Serves Competitions only. Completely separate from the Weekly bank — imports, edits and deletions here never touch Weekly questions.'
+  };
+  A.banks = { weekly: { q: '', subject: '', sel: {}, rows: [], count: 0 }, competition: { q: '', subject: '', sel: {}, rows: [], count: 0 } };
+
+  function loadBanks() {
+    loading('Reading the question banks…');
+    GOC.api.ready.then(function () { return api.adminBanks(); }).then(function (ov) {
+      A.bankOverview = ov;
+      body(banksHtml());
+      ['weekly', 'competition'].forEach(function (b) { loadBankRows(b); });
+    }, function (er) { body(failText(er)); });
+  }
+
+  function banksHtml() {
+    return '<div class="ad-actions" style="margin-bottom:12px"><button class="ad-btn" onclick="f27AdmLoad()">Refresh</button>' +
+      '<p class="ad-note">Two independent banks: Weekly Assessment questions never serve Competitions, and vice versa. ' +
+      'Deleting a question still used by an activity is refused by the server.</p></div>' +
+      ['weekly', 'competition'].map(bankPanelHtml).join('');
+  }
+
+  function bankPanelHtml(bank) {
+    var st = A.banks[bank];
+    var ov = (A.bankOverview && A.bankOverview.banks && A.bankOverview.banks[bank]) || { count: 0, bySubject: {} };
+    var subj = (A.bankOverview && A.bankOverview.subjects) || ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+    var subjChips = Object.keys(ov.bySubject || {}).map(function (s) {
+      return '<span class="f27-chip">' + esc(s) + ' ' + ov.bySubject[s] + '</span>';
+    }).join(' ');
+    return '<div class="ad-card" style="margin-bottom:14px" id="f27Bank-' + bank + '">' +
+      '<div class="ad-h">' + BANK_LABEL[bank] + ' <span class="f27-chip ok">' + ov.count + ' question' + (ov.count === 1 ? '' : 's') + '</span></div>' +
+      '<p class="ad-note">' + esc(BANK_DESC[bank]) + '</p>' +
+      (subjChips ? '<p class="ad-note">' + subjChips + '</p>' : '') +
+      '<div class="ad-grid2 two">' +
+        '<div class="ad-field"><label>Search</label><input id="f27Q-' + bank + '" value="' + esc(st.q) + '" placeholder="Search question text or topic" oninput="f27BankFilter(\'' + bank + '\')"></div>' +
+        '<div class="ad-field"><label>Subject</label><select id="f27Subj-' + bank + '" onchange="f27BankFilter(\'' + bank + '\')">' +
+          '<option value="">All five subjects</option>' +
+          subj.map(function (s) { return '<option value="' + esc(s) + '"' + (st.subject === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+        '</select></div>' +
+      '</div>' +
+      '<div class="ad-actions" style="margin:10px 0">' +
+        '<button class="ad-btn pri" onclick="f27BankAdd(\'' + bank + '\')">Add question</button>' +
+        '<button class="ad-btn" onclick="document.getElementById(\'f27Csv-' + bank + '\').click()">Import CSV into THIS bank</button>' +
+        '<input type="file" id="f27Csv-' + bank + '" accept=".csv,text/csv" style="display:none" onchange="f27BankCsvPicked(\'' + bank + '\',this)">' +
+        '<button class="ad-btn danger" onclick="f27BankDeleteSel(\'' + bank + '\')">Delete selected</button>' +
+        '<button class="ad-btn danger" onclick="f27BankDeleteAll(\'' + bank + '\')">Delete all ' + (bank === 'weekly' ? 'Weekly' : 'Competition') + ' questions</button>' +
+      '</div>' +
+      '<div id="f27CsvBox-' + bank + '"></div>' +
+      '<div id="f27BankList-' + bank + '"><div class="ad-loading">Loading…</div></div>' +
+      '<div id="f27BankEdit-' + bank + '"></div>' +
+    '</div>';
+  }
+
+  function loadBankRows(bank) {
+    var st = A.banks[bank];
+    var host = $('f27BankList-' + bank);
+    if (host) host.innerHTML = '<div class="ad-loading">Loading…</div>';
+    api.adminBankQuestions(bank, { q: st.q, subject: st.subject }).then(function (r) {
+      st.rows = r.questions || [];
+      st.count = r.total;
+      renderBankRows(bank);
+    }, function (er) {
+      if (host) host.innerHTML = failText(er);
+    });
+  }
+
+  function renderBankRows(bank) {
+    var st = A.banks[bank];
+    var host = $('f27BankList-' + bank);
+    if (!host) return;
+    if (!st.rows.length) { host.innerHTML = '<div class="ad-empty">No questions in this bank yet — import a CSV or add one manually.</div>'; return; }
+    host.innerHTML = st.rows.map(function (q) {
+      var on = !!st.sel[q.id];
+      return '<div class="f27-admin-row"><div>' +
+        '<label style="font-weight:700"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="f27BankToggle(\'' + bank + '\',\'' + esc(q.id) + '\',this.checked)"> ' +
+        '<b>' + esc(q.subject) + ' · ' + esc(q.topic || 'General') + '</b></label>' +
+        '<span>' + esc(String(q.text || '').slice(0, 180)) + '</span>' +
+        '<span>#' + esc(q.id) + ' · ' + esc(q.difficulty || 'medium') + '</span></div>' +
+        '<div class="ad-actions"><button class="ad-btn" onclick="f27BankAdd(\'' + bank + '\',\'' + esc(q.id) + '\')">Edit</button>' +
+        '<button class="ad-btn danger" onclick="f27BankDeleteOne(\'' + bank + '\',\'' + esc(q.id) + '\')">Delete</button></div></div>';
+    }).join('');
+  }
+
+  global.f27BankFilter = function (bank) {
+    var st = A.banks[bank];
+    st.q = (($('f27Q-' + bank) || {}).value || '');
+    st.subject = (($('f27Subj-' + bank) || {}).value || '');
+    loadBankRows(bank);
+  };
+  global.f27BankToggle = function (bank, id, on) {
+    A.banks[bank].sel[id] = !!on;
+  };
+
+  /* ---- manual add / edit ---- */
+  global.f27BankAdd = function (bank, id) {
+    var st = A.banks[bank];
+    var q = id ? st.rows.filter(function (x) { return String(x.id) === String(id); })[0] : null;
+    var host = $('f27BankEdit-' + bank);
+    if (!host) return;
+    var subj = (A.bankOverview && A.bankOverview.subjects) || ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+    host.innerHTML = '<div class="ad-card" style="border-color:var(--red)"><div class="ad-h">' +
+      (q ? 'Edit question in ' + BANK_LABEL[bank] : 'Add question to ' + BANK_LABEL[bank]) + '</div>' +
+      '<div class="ad-grid2 two">' +
+        '<div class="ad-field"><label>Subject</label><select id="f27NQ-subj">' +
+          subj.map(function (s) { return '<option value="' + esc(s) + '"' + (q && q.subject === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="ad-field"><label>Topic</label><input id="f27NQ-topic" value="' + esc((q && q.topic) || 'General') + '"></div>' +
+      '</div>' +
+      '<div class="ad-field"><label>Question text</label><textarea id="f27NQ-text" rows="3">' + esc((q && q.text) || '') + '</textarea></div>' +
+      '<div class="ad-field"><label>Options (one per line, 2–5)</label><textarea id="f27NQ-opts" rows="5">' + esc(((q && q.options) || []).join('\n')) + '</textarea></div>' +
+      '<div class="ad-grid2 two">' +
+        '<div class="ad-field"><label>Correct option (1-based)</label><input id="f27NQ-ans" type="number" min="1" max="5" value="' + (q ? Number(q.answer) + 1 : 1) + '"></div>' +
+        '<div class="ad-field"><label>Difficulty</label><select id="f27NQ-diff">' +
+          ['easy', 'medium', 'hard'].map(function (d) { return '<option value="' + d + '"' + (q && q.difficulty === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="ad-field"><label>Explanation (optional)</label><textarea id="f27NQ-expl" rows="2">' + esc((q && q.explanation) || '') + '</textarea></div>' +
+      '<div class="ad-actions"><button class="ad-btn pri" onclick="f27BankSave(\'' + bank + '\',\'' + esc(id || '') + '\')">' + (q ? 'Save changes' : 'Add to ' + (bank === 'weekly' ? 'Weekly' : 'Competition') + ' bank') + '</button>' +
+      '<button class="ad-btn" onclick="document.getElementById(\'f27BankEdit-' + bank + '\').innerHTML=\'\'">Cancel</button></div></div>';
+  };
+
+  global.f27BankSave = function (bank, id) {
+    var g = function (x) { return (($('f27NQ-' + x) || {}).value); };
+    var d = {
+      subject: g('subj'), topic: g('topic'), text: g('text'),
+      options: String(g('opts') || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean),
+      answer: Math.max(0, Number(g('ans')) - 1),
+      explanation: g('expl'), difficulty: g('diff')
+    };
+    var p = id ? api.adminBankUpdate(bank, id, d) : api.adminBankCreate(bank, d);
+    p.then(function () {
+      say(id ? 'Question updated in the ' + BANK_LABEL[bank] + '.' : 'Question added to the ' + BANK_LABEL[bank] + '.');
+      var host = $('f27BankEdit-' + bank); if (host) host.innerHTML = '';
+      loadBanks();
+    }, function (er) { say((er && er.message) || 'Could not save the question.', true); });
+  };
+
+  /* ---- CSV import with preview and report ---- */
+  global.f27BankCsvPicked = function (bank, input) {
+    var box = $('f27CsvBox-' + bank);
+    var f = input && input.files && input.files[0];
+    if (!box) return;
+    if (!f) return;
+    box.innerHTML = '<div class="ad-loading">Reading ' + esc(f.name) + '…</div>';
+    var rd = new FileReader();
+    rd.onload = function () {
+      var csv = String(rd.result || '');
+      A.banks[bank].csv = csv;
+      A.banks[bank].csvName = f.name;
+      api.adminBankImport(bank, csv, true).then(function (r) {
+        var rows = (r.rows || []).map(function (x) {
+          return '<div class="f27-admin-row"><div><b>' + esc(x.subject || '') + ' · ' + esc(x.topic || 'General') + '</b><span>' + esc(String(x.text || '').slice(0, 140)) + '</span></div></div>';
+        }).join('');
+        var errs = (r.errors || []).map(function (e) { return '<div class="ad-note" style="color:var(--red)">Line ' + e.line + ': ' + esc(e.error) + '</div>'; }).join('');
+        box.innerHTML = '<div class="ad-card"><div class="ad-h">Import preview — destination: ' + BANK_LABEL[bank] + '</div>' +
+          '<p class="ad-note">File ' + esc(f.name) + ': ' + r.read + ' row(s) read, <b>' + r.wouldImport + '</b> would be imported, <b>' + r.skipped + '</b> skipped.</p>' +
+          (rows || '<div class="ad-empty">No new questions in this file.</div>') + errs +
+          '<div class="ad-actions"><button class="ad-btn pri" onclick="f27BankImportGo(\'' + bank + '\')">Import ' + r.wouldImport + ' question(s) into ' + (bank === 'weekly' ? 'Weekly' : 'Competition') + ' bank</button>' +
+          '<button class="ad-btn" onclick="document.getElementById(\'f27CsvBox-' + bank + '\').innerHTML=\'\'">Cancel</button></div></div>';
+      }, function (er) {
+        box.innerHTML = '<div class="ad-card">' + failText(er) + '</div>';
+      });
+    };
+    rd.readAsText(f);
+  };
+
+  global.f27BankImportGo = function (bank) {
+    var st = A.banks[bank];
+    var box = $('f27CsvBox-' + bank);
+    if (box) box.innerHTML = '<div class="ad-loading">Importing into ' + BANK_LABEL[bank] + '…</div>';
+    api.adminBankImport(bank, st.csv, false).then(function (r) {
+      var errs = (r.errors || []).map(function (e) { return '<div class="ad-note" style="color:var(--red)">Line ' + e.line + ': ' + esc(e.error) + '</div>'; }).join('');
+      if (box) box.innerHTML = '<div class="ad-card"><div class="ad-h">Import complete — ' + BANK_LABEL[bank] + '</div>' +
+        '<p class="ad-note">' + r.read + ' row(s) read · <b>' + r.imported + ' imported</b> · ' + r.skipped + ' skipped' +
+        (r.questions && r.questions.length ? ' (first ID ' + esc(r.questions[0].id) + ')' : '') + '</p>' + errs + '</div>';
+      loadBanks();
+    }, function (er) {
+      if (box) box.innerHTML = '<div class="ad-card">' + failText(er) + '</div>';
+    });
+  };
+
+  /* ---- deletion (individual, bulk, all) — always confirmed in the UI, and
+     the server requires confirm:true as well ---- */
+  function bankDelete(bank, ids) {
+    var label = BANK_LABEL[bank];
+    var n = ids.length;
+    if (!global.confirm('Delete ' + n + ' selected question' + (n === 1 ? '' : 's') + ' from the ' + label + '?\n\nThis is destructive. Questions already used by an activity are refused by the server.')) return;
+    api.adminBankDelete(bank, ids, true).then(function (r) {
+      say('Deleted ' + r.deleted + ' question(s) from the ' + label + '.');
+      A.banks[bank].sel = {};
+      loadBanks();
+    }, function (er) { say((er && er.message) || 'Delete refused.', true); });
+  }
+  global.f27BankDeleteOne = function (bank, id) { bankDelete(bank, [id]); };
+  global.f27BankDeleteSel = function (bank) {
+    var ids = Object.keys(A.banks[bank].sel).filter(function (k) { return A.banks[bank].sel[k]; });
+    if (!ids.length) { say('Select at least one question first.', true); return; }
+    bankDelete(bank, ids);
+  };
+  global.f27BankDeleteAll = function (bank) {
+    var label = BANK_LABEL[bank];
+    var count = A.banks[bank].count || 0;
+    if (!global.confirm('DELETE ALL ' + count + ' question(s) in the ' + label + '?\n\nThis is destructive and cannot be undone. The other bank is not affected. Questions used by an activity are refused by the server.')) return;
+    api.adminBankDeleteAll(bank, true).then(function (r) {
+      say('Deleted all ' + r.deleted + ' question(s) from the ' + label + '. The ' + (bank === 'weekly' ? 'Competition' : 'Weekly Assessment') + ' bank is untouched.');
+      loadBanks();
+    }, function (er) { say((er && er.message) || 'Delete-all refused.', true); });
   };
 
   /* ============================================================ 8. MOUNTING

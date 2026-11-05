@@ -42,9 +42,11 @@ var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
    still carries a capability from the existing map, so the capability system
    itself is unchanged. */
 /* 110 + 27 + 1: PR #9 follow-up adds GET /api/free2027/admin/email-status, the
-   Founder's safe Brevo/SMTP diagnostic, guarded by the same site-configuration
-   capability (homepage.edit) as the mode switch. */
-var CONSOLE_ROUTES = 110 + 28;
+   safe Brevo/SMTP diagnostic, guarded by the same site-configuration capability
+   (homepage.edit) as the mode switch. +7 more for the two independent question
+   banks (overview, list, create, update, bulk-delete, delete-all, CSV import),
+   all guarded by questions.manage. */
+var CONSOLE_ROUTES = 110 + 35;
 var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
 ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));

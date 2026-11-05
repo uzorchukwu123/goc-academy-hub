@@ -43,8 +43,6 @@
   F.tab = 'weekly';
   F.exam = null;                    // { attempt, questions, index, answers, tick }
   F.saveQueue = {};
-  F.gateClicks = 0;
-  F.gateAt = 0;
 
   function $(id) { return document.getElementById(id); }
   function esc(v) {
@@ -98,7 +96,6 @@
         : 'Registration is verified by a one-time code sent to your email address.';
     }
     if (free) {
-      wireLanding(0);
       freeHomeLoad();
     }
   }
@@ -830,14 +827,11 @@
      The existing homepage statistic is the single public console gateway.
      It opens the existing staff sign-in; authentication and the console's
      passcode gate remain enforced by the original server mechanisms. */
-  F.freeGateClick = function () {
-    revealAdminGate();
-  };
-  function revealAdminGate() {
-    global.go('free-admin');
-    var note = $('freeAdminNote');
-    if (note) note.textContent = 'The console keeps its own passcode. Attempts are limited and logged.';
-  }
+  /* The homepage statistics card is NO LONGER a hidden admin entrance (PR #9):
+     the Founder reaches the console through the Get-in-Touch contact form with
+     the exact message "GOC FOUNDER", which the server checks against the
+     configured Founder account and then routes to the existing staff sign-in.
+     The card is a plain statistic again — no gate, no hidden handler. */
 
   /* The administrator signs in with the hub's own login (js/app.js loginNow),
      which the server authorises exactly as it always did. This only feeds the
@@ -867,21 +861,6 @@
     });
   };
 
-  /* Wire the card once the landing page exists. The listener is attached to the
-     card itself as well as delegated on the document, because the landing page
-     is rebuilt by some of the hub's own animations — a delegated listener is
-     what keeps the entrance working across that. */
-  /* The card is found (never modified) so the entrance is only armed once the
-     homepage markup is really there. The click itself is handled by the one
-     delegated listener in hydrate(), which survives the landing page being
-     re-rendered by the hub's own animations. */
-  var wired = false;
-  function wireLanding(tries) {
-    if (wired) return;
-    if ($('lpStat4')) { wired = true; return; }
-    if ((tries || 0) < 20) setTimeout(function () { wireLanding((tries || 0) + 1); }, 150);
-  }
-
   /* ====================================================== 10. HYDRATION */
   /* Fill the course list from the server's own copy, so the console's list and
      the page's list are the same list. */
@@ -894,15 +873,6 @@
   }
 
   function hydrate() {
-    wireLanding(0);
-    /* Delegated listener survives homepage animation/re-rendering. */
-    document.addEventListener('click', function (ev) {
-      var t = ev.target;
-      if (!t || !t.closest) return;
-      var card = t.closest('[data-f27-gate]');
-      if (card) F.freeGateClick();
-    }, true);
-
     /* `ready` is the one boot promise: the page awaits it, and so can a test. */
     F.ready = boot().then(function () {
       /* The original hub's `go()` is wrapped, not replaced: every screen, the
@@ -947,16 +917,13 @@
   GOC.freeUI = {
     applyMode: applyMode,
     mode: function () { return { on: F.on, mode: F.mode }; },
-    gateClick: function () { return F.freeGateClick(); },
-    gateClicks: function () { return F.gateClicks; },
     config: function () { return F.config; },
     /* The boot promise, so a caller can wait for the mode to be settled. */
     ready: function () { return F.ready || Promise.resolve(); },
     boot: boot
   };
 
-  /* Run once the document is ready. js/app.js has already painted the landing
-     page at this point, so the card exists; wireLanding retries if it is late. */
+  /* Run once the document is ready. */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', hydrate);
   } else {
