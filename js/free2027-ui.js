@@ -99,9 +99,17 @@
     if (note) note.textContent = rules.modeLabel(mode);
     var fine = $('freeHomeNote');
     if (fine && F.config) {
-      fine.textContent = (F.config.otpDelivery && F.config.otpDelivery.available === false)
-        ? 'Registration is verified by a one-time email code. The academy has not connected its email sender yet, so codes are shown on screen for now.'
-        : 'Registration is verified by a one-time code sent to your email address.';
+      var del = F.config.otpDelivery || null;
+      if (del && del.available === false) {
+        /* No sender: say what actually happens. In development the code is
+           shown on screen; in production nothing can deliver it, so the visitor
+           is told before they fill the form rather than after. */
+        fine.textContent = del.devAllowed
+          ? 'Registration is verified by a one-time email code. The academy has not connected its email sender yet, so codes are shown on screen for now.'
+          : 'Registration is verified by a one-time email code. The academy has not connected its email sender yet, so registration cannot be completed until it does.';
+      } else {
+        fine.textContent = 'Registration is verified by a one-time code sent to your email address.';
+      }
     }
     if (free) {
       wireLanding(0);
@@ -686,10 +694,10 @@
     }
   };
   function revealAdminGate() {
-    /* Only from the homepage, and only while the edition is showing it. */
+    /* Only while the edition is showing. The card is rendered on the landing
+       page alone, so asking whether #landing is the active screen adds nothing
+       and is wrong here: in the edition the visitor is on #free-home. */
     if (!F.on || F.mode !== rules.MODE_FREE) return;
-    var landing = $('landing');
-    if (landing && landing.classList && !landing.classList.contains('active')) return;
     global.go('free-admin');
     var note = $('freeAdminNote');
     if (note) note.textContent = 'The console keeps its own passcode. Attempts are limited and logged.';

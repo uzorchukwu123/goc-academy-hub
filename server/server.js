@@ -8809,7 +8809,14 @@ const ROUTES = [
      site in, and the course list. Answered with `on:false` rather than an error
      when the edition is off, so the page can simply stay in Original Mode. */
   { method: 'GET', path: /^\/api\/free2027\/config$/, need: null, handler: freeRoute((req, res) => {
-      okJson(res, free2027.publicConfig());
+      const out = free2027.publicConfig();
+      /* Whether a code can actually be emailed is a fact about the deployment,
+         not about the candidate, and the page needs it before the first
+         registration: without it the homepage would promise an email that no
+         sender can deliver. Only the two booleans are published. */
+      const d = freeOtpDelivery();
+      out.otpDelivery = { available: d.available, devAllowed: d.devAllowed };
+      okJson(res, out);
     }) },
 
   /* Register: prove the address first. Nothing is created by this call. */

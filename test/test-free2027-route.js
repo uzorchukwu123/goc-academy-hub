@@ -112,6 +112,12 @@ waitForBoot(40).then(async function (h) {
   var cfg = await call('GET', '/api/free2027/config');
   ok('the public config lists both modes and the six screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 6, cfg.raw.slice(0, 120));
   ok('the config carries no participant, address or code', cfg.raw.indexOf('@') < 0 && cfg.raw.indexOf('otpCode') < 0);
+  /* The page decides what to promise before the first registration from these
+     two facts alone: with no SMTP configured here, a code cannot be emailed,
+     and this test deployment has opted in to showing it on screen. */
+  ok('the config says whether a code can actually be emailed, and how',
+    cfg.body.otpDelivery && cfg.body.otpDelivery.available === false && cfg.body.otpDelivery.devAllowed === true,
+    JSON.stringify(cfg.body.otpDelivery));
 
   head('the console signs in (unchanged) and unlocks (unchanged)');
   var lin = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
@@ -351,12 +357,52 @@ waitForBoot(40).then(async function (h) {
 }).catch(function (e) {
   fails++;
   console.log('  FAIL  ' + (e && e.stack ? e.stack.split('\n')[0] : e));
-}).then(phaseTwo).then(function () {
+}).then(phaseTwo).then(phaseThree).then(function () {
   try { fs.rmSync(SANDBOX, { recursive: true, force: true }); } catch (e) {}
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
   if (fails) console.log('\nserver log tail:\n' + serverLog.slice(-2000));
   process.exit(fails ? 1 : 0);
 });
+
+/* Phase three: a production deployment with the developer switch still set.
+   GOC_FREE_2027_DEV_OTP must never hand a code back to the browser here —
+   without a real mail sender, registration simply cannot complete, and the
+   public config has to say so before the first candidate tries. */
+async function phaseThree() {
+  head('a production deployment never shows a code on screen');
+  var DATA2 = path.join(SANDBOX, 'data-prod');
+  fs.mkdirSync(DATA2, { recursive: true });
+  var child3 = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')], {
+    cwd: SANDBOX,
+    env: Object.assign({}, process.env, {
+      PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'),
+      /* a production-like run refuses to boot on the published demo secrets,
+         so this one is given real ones (and no SMTP). */
+      GOC_FOUNDER_PW: 'prod-founder-2027', GOC_ACADDIR_PW: 'prod-acaddir-2027', GOC_PASSCODE: '918273',
+      GOC_DATA_DIR: DATA2, GOC_FREE_2027: '1', GOC_FREE_2027_DEV_OTP: '1',
+      NODE_ENV: 'production'
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  var prodLog = '';
+  child3.stdout.on('data', function (c) { prodLog += c; });
+  child3.stderr.on('data', function (c) { prodLog += c; });
+  try {
+    var r = await waitForBoot(40);
+    ok('the edition still opens in production', r.body && r.body.free2027 && r.body.free2027.on === true, r.raw + ' ' + prodLog.slice(-300));
+    var c = await call('GET', '/api/free2027/config');
+    ok('the config says a code cannot be emailed and will not be shown',
+      c.body.otpDelivery && c.body.otpDelivery.available === false && c.body.otpDelivery.devAllowed === false,
+      JSON.stringify(c.body.otpDelivery));
+    var reg = await call('POST', '/api/free2027/register/start', { name: 'Zed', email: 'zed@example.com', course: 'Law' });
+    ok('registration reports the code was not delivered', reg.status === 200 && reg.body.delivered === false, reg.raw.slice(0, 200));
+    ok('and no code is handed back, even with the developer switch set', reg.body.dev !== true && reg.body.devCode === undefined, reg.raw.slice(0, 200));
+    ok('nothing was created from an unproved address', ((JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027 || {}).sessions || [{}])[0].participants === undefined ||
+      (JSON.parse(fs.readFileSync(path.join(DATA2, 'data.json'), 'utf8')).free2027.sessions[0].participants || []).length === 0);
+  } finally {
+    try { child3.kill(); } catch (e) {}
+  }
+}
 
 /* Phase two: the SAME data folder, opened by a server whose deployment has the
    central switch off. Nothing about the edition is reachable, and the original

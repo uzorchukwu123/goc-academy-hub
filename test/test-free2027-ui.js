@@ -221,6 +221,10 @@ settle(load(w1)).then(function () {
   ok('the page was not moved off the homepage', w1.calls.go.length === 0 || w1.calls.go[w1.calls.go.length - 1] === 'landing', w1.calls.go.join(','));
   ok('the edition\'s screens were not opened', w1.calls.go.indexOf('free-home') < 0);
   ok('GOC.freeUI reports Original Mode', w1.sandbox.GOC.freeUI.mode().mode === 'original');
+  /* the hidden entrance belongs to the edition: in Original Mode it is inert */
+  for (var g = 0; g < 5; g++) w1.sandbox.GOC.freeUI.gateClick();
+  ok('the hidden administrator entrance never opens in Original Mode',
+    w1.calls.go.indexOf('free-admin') < 0, w1.calls.go.join(','));
 
   console.log('\nA server that cannot be reached also leaves the hub alone');
   w2 = makeWorld({ healthFails: true });
@@ -275,13 +279,16 @@ settle(load(w1)).then(function () {
     ok('the counter is at four', w.sandbox.GOC.freeUI.gateClicks() === 4, w.sandbox.GOC.freeUI.gateClicks());
     ok('the hub is still on the homepage', w.els['free-home'].classList.contains('active') || w.calls.go.indexOf('free-admin') < 0);
     click();
-    /* KNOWN GAP (see FREE-2027-REMAINING.md, item 1): five clicks are counted
-       correctly, but revealAdminGate() refuses to open while #landing is not
-       the active screen — and in 2027 Free Tutorial Mode the visitor is on
-       #free-home. The count is asserted; the reveal is not, yet. */
     ok('the fifth click counts as a complete sequence', w.sandbox.GOC.freeUI.gateClicks() === 0, w.sandbox.GOC.freeUI.gateClicks());
+    ok('the fifth click reveals the administrator sign-in',
+      w.calls.go.indexOf('free-admin') > -1, w.calls.go.join(','));
+    ok('and the edition\'s homepage gives way to it', w.els['free-admin'].classList.contains('active') &&
+      !w.els['free-home'].classList.contains('active'));
+    ok('the note warns that the console keeps its own passcode',
+      /own passcode/i.test(w.els.freeAdminNote.textContent), w.els.freeAdminNote.textContent);
     ok('and the sign-in is the hub\'s own administrator form', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
-    /* a pause restarts the count */
+    /* a pause restarts the count, and a broken sequence never opens the gate */
+    var reveals = w.calls.go.filter(function (x) { return x === 'free-admin'; }).length;
     w.sandbox.advance(5000);
     click(); click(); click(); click();
     ok('after a pause, four slow clicks leave the count at four',
@@ -290,6 +297,8 @@ settle(load(w1)).then(function () {
     click();
     ok('and a click after a long pause starts the count again, at one',
       w.sandbox.GOC.freeUI.gateClicks() === 1, w.sandbox.GOC.freeUI.gateClicks());
+    ok('a sequence broken by a pause never opens the sign-in again',
+      w.calls.go.filter(function (x) { return x === 'free-admin'; }).length === reveals, w.calls.go.join(','));
 
     console.log('\nThe administrator sign-in keeps the server authorisation');
     w.els.freeAdminId.value = 'GOC-A-001';
@@ -372,6 +381,27 @@ settle(load(w1)).then(function () {
       ok('the result screen is opened', w.calls.go[w.calls.go.length - 1] === 'free-result', w.calls.go.join(','));
       ok('and the result is painted with the score and the private note', /2/.test(w.els.freeResultBody.innerHTML) && /private/i.test(w.els.freeResultBody.innerHTML));
     });
+  });
+}).then(function () {
+  console.log('\nThe homepage tells the truth about the email sender');
+  function noteFor(delivery) {
+    var w = makeWorld({
+      config: { on: true, mode: 'free2027', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10, otpDelivery: delivery }
+    });
+    load(w);
+    return settle(w).then(function () { return w.els.freeHomeNote.textContent; });
+  }
+  return noteFor({ available: true }).then(function (note) {
+    ok('with a working sender the page says the code is emailed',
+      /one-time code sent to your email address/.test(note), note);
+    return noteFor({ available: false, devAllowed: true });
+  }).then(function (note) {
+    ok('with no sender in development it says codes are shown on screen',
+      /shown on screen/.test(note) && !/cannot be completed/.test(note), note);
+    return noteFor({ available: false, devAllowed: false });
+  }).then(function (note) {
+    ok('with no sender in production it says registration cannot be completed',
+      /cannot be completed/.test(note) && !/shown on screen/.test(note), note);
   });
 }).then(function () {
   console.log('\nThe client API sends the right token to the right route');
