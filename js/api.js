@@ -2608,6 +2608,8 @@
     return {
       name: 'server',
       _setPasscodeLength: function (n) { passLen = Number(n) || 4; },
+      /* Read-only view of the token this driver holds in memory. */
+      _token: function () { return token; },
 
       login: function (id, password) {
         return req('POST', '/auth/login', { id: norm(id), password: String(password) })
@@ -3311,6 +3313,18 @@ listPublishedVideos: function () {
     }, function () {
       return storeCopy().then(function () { return { delivered: false }; });
     });
+  };
+
+  /* The management session's token, for the one temporary module that needs it
+     (js/free2027-api.js, the 2027 Free Tutorial console). It is the SAME token
+     GOC.api already holds and sends on every console request — nothing new is
+     issued, stored or trusted here, and the server still decides what the
+     account may do on each route. Returns null for a student or a visitor. */
+  GOC.api.staffToken = function () {
+    try {
+      if (active && active.name === 'server') return active._token ? active._token() : null;
+    } catch (e) { /* never throw into a caller */ }
+    return null;
   };
 
   GOC.api.ready = (function () {

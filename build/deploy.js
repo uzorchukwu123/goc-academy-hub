@@ -17,6 +17,8 @@ var path = require('path');
 var ALLOW_FILES = [
   'package.json', 'package-lock.json',
   'js/goc-core.js',
+  /* The 2027 Free Tutorial Edition's shared rules; server/server.js requires it. */
+  'js/goc-free-2027.js',
   'server/server.js', 'server/setup-appwrite.js', 'server/verify-media.js', 'server/export-questions.js'
 ];
 var ALLOW_DIRS = ['server/lib', 'server/tutor'];
