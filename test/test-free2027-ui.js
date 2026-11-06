@@ -128,6 +128,8 @@ function makeWorld(opts) {
     me: function () { return Promise.resolve({ participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law' } }); },
     logout: function () { return Promise.resolve({ ok: true }); },
     activities: function () { calls.api.push(['activities']); return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } }); },
+    /* Public catalogue used by the direct, registration-free CBT Portal entry. */
+    catalogue: function () { calls.api.push(['catalogue']); return Promise.resolve(o.catalogueReply || { guest: true, activities: [] }); },
     start: function (id) { calls.api.push(['start', id]); return Promise.resolve(o.startAttempt || { attempt: { id: 'F27-A1', title: 'Week 1', kind: 'weekly', remainingSec: 615, responses: {} }, questions: [], resumed: false }); },
     resume: function () { return Promise.resolve({}); },
     answer: function (a, q, c) { calls.api.push(['answer', a, q, c]); return Promise.resolve({ saved: true }); },
@@ -162,7 +164,20 @@ function makeWorld(opts) {
     setTimeout: function (fn) { if (o.runTimeouts) fn(); return 0; },
     setInterval: function () { return 1; },
     clearInterval: function () {},
-    Date: { now: function () { return clock; }, UTC: Date.UTC },
+    /* A real Date constructor (the portal formats open/close dates) whose
+       zero-argument form follows the controlled clock. */
+    Date: (function () {
+      function SandboxDate() {
+        if (arguments.length === 0) return new Date(clock);
+        var args = [null].concat(Array.prototype.slice.call(arguments));
+        return new (Function.prototype.bind.apply(Date, args))();
+      }
+      SandboxDate.now = function () { return clock; };
+      SandboxDate.UTC = Date.UTC;
+      SandboxDate.parse = Date.parse;
+      SandboxDate.prototype = Date.prototype;
+      return SandboxDate;
+    })(),
     /* Two answers, like the real server: /api/health names the mode without a
        token, /api/free2027/config is the edition's own copy of the switch and
        its course list. GOC.free reads the response as TEXT, so this must too. */
@@ -493,6 +508,100 @@ settle(load(w1)).then(function () {
       var w2 = world(function () { return Promise.resolve({ ok: false, status: 403, text: function () { return Promise.resolve('{"error":"Your role does not include this."}'); } }); });
       return w2.api.adminOverview().then(function () { return false; }, function (e) { return /role does not include/.test(e.message) && e.status === 403; });
     })());
+  });
+}).then(function () {
+  /* ===== Homepage CTAs, direct CBT Portal entry and mode-aware routing ===== */
+  head('Homepage: obsolete bootcamp CTA removed, CBT Portal entry added');
+  ok('"Start Free UTME Bootcamp" is gone from the page entirely', !/start free utme bootcamp/i.test(html));
+  ok('"I already have an account" is preserved', /I already have an account/.test(html));
+  ok('the homepage hero offers CBT Portal directly', /hero-cbt" onclick="freeCbtPortal\(\)"/.test(html));
+  ok('the hero CBT action is not a signup route', !/hero-cbt" onclick="go\('signup'\)/.test(html));
+  ok('the hero keeps the original account action, scoped to Original Mode', /hero-original-cta/.test(html) && /hero-original-cta/.test(css));
+  ok('the CTA styling is mode-scoped rather than hiding a live bootcamp button', /body\.f27-mode #landing \.hero-btns \.hero-cbt/.test(css));
+  ok('the exam header exposes Back and Home', /freeExamLeave\(\)/.test(html) && /freeExamHome\(\)/.test(html) && /Back to Home/.test(html));
+  ok('the small-screen exam header wraps instead of overlapping', /max-width: 480px[\s\S]{0,200}flex-wrap: wrap/.test(css));
+  ok('no bootcamp CTA survives in the nav or drawer markup', !/dw-bootcamp|nav-bootcamp|Bootcamp<\/a>/.test(html));
+
+  head('Direct CBT Portal entry: a guest lands in the portal, not registration');
+  var gp = makeWorld({
+    token: null,
+    catalogueReply: { guest: true, activities: [
+      { id: 'F27-Q1', kind: 'weekly', title: 'Week 1', state: 'open', opensAt: 0, closesAt: 9999999999999, durationMin: 30, questionCount: 2, instructions: 'Answer every question.' },
+      { id: 'F27-Q2', kind: 'competition', title: 'Grand Prize', state: 'open', opensAt: 0, closesAt: 9999999999999, durationMin: 20, questionCount: 2, instructions: '' }
+    ] }
+  });
+  load(gp);
+  return settle(gp).then(function () {
+    gp.sandbox.freeCbtPortal();
+    return settle(gp).then(function () {
+      ok('a guest with no token reaches the CBT Portal screen', gp.calls.go[gp.calls.go.length - 1] === 'free-portal', gp.calls.go.join(','));
+      ok('direct entry never sends the guest to registration', gp.calls.go.indexOf('free-register') < 0, gp.calls.go.join(','));
+      ok('direct entry never sends the guest to signup or an account chooser', gp.calls.go.indexOf('signup') < 0 && gp.calls.go.indexOf('login-v2') < 0);
+      var list = gp.els.freePortalList._html;
+      ok('the portal lists the available weekly assessment', /Week 1/.test(list));
+      ok('the guest sees a clear, honest note that browsing needs no account', /no account needed/.test(list) && /only required when you sit a paper/.test(list));
+      ok('the guest list never renders a Start button that would 401', !/freeExamOpen/.test(list));
+      ok('the only action offered to a guest is the existing email verification', /freeAccountEntry\(\)/.test(list) && /Verify email to sit this paper/.test(list));
+      gp.sandbox.freePortalTab('competition');
+      return settle(gp).then(function () {
+        ok('the competition tab lists the available competition', /Grand Prize/.test(gp.els.freePortalList._html), gp.els.freePortalList._html.slice(0, 160));
+        return gp.sandbox.GOC.free.catalogue().then(function (r) {
+          ok('the client exposes the public catalogue method', r && r.guest === true);
+        });
+      });
+    });
+  });
+}).then(function () {
+  head('Website Mode Control: the account action follows the active mode');
+  var fm = makeWorld({ token: null });
+  load(fm);
+  return settle(fm).then(function () {
+    fm.sandbox.freeAccountEntry();
+    return settle(fm).then(function () {
+      ok('in Free Tutorial Mode the account action opens the edition sign-in', fm.calls.go[fm.calls.go.length - 1] === 'free-register', fm.calls.go.join(','));
+      var om = makeWorld({
+        token: null,
+        health: { service: 'goc-academy-hub', free2027: { on: true, mode: 'original' } },
+        config: { on: true, mode: 'original', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10 }
+      });
+      load(om);
+      return settle(om).then(function () {
+        om.sandbox.freeAccountEntry();
+        return settle(om).then(function () {
+          ok('in Original Mode the account action restores the original login', om.calls.go[om.calls.go.length - 1] === 'login-v2', om.calls.go.join(','));
+          ok('Original Mode does not add the free-tutorial body class', !om.doc.body.classList.contains('f27-mode'));
+          om.sandbox.freeCbtPortal();
+          return settle(om).then(function () {
+            ok('the CBT Portal entry stays reachable in Original Mode too', om.calls.go[om.calls.go.length - 1] === 'free-portal', om.calls.go.join(','));
+          });
+        });
+      });
+    });
+  });
+}).then(function () {
+  head('CBT navigation: Back and Home are always available');
+  var nv = makeWorld({ token: 'PT' });
+  load(nv);
+  return settle(nv).then(function () {
+    nv.sandbox.freeExamHome();
+    return settle(nv).then(function () {
+      ok('Back to Home from the CBT reaches the hub homepage', nv.calls.go[nv.calls.go.length - 1] === 'landing', nv.calls.go.join(','));
+      ok('Back to Home never routes to registration', nv.calls.go.indexOf('free-register') < 0);
+      ok('the exam Back control is exported for the header button', typeof nv.sandbox.freeExamLeave === 'function');
+      nv.sandbox.freeExamOpen('F27-Q1');
+      return settle(nv).then(function () {
+        var goBefore = nv.calls.go.slice();
+        nv.sandbox.freeExamLeave();
+        return settle(nv).then(function () {
+          /* Home was used just before, so the previous internal screen IS the
+             homepage: Back is context-aware and always leaves the exam. */
+          ok('Back from a live paper leaves the exam to the previous internal screen', nv.calls.go[nv.calls.go.length - 1] === 'landing', nv.calls.go.join(','));
+          ok('Back never leaves the student stranded on the exam screen', nv.calls.go[nv.calls.go.length - 1] !== 'free-exam');
+          ok('Back never submits the paper behind the student\'s back', !nv.calls.api.some(function (c) { return c[0] === 'submit'; }));
+          ok('Back never routes the student into registration', nv.calls.go.slice(goBefore.length).indexOf('free-register') < 0, nv.calls.go.join(','));
+        });
+      });
+    });
   });
 }).then(function () {
   return null;

@@ -51,7 +51,7 @@
           <!-- In 2027 Free Tutorial Mode the edition swaps the original account
                actions for one CBT Portal entry (see css/free2027.css); in Original
                Mode the original Log in / Get started show again, unchanged. -->
-          <button class="lp-link dw-cbt-link" onclick="freeHomeCta()">CBT Portal</button>
+          <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
           <button class="lp-link dw-original" onclick="go('login-v2')">Log in</button>
           <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
         </div>
@@ -65,8 +65,13 @@
             <h1>Raising Smart Scholars for Academic Excellence</h1>
             <p class="sub">G.O.C Academy Hub blends expert tutoring, AI literacy and a gamified study app — so Nigerian students don't just pass exams, they learn to think and study on their own.</p>
             <div class="hero-btns">
-              <button class="lp-btn-light" onclick="go('signup')">Start free UTME Bootcamp</button>
-              <button class="lp-btn-ghost" onclick="go('login-v2')">I already have an account</button>
+              <!-- The obsolete bootcamp sign-up CTA was removed outright here.
+                   Free Tutorial Mode offers a DIRECT CBT Portal entry (no
+                   registration or login step); Original Mode keeps its own
+                   account CTA. The existing-account action is preserved in both. -->
+              <button class="lp-btn-light hero-cbt" onclick="freeCbtPortal()">CBT Portal</button>
+              <button class="lp-btn-light hero-original-cta" onclick="go('signup')">Get started</button>
+              <button class="lp-btn-ghost" onclick="freeAccountEntry()">I already have an account</button>
             </div>
             <div class="lp-trust">
               <span>✓ No card required</span>
@@ -1520,7 +1525,8 @@
     <section class="screen f27 f27-exam" id="free-exam">
       <header class="f27-cbt-header">
         <div class="f27-cbt-title-row">
-          <button type="button" class="f27-cbt-back" aria-label="Leave this examination" onclick="freeExamLeave()">←</button>
+          <button type="button" class="f27-cbt-back" aria-label="Back to the previous page" onclick="freeExamLeave()">← Back</button>
+          <button type="button" class="f27-cbt-back f27-cbt-home" aria-label="Back to Home" onclick="freeExamHome()">Home</button>
           <div class="f27-cbt-title-wrap">
             <h1 id="freeExamTitle">Assessment</h1>
             <div class="f27-cbt-meta"><span class="f27-cbt-kind" id="freeExamKind">Loading…</span><span id="freeExamMeta"></span></div>

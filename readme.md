@@ -48,6 +48,9 @@ recovery harness and its isolated setup are described in
 [`LOCAL-DEVELOPMENT.md`](LOCAL-DEVELOPMENT.md).
 The consolidated historical findings and verification evidence are in
 [`docs/recovery-verification.md`](docs/recovery-verification.md).
+The data-preservation contract (activity deletion, question-bank deletion),
+the homepage/CBT Portal entry corrections and their verification are in
+[`docs/round2-verification.md`](docs/round2-verification.md).
 
 ## Two ways to run it
 

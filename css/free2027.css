@@ -372,3 +372,32 @@ body.f27-mode #landing .lp-actions .dw-original { display: none !important; }
 @media (min-width: 900px) {
   body.f27-mode #landing .lp-actions .dw-cbt-link { display: inline-block; }
 }
+
+/* ============================================================================
+   Homepage CTA corrections
+   ----------------------------------------------------------------------------
+   The obsolete bootcamp sign-up button is deleted from index.html — it is not
+   hidden here. These rules only choose which of the REMAINING hero
+   actions each mode shows, using the same reversible mode scoping as the
+   drawer. Original Mode keeps its own account CTA and login untouched.
+   ========================================================================== */
+.hero-cbt { display: none; }
+body.f27-mode #landing .hero-btns .hero-cbt { display: block; }
+body.f27-mode #landing .hero-btns .hero-original-cta { display: none !important; }
+
+/* A guest browsing the CBT Portal is told plainly that no account is needed to
+   look around, and that verifying an email is only for sitting a paper. */
+.f27-guest-note {
+  background: #fff; border: 1px solid var(--line, #e4e7ec); border-left: 4px solid var(--red, #dc2626);
+  border-radius: 12px; padding: 12px 14px; margin: 0 0 14px;
+  font-size: 13.5px; line-height: 1.55; color: var(--slate, #475467);
+}
+.f27-guest-note b { color: var(--ink, #101828); }
+
+/* CBT Back / Back to Home: both stay visible and tappable on every width. */
+.f27-cbt-header .f27-cbt-back { min-height: 40px; white-space: nowrap; }
+@media (max-width: 480px) {
+  .f27-cbt-header .f27-cbt-title-row { flex-wrap: wrap; row-gap: 6px; }
+  .f27-cbt-header .f27-cbt-back { padding: 8px 10px; font-size: 12.5px; }
+  .f27-cbt-header .f27-cbt-title-wrap { flex: 1 1 100%; order: 3; }
+}

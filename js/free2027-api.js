@@ -98,6 +98,9 @@
     submit: function (attemptId, responses) {
       return request('POST', '/attempts/' + encodeURIComponent(String(attemptId)) + '/submit', { responses: responses || {} });
     },
+    /* Public catalogue: lets a visitor open the CBT Portal with no token,
+       no registration and no login step. Public activity metadata only. */
+    catalogue: function () { return request('GET', '/catalogue'); },
     results: function () { return request('GET', '/results'); },
     /* The candidate's own programme record: profile, enrolment, access, the
        lesson catalogue and how far through it they are. */
@@ -130,7 +133,9 @@
         ? request('PUT', '/admin/activities/' + encodeURIComponent(String(id)), d || {}, { admin: true })
         : request('POST', '/admin/activities', d || {}, { admin: true });
     },
-    deleteActivity: function (id) { return request('DELETE', '/admin/activities/' + encodeURIComponent(String(id)), undefined, { admin: true }); },
+    /* Deletes ONLY the activity. confirm:true is required by the server;
+       attempts, answers, scores and results are always preserved. */
+    deleteActivity: function (id) { return request('DELETE', '/admin/activities/' + encodeURIComponent(String(id)), { confirm: true }, { admin: true }); },
     activityState: function (id, action, d) {
       return request('POST', '/admin/activities/' + encodeURIComponent(String(id)) + '/' + action, d || {}, { admin: true });
     },

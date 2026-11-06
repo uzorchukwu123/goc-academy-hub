@@ -6,6 +6,11 @@ Scope: cumulative recovery from `main` (`fa9a794`) through the retained branch w
 
 Status: prepared for review. **No merge and no deployment were performed.**
 
+Round 2 supersedes parts of this report: activity deletion is now non-cascading,
+question-bank deletion preserves history, and the homepage/CBT entry changed.
+See [`round2-verification.md`](round2-verification.md) for the current contract
+and the latest test results.
+
 Process note: the historical report was requested before modifications. In this
 session, source recovery had already begun before the consolidated historical
 findings were delivered; the findings below are based on Git/PR evidence and

@@ -8875,6 +8875,11 @@ const ROUTES = [
   { method: 'POST', path: /^\/api\/free2027\/logout$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
       okJson(res, free2027.logout(req.free2027.data));
     }) },
+  /* Public CBT Portal catalogue: a visitor enters the portal directly, with no
+     registration, login or onboarding step. Public metadata only. */
+  { method: 'GET', path: /^\/api\/free2027\/catalogue$/, need: null, handler: freeRoute((req, res) => {
+      okJson(res, free2027.publicActivities());
+    }) },
   { method: 'GET', path: /^\/api\/free2027\/activities$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
       okJson(res, free2027.listActivities(req.free2027.data));
     }) },
@@ -8982,7 +8987,9 @@ const ROUTES = [
       return free2027.saveActivity(body, params[0]).then(r => okJson(res, r));
     }) },
   { method: 'DELETE', path: /^\/api\/free2027\/admin\/activities\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
-      return free2027.deleteActivity(params[0]).then(r => okJson(res, r));
+      /* Deletes ONLY the activity record. The body's confirm:true is required,
+         and student attempts/answers/scores/results are always preserved. */
+      return free2027.deleteActivity(params[0], body).then(r => okJson(res, r));
     }) },
   /* publish / close / reopen — reopening is the only door left open to a
      latecomer, and it always carries the new closing time. */

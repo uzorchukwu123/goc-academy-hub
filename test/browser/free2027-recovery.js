@@ -101,7 +101,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
   const page = await context.newPage();
   page.setDefaultTimeout(20000);
   page.on('pageerror', (e) => jsErrors.push(String(e && e.message || e)));
-  page.on('dialog', (d) => d.accept().catch(() => {}));
+  let lastDialog = '';
+  page.on('dialog', (d) => { lastDialog = d.message(); d.accept().catch(() => {}); });
   page.on('response', (r) => { if (r.url().includes('/api/free2027/admin/banks/') && r.url().endsWith('/import')) console.log('IMPORT HTTP ' + r.status()); });
 
   let flowCompleted = false;
@@ -113,6 +114,13 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('homepage', 'branding present', await page.evaluate(() => /G\.O\.C Academy Hub/.test(document.querySelector('#landing .lp-brand .bt').textContent)));
     check('homepage', 'hero headline present', await page.evaluate(() => /Raising Smart Scholars/.test(document.querySelector('#landing .lp-hero h1').textContent)));
     for (const id of ['lpFeatures', 'lpSubjects', 'lpHow', 'contact']) check('homepage', 'section #' + id + ' exists', await page.evaluate((x) => !!document.getElementById(x), id));
+    /* Round 2: the obsolete bootcamp CTA must be GONE, the account action kept,
+       and a real, visible CBT Portal entry offered next to it. */
+    check('homepage', 'no "Start Free UTME Bootcamp" text anywhere in the rendered page', await page.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
+    check('homepage', 'no bootcamp CTA element survives in the DOM', await page.evaluate(() => !Array.from(document.querySelectorAll('button, a')).some((e) => /start free utme bootcamp/i.test(e.textContent))));
+    check('homepage', 'Free-mode hero shows a visible CBT Portal button', await visible(page, '#landing .hero-cbt'));
+    check('homepage', 'the obsolete hero account CTA is not shown in Free mode', !(await visible(page, '#landing .hero-original-cta')));
+    check('homepage', 'the drawer keeps no bootcamp action', await page.evaluate(() => !/bootcamp/i.test(document.getElementById('lpDrawer').textContent)));
     check('homepage', 'mobile hero is not clipped by the flex screen shell', await page.evaluate(() => { const hero = document.querySelector('#landing .lp-hero'); const h1 = hero.querySelector('h1'); const buttons = hero.querySelector('.hero-btns'); return getComputedStyle(hero).flexShrink === '0' && h1.getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom && buttons.getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom && hero.querySelector('.lp-trust').getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom; }));
     check('homepage', 'mobile logo strip is not clipped', await page.evaluate(() => { const e = document.querySelector('#landing .lp-logos'); return e.getBoundingClientRect().height >= e.scrollHeight - 2; }));
     await shot(page, '01-homepage-mobile');
@@ -143,9 +151,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.evaluate(() => go('landing'));
     await page.click('#lpBurger');
     await page.click('#lpDrawer .dw-cbt');
-    await active(page, 'free-register');
-    check('drawer', 'CBT Portal action opens registration without a session', true);
-    await page.click('#free-register [onclick="freeNavBack()"]');
+    /* Corrected contract: the drawer CBT Portal action enters the portal
+       DIRECTLY. A guest is never bounced into registration first. */
+    await active(page, 'free-portal');
+    check('drawer', 'CBT Portal action opens the portal directly without a session', true);
+    check('drawer', 'the drawer CBT action never opens registration', await page.evaluate(() => !document.getElementById('free-register').classList.contains('active')));
+    await page.click('#free-portal .lp-actions [onclick="freeNavBack()"]');
     await active(page, 'landing');
     check('navigation', 'Back returns inside the site, not to browser history', page.url() === BASE + '/');
 
@@ -310,6 +321,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.fill('#f27Dist-1', '1');
     await page.fill('#f27Dist-2', '1');
     await page.fill('#f27Dist-3', '1');
+    /* Regression: the availability reply rebuilds the distribution grid. It
+       must NOT discard what the administrator has already typed — that race
+       silently dropped the distribution (and could detach an input mid-edit). */
+    await page.waitForSelector('#f27Availability .ad-metric');
+    check('activities', 'a slow availability reply preserves the typed distribution', await page.evaluate(() => ['f27Dist-1', 'f27Dist-2', 'f27Dist-3'].every((id) => document.getElementById(id).value === '1')));
+    check('activities', 'a slow availability reply preserves the typed title and count', await page.evaluate(() => document.getElementById('f27Title').value === 'Recovered Weekly Assessment' && document.getElementById('f27Count').value === '3'));
     await page.check('#f27RandO');
     await page.fill('#f27Instr', 'Answer every question. Your work is saved automatically.');
     await page.fill('#f27Dur', '10');
@@ -343,6 +360,13 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await active(page, 'free-exam');
     check('cbt', 'mobile CBT renders question and options', await page.evaluate(() => !!document.getElementById('freeExamQ').textContent && document.querySelectorAll('#freeExamOpts button, #freeExamOpts .f27-cbt-option').length >= 2));
     check('cbt', 'countdown visible', await visible(page, '#freeExamTime'));
+    check('cbt', 'mobile exam header shows a working Back control', await visible(page, '.f27-cbt-back'));
+    check('cbt', 'mobile exam header shows a working Back to Home control', await visible(page, '.f27-cbt-home'));
+    check('cbt', 'the exam header controls do not overlap on a 390px screen', await page.evaluate(() => {
+      const b = document.querySelector('.f27-cbt-back').getBoundingClientRect();
+      const h = document.querySelector('.f27-cbt-home').getBoundingClientRect();
+      return b.right <= h.left + 1 && document.documentElement.scrollWidth <= window.innerWidth;
+    }));
     await shot(page, '12-cbt-question');
     check('cbt', 'option letter badges are separate from option text', await page.evaluate(() => !!document.querySelector('#freeExamOpts .f27-cbt-letter') && !!document.querySelector('#freeExamOpts .f27-cbt-text')));
     await page.click('#freeExamOpts button:first-child');
@@ -467,10 +491,115 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('persistence', 'verified student record retains name/course/verified status', p?.name === 'Ada Browser' && p?.course === 'Medicine and Surgery' && p?.verified === true);
     check('persistence', 'weekly and competition banks stay independent on disk', j.free2027.questionBanks.weekly.questions.length === 4 && j.free2027.questionBanks.competition.questions.length === 2);
     const weekly = s.activities.find((a) => a.kind === 'weekly'); const competition = s.activities.find((a) => a.kind === 'competition');
-    check('persistence', 'allocation, distribution, randomisation and scheduling persist', weekly?.questionIds.length === 3 && weekly?.subjectDistribution?.Mathematics === 1 && weekly?.randomizeOptions === true && weekly?.durationMin === 10 && weekly?.maxAttempts === 2 && weekly?.opensAt <= Date.now() && weekly?.closesAt > Date.now() && competition?.questionIds.length === 2);
+    check('persistence', 'allocation, distribution, randomisation and scheduling persist', weekly?.questionIds.length === 3 && weekly?.subjectDistribution?.Mathematics === 1 && weekly?.randomizeOptions === true && weekly?.durationMin === 10 && weekly?.maxAttempts === 2 && weekly?.opensAt <= Date.now() && weekly?.closesAt > Date.now() && competition?.questionIds.length === 2,
+      JSON.stringify({ title: weekly?.title, n: weekly?.questionIds.length, dist: weekly?.subjectDistribution, randO: weekly?.randomizeOptions, dur: weekly?.durationMin, max: weekly?.maxAttempts, opensIn: weekly && weekly.opensAt - Date.now(), closesIn: weekly && weekly.closesAt - Date.now(), compN: competition?.questionIds.length }));
     check('persistence', 'both submitted attempts retain their papers and responses', s.attempts.filter((a) => a.submittedAt && Object.keys(a.responses || {}).length > 0 && a.questionIds.length > 0).length === 2);
     check('contact', 'ordinary contact was stored and emailed, Founder gate was neither', j.contactMessages.length === 1 && !JSON.stringify(j).includes(GATE) && !fs.readFileSync(MAIL, 'utf8').includes(GATE) && fs.readFileSync(MAIL, 'utf8').includes('ordinary contact message'));
   }
+  /* =====================================================================
+     ROUND 2 — the data-preservation contract, exercised in a real browser.
+     Runs AFTER the persistence assertions above so nothing it deletes can
+     weaken an earlier check.
+     ===================================================================== */
+  if (flowCompleted) {
+    try {
+      const week1 = currentSession().activities.find((a) => a.title === 'Recovered Weekly Assessment');
+      const week1Json = JSON.stringify(week1);
+      const attemptsJsonBefore = JSON.stringify(currentSession().attempts);
+      const participantsJsonBefore = JSON.stringify(currentSession().participants);
+      const banksJsonBefore = JSON.stringify(readData().free2027.questionBanks);
+
+      /* 16. A new weekly assessment ACCUMULATES; it never replaces Week 1. */
+      await page.evaluate(() => go('admin'));
+      await active(page, 'admin');
+      await openFreeAdmin(page);
+      await page.click('[data-f27adm="activities"]');
+      await page.waitForSelector('#f27AdmBody button:has-text("Create Activity")');
+      await page.click('#f27AdmBody button:has-text("Create Activity")');
+      await page.click('.f27-activity-category:has-text("WEEKLY ASSESSMENT")');
+      await page.waitForSelector('#f27Kind');
+      await page.fill('#f27Title', 'Week 2 Accumulation');
+      await page.fill('#f27Count', '2');
+      await page.fill('#f27Dist-1', '1');
+      await page.fill('#f27Dist-2', '1');
+      await page.fill('#f27Dur', '10');
+      await page.fill('#f27Max', '2');
+      await page.selectOption('#f27Status', 'published');
+      await page.click('#f27SaveBtn');
+      await page.waitForFunction(() => /Week 2 Accumulation/.test(document.getElementById('f27AdmBody').textContent) && !document.getElementById('f27SaveBtn'));
+      const actsNow = currentSession().activities;
+      check('accumulation', 'Week 1 and Week 2 coexist as separate records', actsNow.some((a) => a.title === 'Recovered Weekly Assessment') && actsNow.some((a) => a.title === 'Week 2 Accumulation'));
+      check('accumulation', 'each assessment has its own stable unique id', new Set(actsNow.map((a) => a.id)).size === actsNow.length);
+      check('accumulation', 'creating Week 2 does not rewrite Week 1', JSON.stringify(currentSession().activities.find((a) => a.title === 'Recovered Weekly Assessment')) === week1Json);
+      check('accumulation', 'creating Week 2 touches no attempt or student record', JSON.stringify(currentSession().attempts) === attemptsJsonBefore && JSON.stringify(currentSession().participants) === participantsJsonBefore);
+      await shot(page, '20-accumulated-activities');
+
+      /* 17. MANDATORY: deleting an activity keeps every attempt/answer/score. */
+      const keptAttempt = currentSession().attempts.find((a) => a.activityId === week1.id && a.submittedAt);
+      const keptJson = JSON.stringify(keptAttempt);
+      const otherActivitiesJson = JSON.stringify(currentSession().activities.filter((a) => a.id !== week1.id));
+      const row = page.locator('#f27AdmBody .ad-card', { hasText: 'Recovered Weekly Assessment' });
+      /* The single global dialog handler records the message and accepts it. */
+      lastDialog = '';
+      await row.locator('button:text-is("Delete")').click();
+      await page.waitForFunction((t) => !new RegExp(t).test(document.getElementById('f27AdmBody').textContent), 'Recovered Weekly Assessment', { timeout: 20000 });
+      check('delete-preservation', 'the delete confirmation states that attempts and results are kept', /ONLY the activity is removed/.test(lastDialog) && /KEPT/.test(lastDialog), lastDialog.slice(0, 160));
+      const afterDel = currentSession();
+      check('delete-preservation', 'the activity is gone from the console and the data file', !afterDel.activities.some((a) => a.id === week1.id));
+      check('delete-preservation', 'the submitted attempt still exists, byte-for-byte', JSON.stringify(afterDel.attempts.find((a) => a.id === keptAttempt.id)) === keptJson);
+      check('delete-preservation', 'no attempt was removed', afterDel.attempts.length === JSON.parse(attemptsJsonBefore).length);
+      check('delete-preservation', 'submitted answers, score and result are unchanged', JSON.stringify(afterDel.attempts.find((a) => a.id === keptAttempt.id).responses) === JSON.stringify(keptAttempt.responses) && afterDel.attempts.find((a) => a.id === keptAttempt.id).score === keptAttempt.score);
+      check('delete-preservation', 'other activities are untouched', JSON.stringify(afterDel.activities) === otherActivitiesJson);
+      check('delete-preservation', 'student records are untouched', JSON.stringify(afterDel.participants) === participantsJsonBefore);
+      check('delete-preservation', 'both question banks are untouched', JSON.stringify(readData().free2027.questionBanks) === banksJsonBefore);
+      check('delete-preservation', 'the activity id is retained as a historical reference', (afterDel.activityHistory || []).some((h) => h.id === week1.id));
+      await shot(page, '21-activity-deleted-history-kept');
+
+      /* The student can still see the result of the deleted assessment. */
+      await page.evaluate(() => freeGo('free-portal'));
+      await active(page, 'free-portal');
+      /* "Your results this session" is a panel painted by the weekly list, not
+         a tab of its own. The portal remembers the leaderboard tab from the
+         earlier flow, so select Weekly first. */
+      await page.click('[data-f27tab="weekly"]');
+      await page.waitForSelector('#freePortalResults .f27-res-row');
+      check('delete-preservation', 'the student result for the deleted assessment is still displayed', await page.evaluate((t) => document.getElementById('freePortalResults').textContent.includes(t), 'Recovered Weekly Assessment'));
+      check('delete-preservation', 'the surviving result still shows its score', await page.evaluate(() => /\d+\/\d+/.test(document.querySelector('#freePortalResults .f27-res-score').textContent)));
+      await shot(page, '22-result-survives-deletion');
+
+      /* 18. Bank bulk delete + delete-all are bank-scoped and preserve results. */
+      await page.evaluate(() => go('admin'));
+      await active(page, 'admin');
+      await openFreeAdmin(page);
+      await page.click('[data-f27adm="banks"]');
+      await page.waitForSelector('#f27BankList-weekly .f27-admin-row, #f27BankList-weekly input[type="checkbox"]');
+      const compCountBefore = readData().free2027.questionBanks.competition.questions.length;
+      const attemptsBeforeBank = JSON.stringify(currentSession().attempts);
+      await page.locator('#f27BankList-weekly input[type="checkbox"]').nth(0).check();
+      await page.locator('#f27BankList-weekly input[type="checkbox"]').nth(1).check();
+      await page.click('#f27Bank-weekly button:has-text("Delete selected")');
+      await page.waitForFunction(() => /2 questions/.test(document.getElementById('f27BankCount-weekly').textContent), null, { timeout: 20000 });
+      check('bulk-delete', 'multi-selected questions are bulk-deleted from the chosen bank', readData().free2027.questionBanks.weekly.questions.length === 2);
+      check('bulk-delete', 'bulk deletion never touches the other bank', readData().free2027.questionBanks.competition.questions.length === compCountBefore);
+      check('bulk-delete', 'bulk deletion never touches attempts, answers or scores', JSON.stringify(currentSession().attempts) === attemptsBeforeBank);
+      await shot(page, '23-bulk-delete');
+      await page.click('#f27Bank-weekly button:has-text("Delete all Weekly questions")');
+      await page.waitForFunction(() => /0 questions/.test(document.getElementById('f27BankCount-weekly').textContent), null, { timeout: 20000 });
+      check('bulk-delete', 'delete-all clears only the selected weekly bank', readData().free2027.questionBanks.weekly.questions.length === 0 && readData().free2027.questionBanks.competition.questions.length === compCountBefore);
+      check('bulk-delete', 'historical attempts and scores survive delete-all', JSON.stringify(currentSession().attempts) === attemptsBeforeBank);
+      await page.evaluate(() => freeGo('free-portal'));
+      await active(page, 'free-portal');
+      await page.click('[data-f27tab="weekly"]');
+      await page.waitForSelector('#freePortalResults .f27-res-row');
+      check('bulk-delete', 'results are still readable after the source bank was emptied', await page.evaluate(() => /Recovered Competition/.test(document.getElementById('freePortalResults').textContent)));
+      check('bulk-delete', 'the deleted assessment result is still listed after the bank was emptied', await page.evaluate(() => /Recovered Weekly Assessment/.test(document.getElementById('freePortalResults').textContent)));
+      await shot(page, '24-results-after-bank-clear');
+    } catch (e) {
+      check('round2', 'data-preservation flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e);
+      await shot(page, '98-round2-failure');
+    }
+  }
+
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.evaluate(() => go('landing'));
   await active(page, 'landing');
@@ -480,6 +609,41 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
   await active(page, 'free-home');
   check('desktop', 'Free Tutorial landing fits the desktop viewport', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await shot(page, '19-free-landing-desktop');
+  /* 19. GUEST direct CBT Portal entry — a brand-new browser context with no
+         student token, no registration and no login, on mobile AND desktop. */
+  for (const [label, vp, mobile] of [['mobile', { width: 390, height: 844 }, true], ['desktop', { width: 1366, height: 900 }, false]]) {
+    const gbrowser = await pw.launch({ executablePath: EXECUTABLE, args: ['--no-sandbox', '--disable-dev-shm-usage'].concat(extraArgs), headless: true });
+    const gctx = await gbrowser.newContext({ viewport: vp, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
+    const gp = await gctx.newPage();
+    gp.setDefaultTimeout(20000);
+    gp.on('pageerror', (e) => jsErrors.push('guest-' + label + ': ' + String(e && e.message || e)));
+    gp.on('dialog', (d) => d.accept().catch(() => {}));
+    try {
+      await gp.goto(BASE, { waitUntil: 'networkidle' });
+      await active(gp, 'landing');
+      check('guest-entry', label + ': homepage has no bootcamp CTA', await gp.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
+      check('guest-entry', label + ': CBT Portal button is visible', await visible(gp, '#landing .hero-cbt'));
+      await gp.click('#landing .hero-cbt');
+      await active(gp, 'free-portal');
+      check('guest-entry', label + ': clicking CBT Portal opens the portal directly', await gp.evaluate(() => document.getElementById('free-portal').classList.contains('active')));
+      check('guest-entry', label + ': no registration screen was opened', await gp.evaluate(() => !document.getElementById('free-register').classList.contains('active')));
+      check('guest-entry', label + ': no signup or login screen was opened', await gp.evaluate(() => ['signup', 'login-v2', 'login'].every((id) => { const e = document.getElementById(id); return !e || !e.classList.contains('active'); })));
+      await gp.waitForSelector('#freePortalList .f27-guest-note');
+      check('guest-entry', label + ': the guest can browse real published listings', await gp.evaluate(() => document.querySelectorAll('#freePortalList .f27-item').length > 0));
+      check('guest-entry', label + ': the guest is told browsing needs no account', await gp.evaluate(() => /no account needed/.test(document.getElementById('freePortalList').textContent)));
+      check('guest-entry', label + ': Back and Back to Home are visible in the portal', await visible(gp, '#free-portal .lp-actions button[onclick="freeNavBack()"]') && await visible(gp, '#free-portal .lp-actions button[onclick="freeNavHome()"]'));
+      check('guest-entry', label + ': no horizontal overflow', await gp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await shot(gp, '25-guest-cbt-' + label);
+      await gp.click('#free-portal .lp-actions button[onclick="freeNavHome()"]');
+      await active(gp, 'landing');
+      check('guest-entry', label + ': Back to Home returns the guest to the homepage', true);
+    } catch (e) {
+      check('guest-entry', label + ': guest flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' | ') : e);
+      await shot(gp, '97-guest-failure-' + label);
+    }
+    await gbrowser.close();
+  }
+
   check('harness', 'no uncaught page JavaScript errors', jsErrors.length === 0, jsErrors.join(' | '));
   fs.writeFileSync(path.join(ART, 'results.json'), JSON.stringify({ generatedAt: new Date().toISOString(), base: BASE, passed: results.filter((r) => r.pass).length, total: results.length, results, jsErrors }, null, 2));
   const failed = results.filter((r) => !r.pass);

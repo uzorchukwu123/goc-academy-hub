@@ -215,8 +215,15 @@ checks the homepage/drawer, Free landing, registration/OTP validation and resend
 cooldown, verified-session refresh, contact/Founder entrance, staff login and
 passcode, both banks, invalid/valid CSV, manual A–E entry, activity allocation,
 CBT navigation/save/resume/submit, leaderboard approval/publication, reversible
-website-mode switching, removed hidden entrances, and desktop fit. Screenshots
-and a JSON result file are written outside the repository by default.
+website-mode switching, removed hidden entrances, and desktop fit.
+
+It also covers the round-2 contract: the homepage has no bootcamp CTA, a guest
+enters the CBT Portal directly (mobile and desktop, in separate browser runs),
+the exam header's Back/Home controls do not overlap, a slow availability reply
+preserves the typed activity draft, assessments accumulate, deleting an activity
+keeps every attempt/answer/score/result, and bank bulk/delete-all is bank-scoped
+and leaves historical results readable. Screenshots and a JSON result file are
+written outside the repository by default.
 
 Install the browser tooling separately so the app dependency tree is unchanged:
 

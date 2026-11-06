@@ -176,6 +176,30 @@ npm run build
 ```
 
 The optional real-browser harness is
+## Deleting activities and questions (data preservation)
+
+Deleting an activity removes **only that activity record**. Every attempt,
+submitted answer, score and result is kept, along with student records, other
+activities and both question banks. The server requires `confirm: true`, and an
+identity tombstone is appended to `session.activityHistory` so historical results
+still name the assessment they belong to (`activityDeleted: true`).
+
+Questions can be deleted individually, in a multi-selected bulk delete, or with
+delete-all on one bank. A question referenced by an activity or a historical
+attempt is snapshotted into `ed.questionHistory` **before** it leaves the live
+bank, so papers still resume and mark accurately. One bank's deletion never
+touches the other. Editing a referenced question is still refused, to protect
+historical marking.
+
+## CBT Portal entry
+
+`CBT Portal` on the homepage goes straight into the portal. `GET
+/api/free2027/catalogue` is public and returns published activity metadata only —
+no questions, options, answers or participant data. Sitting a paper still uses
+the existing email-verified identity; there is no second account system.
+
+## Browser regression
+
 [`test/browser/free2027-recovery.js`](../test/browser/free2027-recovery.js). Setup
 and isolation requirements are in [`LOCAL-DEVELOPMENT.md`](../LOCAL-DEVELOPMENT.md).
 It exercises the mobile drawer, Free landing, registration/OTP, banks/CSV/manual

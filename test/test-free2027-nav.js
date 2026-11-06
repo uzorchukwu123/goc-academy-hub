@@ -116,6 +116,8 @@ function makeWorld(opts) {
     me: function () { return session.token ? Promise.resolve({ participant: { id: 'GOC-F27-0123456789ABCDEF0123', name: 'Ada' } }) : Promise.reject(new Error('401')); },
     logout: function () { calls.api.push(['logout']); session.token = null; return Promise.resolve({ ok: true }); },
     activities: function () { calls.api.push(['activities']); return Promise.resolve({ activities: [], participant: { id: 'GOC-F27-0123456789ABCDEF0123', name: 'Ada' } }); },
+    /* Public catalogue used by the direct, registration-free CBT Portal entry. */
+    catalogue: function () { calls.api.push(['catalogue']); return Promise.resolve(o.catalogueReply || { guest: true, activities: [] }); },
     results: function () { calls.api.push(['results']); return Promise.resolve({ results: [] }); },
     programme: function () { return Promise.resolve({ profile: { id: 'GOC-F27-0123456789ABCDEF0123', name: 'Ada', course: 'Law' }, enrolment: {}, access: {}, progress: { lessons: [], completed: 0, total: 0, percent: 0 }, quizzes: {} }); },
     leaderboards: function () { return Promise.resolve({ leaderboards: [] }); },
@@ -206,7 +208,12 @@ settle(w1).then(function () {
               return settle(w4).then(function () {
                 w4.sandbox.dwFreePortal();
                 return settle(w4).then(function () {
-                  ok('the drawer CBT Portal action closes the drawer and opens registration', w4.calls.api.some(function (c) { return c[0] === 'closeDrawer'; }) && w4.calls.go[w4.calls.go.length - 1] === 'free-register', w4.calls.go.join(','));
+                  /* Corrected contract: CBT Portal entry is DIRECT. A guest must
+                     land in the portal itself — never registration, login or an
+                     onboarding screen — and the public catalogue is read. */
+                  ok('the drawer CBT Portal action closes the drawer and opens the CBT Portal directly', w4.calls.api.some(function (c) { return c[0] === 'closeDrawer'; }) && w4.calls.go[w4.calls.go.length - 1] === 'free-portal', w4.calls.go.join(','));
+                  ok('direct CBT entry never routes a guest through registration', w4.calls.go.indexOf('free-register') < 0, w4.calls.go.join(','));
+                  ok('direct CBT entry reads the public catalogue without a token', w4.calls.api.some(function (c) { return c[0] === 'catalogue'; }));
                   head('behaviour: Back uses internal history, Home goes to the hub homepage');
                   var w5 = makeWorld({ token: 'PT' });
                   load(w5);

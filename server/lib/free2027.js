@@ -79,6 +79,11 @@ function ensureEdition(db, opts) {
   /* Permanent identifier registry is scoped to this programme and survives
      session archiving/deletion. */
   if (!Array.isArray(ed.studentIds)) ed.studentIds = [];
+  /* Historical reference stores. Both are ADDITIVE: they only gain an entry
+     when an administrator deletes an activity or a question, so a student's
+     attempt, answers, score and result stay traceable afterwards. An older
+     data file simply gains empty stores; no existing record is rewritten. */
+  if (!Array.isArray(ed.questionHistory)) ed.questionHistory = [];
   if (!ed.studentIdsByEmail || typeof ed.studentIdsByEmail !== 'object' || Array.isArray(ed.studentIdsByEmail)) ed.studentIdsByEmail = {};
   if (typeof ed.rev !== 'number') ed.rev = 0;
 
@@ -99,6 +104,9 @@ function ensureEdition(db, opts) {
   });
   ['participants', 'activities', 'attempts', 'records', 'lessons', 'audit'].forEach(function (k) {
     if (!Array.isArray(cur[k])) cur[k] = [];
+  });
+  (ed.sessions || []).forEach(function (session) {
+    if (session && !Array.isArray(session.activityHistory)) session.activityHistory = [];
   });
   ['participantSeq', 'activitySeq', 'attemptSeq', 'lessonSeq'].forEach(function (k) {
     if (typeof cur[k] !== 'number') cur[k] = 0;
@@ -313,6 +321,20 @@ function createFree2027(deps) {
     }
     return null;
   }
+  /* Deleted activities keep a minimal identity tombstone. The attempt itself
+     still carries its activityId, and these resolvers let results/history read
+     the title and kind after the activity record is gone. */
+  function findActivityHistory(session, id) {
+    var rows = (session && session.activityHistory) || [];
+    for (var i = rows.length - 1; i >= 0; i--) {
+      if (rows[i] && String(rows[i].id) === String(id)) return rows[i];
+    }
+    return null;
+  }
+  function activityIdentity(session, id) {
+    return findActivity(session, id) || findActivityHistory(session, id);
+  }
+
   function findAttempt(session, id) {
     var want = String(id || '');
     for (var i = 0; i < session.attempts.length; i++) {
@@ -377,12 +399,42 @@ function createFree2027(deps) {
     var all = bankQuestionsSync(db, bank);
     var byId = {};
     all.forEach(function (q) { if (q && q.id) byId[String(q.id)] = q; });
+    /* A question deleted from the live bank keeps its historical snapshot, so
+       an attempt that was already started or submitted still resumes, marks
+       and displays exactly as it did before. Only this bank's own history is
+       consulted — never the other bank, never db.questions. */
+    var hist = {};
+    (((db.free2027 || {}).questionHistory) || []).forEach(function (q) {
+      if (q && q.id && q.bank === bank) hist[String(q.id)] = q;
+    });
     var questions = [], missing = [];
     (ids || []).forEach(function (id) {
-      var q = byId[String(id)];
+      var q = byId[String(id)] || hist[String(id)];
       if (q) questions.push(q); else missing.push(String(id));
     });
     return { questions: questions, missing: missing };
+  }
+
+  /* Snapshot questions into the edition's history BEFORE they leave the live
+     bank. This is what makes bank deletion safe for historical records: the
+     marking engine and the paper payload can still resolve the exact question
+     (options and answer included) that the candidate actually sat. */
+  function archiveBankQuestions(ed, bank, rows) {
+    if (!Array.isArray(ed.questionHistory)) ed.questionHistory = [];
+    var t = now();
+    var seen = {};
+    ed.questionHistory.forEach(function (h) { if (h && h.id) seen[String(h.id)] = true; });
+    var n = 0;
+    (rows || []).forEach(function (q) {
+      if (!q || !q.id || seen[String(q.id)]) return;
+      seen[String(q.id)] = true;
+      ed.questionHistory.push(Object.assign({}, q, {
+        options: Array.isArray(q.options) ? q.options.slice() : q.options,
+        bank: bank, deletedAt: t
+      }));
+      n++;
+    });
+    return n;
   }
 
   /* Eligible questions are the live, active multiple-choice records in ONE
@@ -531,6 +583,35 @@ function createFree2027(deps) {
       topN: rules.PUBLIC_TOP_N,
       otp: { length: rules.OTP_LENGTH, resendSec: rules.OTP_RESEND_SEC, ttlMin: rules.OTP_TTL_MIN },
       session: { id: session.id, label: session.label, startedAt: session.startedAt }
+    };
+  }
+
+  /* Public, read-only CBT Portal catalogue. No token and no registration: a
+     visitor who clicks "CBT Portal" lands straight in the portal and can see
+     what is running. It exposes only public activity metadata — never a
+     question, an option, an answer, a mark or any participant's data. Sitting a
+     paper still uses the existing verified student identity; this creates no
+     second account system. */
+  function publicActivities() {
+    var db = readData();
+    var ed = edition(db);
+    var session = currentSession(ed);
+    var t = now();
+    return {
+      guest: true,
+      activities: session.activities
+        .filter(function (a) { return a && a.published && a.status !== rules.STATUS_ARCHIVED; })
+        .map(function (a) {
+          return {
+            id: a.id, kind: a.kind, title: a.title, instructions: a.instructions || '',
+            opensAt: a.opensAt, closesAt: a.closesAt, durationMin: a.durationMin,
+            maxAttempts: a.maxAttempts, questionCount: (a.questionIds || []).length,
+            state: rules.activityState(a, t),
+            leaderboardPublished: a.kind === rules.KIND_COMPETITION ? rules.leaderboardPublished(a) : false
+          };
+        })
+        .sort(function (x, y) { return (x.opensAt || 0) - (y.opensAt || 0); }),
+      session: { id: session.id, label: session.label }
     };
   }
 
@@ -936,7 +1017,10 @@ function createFree2027(deps) {
   }
 
   function resultOf(attempt, session) {
-    var activity = findActivity(session, attempt.activityId);
+    /* Read the live activity, or its identity tombstone once deleted, so a
+       result never loses the assessment it belongs to. */
+    var live = findActivity(session, attempt.activityId);
+    var activity = live || findActivityHistory(session, attempt.activityId);
     return {
       attemptId: attempt.id,
       activityId: attempt.activityId,
@@ -953,11 +1037,15 @@ function createFree2027(deps) {
       durationSec: attempt.durationSec,
       submittedAt: attempt.submittedAt,
       autoSubmitted: !!attempt.autoSubmitted,
+      /* True when the administrator has since deleted the activity. The score
+         and the rest of this result are unchanged and still belong to the
+         candidate. */
+      activityDeleted: !live && !!activity,
       /* Results are immediate. A weekly assessment is private: this is the only
          place it is ever shown, and only to the candidate who sat it. */
       private: activity ? activity.kind === rules.KIND_WEEKLY : true,
-      position: activity && activity.kind === rules.KIND_COMPETITION
-        ? myPositionFor(session, activity, attempt.participantId)
+      position: live && live.kind === rules.KIND_COMPETITION
+        ? myPositionFor(session, live, attempt.participantId)
         : null
     };
   }
@@ -1588,17 +1676,53 @@ function createFree2027(deps) {
     });
   }
 
-  function deleteActivity(id) {
+  /* Delete ONE activity record, and NOTHING else.
+
+     DATA-PRESERVATION CONTRACT ( deliberately not a cascading delete ):
+       - the activity disappears from the active list;
+       - every attempt, submitted answer, score and result stays exactly as it
+         was — the attempts collection is never filtered, cleared or rewritten;
+       - participants, other activities, both question banks, records and audit
+         entries are untouched;
+       - a minimal identity tombstone (id/kind/title) is APPENDED to
+         session.activityHistory so the student's records stay traceable to the
+         assessment they sat, without keeping the activity itself alive.
+
+     The attempt keeps its own activityId, so the historical relationship is
+     preserved rather than orphaned-and-destroyed. */
+  function deleteActivity(id, body) {
     return locked(async function () {
       var db = readData();
       var ed = edition(db);
       var session = currentSession(ed);
       var a = findActivity(session, id);
       if (!a) throw FreeError(404, 'That activity was not found.');
+      if (!body || body.confirm !== true) {
+        throw FreeError(400, 'Deleting an activity must be confirmed explicitly (confirm: true). ' +
+          'Only the activity is removed — student attempts, answers, scores and results are always kept.');
+      }
+      var kept = session.attempts.filter(function (x) {
+        return x && String(x.activityId) === String(a.id);
+      });
+      var submitted = kept.filter(function (x) { return x.submittedAt; }).length;
+      if (!Array.isArray(session.activityHistory)) session.activityHistory = [];
+      session.activityHistory.push({
+        id: a.id, kind: a.kind, title: a.title,
+        opensAt: a.opensAt, closesAt: a.closesAt,
+        durationMin: a.durationMin, maxAttempts: a.maxAttempts,
+        questionCount: (a.questionIds || []).length,
+        deletedAt: now(), attemptsKept: kept.length, resultsKept: submitted
+      });
+      /* The ONLY destructive line in this function: one activity record. */
       session.activities = session.activities.filter(function (x) { return x.id !== a.id; });
-      session.attempts = session.attempts.filter(function (x) { return String(x.activityId) !== String(a.id); });
       writeData(db);
-      return { ok: true };
+      return {
+        ok: true,
+        deleted: { id: a.id, title: a.title, kind: a.kind },
+        attemptsKept: kept.length,
+        resultsKept: submitted,
+        preserved: ['attempts', 'responses', 'scores', 'results', 'participants', 'questionBanks', 'otherActivities']
+      };
     });
   }
 
@@ -1641,9 +1765,10 @@ function createFree2027(deps) {
     var db = readData();
     var ed = edition(db);
     var session = currentSession(ed);
-    var a = findActivity(session, id);
+    var live = findActivity(session, id);
+    var a = live || findActivityHistory(session, id);
     if (!a) throw FreeError(404, 'That activity was not found.');
-    var ranked = rankRowsFor(session, a);
+    var ranked = live ? rankRowsFor(session, a) : [];
     var rows = session.attempts
       .filter(function (x) { return x && String(x.activityId) === String(a.id) && x.submittedAt; })
       .sort(function (x, y) { return (y.submittedAt || 0) - (x.submittedAt || 0); })
@@ -1657,8 +1782,10 @@ function createFree2027(deps) {
         };
       });
     return {
-      activity: { id: a.id, title: a.title, kind: a.kind, state: rules.activityState(a, now()), status: a.status,
-        leaderboard: a.leaderboard || null, publicNow: rules.leaderboardPublished(a) },
+      activity: { id: a.id, title: a.title, kind: a.kind,
+        state: live ? rules.activityState(a, now()) : 'deleted',
+        status: live ? a.status : 'deleted', deleted: !live,
+        leaderboard: a.leaderboard || null, publicNow: live ? rules.leaderboardPublished(a) : false },
       rows: rows,
       top: ranked.slice(0, rules.PUBLIC_TOP_N),
       ranked: ranked.length,
@@ -1676,7 +1803,10 @@ function createFree2027(deps) {
     return {
       attempt: Object.assign({}, a, { responses: Object.assign({}, a.responses || {}) }),
       participant: { id: p.id, name: p.name, course: p.course },
-      activity: (function () { var x = findActivity(session, a.activityId); return x ? { id: x.id, title: x.title, kind: x.kind } : null; })()
+      activity: (function () {
+        var x = activityIdentity(session, a.activityId);
+        return x ? { id: x.id, title: x.title, kind: x.kind, deleted: !findActivity(session, a.activityId) } : null;
+      })()
     };
   }
 
@@ -1977,7 +2107,10 @@ function createFree2027(deps) {
   }
 
   /* Bulk delete of selected questions from ONE bank. Requires confirm:true on
-     the server; refuses any question referenced by an activity. */
+     the server. Questions referenced by an activity or a historical attempt
+     ARE deletable: their full record is snapshotted into questionHistory first,
+     so attempts, answers, scores and results stay accurate. The other bank,
+     the attempts collection and the activities themselves are never touched. */
   function deleteBankQuestions(bank, body) {
     bank = cleanBank(bank);
     if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
@@ -1987,28 +2120,30 @@ function createFree2027(deps) {
       if (!body || body.confirm !== true) {
         throw FreeError(400, 'Deleting questions is destructive. Confirm it explicitly (confirm: true) — the response names the bank and the number of questions.');
       }
-      var b = db.free2027.questionBanks[bank];
+      var ed = ensureEdition(db);
+      var b = ed.questionBanks[bank];
       var ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
       if (!ids.length) throw FreeError(400, 'Select at least one question to delete.');
-      var blocked = [];
-      ids.forEach(function (id) {
-        var refs = activitiesReferencing(db, id);
-        if (refs.length) blocked.push({ id: id, refs: refs });
-      });
-      if (blocked.length) {
-        throw FreeError(409, blocked.length + ' selected question(s) are used by existing activities and cannot be deleted (first: ' + blocked[0].id + ').');
-      }
+      var doomed = (b.questions || []).filter(function (q) { return q && ids.indexOf(String(q.id)) > -1; });
+      var referenced = 0;
+      doomed.forEach(function (q) { if (activitiesReferencing(db, q.id).length) referenced++; });
+      var preserved = archiveBankQuestions(ed, bank, doomed);
       var before = b.questions.length;
       b.questions = b.questions.filter(function (q) { return ids.indexOf(String(q && q.id)) < 0; });
       writeData(db);
-      return { bank: bank, requested: ids.length, deleted: before - b.questions.length, remaining: b.questions.length };
+      return {
+        bank: bank, requested: ids.length, deleted: before - b.questions.length, remaining: b.questions.length,
+        preservedForHistory: preserved, referencedByActivities: referenced,
+        attemptsAffected: 0
+      };
     });
   }
 
   /* Delete ALL questions of ONE bank. Never touches the other bank; the bank
      parameter is validated against the allowlist, so no request can name an
-     arbitrary path. Requires confirm:true; refuses while any question in the
-     bank is referenced by an activity. */
+     arbitrary path. Requires confirm:true. Referenced questions are snapshotted
+     into questionHistory first, so no attempt, answer, score or result is
+     affected by clearing the live bank. */
   function deleteAllBankQuestions(bank, body) {
     bank = cleanBank(bank);
     if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
@@ -2019,18 +2154,21 @@ function createFree2027(deps) {
         var n0 = bankQuestionsSync(db, bank).length;
         throw FreeError(400, 'Delete-all on the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank would remove ' + n0 + ' question(s). This is destructive — confirm explicitly (confirm: true).');
       }
-      var b = db.free2027.questionBanks[bank];
+      var ed = ensureEdition(db);
+      var b = ed.questionBanks[bank];
       var rows = b.questions || [];
-      var blocked = 0;
-      rows.forEach(function (q) { if (q && activitiesReferencing(db, q.id).length) blocked++; });
-      if (blocked) {
-        throw FreeError(409, blocked + ' of the ' + rows.length + ' question(s) in the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank are used by existing activities and cannot be deleted.');
-      }
+      var referenced = 0;
+      rows.forEach(function (q) { if (q && activitiesReferencing(db, q.id).length) referenced++; });
+      var preserved = archiveBankQuestions(ed, bank, rows);
       var n = rows.length;
       b.questions = [];
       /* the sequence keeps moving forward, so deleted IDs are never re-issued */
       writeData(db);
-      return { bank: bank, deleted: n, remaining: 0 };
+      return {
+        bank: bank, deleted: n, remaining: 0,
+        preservedForHistory: preserved, referencedByActivities: referenced,
+        attemptsAffected: 0
+      };
     });
   }
 
@@ -2122,6 +2260,7 @@ function createFree2027(deps) {
     saveActivity: saveActivity,
     setActivityState: setActivityState,
     deleteActivity: deleteActivity,
+    publicActivities: publicActivities,
     leaderboardAction: leaderboardAction,
     activityResults: activityResults,
     attemptDetail: attemptDetail,

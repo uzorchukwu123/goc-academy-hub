@@ -188,20 +188,34 @@ async function registerStudent(email, name) {
   ok('28. bulk delete removes exactly the selected weekly questions', bulk.status === 200 && bulk.body.deleted === 3, bulk.raw.slice(0, 140));
   var cq2 = await call('GET', '/api/free2027/admin/question-banks/competition/questions', undefined, adm);
   ok('29. the competition bank is untouched by weekly bulk deletion', dataFile().free2027.questionBanks.competition.questions.length === cq2.body.total);
-  /* delete-all isolation + referenced-question refusal */
+  /* delete-all isolation + history-preserving deletion of referenced questions */
   var t = Date.now();
   var act = await call('POST', '/api/free2027/admin/activities', { kind: 'weekly', title: 'Week A', questionCount: 2, opensAt: t - 60000, closesAt: t + 3600000, durationMin: 10, maxAttempts: 1 }, adm);
   ok('an activity is created from weekly-bank questions', act.status === 200 && act.body.activity.questionIds.every(function (id) { return /^WQ-/.test(id); }), act.raw.slice(0, 160));
   var refId = act.body.activity.questionIds[0];
+  var weeklyBeforeRefDel = dataFile().free2027.questionBanks.weekly.questions.length;
+  var compBeforeRefDel = dataFile().free2027.questionBanks.competition.questions.length;
   var refDel = await call('POST', '/api/free2027/admin/question-banks/weekly/questions/delete', { ids: [refId], confirm: true }, adm);
-  ok('42. deleting a question referenced by an activity is refused', refDel.status === 409, refDel.status + ' ' + refDel.raw.slice(0, 140));
-  var delAllBlocked = await call('POST', '/api/free2027/admin/question-banks/weekly/delete-all', { confirm: true }, adm);
-  ok('delete-all is refused while a question is referenced', delAllBlocked.status === 409, delAllBlocked.status);
+  /* Corrected contract: an administrator CAN delete a question that an
+     activity references, and the historical record needed for accurate
+     results is snapshotted first. Nothing of the student's is touched. */
+  ok('42. a referenced question is deletable and reports its preserved history', refDel.status === 200 && refDel.body.deleted === 1 && refDel.body.preservedForHistory === 1 && refDel.body.referencedByActivities >= 1 && refDel.body.attemptsAffected === 0, refDel.status + ' ' + refDel.raw.slice(0, 200));
+  var histAfter = dataFile().free2027.questionHistory || [];
+  var snap = histAfter.filter(function (h) { return h.id === refId; })[0];
+  ok('the deleted question keeps a full historical snapshot (options + answer)', !!snap && Array.isArray(snap.options) && snap.options.length >= 2 && Number.isInteger(snap.answer) && !!snap.text, JSON.stringify(snap || {}).slice(0, 160));
+  ok('deleting a referenced question leaves the activity and its allocation intact', (dataFile().free2027.sessions[0].activities.filter(function (a) { return a.id === act.body.activity.id; })[0] || {}).questionIds.indexOf(refId) > -1);
+  ok('weekly deletion removes exactly one live question', dataFile().free2027.questionBanks.weekly.questions.length === weeklyBeforeRefDel - 1);
+  ok('the competition bank is untouched by a referenced weekly deletion', dataFile().free2027.questionBanks.competition.questions.length === compBeforeRefDel);
+  var stillResolves = await call('GET', '/api/free2027/admin/activities/' + act.body.activity.id + '/results', undefined, adm);
+  ok('the activity remains readable after its question left the live bank', stillResolves.status === 200, String(stillResolves.status));
+  var delAllNoConfW = await call('POST', '/api/free2027/admin/question-banks/weekly/delete-all', {}, adm);
+  ok('weekly delete-all still requires explicit confirmation', delAllNoConfW.status === 400 && /confirm/i.test(delAllNoConfW.raw), delAllNoConfW.raw.slice(0, 160));
   var delAllNoConf = await call('POST', '/api/free2027/admin/question-banks/competition/delete-all', {}, adm);
   ok('32b. delete-all without confirm is rejected, naming bank and count', delAllNoConf.status === 400 && /Competition Question Bank/.test(delAllNoConf.raw) && /confirm/i.test(delAllNoConf.raw), delAllNoConf.raw.slice(0, 180));
   var compBefore = dataFile().free2027.questionBanks.competition.questions.length;
+  var weeklyBeforeAll = dataFile().free2027.questionBanks.weekly.questions.length;
   var delAllC = await call('POST', '/api/free2027/admin/question-banks/competition/delete-all', { confirm: true }, adm);
-  ok('31. delete-all clears the competition bank only', delAllC.status === 200 && delAllC.body.deleted === compBefore && dataFile().free2027.questionBanks.weekly.questions.length > 0, JSON.stringify(delAllC.body));
+  ok('31. delete-all clears the competition bank only', delAllC.status === 200 && delAllC.body.deleted === compBefore && delAllC.body.remaining === 0 && dataFile().free2027.questionBanks.weekly.questions.length === weeklyBeforeAll, JSON.stringify(delAllC.body));
   /* re-import competition questions for the engine tests */
   await call('POST', '/api/free2027/admin/question-banks/competition/import', { csv: csvText('Comp2', SUBJ5, 4) }, adm);
 

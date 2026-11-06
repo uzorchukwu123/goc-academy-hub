@@ -183,6 +183,25 @@
     global.go('free-register');
   };
 
+  /* DIRECT CBT Portal entry. No registration, no login, no Get Started and no
+     account-selection step: the visitor lands in the existing portal, which
+     renders the public catalogue when nobody is signed in. Sitting a paper
+     still uses the edition's existing verified identity — this deliberately
+     creates no second account system. */
+  F.freeCbtPortal = function () {
+    global.go('free-portal');
+    F.freePortalLoad();
+  };
+
+  /* "I already have an account" stays on the homepage in both modes. In
+     Original Mode it opens the original login exactly as before; in Free
+     Tutorial Mode it opens the edition's own email-code sign-in, which returns
+     a returning student to the same permanent ID. */
+  F.freeAccountEntry = function () {
+    if (F.on && F.mode === rules.MODE_FREE) { global.go('free-register'); return; }
+    global.go('login-v2');
+  };
+
   /* Internal navigation history recovered from PR #9. Back NEVER calls
      window.history.back(): a browser history entry can point at an external
      website, and a direct URL or refresh leaves no useful internal entry.
@@ -217,7 +236,7 @@
      the same entry chain as the homepage button. */
   F.dwFreePortal = function () {
     if (typeof global.closeDrawer === 'function') global.closeDrawer();
-    setTimeout(function () { F.freeHomeCta(); }, 180);
+    setTimeout(function () { F.freeCbtPortal(); }, 180);
   };
 
   /* ================================================= 3. REGISTRATION (OTP) */
@@ -386,12 +405,22 @@
     if (!host) return;
     F.freeProgrammeLoad();
     if (!api.hasToken()) {
-      host.innerHTML = '<div class="f27-empty"><p>Register first — it takes a minute and needs no password.</p>' +
-        '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button></div>';
+      /* Direct entry: the portal is fully browsable before sign-in. Nothing
+         here pushes the visitor into registration — the catalogue, the
+         instructions and the published leaderboards all render for a guest. */
+      F.guest = true;
       if (mine) mine.innerHTML = '';
       paintWho();
+      host.innerHTML = '<div class="ad-loading">Loading this session\'s programme…</div>';
+      api.catalogue().then(function (r) {
+        F.activities = r.activities || [];
+        paintGuestLists(host);
+      }, function (er) {
+        host.innerHTML = emptyState('Programme unavailable', (er && er.message) || 'Could not load the programme just now.');
+      });
       return;
     }
+    F.guest = false;
     host.innerHTML = '<div class="ad-loading">Loading this session\'s programme…</div>';
     api.activities().then(function (r) {
       F.activities = r.activities || [];
@@ -460,6 +489,45 @@
     }).join('');
     if (mine) mine.innerHTML = '';
     paintMyResults();
+  }
+
+  /* The same activity cards a signed-in candidate sees, minus anything
+     personal. A guest reads the instructions and windows freely; the single
+     sign-in action appears only when they choose to sit a paper. */
+  function paintGuestLists(host) {
+    if (F.tab === 'leaderboard') return paintBoards(host, null);
+    var rows = (F.activities || []).filter(function (a) { return a.kind === F.tab; });
+    var notice = '<div class="f27-guest-note" role="status">' +
+      '<b>You are in the CBT Portal.</b> Browse the programme below — no account needed. ' +
+      'Verifying your email is only required when you sit a paper, so your score and result are saved to your own record.' +
+      '</div>';
+    if (!rows.length) {
+      host.innerHTML = notice + (F.tab === 'weekly'
+        ? emptyState('No weekly assessments yet', 'Published weekly assessments will appear here.')
+        : emptyState('No competitions yet', 'Published competitions will appear here.'));
+      return;
+    }
+    host.innerHTML = notice + rows.map(function (a) {
+      var open = a.state === 'open';
+      return '<div class="f27-item">' +
+        '<div class="f27-item-top"><span class="f27-tag">' + esc(rules.kindLabel(a.kind)) + '</span>' +
+        '<span class="' + stateClass(a) + '">' + esc(rules.stateLabel(a.state)) + '</span></div>' +
+        '<h3>' + esc(a.title) + '</h3>' +
+        (a.instructions ? '<p class="f27-instr">' + esc(a.instructions) + '</p>' : '') +
+        '<div class="f27-facts">' +
+        '<span><b>' + a.questionCount + '</b> questions</span>' +
+        '<span><b>' + a.durationMin + '</b> min</span>' +
+        '<span>up to <b>' + a.maxAttempts + '</b> attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
+        '<span>closes <b>' + esc(when(a.closesAt)) + '</b></span></div>' +
+        (open
+          ? '<button class="btn btn-red btn-block" onclick="freeAccountEntry()">Verify email to sit this paper</button>'
+          : '<button class="btn btn-outline btn-block" disabled>' +
+            (a.state === 'upcoming' ? 'Opens ' + esc(when(a.opensAt)) : 'Closed') + '</button>') +
+        (a.kind === rules.KIND_COMPETITION && a.leaderboardPublished
+          ? '<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="freeBoardOpen(\'' + esc(a.id) + '\')">See the leaderboard</button>'
+          : '') +
+        '</div>';
+    }).join('');
   }
 
   function paintBoards(host, mine) {
@@ -664,6 +732,19 @@
        server either way. */
     F.freeNavBack();
     if (F.navStack.indexOf('free-portal') > -1) F.freePortalLoad();
+  };
+
+  /* Back to Home from inside a paper. The attempt stays open on the server
+     with every answer saved, exactly like Back, so nothing is lost. */
+  F.freeExamHome = function () {
+    if (F.exam) {
+      if (typeof global.confirm === 'function' && !global.confirm(
+        'Leave this paper and go home? Your answers and remaining time are saved — you can resume it from the CBT Portal.')) return;
+      stopClock();
+      F.exam = null;
+      say('Your paper is saved. Open it again from the portal to carry on.');
+    }
+    F.freeNavHome();
   };
 
   F.freeExamSubmit = function () {
@@ -906,7 +987,8 @@
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
-    'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal'];
+    'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
+    'freeCbtPortal', 'freeAccountEntry', 'freeExamHome'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

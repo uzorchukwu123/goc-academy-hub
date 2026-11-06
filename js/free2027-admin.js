@@ -611,8 +611,16 @@
     var bank = a.kind === rules.KIND_COMPETITION ? 'competition' : 'weekly';
     host.innerHTML = '<div class="ad-loading">Checking available eligible questions…</div>';
     api.adminBanks().then(function (r) {
+      /* Ignore a late reply for an editor that has since been closed, replaced
+         or switched to the other category — it must not repaint this one. */
+      if (A.editing !== a || !$('f27Availability')) return;
       var b = (r.banks || {})[bank] || {};
       A.availability = { bank: bank, total: Number(b.eligibleCount || 0), bySubject: b.eligibleBySubject || {} };
+      /* The grid below is rebuilt to show per-subject availability. Read the
+         draft out of the DOM FIRST, otherwise anything the administrator has
+         already typed (distribution above all, but also title/count/dates)
+         is silently discarded when this response lands mid-edit. */
+      global.f27AdmEditorRead();
       var count = $('f27Count');
       if (count) count.max = String(Math.min(rules.MAX_QUESTIONS, A.availability.total || rules.MAX_QUESTIONS));
       host.innerHTML = '<div class="ad-metric"><span>Available eligible questions</span><b>' + A.availability.total + '</b></div>' +
@@ -624,6 +632,7 @@
         grid.parentNode.replaceChild(wrap.firstChild, grid);
       }
     }, function (er) {
+      if (A.editing !== a || !$('f27Availability')) return;
       A.availability = null;
       host.innerHTML = failText(er);
     });
@@ -731,9 +740,11 @@
   };
 
   global.f27AdmDeleteActivity = function (id) {
-    if (!confirmDo('Delete this activity and every attempt submitted for it in this session?\n\nStarting a new session archives the whole session first if you would rather keep it.')) return;
-    api.deleteActivity(id).then(function () {
-      say('Deleted');
+    if (!confirmDo('Delete this activity?\n\nONLY the activity is removed. Every student attempt, submitted answer, score and result is KEPT and stays in the student\'s history.\n\nOther activities and both question banks are untouched. This cannot be undone.')) return;
+    api.deleteActivity(id).then(function (r) {
+      var kept = r && typeof r.attemptsKept === 'number' ? r.attemptsKept : null;
+      say(kept === null ? 'Activity deleted — student attempts and results kept'
+        : 'Activity deleted — ' + kept + ' student attempt(s) and their results kept');
       loadActivities();
     }, function (er) { say(er.message || 'That activity could not be deleted.'); });
   };
