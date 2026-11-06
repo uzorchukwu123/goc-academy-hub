@@ -165,13 +165,29 @@ physical Android handset test. A final physical Android/Chrome smoke test is
 recommended before release. SMTP was exercised through the isolated test capture
 adapter; production provider credentials were not used or committed.
 
+### GitHub checks note (pre-existing Vercel failure)
+
+The PR's GitHub **Vercel** preview-deployment status reports `Deployment has
+failed`. This is **pre-existing and unrelated to this recovery**: the identical
+Vercel failure status is present on `main` (`fa9a794`) and on every earlier
+commit/PR head checked (`afb2d70`, `3ab242f`, `71e9ebb`, `aeceb81`, `3360c7b`).
+The local production build (`npm run build`) passes cleanly. The Vercel build
+logs are not reachable from this environment, and remediating the Vercel
+project/integration would be deployment configuration work, which was explicitly
+out of scope (no merge, no deployment). The `Vercel Preview Comments` check
+passes. Reviewers should treat the Vercel deployment status as a known
+project-level issue to resolve in the Vercel dashboard, not as a regression
+introduced by this PR.
+
 ## 5. Handoff
 
 - Branch: `arena/577ff09f-goc-academy-hub`
 - Base: `main`
+- Recovery commit: `b131972ee7ae16cff02cae224c4fc0255861a89a`
+- Pull request: <https://github.com/uzorchukwu123/goc-academy-hub/pull/10>
 - Delivery: one clean cumulative PR containing all retained recovery work.
 - Merge: **not performed**.
 - Deployment: **not performed**.
 
-The exact recovery commit hash and PR URL are recorded in the final handoff/PR
-description after push.
+The PR description records the final head and cumulative diff. This report may
+be followed by documentation-only commits on the same PR branch.
