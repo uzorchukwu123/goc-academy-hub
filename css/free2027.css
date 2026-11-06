@@ -435,11 +435,20 @@ body.f27-mode .dw-btns .dw-cbt-hint + .dw-original { margin-top: 12px; }
    ----------------------------------------------------------------------------
    The obsolete bootcamp sign-up button is deleted from index.html — it is not
    hidden here. The CBT Portal entry is ADDED beside the original account
-   actions; the original "Get started" (sign-up) and "I already have an account"
-   (login) are never hidden, in either mode.
+   actions. "I already have an account" is shown in both modes and routes by
+   mode (heroAccount). The hero's original "Get started" belongs to the hub
+   experience, so it is displayed in Original Mode only — see the rule below.
    ========================================================================== */
 .hero-cbt { display: none; }
 body.f27-mode #landing .hero-btns .hero-cbt { display: block; }
+/* The hero's original "Get started" is the G.O.C Academy Hub sign-up, not part
+   of the Free UTME Tutorial experience: in Free Tutorial Mode students register
+   through the edition landing page's "Register free". It is NOT deleted — the
+   button and its go('signup') handler stay in index.html, and removing the mode
+   class (switching back to Original Mode) restores it exactly as it was. No
+   other registration action is affected: the nav/drawer hub sign-up and the
+   edition's "Register free" are untouched. */
+body.f27-mode #landing .hero-btns .hero-original-cta { display: none !important; }
 
 /* A guest browsing the CBT Portal is told plainly that no account is needed to
    look around, and that verifying an email is only for sitting a paper. */

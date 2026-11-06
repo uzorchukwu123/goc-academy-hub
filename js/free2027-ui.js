@@ -204,6 +204,16 @@
     navigate('free-home');
   };
 
+  /* The homepage hero's "I already have an account" link. ONE unchanged button,
+     one destination per mode: the hub's own login page in Original Mode (the
+     exact route it always used), and the edition's own student login page in
+     Free Tutorial Mode, so a free-tutorial student is never sent to a G.O.C
+     account they never created. This is navigation only — it adds no account
+     system and changes no authentication behaviour on either side. */
+  F.heroAccount = function () {
+    global.go(F.on && F.mode === rules.MODE_FREE ? 'free-login' : 'login-v2');
+  };
+
   /* "Enter the CBT Portal" / "Student log in" — the AUTHENTICATION-AWARE entry,
      reached from the landing page. A valid session opens the student's own
      dashboard with their existing account and records. No session, an expired
@@ -1086,7 +1096,7 @@
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
-    'freeCbtPortal', 'freeExamHome', 'freeLogin', 'freePortalEnter'];
+    'freeCbtPortal', 'freeExamHome', 'freeLogin', 'freePortalEnter', 'heroAccount'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

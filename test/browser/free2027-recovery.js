@@ -71,6 +71,51 @@ async function waitCode(email) {
   for (let i = 0; i < 50; i++) { const c = mailedCode(email); if (c) return c; await new Promise((r) => setTimeout(r, 200)); }
   return null;
 }
+/* Drive the Founder's real Website Mode Control panel, then return to the
+   homepage so the hero can be inspected in the mode that was just applied. */
+async function switchWebsiteMode(page, toFree) {
+  await page.evaluate(() => go('admin'));
+  await active(page, 'admin');
+  await closeAdminSheet(page);
+  await page.click('button.adm-tile[data-section="websitemode"]');
+  const label = toFree ? 'Switch to 2027 Free Tutorial Mode' : 'Switch to Original Mode';
+  await page.waitForSelector('#f27ModeBody button:has-text("' + label + '")');
+  await page.click('#f27ModeBody button:has-text("' + label + '")');
+  await page.waitForFunction((f) => document.body.classList.contains('f27-mode') === f, toFree);
+  await page.evaluate(() => go('landing'));
+  await active(page, 'landing');
+}
+
+/* The homepage hero contract, clicked for real in the given mode. */
+async function checkHeroForMode(page, label, free) {
+  const tag = label + ' (' + (free ? 'Free Tutorial' : 'Original') + ')';
+  check('mode-hero', tag + ': hero Get started is ' + (free ? 'hidden' : 'visible'), (await visible(page, '#landing .hero-original-cta')) === !free);
+  check('mode-hero', tag + ': hero Get started is never deleted, handler intact', await page.evaluate(() => {
+    const e = document.querySelector('#landing .hero-original-cta');
+    return !!e && e.getAttribute('onclick') === "go('signup')" && e.textContent.trim() === 'Get started' && e.className === 'lp-btn-light hero-original-cta';
+  }));
+  check('mode-hero', tag + ': hero account link stays visible, same text and class', await visible(page, '#landing .hero-btns .lp-btn-ghost') && await page.evaluate(() => {
+    const e = document.querySelector('#landing .hero-btns .lp-btn-ghost');
+    return e.textContent.trim() === 'I already have an account' && e.className === 'lp-btn-ghost';
+  }));
+  check('mode-hero', tag + ': hero CBT Portal entry is ' + (free ? 'shown' : 'hidden'), (await visible(page, '#landing .hero-cbt')) === free);
+  await page.click('#landing .hero-btns .lp-btn-ghost');
+  const want = free ? 'free-login' : 'login-v2';
+  const other = free ? 'login-v2' : 'free-login';
+  await active(page, want);
+  check('mode-hero', tag + ': hero account link opens #' + want + ' and never #' + other, await page.evaluate((w) => document.getElementById(w.want).classList.contains('active') && !document.getElementById(w.other).classList.contains('active'), { want: want, other: other }));
+  await page.evaluate(() => go('landing'));
+  await active(page, 'landing');
+  if (!free) {
+    await page.click('#landing .hero-original-cta');
+    await active(page, 'signup');
+    check('mode-hero', tag + ': hero Get started opens the ORIGINAL #signup', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !!document.getElementById('signName')));
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+  }
+  check('mode-hero', tag + ': no stale mode or chrome class on the homepage', await page.evaluate((f) => document.body.classList.contains('f27-mode') === f && !document.body.classList.contains('goc-original-area'), free));
+}
+
 async function closeAdminSheet(page) {
   if (await page.locator('#admSheet.show').count()) { await page.locator('.adm-sheet-close').click(); await page.waitForTimeout(200); }
 }
@@ -120,10 +165,15 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('homepage', 'no "Start Free UTME Bootcamp" text anywhere in the rendered page', await page.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
     check('homepage', 'no bootcamp CTA element survives in the DOM', await page.evaluate(() => !Array.from(document.querySelectorAll('button, a')).some((e) => /start free utme bootcamp/i.test(e.textContent))));
     check('homepage', 'Free-mode hero shows a visible CBT Portal button', await visible(page, '#landing .hero-cbt'));
-    /* Owner correction: the original account actions are NEVER hidden. Free
-       Tutorial Mode adds the CBT Portal beside them. */
-    check('homepage', 'Free mode keeps the original Get started visible beside CBT Portal', await visible(page, '#landing .hero-original-cta'));
-    check('homepage', 'Free mode keeps the original login action visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
+    /* Owner correction: the hero's hub "Get started" belongs to the original
+       experience and is displayed in Original Mode only. The account link stays
+       visible in both modes and routes by mode. */
+    check('homepage', 'Free mode hides the hero Get started button', !(await visible(page, '#landing .hero-original-cta')));
+    check('homepage', 'the hero Get started button is hidden, not deleted', await page.evaluate(() => {
+      const e = document.querySelector('#landing .hero-original-cta');
+      return !!e && e.getAttribute('onclick') === "go('signup')" && getComputedStyle(e).display === 'none';
+    }));
+    check('homepage', 'Free mode keeps the hero account link visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
     check('homepage', 'the drawer keeps no bootcamp action', await page.evaluate(() => !/bootcamp/i.test(document.getElementById('lpDrawer').textContent)));
     check('homepage', 'mobile hero is not clipped by the flex screen shell', await page.evaluate(() => { const hero = document.querySelector('#landing .lp-hero'); const h1 = hero.querySelector('h1'); const buttons = hero.querySelector('.hero-btns'); return getComputedStyle(hero).flexShrink === '0' && h1.getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom && buttons.getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom && hero.querySelector('.lp-trust').getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom; }));
     check('homepage', 'mobile logo strip is not clipped', await page.evaluate(() => { const e = document.querySelector('#landing .lp-logos'); return e.getBoundingClientRect().height >= e.scrollHeight - 2; }));
@@ -497,6 +547,23 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.waitForFunction(() => document.body.classList.contains('f27-mode'));
     check('mode-control', 'switching back preserves both independent banks', currentSession()?.activities.length === 2 && Object.keys(readData().free2027.questionBanks).length === 2);
 
+    /* Owner correction: the homepage hero must follow the active mode, and must
+       restore completely on switch-back. Two full round trips per layout, driven
+       through the real console control, prove nothing accumulates: no stale
+       class, no permanently hidden button, no stale destination. */
+    for (const [label, vp] of [['mobile', { width: 390, height: 844 }], ['desktop', { width: 1366, height: 900 }]]) {
+      await page.setViewportSize(vp);
+      for (let pass = 1; pass <= 2; pass++) {
+        await switchWebsiteMode(page, false);
+        await checkHeroForMode(page, label + ' round ' + pass, false);
+        await switchWebsiteMode(page, true);
+        await checkHeroForMode(page, label + ' round ' + pass, true);
+      }
+      check('mode-hero', label + ': student records survive every mode switch', currentSession()?.participants.length >= 1 && currentSession()?.attempts.filter((a) => a.submittedAt).length === 2);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await shot(page, '17b-hero-mode-roundtrips');
+
     /* 15. Removed hidden entrances and ordinary-contact safety. */
     await page.evaluate(() => go('landing'));
     await active(page, 'landing');
@@ -635,6 +702,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     return !!e && getComputedStyle(e).display === 'none';
   }));
   check('desktop', 'the original Get started nav action is still shown', await visible(page, '#landing .lp-actions .dw-original[onclick="go(\'signup\')"]'));
+  check('desktop', 'the desktop hero hides the original Get started button in Free Mode', !(await visible(page, '#landing .hero-original-cta')));
+  check('desktop', 'the desktop hero keeps the account link visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
   await shot(page, '18-homepage-desktop');
   /* The desktop navigation CBT Portal link must open the same landing page. */
   await page.click('#landing .lp-actions .dw-cbt-link');
@@ -669,6 +738,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       await active(gp, 'landing');
       check('guest-entry', label + ': homepage has no bootcamp CTA', await gp.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
       check('guest-entry', label + ': CBT Portal button is visible', await visible(gp, '#landing .hero-cbt'));
+      check('guest-entry', label + ': the hero hides the original Get started button', !(await visible(gp, '#landing .hero-original-cta')));
+      check('guest-entry', label + ': the hero keeps the account link visible', await visible(gp, '#landing .hero-btns .lp-btn-ghost'));
       await gp.click('#landing .hero-cbt');
       await active(gp, 'free-home');
       check('guest-entry', label + ': the homepage CBT Portal button opens the Free UTME Tutorial landing page', await gp.evaluate(() => document.getElementById('free-home').classList.contains('active')));
@@ -706,6 +777,13 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       await gp.click('#free-portal .lp-actions button[onclick="freeNavHome()"]');
       await active(gp, 'landing');
       check('guest-entry', label + ': Back to Home returns the guest to the homepage', true);
+      /* The hero account link is mode-aware: in Free Tutorial Mode it belongs to
+         the edition, so a guest never reaches the hub account login. */
+      await gp.click('#landing .hero-btns .lp-btn-ghost');
+      await active(gp, 'free-login');
+      check('guest-entry', label + ': the hero account link opens the EDITION login', await gp.evaluate(() => document.getElementById('free-login').classList.contains('active') && !!document.getElementById('freeLoginEmail')));
+      check('guest-entry', label + ': the hero account link never opens the hub login', await gp.evaluate(() => !document.getElementById('login-v2').classList.contains('active') && !document.getElementById('signup').classList.contains('active')));
+      await shot(gp, '25b-guest-hero-account-' + label);
     } catch (e) {
       check('guest-entry', label + ': guest flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' | ') : e);
       await shot(gp, '97-guest-failure-' + label);
@@ -725,8 +803,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.evaluate(() => go('landing'));
     await active(page, 'landing');
-    check('original-accounts', 'Free Mode keeps the original Get started action visible', await visible(page, '#landing .hero-original-cta'));
-    check('original-accounts', 'Free Mode keeps the original login action visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
+    check('original-accounts', 'Free Mode hides the hero Get started action', !(await visible(page, '#landing .hero-original-cta')));
+    check('original-accounts', 'Free Mode keeps the hero account link visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
     check('original-accounts', 'Free Mode keeps the original nav Get started visible', await visible(page, '#landing .lp-actions button[onclick="go(\'signup\')"]'));
     check('original-accounts', 'the hub Log in nav shortcut stands down in Free Mode but is not deleted', await page.evaluate(() => {
       const e = document.querySelector('#landing .lp-actions .dw-hub-login');
@@ -734,8 +812,11 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     }));
     check('original-accounts', 'the hub login screen itself is still reachable and independent', await page.evaluate(() => !!document.getElementById('login-v2') && !!document.getElementById('loginId')));
 
-    /* 1. A NEW student reaches the ORIGINAL registration form. */
-    await page.click('#landing .hero-original-cta');
+    /* 1. A NEW student reaches the ORIGINAL registration form. The hero CTA is
+       hidden in Free Tutorial Mode, so this uses the hub's own nav sign-up,
+       which is unchanged — proving the original account system still works
+       independently while the site is in Free Tutorial Mode. */
+    await page.click('#landing .lp-actions button[onclick="go(\'signup\')"]');
     await active(page, 'signup');
     check('original-accounts', 'Get started opens the ORIGINAL registration screen (not the edition)', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !document.getElementById('free-home').classList.contains('active')));
     check('original-accounts', 'the original registration form is actually rendered', await visible(page, '#signup #signName') && await visible(page, '#signup #signupBtn'));
@@ -772,9 +853,16 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     /* 4. A returning student logs in through the ORIGINAL login form. */
     await page.evaluate(() => go('landing'));
     await active(page, 'landing');
+    /* In Free Tutorial Mode the hero account link belongs to the edition. */
     await page.click('#landing .hero-btns .lp-btn-ghost');
+    await active(page, 'free-login');
+    check('original-accounts', 'Free Mode: "I already have an account" opens the EDITION login', await page.evaluate(() => document.getElementById('free-login').classList.contains('active') && !!document.getElementById('freeLoginEmail')));
+    check('original-accounts', 'Free Mode: it never opens the hub login', await page.evaluate(() => !document.getElementById('login-v2').classList.contains('active')));
+    /* The hub login has no public shortcut in Free Mode by design, so reach it
+       by its own route to prove it is untouched and still works. */
+    await page.evaluate(() => go('login-v2'));
     await active(page, 'login-v2');
-    check('original-accounts', '"I already have an account" opens the ORIGINAL login (no edition reroute)', await page.evaluate(() => document.getElementById('login-v2').classList.contains('active') && !document.getElementById('free-register').classList.contains('active')));
+    check('original-accounts', 'the ORIGINAL login is still reachable and independent in Free Mode', await page.evaluate(() => document.getElementById('login-v2').classList.contains('active') && !document.getElementById('free-register').classList.contains('active')));
     check('original-accounts', 'the original login form is actually rendered', await visible(page, '#login-v2 #loginId') && await visible(page, '#login-v2 #loginBtn'));
     await shot(page, '28-original-login');
     await page.fill('#loginId', scholarId);

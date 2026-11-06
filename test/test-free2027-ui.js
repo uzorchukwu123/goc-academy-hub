@@ -533,8 +533,13 @@ settle(load(w1)).then(function () {
      rerouted. "Get started" is the original signup route and "I already have
      an account" is the original login route, in every mode. */
   ok('the hero keeps the ORIGINAL signup route', /hero-original-cta" onclick="go\('signup'\)">Get started</.test(html));
-  ok('the hero keeps the ORIGINAL login route (not an edition reroute)', /class="lp-btn-ghost" onclick="go\('login-v2'\)">I already have an account</.test(html));
-  ok('no CSS rule hides the original hero signup CTA', !/\.hero-original-cta \{ display: none/.test(css));
+  /* Owner correction: the account link is unchanged on the page and routes by
+     mode; the hero's hub sign-up CTA is displayed in Original Mode only. */
+  ok('the hero account link keeps its text, class and position, with a mode-aware action', /<button class="lp-btn-ghost" onclick="heroAccount\(\)">I already have an account<\/button>/.test(html));
+  ok('the hero account action is exposed to the markup', /'heroAccount'\]/.test(uiSrc) && /F\.heroAccount = function/.test(uiSrc));
+  var unscopedCss = css.replace(/body\.f27-mode[^{}]*\{[^{}]*\}/g, '');
+  ok('no UNSCOPED CSS rule hides the original hero signup CTA', !/\.hero-original-cta \{ display: none/.test(unscopedCss));
+  ok('the hero signup CTA is hidden in Free Tutorial Mode only', /body\.f27-mode #landing \.hero-btns \.hero-original-cta \{ display: none !important; \}/.test(css));
   ok('the edition no longer defines an account-entry reroute', !/freeAccountEntry/.test(uiSrc) && !/freeAccountEntry/.test(html));
   ok('the CTA styling is mode-scoped rather than hiding a live bootcamp button', /body\.f27-mode #landing \.hero-btns \.hero-cbt/.test(css));
   ok('the exam header exposes Back and Home', /freeExamLeave\(\)/.test(html) && /freeExamHome\(\)/.test(html) && /Back to Home/.test(html));
@@ -589,6 +594,74 @@ settle(load(w1)).then(function () {
         });
       });
     });
+  });
+}).then(function () {
+  head('Homepage hero account link: one button, the right login page per mode');
+  /* Free Tutorial Mode: the edition's own student login, never the hub's. */
+  var hf = makeWorld({ token: null });
+  load(hf);
+  return settle(hf).then(function () {
+    hf.sandbox.heroAccount();
+    return settle(hf).then(function () {
+      ok('Free Mode: "I already have an account" opens the EDITION student login', hf.calls.go[hf.calls.go.length - 1] === 'free-login', hf.calls.go.join(','));
+      ok('Free Mode: it never opens the hub login or an unknown account page', hf.calls.go.indexOf('login-v2') < 0 && hf.calls.go.indexOf('signup') < 0, hf.calls.go.join(','));
+      ok('Free Mode: it does not invent a second authentication step', hf.calls.go.indexOf('free-register') < 0 && hf.calls.go.indexOf('admin-gate') < 0, hf.calls.go.join(','));
+      /* Original Mode: exactly the route the button always used. */
+      var ho = makeWorld({
+        token: null,
+        health: { service: 'goc-academy-hub', free2027: { on: true, mode: 'original' } },
+        config: { on: true, mode: 'original', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10 }
+      });
+      load(ho);
+      return settle(ho).then(function () {
+        ho.sandbox.heroAccount();
+        return settle(ho).then(function () {
+          ok('Original Mode: "I already have an account" opens the ORIGINAL hub login', ho.calls.go[ho.calls.go.length - 1] === 'login-v2', ho.calls.go.join(','));
+          ok('Original Mode: it is never rerouted into the edition', ho.calls.go.indexOf('free-login') < 0 && ho.calls.go.indexOf('free-home') < 0, ho.calls.go.join(','));
+          /* The offline fallback is Original Mode, so the hub route must hold. */
+          var hx = makeWorld({ healthFails: true });
+          load(hx);
+          return settle(hx).then(function () {
+            hx.sandbox.heroAccount();
+            return settle(hx).then(function () {
+              ok('if the mode answer never arrives the hub login is used (safe fallback)', hx.calls.go[hx.calls.go.length - 1] === 'login-v2', hx.calls.go.join(','));
+            });
+          });
+        });
+      });
+    });
+  });
+}).then(function () {
+  head('Repeated mode switching: the hero destination never goes stale');
+  /* One world, switched back and forth through the real applyMode used by the
+     console's mode control. The destination must follow the CURRENT mode every
+     time, and the body must not accumulate classes. */
+  var hs = makeWorld({ token: null });
+  load(hs);
+  return settle(hs).then(function () {
+    var seen = [];
+    function flip(mode, on, expected, label) {
+      hs.sandbox.applyMode(mode, on);
+      return settle(hs).then(function () {
+        hs.calls.go.length = 0;
+        hs.sandbox.heroAccount();
+        return settle(hs).then(function () {
+          var got = hs.calls.go[hs.calls.go.length - 1];
+          seen.push(got);
+          ok(label + ': hero account link goes to ' + expected, got === expected, hs.calls.go.join(','));
+          ok(label + ': body carries only the expected mode class', hs.doc.body.classList.contains('f27-mode') === (mode === 'free2027' && on === true));
+        });
+      });
+    }
+    return flip('original', true, 'login-v2', 'switch 1 -> Original')
+      .then(function () { return flip('free2027', true, 'free-login', 'switch 2 -> Free Tutorial'); })
+      .then(function () { return flip('original', true, 'login-v2', 'switch 3 -> Original'); })
+      .then(function () { return flip('free2027', true, 'free-login', 'switch 4 -> Free Tutorial'); })
+      .then(function () { return flip('original', true, 'login-v2', 'switch 5 -> Original'); })
+      .then(function () {
+        ok('five switches produce no stale or accumulated destination', seen.join(',') === 'login-v2,free-login,login-v2,free-login,login-v2', seen.join(','));
+        ok('the mode class is fully removed in Original Mode', !hs.doc.body.classList.contains('f27-mode') && !hs.doc.body.classList.contains('goc-original-area'));
+      });
   });
 }).then(function () {
   head('Original student accounts stay reachable in BOTH website modes');

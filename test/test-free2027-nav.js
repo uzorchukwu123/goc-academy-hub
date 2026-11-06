@@ -58,7 +58,14 @@ ok('the CBT Portal drawer entry is hidden in Original Mode (default)', /\.dw-cbt
 ok('Free Tutorial Mode adds the drawer CBT Portal entry', /body\.f27-mode \.dw-btns \.dw-cbt \{ display: block; \}/.test(flatCss));
 ok('no rule hides the original drawer account actions in any mode', !/\.dw-original \{ display: none/.test(flatCss));
 ok('no rule hides the original inline-nav account actions in any mode', !/#landing \.lp-actions \.dw-original \{ display: none/.test(flatCss));
-ok('no rule hides the original hero sign-up CTA in any mode', !/\.hero-original-cta \{ display: none/.test(flatCss));
+/* Owner correction: the hero's hub sign-up CTA is shown in Original Mode only.
+   The unscoped check still proves no mode hides it unconditionally. */
+var unscopedCss = flatCss.replace(/body\.f27-mode[^{}]*\{[^{}]*\}/g, '');
+ok('no UNSCOPED rule hides the original hero sign-up CTA', !/\.hero-original-cta \{ display: none/.test(unscopedCss));
+ok('the hero sign-up CTA is hidden in Free Tutorial Mode only', /body\.f27-mode #landing \.hero-btns \.hero-original-cta \{ display: none !important; \}/.test(flatCss));
+ok('the hero sign-up CTA is still in the markup with its original handler', /class="lp-btn-light hero-original-cta" onclick="go\('signup'\)">Get started</.test(html));
+ok('the hero account link routes by mode instead of a fixed hub destination', /class="lp-btn-ghost" onclick="heroAccount\(\)">I already have an account</.test(html));
+ok('heroAccount picks the edition login in Free Mode and the hub login otherwise', /F\.heroAccount = function \(\) \{\s*global\.go\(F\.on && F\.mode === rules\.MODE_FREE \? 'free-login' : 'login-v2'\);/.test(uiSrc));
 ok('desktop (>=900px) shows the inline CBT Portal entry', /@media \(min-width: 900px\) \{\s*body\.f27-mode #landing \.lp-actions \.dw-cbt-link \{ display: inline-block; \}\s*\}/.test(flatCss));
 ok('the landing keeps its original Log in / Get started in the markup', /<button class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
 /* Owner correction (navigation): the edition landing page is the single student

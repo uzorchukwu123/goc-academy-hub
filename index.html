@@ -69,14 +69,18 @@
             <h1>Raising Smart Scholars for Academic Excellence</h1>
             <p class="sub">G.O.C Academy Hub blends expert tutoring, AI literacy and a gamified study app — so Nigerian students don't just pass exams, they learn to think and study on their own.</p>
             <div class="hero-btns">
-              <!-- ONLY change here: the obsolete bootcamp sign-up CTA is
-                   replaced by a direct CBT Portal entry. The original student
-                   account actions are untouched and available in EVERY mode:
-                   "Get started" is the original sign-up route, and "I already
-                   have an account" is the original login route. -->
+              <!-- The obsolete bootcamp sign-up CTA is replaced by a direct
+                   CBT Portal entry. "Get started" keeps its original sign-up
+                   route and handler untouched; it is displayed in Original
+                   Mode only (css/free2027.css hides it in Free Tutorial Mode,
+                   where registration belongs to the edition's own landing
+                   page). "I already have an account" keeps its text, styling,
+                   position and visibility in both modes; only its destination
+                   is mode-aware (heroAccount): the hub login in Original Mode,
+                   the edition's student login in Free Tutorial Mode. -->
               <button class="lp-btn-light hero-cbt" onclick="freeCbtPortal()">CBT Portal</button>
               <button class="lp-btn-light hero-original-cta" onclick="go('signup')">Get started</button>
-              <button class="lp-btn-ghost" onclick="go('login-v2')">I already have an account</button>
+              <button class="lp-btn-ghost" onclick="heroAccount()">I already have an account</button>
             </div>
             <div class="lp-trust">
               <span>✓ No card required</span>

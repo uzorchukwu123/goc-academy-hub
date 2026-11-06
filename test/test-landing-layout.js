@@ -23,10 +23,19 @@ check('the CBT exam screen has both Back and Back to Home controls', /onclick="f
    coexist with the CBT Portal entry. Nothing may hide or reroute it. */
 const f27css = fs.readFileSync(path.join(__dirname, '..', 'css', 'free2027.css'), 'utf8').replace(/\s+/g, ' ');
 check('the original hero signup route is intact', /hero-original-cta" onclick="go\('signup'\)"/.test(html));
-check('the original hero login route is intact', /class="lp-btn-ghost" onclick="go\('login-v2'\)"/.test(html));
+/* Owner correction: the hero's account link keeps its text, class, position and
+   visibility; ONLY its destination is mode-aware. */
+check('the hero account link keeps its original text, class and position', /<button class="lp-btn-ghost" onclick="heroAccount\(\)">I already have an account<\/button>/.test(html));
+check('the hero account link is a mode-aware action, not a hard-coded hub route', !/class="lp-btn-ghost" onclick="go\('login-v2'\)"/.test(html));
 check('the original nav Log in / Get started are intact', /class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)"/.test(html) && /class="lp-cta dw-original" onclick="go\('signup'\)"/.test(html));
 check('the original drawer Create free account / Log in are intact', /dw-original" onclick="dwGo\('signup'\)"/.test(html) && /dw-original dw-hub-login" onclick="dwGo\('login-v2'\)"/.test(html));
-check('no stylesheet rule deletes or hides an original account action outright', !/\.dw-original \{ display: none/.test(f27css) && !/\.hero-original-cta \{ display: none/.test(f27css));
+/* The hero's hub "Get started" is displayed in Original Mode only. Strip the
+   mode-scoped rules first, so this still proves that NOTHING hides an original
+   account action unconditionally, in every mode. */
+const unscopedF27css = f27css.replace(/body\.f27-mode[^{}]*\{[^{}]*\}/g, '');
+check('no unscoped stylesheet rule deletes or hides an original account action', !/\.dw-original \{ display: none/.test(unscopedF27css) && !/\.hero-original-cta \{ display: none/.test(unscopedF27css));
+check('the hero Get started button is hidden in Free Tutorial Mode only', /body\.f27-mode #landing \.hero-btns \.hero-original-cta \{ display: none !important; \}/.test(f27css));
+check('the hero Get started button and its original handler are NOT deleted', /class="lp-btn-light hero-original-cta" onclick="go\('signup'\)">Get started</.test(html));
 /* Owner correction: in Free Tutorial Mode the hub's own Log in shortcut would
    send a free-tutorial student to an account they never created. It stands down
    in THAT MODE ONLY — the button stays in the markup, Original Mode shows it,

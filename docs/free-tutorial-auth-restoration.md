@@ -180,6 +180,32 @@ The entry itself makes no account decision. The decision happens one step later:
 is never stranded. No step routes a Free UTME student to the hub's `login-v2`,
 `signup`, or any other account page.
 
+### The homepage hero adapts to the active mode
+
+Two homepage hero controls are mode-aware. Nothing else on the homepage changed.
+
+| Hero control | Original Mode | Free Tutorial Mode |
+| --- | --- | --- |
+| **Get started** | Visible; opens `#signup` (unchanged) | Not displayed — registration belongs to the edition's **Register free** |
+| **I already have an account** | Opens `#login-v2` (unchanged) | Opens `#free-login` |
+| **CBT Portal** | Not displayed | Opens the edition landing page via `freeCbtPortal()` |
+
+"Get started" is **hidden, never deleted**: the button and its `go('signup')`
+handler stay in `index.html`, and one mode-scoped rule
+(`body.f27-mode #landing .hero-btns .hero-original-cta`) hides it in Free Tutorial
+Mode only. Switching back to Original Mode removes the body class and the button
+returns exactly as it was.
+
+"I already have an account" keeps its text, class, styling, position, size and
+visibility in both modes. Only its `onclick` changed, to `heroAccount()` — a
+three-line navigation action that picks `#free-login` in Free Tutorial Mode and
+`#login-v2` otherwise, including the offline fallback where the mode answer never
+arrives. It creates no authentication system and changes no auth behaviour.
+
+The hub's **nav** "Get started" and the drawer's **Create free account** are
+untouched and still shown in Free Tutorial Mode, so the original account system
+remains independently usable in either mode.
+
 **Navigation links removed:** the duplicate `Log in` link in the edition landing
 page's own nav bar (its hero still carries **Student log in**), and the hub's
 `Log in` shortcut in the homepage nav and mobile drawer, which **stands down in
@@ -214,7 +240,7 @@ and no student is invalidated. The permanent registry (`studentIds`,
 | `npm run build` | exit 0 — 1777690 → 1093714 bytes (38% smaller) |
 | `node test/test-free2027-auth.js` | **94 assertions passed** |
 | `node test/test-free2027-session-client.js` | **all passed** |
-| Real-browser harness (fresh isolated install) | **225/225 checks passed**, 0 page JS errors |
+| Real-browser harness (fresh isolated install) | **292/292 checks passed**, 0 page JS errors |
 | `git diff --check` | clean |
 
 `test/test-free2027-auth.js` runs against the real HTTP server and the real data
@@ -248,6 +274,14 @@ portal directly; an **expired session** returns to the edition login and logging
 back in restores every record; and Original Mode brings the hub's Log in shortcut
 back with the hub's own registration and login still working.
 
+The hero is verified by **clicking it for real** through two complete
+Original → Free → Original round trips on **each** layout (mobile 390×844 and
+desktop 1366×900), driven by the Founder's actual Website Mode Control panel:
+Get started hidden/shown correctly, its handler never deleted, the account link
+unchanged and opening the right login page each time, the CBT entry shown only in
+Free Mode, no accumulated `f27-mode`/`goc-original-area` class, and student
+records intact after every switch.
+
 Limits, stated plainly: the browser run is headless Chromium 131 emulating
 390×844 and desktop viewports, not physical devices; the data store is the local
 JSON file, not a live Appwrite Database; email uses the SMTP capture adapter. The
@@ -265,6 +299,11 @@ The follow-up navigation correction touched only `index.html`,
 `css/free2027.css`, `js/free2027-ui.js`, `sw.js`, `DEPLOY-CHECKLIST.md` and four
 test files. No server code, authentication logic, data structure or hub file was
 modified by it.
+
+The final homepage-hero correction is smaller still: **one `onclick` attribute**
+in `index.html`, **one mode-scoped CSS rule**, and **one navigation function**
+(`heroAccount`) in `js/free2027-ui.js`, plus the `goc-v199` cache bump and the
+tests that encode the new contract.
 
 Two changes sit just outside the authentication code and were necessary:
 
