@@ -896,29 +896,129 @@
     global.go('free-result');
     freeResultPaint(result);
   };
+  /* One percentage format for every surface, taken from the server's official
+     percentage so the result and the public board can never disagree. */
+  function pctText(v) {
+    if (v === null || v === undefined || !isFinite(Number(v))) return '—';
+    return Number(v).toFixed(2) + '%';
+  }
+  function subjectTableHtml(rows, total, maxTotal) {
+    if (!Array.isArray(rows) || !rows.length) return '';
+    var body = rows.map(function (x) {
+      return '<tr><td>' + esc(x.subject) + '</td><td>' + x.correct + '/' + x.total + '</td>' +
+        '<td>' + x.score + '/' + x.maxScore + '</td></tr>';
+    }).join('');
+    var foot = (total === null || total === undefined) ? '' :
+      '<tr class="me"><td><b>TOTAL</b></td><td></td><td><b>' + total + '/' + maxTotal + '</b></td></tr>';
+    return '<div class="f27-table-wrap" style="margin:14px 0"><table class="f27-table">' +
+      '<thead><tr><th>Subject</th><th>Correct</th><th>Score</th></tr></thead>' +
+      '<tbody>' + body + foot + '</tbody></table></div>';
+  }
   function freeResultPaint(r) {
     var host = $('freeResultBody');
     if (!host) return;
     if (!r) { host.innerHTML = '<p class="f27-fine">No result to show.</p>'; return; }
+    F.lastResult = r;
     var pct = r.maxScore ? Math.round((Number(r.score) || 0) / Number(r.maxScore) * 100) : 0;
     var pos = r.position;
+    var unanswered = r.unanswered == null
+      ? (r.total == null || r.answered == null ? null : r.total - r.answered)
+      : r.unanswered;
     host.innerHTML = '<div class="f27-result">' +
       '<span class="f27-tag">' + esc(rules.kindLabel(r.kind)) + '</span>' +
       '<h1>' + esc(r.title || 'Result') + '</h1>' +
       '<div class="f27-score"><b>' + (r.score == null ? '—' : r.score) + '</b><span>of ' + (r.maxScore == null ? '—' : r.maxScore) + '</span></div>' +
       '<div class="f27-bars"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div>' +
+      '<p class="f27-fine">Overall percentage: <b>' + pctText(r.percent) + '</b></p>' +
       '<div class="f27-facts">' +
       '<span>correct <b>' + (r.correct == null ? '—' : r.correct) + '</b></span>' +
-      '<span>wrong <b>' + (r.wrong == null ? '—' : r.wrong) + '</b></span>' +
+      '<span>incorrect <b>' + (r.wrong == null ? '—' : r.wrong) + '</b></span>' +
+      '<span>unanswered <b>' + (unanswered == null ? '—' : unanswered) + '</b></span>' +
       '<span>answered <b>' + (r.answered == null ? '—' : r.answered) + '</b> of ' + (r.total == null ? '—' : r.total) + '</span>' +
       '<span>time <b>' + clock(r.timeUsedSec) + '</b></span>' +
       '</div>' +
+      subjectTableHtml(r.subjectScores, r.scoring === 'jamb' ? r.score : null, r.maxScore) +
       (r.autoSubmitted ? '<p class="f27-fine">The clock ran out, so the paper was submitted with the answers that had been saved.</p>' : '') +
       (r.private
         ? '<p class="f27-fine">This is a weekly assessment: your result is private and is never shown to anyone else.</p>'
         : (pos ? '<p class="f27-fine">Competition position: <b>' + pos.rank + '</b> of ' + pos.of + '.' +
             (pos.inTop ? ' You are in the published top ten.' : ' The public board shows only the top ten — this is your private position.') + '</p>' : '')) +
-      '<div class="f27-cta"><button class="btn btn-red btn-block" onclick="freeGo(\'free-portal\')">Back to the CBT Portal</button></div>' +
+      '<div class="f27-cta">' +
+      (r.attemptId ? '<button class="btn btn-outline btn-block" onclick="freeReviewShow(\'' + esc(r.attemptId) + '\')">Review my answers</button>' : '') +
+      '<button class="btn btn-red btn-block" onclick="freeGo(\'free-portal\')">Back to the CBT Portal</button></div>' +
+      '</div>';
+  }
+
+  /* ====================================================== 6b. ANSWER REVIEW
+     Rendered into the SAME result host, so no new screen, navigation entry,
+     HTML container or stylesheet rule is needed. The server owns every verdict
+     and refuses the call until the paper has been submitted. */
+  F.freeReviewShow = function (attemptId) {
+    global.go('free-result');
+    var host = $('freeResultBody');
+    if (!host) return;
+    host.innerHTML = '<div class="ad-loading">Loading your review…</div>';
+    api.review(attemptId).then(function (r) {
+      paintReview(r && r.review);
+    }, function (er) {
+      host.innerHTML = '<p class="f27-fine">' + esc((er && er.message) || 'That review is not available.') + '</p>' +
+        '<div class="f27-cta"><button class="btn btn-outline btn-block" onclick="freeReviewBack()">Back to my result</button></div>';
+    });
+  };
+  F.freeReviewBack = function () {
+    global.go('free-result');
+    freeResultPaint(F.lastResult || null);
+  };
+  function optionLine(letter, text, chosen, isKey) {
+    var mark = isKey ? ' <b>✓ correct</b>' : '';
+    var mine = chosen ? ' <b>← your answer</b>' : '';
+    return '<div class="f27-fine"' + (isKey ? ' style="font-weight:700"' : '') + '>' +
+      letter + '. ' + esc(text == null ? '' : text) + mark + mine + '</div>';
+  }
+  function paintReview(v) {
+    var host = $('freeResultBody');
+    if (!host) return;
+    if (!v) { host.innerHTML = '<p class="f27-fine">No review to show.</p>'; return; }
+    var letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    var questions = (v.questions || []).map(function (q) {
+      var chip = q.outcome === 'correct' ? 'ok' : q.outcome === 'incorrect' ? 'no' : 'warn';
+      var label = q.outcome === 'correct' ? 'Correct' : q.outcome === 'incorrect' ? 'Incorrect'
+        : q.outcome === 'unanswered' ? 'Unanswered' : 'Awaiting marking';
+      var opts = (q.options || []).map(function (o, i) {
+        return optionLine(letters[i] || String(i + 1), o, q.yourAnswer === i, q.correctAnswer === i);
+      }).join('');
+      var yourText = q.yourAnswer === null || q.yourAnswer === undefined
+        ? 'Not answered'
+        : (letters[q.yourAnswer] || '') + '. ' + ((q.options || [])[q.yourAnswer] || '');
+      var keyText = q.correctAnswer === null || q.correctAnswer === undefined
+        ? '—'
+        : (letters[q.correctAnswer] || '') + '. ' + ((q.options || [])[q.correctAnswer] || '');
+      return '<div class="f27-item" style="text-align:left;margin-bottom:10px">' +
+        '<div class="f27-item-top"><b>Question ' + q.n + '</b>' +
+        '<span class="f27-chip ' + chip + '">' + label + '</span></div>' +
+        '<p class="f27-fine">' + esc(q.subject || '') + (q.topic ? ' · ' + esc(q.topic) : '') + '</p>' +
+        (q.passage ? '<div class="f27-cbt-passage"><b>' + esc(q.passage.title || 'Passage') + '</b><p>' + esc(q.passage.text || '') + '</p></div>' : '') +
+        '<p>' + esc(q.text || '') + '</p>' + opts +
+        '<p class="f27-fine">Your answer: <b>' + esc(yourText) + '</b></p>' +
+        '<p class="f27-fine">Correct answer: <b>' + esc(keyText) + '</b></p>' +
+        '</div>';
+    }).join('');
+    host.innerHTML = '<div class="f27-result" style="text-align:left;max-width:720px">' +
+      '<span class="f27-tag">' + esc(rules.kindLabel(v.kind)) + ' review</span>' +
+      '<h1>' + esc(v.title || 'Review') + '</h1>' +
+      '<div class="f27-score"><b>' + (v.score == null ? '—' : v.score) + '</b><span>of ' + (v.maxScore == null ? '—' : v.maxScore) + '</span></div>' +
+      '<p class="f27-fine">Percentage: <b>' + pctText(v.percent) + '</b></p>' +
+      '<div class="f27-facts">' +
+      '<span>correct <b>' + (v.correct == null ? '—' : v.correct) + '</b></span>' +
+      '<span>incorrect <b>' + (v.wrong == null ? '—' : v.wrong) + '</b></span>' +
+      '<span>unanswered <b>' + (v.unanswered == null ? '—' : v.unanswered) + '</b></span>' +
+      '<span>total <b>' + (v.total == null ? '—' : v.total) + '</b></span>' +
+      '</div>' +
+      subjectTableHtml(v.subjectScores, v.scoring === 'jamb' ? v.score : null, v.maxScore) +
+      (v.activityDeleted ? '<p class="f27-fine">This activity has since been removed by the academy. Your answers and result are unchanged.</p>' : '') +
+      questions +
+      '<div class="f27-cta"><button class="btn btn-outline btn-block" onclick="freeReviewBack()">Back to my result</button>' +
+      '<button class="btn btn-red btn-block" onclick="freeGo(\'free-portal\')">Back to the CBT Portal</button></div>' +
       '</div>';
   }
 
@@ -954,12 +1054,12 @@
         var me = mine && mine.participantId === x.participantId;
         return '<tr' + (me ? ' class="me"' : '') + '><td>' + x.rank + '</td><td>' + esc(x.participantId) + '</td>' +
           '<td>' + esc(x.name) + '</td><td>' + esc(x.course) + '</td>' +
-          '<td>' + x.score + '/' + x.maxScore + '</td><td>' + clock(x.timeUsedSec) + '</td></tr>';
+          '<td>' + pctText(x.percent) + '</td><td>' + clock(x.timeUsedSec) + '</td></tr>';
       }).join('');
       host.innerHTML = '<h1 class="f27-h1">' + esc(b.title) + '</h1>' +
         '<p class="f27-fine">Top ' + rules.PUBLIC_TOP_N + ' of ' + b.totalCompetitors + ' competitor' + (b.totalCompetitors === 1 ? '' : 's') +
-        '. Ranked on the highest score first, then on the shortest completion time.</p>' +
-        '<div class="f27-table-wrap"><table class="f27-table"><thead><tr><th>#</th><th>Participant</th><th>Name</th><th>Course</th><th>Score</th><th>Time</th></tr></thead>' +
+        '. Ranked on the highest score first, then on the shortest completion time. Percentages are shown here; your own score is on your result.</p>' +
+        '<div class="f27-table-wrap"><table class="f27-table"><thead><tr><th>#</th><th>Participant</th><th>Name</th><th>Course</th><th>Percentage</th><th>Time</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>' +
         (mine && !mine.inTop
           ? '<div class="f27-mine-card"><b>Your position</b><span>' + mine.rank + ' of ' + mine.of + '</span>' +
@@ -1099,7 +1199,7 @@
   /* Expose the handful of names the markup calls. */
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
-    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
+    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeReviewShow', 'freeReviewBack', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
     'freeCbtPortal', 'freeExamHome', 'freeLogin', 'freePortalEnter', 'heroAccount'];

@@ -9101,6 +9101,13 @@ const ROUTES = [
   { method: 'GET', path: /^\/api\/free2027\/attempts\/([^/]+)$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
       return free2027.resumeAttempt(req.free2027.data, params[0]).then(r => okJson(res, r));
     }) },
+  /* Post-submission review of the candidate's OWN paper (competition or weekly
+     assessment). Ownership and the submitted state are enforced in the library,
+     so an altered request cannot reach another candidate's responses or an
+     answer key before submission. */
+  { method: 'GET', path: /^\/api\/free2027\/attempts\/([^/]+)\/review$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.attemptReview(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
   { method: 'PUT', path: /^\/api\/free2027\/attempts\/([^/]+)\/answer$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
       return free2027.saveAnswer(req.free2027.data, params[0], body).then(r => okJson(res, r));
     }) },

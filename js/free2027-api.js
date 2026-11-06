@@ -139,6 +139,9 @@
     activities: function () { return request('GET', '/activities'); },
     start: function (id) { return request('POST', '/activities/' + encodeURIComponent(String(id)) + '/start', {}); },
     resume: function (attemptId) { return request('GET', '/attempts/' + encodeURIComponent(String(attemptId))); },
+    /* Post-submission review of this candidate's own paper. The server checks
+       ownership and refuses while the paper is still open. */
+    review: function (attemptId) { return request('GET', '/attempts/' + encodeURIComponent(String(attemptId)) + '/review'); },
     answer: function (attemptId, questionId, choice) {
       return request('PUT', '/attempts/' + encodeURIComponent(String(attemptId)) + '/answer', { questionId: String(questionId), choice: choice });
     },

@@ -490,7 +490,14 @@
           '<div><b>' + esc(a.title) + ' <span class="f27-chip ' + (a.state === 'open' ? 'ok' : a.state === 'upcoming' ? 'warn' : '') + '">' + esc(rules.stateLabel(a.state)) + '</span> ' + lb + '</b>' +
           '<span>' + esc(rules.kindLabel(a.kind)) + ' · ' + a.questionCount + ' questions · ' + a.durationMin + ' min · up to ' + a.maxAttempts + ' attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
           '<span>opens ' + esc(when(a.opensAt)) + ' · closes ' + esc(when(a.closesAt)) + (a.reopenClosesAt ? ' (reopened to ' + esc(when(a.reopenClosesAt)) + ')' : '') + '</span>' +
-          '<span>' + a.attempts + ' submitted · ' + (a.status === rules.STATUS_DRAFT ? 'not published yet' : a.status) + '</span></div>' +
+          '<span>' + a.attempts + ' submitted · ' + (a.status === rules.STATUS_DRAFT ? 'not published yet' : a.status) + '</span>' +
+          /* A standard 180-question UTME competition shows its readiness here so
+             the shortfall is visible before a launch is even attempted. The
+             server enforces the same figures independently. */
+          (a.launch && a.launch.gated && !a.launch.ok
+            ? '<span class="f27-chip no">Available questions: ' + a.launch.available + '/' + a.launch.required +
+              ' · additional required: ' + a.launch.needed + '</span>'
+            : '') + '</div>' +
         '</div><div class="ad-actions">' + actions + '</div></div>';
     }).join('');
     return '<div class="ad-actions" style="margin-bottom:12px"><button class="ad-btn pri" onclick="f27AdmNewActivity()">Create Activity</button>' +
@@ -578,7 +585,7 @@
       '<p class="ad-note">Questions are retrieved automatically from the <b>' + bankLabel + '</b>. There is no individual question picker.</p>' +
       '<div id="f27Availability" class="f27-availability"><div class="ad-loading">Checking available eligible questions…</div></div>' +
       '<div class="ad-field"><label for="f27Count">Number of questions</label>' +
-        '<input id="f27Count" type="number" min="1" max="' + rules.MAX_QUESTIONS + '" step="1" value="' + Number(a.questionCount || 0) + '" onchange="f27AdmEditorRead()">' +
+        '<input id="f27Count" type="number" min="1" max="' + rules.maxQuestionsFor(a.kind) + '" step="1" value="' + Number(a.questionCount || 0) + '" onchange="f27AdmEditorRead()">' +
         '<p class="ad-note">Cannot exceed the available eligible questions in this category’s bank.</p></div>' +
       '<div class="ad-field"><label>Optional subject distribution</label>' +
         '<p class="ad-note">Leave every box blank to draw from all eligible questions. If used, the counts must add up to the number of questions.</p>' +
@@ -622,7 +629,8 @@
          is silently discarded when this response lands mid-edit. */
       global.f27AdmEditorRead();
       var count = $('f27Count');
-      if (count) count.max = String(Math.min(rules.MAX_QUESTIONS, A.availability.total || rules.MAX_QUESTIONS));
+      var cap = rules.maxQuestionsFor(A.editing && A.editing.kind);
+      if (count) count.max = String(Math.min(cap, A.availability.total || cap));
       host.innerHTML = '<div class="ad-metric"><span>Available eligible questions</span><b>' + A.availability.total + '</b></div>' +
         '<p class="ad-note">' + BANK_SUBJECTS.map(function (s) { return esc(s) + ': ' + Number(A.availability.bySubject[s] || 0); }).join(' · ') + '</p>';
       var grid = document.querySelector('.f27-distribution-grid');
@@ -675,8 +683,9 @@
     var a = A.editing;
     if (!a) return;
     var count = Number(a.questionCount);
-    if (!isFinite(count) || count < 1 || count > rules.MAX_QUESTIONS) {
-      say('Set how many questions to include, between 1 and ' + rules.MAX_QUESTIONS + '.');
+    var cap = rules.maxQuestionsFor(a.kind);
+    if (!isFinite(count) || count < 1 || count > cap) {
+      say('Set how many questions to include, between 1 and ' + cap + '.');
       return;
     }
     if (A.availability && count > A.availability.total) {

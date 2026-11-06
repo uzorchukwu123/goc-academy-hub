@@ -455,6 +455,36 @@ function createFree2027(deps) {
     return questionsInBank(db, bank, ids).questions;
   }
 
+  /* The paper as it was actually served. questionHistory only archives a
+     question when it is DELETED, so an administrator EDITING a question would
+     otherwise change the wording, the options and even the answer key of a
+     paper that has already been sat. Freezing the served records on the attempt
+     makes the paper the candidate saw, the paper that was marked and the paper
+     they later review one and the same thing. Only the fields marking and
+     review need are kept. This never leaves the server. */
+  function snapshotQuestions(questions) {
+    return (questions || []).map(function (q) {
+      var snap = {
+        id: String(q.id), kind: q.kind || 'objective',
+        subject: q.subject || '', topic: q.topic || '', text: q.text || '',
+        options: Array.isArray(q.options) ? q.options.slice() : [],
+        answer: q.answer == null ? null : q.answer
+      };
+      if (q.maxMark != null) snap.maxMark = q.maxMark;
+      if (q.passage) snap.passage = { id: q.passage.id, title: q.passage.title, text: q.passage.text };
+      return snap;
+    });
+  }
+  /* Attempts taken before snapshots existed fall back to the live bank and then
+     to the deletion archive, exactly as they always did. */
+  async function attemptQuestionRecords(db, attempt, activity) {
+    if (attempt && Array.isArray(attempt.questionSnapshot) && attempt.questionSnapshot.length) {
+      return attempt.questionSnapshot;
+    }
+    return questionRecords(db, (attempt && attempt.questionIds) || [],
+      (attempt && attempt.bank) || (activity && activity.kind));
+  }
+
   /* Bank membership check used by allocation, editing and publication. It never
      reads the other bank or the shared db.questions. */
   function questionsInBank(db, bank, ids) {
@@ -469,10 +499,15 @@ function createFree2027(deps) {
     (((db.free2027 || {}).questionHistory) || []).forEach(function (q) {
       if (q && q.id && q.bank === bank) hist[String(q.id)] = q;
     });
-    var questions = [], missing = [];
+    var questions = [], missing = [], used = {};
     (ids || []).forEach(function (id) {
-      var q = byId[String(id)] || hist[String(id)];
-      if (q) questions.push(q); else missing.push(String(id));
+      var key = String(id);
+      /* One question serves once, even if an id were ever repeated in a saved
+         allocation: a duplicate must not be marked or counted twice. */
+      if (used[key]) return;
+      used[key] = true;
+      var q = byId[key] || hist[key];
+      if (q) questions.push(q); else missing.push(key);
     });
     return { questions: questions, missing: missing };
   }
@@ -501,12 +536,74 @@ function createFree2027(deps) {
 
   /* Eligible questions are the live, active multiple-choice records in ONE
      bank. Subject is metadata used only for optional distribution counts. */
+  function isEligibleQuestion(q) {
+    return !!(q && q.active !== false && !q.archived && core.questionIsLive(q) &&
+      q.kind === 'objective' && Array.isArray(q.options) && q.options.length >= 2 &&
+      Number.isInteger(Number(q.answer)) && Number(q.answer) >= 0 && Number(q.answer) < q.options.length);
+  }
   function eligibleBankQuestions(db, bank) {
-    return bankQuestionsSync(db, bank).filter(function (q) {
-      return q && q.active !== false && !q.archived && core.questionIsLive(q) &&
-        q.kind === 'objective' && Array.isArray(q.options) && q.options.length >= 2 &&
-        Number.isInteger(Number(q.answer)) && Number(q.answer) >= 0 && Number(q.answer) < q.options.length;
-    });
+    return bankQuestionsSync(db, bank).filter(isEligibleQuestion);
+  }
+
+  /* Standard-UTME competition readiness, revalidated at launch AND when an
+     attempt is created. Only a competition configured as a standard
+     180-question paper is gated; every other activity keeps the behaviour it
+     already had.
+
+     A question counts only when it is still in THIS competition's own live
+     bank and still eligible: a record that has been deactivated, archived or
+     deleted (and now survives only as a history snapshot) cannot make up the
+     180. Duplicate ids count once. The subject distribution must be met exactly,
+     so one short subject cannot be padded out from another. */
+  function competitionLaunchStatus(db, activity) {
+    if (!rules.isJambCompetition(activity)) return { gated: false, ok: true };
+    var required = rules.JAMB_QUESTION_COUNT;
+    var dist = activity.subjectDistribution || {};
+    var out = { gated: true, ok: false, required: required, available: 0, needed: required, bySubject: {} };
+    var distProblem = rules.jambDistributionProblem(dist);
+    if (distProblem) { out.error = distProblem; return out; }
+
+    var ids = Array.isArray(activity.questionIds) ? activity.questionIds.map(String) : [];
+    var unique = [], seen = {};
+    ids.forEach(function (id) { if (!seen[id]) { seen[id] = true; unique.push(id); } });
+    out.duplicates = ids.length - unique.length;
+
+    var bank = bankForKind(activity.kind);
+    var liveById = {};
+    bankQuestionsSync(db, bank).forEach(function (q) { if (q && q.id) liveById[String(q.id)] = q; });
+    var eligible = [];
+    unique.forEach(function (id) { if (isEligibleQuestion(liveById[id])) eligible.push(liveById[id]); });
+    eligible.forEach(function (q) { out.bySubject[q.subject] = (out.bySubject[q.subject] || 0) + 1; });
+    out.available = eligible.length;
+    out.needed = Math.max(0, required - eligible.length);
+
+    if (out.duplicates > 0) {
+      out.error = 'Competition cannot launch. Its question allocation contains ' + out.duplicates +
+        ' duplicate question ID' + (out.duplicates === 1 ? '' : 's') + '.';
+      return out;
+    }
+    if (eligible.length < required) {
+      out.error = 'Competition cannot launch. Available questions: ' + eligible.length + '/' + required +
+        '. Additional questions required: ' + out.needed + '.';
+      return out;
+    }
+    var subjects = rules.jambSubjectOrder(dist);
+    for (var i = 0; i < subjects.length; i++) {
+      var subject = subjects[i], want = Number(dist[subject]) || 0, have = out.bySubject[subject] || 0;
+      if (have !== want) {
+        out.error = 'Competition cannot launch. ' + subject + ' has ' + have +
+          ' eligible question' + (have === 1 ? '' : 's') + ' in this paper but the standard UTME structure needs ' +
+          want + '.' + (have < want ? ' Additional questions required: ' + (want - have) + '.' : '');
+        return out;
+      }
+    }
+    out.ok = true;
+    return out;
+  }
+  function requireLaunchReady(db, activity) {
+    var st = competitionLaunchStatus(db, activity);
+    if (st.gated && !st.ok) throw FreeError(409, st.error);
+    return st;
   }
   function bankAvailability(db, bank) {
     var rows = eligibleBankQuestions(db, bank);
@@ -1053,8 +1150,10 @@ function createFree2027(deps) {
          paper honest: the clock cannot be dodged by walking away. */
       var stale = mine.filter(function (a) { return !a.submittedAt && rules.attemptExpired(a, t); });
       if (stale.length) {
-        var qs = await questionRecords(db, stale[0].questionIds || [], activity.kind);
-        stale.forEach(function (a) { finaliseAttempt(a, qs, t, true); });
+        for (var si = 0; si < stale.length; si++) {
+          var qs = await attemptQuestionRecords(db, stale[si], activity);
+          finaliseAttempt(stale[si], qs, t, true, activity);
+        }
         writeData(db);
         mine = attemptsFor(ctx.session, activity.id, p.id);
       }
@@ -1077,6 +1176,9 @@ function createFree2027(deps) {
         throw FreeError(400, 'Some questions of this activity are not in its own question bank.');
       }
       if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
+      /* Revalidated here as well as at launch: a question deactivated after
+         publication must not let a new standard-UTME paper start short. */
+      requireLaunchReady(db, activity);
       ctx.session.attemptSeq = (ctx.session.attemptSeq || 0) + 1;
       var attempt = {
         id: 'F27-A' + ctx.session.attemptSeq + '-' + crypto.randomBytes(3).toString('hex'),
@@ -1084,6 +1186,7 @@ function createFree2027(deps) {
         participantId: p.id,
         bank: bankForKind(activity.kind),
         questionIds: paperQs.map(function (q) { return String(q.id); }),
+        questionSnapshot: snapshotQuestions(paperQs),
         optionOrders: activity.randomizeOptions ? makeOptionOrders(paperQs) : null,
         responses: {},
         startedAt: t,
@@ -1180,8 +1283,8 @@ function createFree2027(deps) {
         var a2 = findAttempt(ctx2.session, attemptId);
         if (a2 && !a2.submittedAt) {
           var act2 = findActivity(ctx2.session, a2.activityId);
-          var qs2 = await questionRecords(db2, a2.questionIds || [], a2.bank || (act2 && act2.kind));
-          finaliseAttempt(a2, qs2, t, true);
+          var qs2 = await attemptQuestionRecords(db2, a2, act2);
+          finaliseAttempt(a2, qs2, t, true, act2);
           writeData(db2);
         }
       });
@@ -1195,7 +1298,10 @@ function createFree2027(deps) {
 
   /* Marking is the hub's own: js/goc-core.js markAttempt over the real question
      records. Nothing about it is re-implemented here. */
-  function finaliseAttempt(attempt, questions, t, autoClosed) {
+  function finaliseAttempt(attempt, questions, t, autoClosed, activity) {
+    /* The hub's own engine still decides every individual verdict. A standard
+       JAMB competition then converts those same verdicts into subject scores
+       out of 100 each; nothing is re-marked and no client figure is consulted. */
     var marked = core.markAttempt(questions, attempt.responses || {});
     var elapsed = Math.round((t - (Number(attempt.startedAt) || t)) / 1000);
     var used = Math.max(0, Math.min(elapsed, Number(attempt.durationSec) || 0));
@@ -1210,7 +1316,23 @@ function createFree2027(deps) {
     attempt.wrong = marked.wrong;
     attempt.answered = marked.answered;
     attempt.total = marked.total;
+    attempt.unanswered = marked.unanswered;
     attempt.markedAt = t;
+    var act = activity || null;
+    if (act && rules.isJambCompetition(act) && marked.status === 'marked') {
+      var jamb = rules.jambSubjectScores(marked.answers, act.subjectDistribution || {});
+      attempt.scoring = 'jamb';
+      attempt.subjectScores = jamb.subjects;
+      attempt.score = jamb.score;
+      attempt.maxScore = jamb.maxScore;
+      attempt.percent = jamb.percent;
+    } else {
+      /* Every other paper — including a weekly assessment and any competition
+         that is not a standard 180-question UTME paper — keeps its existing
+         marking exactly. */
+      attempt.scoring = 'raw';
+      attempt.subjectScores = null;
+    }
     return attempt;
   }
 
@@ -1226,11 +1348,21 @@ function createFree2027(deps) {
       kind: activity ? activity.kind : '',
       score: attempt.score,
       maxScore: attempt.maxScore,
-      percent: attempt.percent,
+      /* One percentage rule, derived from the official score above, so the
+         result page and the public board can never disagree. */
+      percent: attempt.percent == null ? null : rules.percentOf(attempt.score, attempt.maxScore),
       correct: attempt.correct,
       wrong: attempt.wrong,
       answered: attempt.answered,
+      unanswered: attempt.unanswered == null
+        ? (attempt.total == null || attempt.answered == null ? null : attempt.total - attempt.answered)
+        : attempt.unanswered,
       total: attempt.total,
+      /* Subject scores out of 100 each, for a standard JAMB competition only. */
+      scoring: attempt.scoring || 'raw',
+      subjectScores: Array.isArray(attempt.subjectScores) ? attempt.subjectScores : null,
+      /* A submitted paper can always be reviewed by its owner. */
+      reviewable: !!attempt.submittedAt,
       timeUsedSec: attempt.timeUsedSec,
       durationSec: attempt.durationSec,
       submittedAt: attempt.submittedAt,
@@ -1259,7 +1391,7 @@ function createFree2027(deps) {
       if (attempt.submittedAt) return { alreadySubmitted: true, result: resultOf(attempt, ctx.session) };
       var activity = findActivity(ctx.session, attempt.activityId);
       if (!activity) throw FreeError(404, 'That activity was not found.');
-      var qs = await questionRecords(db, attempt.questionIds || [], attempt.bank || activity.kind);
+      var qs = await attemptQuestionRecords(db, attempt, activity);
 
       /* Answers sent with the submit are only ever used to fill gaps: the
          server's own copy wins, and each value is validated the same way an
@@ -1278,11 +1410,112 @@ function createFree2027(deps) {
         });
       }
 
-      finaliseAttempt(attempt, qs, t, false);
+      finaliseAttempt(attempt, qs, t, false, activity);
       pushRecord(ctx.session, { participantId: attempt.participantId, kind: 'submit', activityId: attempt.activityId });
       writeData(db);
       return { result: resultOf(attempt, ctx.session) };
     });
+  }
+
+  /* Post-submission answer review — ONE facility for both a competition and a
+     weekly assessment, built from the attempt that was actually saved.
+
+     Ownership is checked before anything is read. Review opens only after
+     submission, so an answer key can never be reached while a paper is live.
+     The questions come through questionsInBank(), which falls back to the
+     edition's questionHistory snapshot, so a question edited or deleted after
+     the paper was sat still reviews exactly as the candidate saw it. Options are
+     presented in the same shuffled order the candidate was served, and both
+     their choice and the correct choice are mapped into that order.
+
+     Verdicts are not re-invented: they come from the hub's own markAttempt over
+     the server's stored responses, the same call that produced the score. */
+  async function attemptReview(data, attemptId) {
+    var db = readData();
+    var ctx = sessionForCallerWithDb(db, data);
+    var attempt = findAttempt(ctx.session, attemptId);
+    if (!attempt) throw FreeError(404, 'That examination was not found.');
+    if (String(attempt.participantId) !== String(data.id)) {
+      throw FreeError(403, 'That examination does not belong to you.');
+    }
+    if (!attempt.submittedAt) {
+      throw FreeError(409, 'Review becomes available after you submit this paper.');
+    }
+    var live = findActivity(ctx.session, attempt.activityId);
+    var activity = live || findActivityHistory(ctx.session, attempt.activityId);
+    var qs = await attemptQuestionRecords(db, attempt, activity);
+    var marked = core.markAttempt(qs, attempt.responses || {});
+    var verdict = {};
+    (marked.answers || []).forEach(function (r) { verdict[String(r.questionId)] = r; });
+
+    var questions = qs.map(function (q, i) {
+      var qid = String(q.id);
+      var order = optionOrderFor(attempt, qid);
+      var options = Array.isArray(q.options) ? q.options.slice() : [];
+      if (order) options = order.map(function (idx) { return q.options[idx]; });
+      var stored = (attempt.responses || {})[qid];
+      var hasAnswer = !(stored === undefined || stored === null || stored === '');
+      var yourAnswer = hasAnswer ? displayedResponse(attempt, qid, stored) : null;
+      var correctAnswer = q.kind === 'objective'
+        ? (order ? order.indexOf(Number(q.answer)) : Number(q.answer))
+        : null;
+      var row = verdict[qid] || {};
+      var outcome = q.kind !== 'objective' ? 'awaiting-marking'
+        : !hasAnswer ? 'unanswered'
+        : row.isCorrect === true ? 'correct' : 'incorrect';
+      var item = {
+        n: i + 1, id: qid, subject: q.subject || '', topic: q.topic || '',
+        text: q.text || '', options: options,
+        yourAnswer: yourAnswer === undefined ? null : yourAnswer,
+        correctAnswer: correctAnswer, outcome: outcome
+      };
+      if (q.passage) item.passage = { id: q.passage.id, title: q.passage.title, text: q.passage.text };
+      return item;
+    });
+
+    /* Subject performance. A standard UTME paper shows the official scaled
+       subject scores out of 100; every other paper shows raw correct counts. */
+    var subjects;
+    if (attempt.scoring === 'jamb' && Array.isArray(attempt.subjectScores)) {
+      subjects = attempt.subjectScores.map(function (x) { return Object.assign({}, x); });
+    } else {
+      var bySubject = {}, order2 = [];
+      (marked.answers || []).forEach(function (r) {
+        if (r.kind !== 'objective') return;
+        var subject = String(r.subject || '');
+        if (!bySubject[subject]) { bySubject[subject] = { subject: subject, correct: 0, total: 0 }; order2.push(subject); }
+        bySubject[subject].total++;
+        if (r.isCorrect === true) bySubject[subject].correct++;
+      });
+      subjects = order2.map(function (subject) {
+        var x = bySubject[subject];
+        return { subject: subject, correct: x.correct, total: x.total, score: x.correct, maxScore: x.total };
+      });
+    }
+
+    var answered = attempt.answered == null ? marked.answered : attempt.answered;
+    var total = attempt.total == null ? marked.total : attempt.total;
+    return { review: {
+      attemptId: attempt.id,
+      activityId: attempt.activityId,
+      title: activity ? activity.title : '',
+      kind: activity ? activity.kind : '',
+      activityDeleted: !live && !!activity,
+      scoring: attempt.scoring || 'raw',
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      percent: attempt.percent == null ? null : rules.percentOf(attempt.score, attempt.maxScore),
+      correct: attempt.correct == null ? marked.correct : attempt.correct,
+      wrong: attempt.wrong == null ? marked.wrong : attempt.wrong,
+      answered: answered,
+      unanswered: total == null || answered == null ? null : total - answered,
+      total: total,
+      submittedAt: attempt.submittedAt,
+      autoSubmitted: !!attempt.autoSubmitted,
+      timeUsedSec: attempt.timeUsedSec,
+      subjectScores: subjects,
+      questions: questions
+    } };
   }
 
   function myResults(data) {
@@ -1748,6 +1981,7 @@ function createFree2027(deps) {
           createdAt: a.createdAt, updatedAt: a.updatedAt,
           attempts: submitted.length,
           competitors: ranked.length,
+          launch: competitionLaunchStatus(db, a),
           leaderboard: {
             approved: !!(a.leaderboard && a.leaderboard.approved),
             published: !!(a.leaderboard && a.leaderboard.published),
@@ -1804,6 +2038,7 @@ function createFree2027(deps) {
       v.rec.questionCount = ids.length;
       var t = now();
       var requestedStatus = body && body.status;
+      if (requestedStatus === rules.STATUS_PUBLISHED) requireLaunchReady(db, v.rec);
       if (requestedStatus === rules.STATUS_PUBLISHED || requestedStatus === rules.STATUS_DRAFT) {
         v.rec.status = requestedStatus;
         v.rec.published = requestedStatus === rules.STATUS_PUBLISHED;
@@ -1842,6 +2077,10 @@ function createFree2027(deps) {
       if (act === 'publish') {
         var v = rules.validateActivity({}, a);
         if (v.error) throw FreeError(400, v.error + ' Correct the settings before publishing.');
+        /* A standard UTME paper is checked first, so a duplicate id or a short
+           bank is reported with its available count and shortfall rather than
+           a generic allocation message. Every other activity is unaffected. */
+        requireLaunchReady(db, a);
         var ids = Array.isArray(a.questionIds) ? a.questionIds.map(String) : [];
         if (!ids.length || ids.length !== Number(a.questionCount || ids.length)) {
           throw FreeError(400, 'This activity has no persisted question allocation yet.');
@@ -1860,6 +2099,7 @@ function createFree2027(deps) {
         var closes = rules.parseWhen(body && body.closesAt);
         if (closes == null) throw FreeError(400, 'Set the new closing date and time.');
         if (closes <= t) throw FreeError(400, 'The new closing time must be in the future.');
+        requireLaunchReady(db, a);
         a.status = rules.STATUS_PUBLISHED;
         a.published = true;
         a.reopenedAt = t;
@@ -2432,6 +2672,7 @@ function createFree2027(deps) {
     startActivity: startActivity,
     saveAnswer: saveAnswer,
     resumeAttempt: resumeAttempt,
+    attemptReview: attemptReview,
     submitAttempt: submitAttempt,
     myResults: myResults,
     /* leaderboards */
@@ -2469,6 +2710,7 @@ function createFree2027(deps) {
     BANK_SUBJECTS: BANK_SUBJECTS,
     bankForKind: bankForKind,
     bankOverview: bankOverview,
+    competitionLaunchStatus: competitionLaunchStatus,
     listBankQuestions: listBankQuestions,
     createBankQuestion: createBankQuestion,
     updateBankQuestion: updateBankQuestion,

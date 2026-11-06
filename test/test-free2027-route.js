@@ -391,9 +391,15 @@ waitForBoot(40).then(async function (h) {
   ok('the public board is served', board.status === 200, board.raw.slice(0, 160));
   ok('the whole field is counted', board.body.leaderboard.totalCompetitors === 11, board.body.leaderboard.totalCompetitors);
   ok('the public board is exactly the top ten, whatever the field size', board.body.leaderboard.rows.length === 10, board.body.leaderboard.rows.length);
-  ok('the public board ranks by score then time', board.body.leaderboard.rows[0].score === 4 &&
-    board.body.leaderboard.rows[1].score === 3 && board.body.leaderboard.rows[2].score === 2,
-    JSON.stringify(board.body.leaderboard.rows.map(function (r) { return r.score; })));
+  /* The public board's performance metric is the percentage, derived from the
+     same official score the candidate sees. This paper has four questions, so
+     4/4, 3/4 and 2/4 are 100%, 75% and 50%. Ordering and ties are unchanged. */
+  ok('the public board ranks by percentage then time', board.body.leaderboard.rows[0].percent === 100 &&
+    board.body.leaderboard.rows[1].percent === 75 && board.body.leaderboard.rows[2].percent === 50,
+    JSON.stringify(board.body.leaderboard.rows.map(function (r) { return r.percent; })));
+  ok('the public board never carries a raw score or its maximum',
+    board.body.leaderboard.rows.every(function (r) { return r.score === undefined && r.maxScore === undefined; }),
+    JSON.stringify(board.body.leaderboard.rows[0]));
   ok('the public board carries no email address', board.raw.indexOf('@') < 0);
   ok('a weekly assessment never gets a public board', (await call('GET', '/api/free2027/leaderboards/' + weeklyId)).status === 404);
   var bottom = extra[7].participant.id;

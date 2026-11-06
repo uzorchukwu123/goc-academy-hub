@@ -287,6 +287,13 @@
   var MIN_ATTEMPTS = 1;
   var MAX_ATTEMPTS = 10;
   var MAX_QUESTIONS = 100;
+  /* A competition may now hold a full standard UTME paper of 180 questions.
+     Weekly assessments keep the limit they always had: only the competition
+     cap rises, and only far enough to admit the standard paper. */
+  var MAX_COMPETITION_QUESTIONS = 180;
+  function maxQuestionsFor(kind) {
+    return cleanKind(kind) === KIND_COMPETITION ? MAX_COMPETITION_QUESTIONS : MAX_QUESTIONS;
+  }
 
   /* The edition's banks support exactly these five subjects. They are metadata
      on a question, never a destination: the selected bank panel / activity
@@ -391,14 +398,22 @@
     ids = ids.map(function (x) { return String(x); }).filter(Boolean);
     var seen = {};
     ids = ids.filter(function (x) { if (seen[x]) return false; seen[x] = true; return true; });
-    if (ids.length > MAX_QUESTIONS) return { error: 'An activity can hold at most ' + MAX_QUESTIONS + ' questions.' };
+    var cap = maxQuestionsFor(kind);
+    if (ids.length > cap) return { error: 'An activity can hold at most ' + cap + ' questions.' };
 
     var questionCount = Math.round(Number(pick('questionCount', ids.length || 0)));
-    if (!isFinite(questionCount) || questionCount < 1 || questionCount > MAX_QUESTIONS) {
-      return { error: 'Set how many questions to include, between 1 and ' + MAX_QUESTIONS + '.' };
+    if (!isFinite(questionCount) || questionCount < 1 || questionCount > cap) {
+      return { error: 'Set how many questions to include, between 1 and ' + cap + '.' };
     }
     var dist = cleanSubjectDistribution(pick('subjectDistribution', null), questionCount);
     if (dist.error) return { error: dist.error };
+    /* A competition configured as a standard 180-question UTME paper must carry
+       the standard distribution. Other competitions and every weekly assessment
+       keep the distribution rules they already had. */
+    if (kind === KIND_COMPETITION && questionCount === JAMB_QUESTION_COUNT) {
+      var jambProblem = jambDistributionProblem(dist.distribution);
+      if (jambProblem) return { error: jambProblem };
+    }
     var randomizeQuestions = pick('randomizeQuestions', true) !== false;
     var randomizeOptions = pick('randomizeOptions', false) === true;
 
@@ -462,6 +477,107 @@
       if (rows[i] && !rows[i].submittedAt && attemptState(rows[i], t) === 'open') return rows[i];
     }
     return null;
+  }
+
+  /* ------------------------------------ 5b. standard JAMB UTME competition
+     A competition configured as a standard UTME paper is exactly 180 questions:
+     Use of English 60, and three other subjects 40 each. Each subject is scaled
+     to 100, so the paper is out of 400.
+
+     This is keyed off the EXISTING configuration (kind + questionCount +
+     subjectDistribution) rather than a new stored flag, so no activity record,
+     schema or historical result changes shape. A competition configured any
+     other way keeps the marking it already had. */
+  var JAMB_QUESTION_COUNT = 180;
+  var JAMB_ENGLISH = 'Use of English';
+  var JAMB_ENGLISH_QUESTIONS = 60;
+  var JAMB_OTHER_QUESTIONS = 40;
+  var JAMB_SUBJECT_MAX = 100;
+  var JAMB_TOTAL_MAX = 400;
+  var JAMB_OTHER_SUBJECTS = 3;
+
+  function isJambCompetition(rec) {
+    return !!rec && rec.kind === KIND_COMPETITION &&
+      Number(rec.questionCount) === JAMB_QUESTION_COUNT;
+  }
+
+  /* Null when the distribution is the standard one, otherwise a sentence
+     naming what is wrong with it. */
+  function jambDistributionProblem(dist) {
+    if (!dist || typeof dist !== 'object' || Array.isArray(dist)) {
+      return 'A standard 180-question competition needs a subject distribution: ' +
+        JAMB_ENGLISH + ' ' + JAMB_ENGLISH_QUESTIONS + ' and three other subjects ' +
+        JAMB_OTHER_QUESTIONS + ' each.';
+    }
+    var keys = Object.keys(dist).filter(function (k) { return Number(dist[k]) > 0; });
+    if (Number(dist[JAMB_ENGLISH]) !== JAMB_ENGLISH_QUESTIONS) {
+      return JAMB_ENGLISH + ' must carry exactly ' + JAMB_ENGLISH_QUESTIONS + ' questions.';
+    }
+    var others = keys.filter(function (k) { return k !== JAMB_ENGLISH; });
+    if (others.length !== JAMB_OTHER_SUBJECTS) {
+      return 'A standard competition needs exactly ' + JAMB_OTHER_SUBJECTS +
+        ' other subjects alongside ' + JAMB_ENGLISH + '.';
+    }
+    for (var i = 0; i < others.length; i++) {
+      if (SUBJECTS.indexOf(others[i]) < 0) return 'Unknown subject: ' + others[i] + '.';
+      if (Number(dist[others[i]]) !== JAMB_OTHER_QUESTIONS) {
+        return others[i] + ' must carry exactly ' + JAMB_OTHER_QUESTIONS + ' questions.';
+      }
+    }
+    return null;
+  }
+
+  /* English first, then the other three in the configured order. */
+  function jambSubjectOrder(dist) {
+    var others = Object.keys(dist || {}).filter(function (k) {
+      return k !== JAMB_ENGLISH && Number(dist[k]) > 0;
+    });
+    return [JAMB_ENGLISH].concat(others);
+  }
+
+  function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+  /* ONE percentage rule for every surface: always derived from the official
+     score and its maximum, never from a separately kept figure. */
+  function percentOf(score, maxScore) {
+    var max = Number(maxScore) || 0;
+    if (!max) return 0;
+    return round2((Number(score) || 0) / max * 100);
+  }
+
+  /* Subject-based marking. `rows` are the marking engine's own per-question
+     rows, so the raw correct counts come from the same authoritative marking
+     that produced the individual answer verdicts. Each subject is rounded once
+     to 2dp and the total is the sum of those rounded subject scores, so the
+     four subject scores always add up to the displayed total. */
+  function jambSubjectScores(rows, dist) {
+    var order = jambSubjectOrder(dist);
+    var counts = {};
+    (Array.isArray(rows) ? rows : []).forEach(function (r) {
+      if (!r || r.kind !== 'objective') return;
+      var subject = String(r.subject || '');
+      if (!counts[subject]) counts[subject] = { correct: 0, seen: 0 };
+      counts[subject].seen++;
+      if (r.isCorrect === true) counts[subject].correct++;
+    });
+    var subjects = order.map(function (subject) {
+      var want = Number(dist[subject]) || 0;
+      var c = counts[subject] || { correct: 0, seen: 0 };
+      return {
+        subject: subject,
+        correct: c.correct,
+        total: want,
+        score: want ? round2(c.correct / want * JAMB_SUBJECT_MAX) : 0,
+        maxScore: JAMB_SUBJECT_MAX
+      };
+    });
+    var total = round2(subjects.reduce(function (sum, x) { return sum + x.score; }, 0));
+    return {
+      subjects: subjects,
+      score: total,
+      maxScore: JAMB_TOTAL_MAX,
+      percent: percentOf(total, JAMB_TOTAL_MAX)
+    };
   }
 
   /* ------------------------------------------------------------- 6. ranking
@@ -531,8 +647,14 @@
       title: String(activity.title || ''),
       publishedAt: Number((activity.leaderboard && activity.leaderboard.publishedAt) || 0),
       totalCompetitors: ranked.length,
+      /* Percentage is the public performance metric. The raw score and its
+         maximum deliberately do not leave the server here: a candidate reads
+         their own score on their own result, while the board compares
+         percentages. Ordering and ties are unchanged — betterRank still ranks
+         on the official score, then the shortest completion time. */
       rows: ranked.slice(0, PUBLIC_TOP_N).map(function (r) {
-        return { rank: r.rank, participantId: r.participantId, name: r.name, course: r.course, score: r.score, maxScore: r.maxScore, timeUsedSec: r.timeUsedSec };
+        return { rank: r.rank, participantId: r.participantId, name: r.name, course: r.course,
+          percent: percentOf(r.score, r.maxScore), timeUsedSec: r.timeUsedSec };
       })
     };
   }
@@ -761,6 +883,8 @@
     MIN_ATTEMPTS: MIN_ATTEMPTS,
     MAX_ATTEMPTS: MAX_ATTEMPTS,
     MAX_QUESTIONS: MAX_QUESTIONS,
+    MAX_COMPETITION_QUESTIONS: MAX_COMPETITION_QUESTIONS,
+    maxQuestionsFor: maxQuestionsFor,
     SUBJECTS: SUBJECTS.slice(),
     CSV_HEADER: CSV_HEADER,
     CSV_COLUMNS: CSV_COLUMNS.slice(),
@@ -779,6 +903,20 @@
     attemptsUsed: attemptsUsed,
     attemptsLeft: attemptsLeft,
     openAttempt: openAttempt,
+    /* standard JAMB UTME competition structure and marking */
+    JAMB_QUESTION_COUNT: JAMB_QUESTION_COUNT,
+    JAMB_ENGLISH: JAMB_ENGLISH,
+    JAMB_ENGLISH_QUESTIONS: JAMB_ENGLISH_QUESTIONS,
+    JAMB_OTHER_QUESTIONS: JAMB_OTHER_QUESTIONS,
+    JAMB_SUBJECT_MAX: JAMB_SUBJECT_MAX,
+    JAMB_TOTAL_MAX: JAMB_TOTAL_MAX,
+    JAMB_OTHER_SUBJECTS: JAMB_OTHER_SUBJECTS,
+    isJambCompetition: isJambCompetition,
+    jambDistributionProblem: jambDistributionProblem,
+    jambSubjectOrder: jambSubjectOrder,
+    jambSubjectScores: jambSubjectScores,
+    round2: round2,
+    percentOf: percentOf,
     /* ranking */
     betterRank: betterRank,
     rankRows: rankRows,

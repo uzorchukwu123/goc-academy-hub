@@ -137,7 +137,8 @@ function makeWorld(opts) {
     submit: function (a, r) { calls.api.push(['submit', a, r]); return Promise.resolve(o.submitReply || { result: { title: 'Week 1', kind: 'weekly', score: 2, maxScore: 4, private: true, timeUsedSec: 30 } }); },
     results: function () { calls.api.push(['results']); return Promise.resolve(o.resultsReply || { results: [] }); },
     leaderboards: function () { return Promise.resolve({ leaderboards: [] }); },
-    leaderboard: function () { return Promise.resolve({ leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); },
+    leaderboard: function () { return Promise.resolve(o.boardReply || { leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); },
+    review: function (a) { calls.api.push(['review', a]); return o.reviewFails ? Promise.reject(new Error('Review becomes available after you submit this paper.')) : Promise.resolve(o.reviewReply || { review: null }); },
     programme: function () {
       calls.api.push(['programme']);
       return Promise.resolve(o.programmeReply || {
@@ -810,6 +811,85 @@ settle(load(w1)).then(function () {
           ok('Back never routes the student into registration', nv.calls.go.slice(goBefore.length).indexOf('free-register') < 0, nv.calls.go.join(','));
         });
       });
+    });
+  });
+}).then(function () {
+  console.log('\nThe result and the public board present one official result');
+  var jambResult = {
+    attemptId: 'F27-A1-abc', title: 'Standard UTME Cup', kind: 'competition',
+    score: 322.5, maxScore: 400, percent: 80.63, scoring: 'jamb',
+    correct: 144, wrong: 26, answered: 170, unanswered: 10, total: 180, timeUsedSec: 3600,
+    subjectScores: [
+      { subject: 'Use of English', correct: 45, total: 60, score: 75, maxScore: 100 },
+      { subject: 'Mathematics', correct: 34, total: 40, score: 85, maxScore: 100 },
+      { subject: 'Physics', correct: 32, total: 40, score: 80, maxScore: 100 },
+      { subject: 'Chemistry', correct: 33, total: 40, score: 82.5, maxScore: 100 }
+    ],
+    position: { rank: 2, of: 3, score: 322.5, maxScore: 400, inTop: true }
+  };
+  var w = makeWorld({ token: 'T1', resultsReply: { results: [jambResult] },
+    listReply: { activities: [{ id: 'F27-Q1', kind: 'weekly', title: 'Week One Check', state: 'open',
+      questionCount: 8, durationMin: 30, maxAttempts: 1, attemptsLeft: 0, attemptsUsed: 1 }],
+      participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } } });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freeGo('free-portal');
+    return settle(w);
+  }).then(function () {
+    w.sandbox.freeResultShow(0);
+    return settle(w);
+  }).then(function () {
+    var out = w.els.freeResultBody.innerHTML;
+    ok('the individual result still shows the total out of 400', /322\.5/.test(out) && /400/.test(out), out.slice(0, 200));
+    ok('the overall percentage is shown', /80\.63%/.test(out), out.slice(0, 240));
+    ok('every configured subject is named with its score out of 100',
+      /Use of English/.test(out) && /Mathematics/.test(out) && /Physics/.test(out) && /Chemistry/.test(out) &&
+      /75\/100/.test(out) && /85\/100/.test(out) && /80\/100/.test(out) && /82\.5\/100/.test(out));
+    ok('attempted, correct, incorrect and unanswered are all labelled',
+      /unanswered/.test(out) && /incorrect/.test(out) && /correct/.test(out) && /answered/.test(out));
+    ok('the correct, incorrect, unanswered and attempted counts are rendered',
+      />144</.test(out) && />26</.test(out) && />10</.test(out) && />170</.test(out), out.slice(0, 600));
+    ok('a review button is offered for a submitted paper', /freeReviewShow\('F27-A1-abc'\)/.test(out));
+
+    var bw = makeWorld({ token: 'T1', boardReply: { leaderboard: { title: 'Standard UTME Cup', totalCompetitors: 2,
+      rows: [ { rank: 1, participantId: 'P1', name: 'Ada', course: 'Law', percent: 100, timeUsedSec: 900 },
+              { rank: 2, participantId: 'P2', name: 'Ben', course: 'Law', percent: 80.63, timeUsedSec: 1200 } ] }, mine: null } });
+    load(bw);
+    return settle(bw).then(function () {
+      bw.sandbox.freeBoardOpen('Q1');
+      return settle(bw);
+    }).then(function () {
+      var board = bw.els.freeBoardBody.innerHTML;
+      ok('the board column is headed Percentage, not Score', /<th>Percentage<\/th>/.test(board) && !/<th>Score<\/th>/.test(board), board.slice(0, 200));
+      ok('the board renders percentages', /100\.00%/.test(board) && /80\.63%/.test(board));
+      ok('the board never renders a score over a maximum', !/\d\/400/.test(board) && !/\d+\/\d+/.test(board), board.slice(0, 300));
+      ok('names and ranks are still shown', /Ada/.test(board) && /Ben/.test(board));
+    });
+  }).then(function () {
+    var rw = makeWorld({ token: 'T1', reviewReply: { review: {
+      attemptId: 'F27-A1-abc', title: 'Week One Check', kind: 'weekly', scoring: 'raw',
+      score: 1, maxScore: 3, percent: 33.33, correct: 1, wrong: 1, unanswered: 1, total: 3,
+      subjectScores: [{ subject: 'Physics', correct: 1, total: 3, score: 1, maxScore: 3 }],
+      questions: [
+        { n: 1, id: 'WQ-1', subject: 'Physics', text: 'Right one', options: ['a', 'b', 'c', 'd'], yourAnswer: 1, correctAnswer: 1, outcome: 'correct' },
+        { n: 2, id: 'WQ-2', subject: 'Physics', text: 'Wrong one', options: ['a', 'b', 'c', 'd'], yourAnswer: 0, correctAnswer: 2, outcome: 'incorrect' },
+        { n: 3, id: 'WQ-3', subject: 'Physics', text: 'Skipped one', options: ['a', 'b', 'c', 'd'], yourAnswer: null, correctAnswer: 3, outcome: 'unanswered' }
+      ] } } });
+    load(rw);
+    return settle(rw).then(function () {
+      rw.sandbox.freeReviewShow('F27-A1-abc');
+      return settle(rw);
+    }).then(function () {
+      var rev = rw.els.freeResultBody.innerHTML;
+      ok('the review asks the server for that attempt', rw.calls.api.some(function (c) { return c[0] === 'review' && c[1] === 'F27-A1-abc'; }));
+      ok('the review renders every question and its options', /Right one/.test(rev) && /Wrong one/.test(rev) && /Skipped one/.test(rev));
+      ok('correct, incorrect and unanswered are labelled distinctly',
+        />Correct</.test(rev) && />Incorrect</.test(rev) && />Unanswered</.test(rev));
+      ok('the selected and the correct answer are both shown', /Your answer:/.test(rev) && /Correct answer:/.test(rev));
+      ok('an unanswered question is shown as not answered', /Not answered/.test(rev));
+      ok('the review shows the score and percentage', /33\.33%/.test(rev));
+      ok('the review is painted into the existing result host, adding no new screen',
+        rw.calls.go.indexOf('free-review') < 0);
     });
   });
 }).then(function () {
