@@ -541,7 +541,7 @@ settle(load(w1)).then(function () {
   ok('the small-screen exam header wraps instead of overlapping', /max-width: 480px[\s\S]{0,200}flex-wrap: wrap/.test(css));
   ok('no bootcamp CTA survives in the nav or drawer markup', !/dw-bootcamp|nav-bootcamp|Bootcamp<\/a>/.test(html));
 
-  head('Direct CBT Portal entry: a guest lands in the portal, not registration');
+  head('CBT Portal entry: every public entry opens the Free Tutorial landing page');
   var gp = makeWorld({
     token: null,
     catalogueReply: { guest: true, activities: [
@@ -553,9 +553,28 @@ settle(load(w1)).then(function () {
   return settle(gp).then(function () {
     gp.sandbox.freeCbtPortal();
     return settle(gp).then(function () {
-      ok('a guest with no token reaches the CBT Portal screen', gp.calls.go[gp.calls.go.length - 1] === 'free-portal', gp.calls.go.join(','));
-      ok('direct entry never sends the guest to registration', gp.calls.go.indexOf('free-register') < 0, gp.calls.go.join(','));
-      ok('direct entry never sends the guest to signup or an account chooser', gp.calls.go.indexOf('signup') < 0 && gp.calls.go.indexOf('login-v2') < 0);
+      ok('a guest clicking CBT Portal reaches the Free UTME Tutorial landing page', gp.calls.go[gp.calls.go.length - 1] === 'free-home', gp.calls.go.join(','));
+      ok('the CBT entry never sends the guest to registration', gp.calls.go.indexOf('free-register') < 0, gp.calls.go.join(','));
+      ok('the CBT entry never sends the guest to signup or a hub account chooser', gp.calls.go.indexOf('signup') < 0 && gp.calls.go.indexOf('login-v2') < 0);
+      ok('the landing page is the one carrying the edition heading and its three choices',
+        /2027 UTME · Free Tutorial Edition/.test(html) && /Register free</.test(html) && /Student log in</.test(html) && /Enter the CBT Portal</.test(html));
+      /* Enter the CBT Portal is the authentication-aware step. */
+      gp.calls.go.length = 0;
+      gp.sandbox.freePortalEnter();
+      return settle(gp).then(function () {
+        ok('Enter the CBT Portal with no session opens the EDITION login page', gp.calls.go[gp.calls.go.length - 1] === 'free-login', gp.calls.go.join(','));
+        ok('it never falls back to the hub login or an unknown account page', gp.calls.go.indexOf('login-v2') < 0 && gp.calls.go.indexOf('signup') < 0, gp.calls.go.join(','));
+        ok('that login page links to the edition registration page', (function () {
+          var i = html.indexOf('id="free-login"');
+          var seg = html.slice(i, html.indexOf('</section>', i));
+          return /freeGo\('free-register'\)/.test(seg) && /Register free/.test(seg);
+        })());
+        /* The public catalogue itself is unchanged: opening the portal as a
+           guest still renders it. Only the navigation route changed. */
+        gp.sandbox.freeGo('free-portal');
+        return settle(gp);
+      });
+    }).then(function () {
       var list = gp.els.freePortalList._html;
       ok('the portal lists the available weekly assessment', /Week 1/.test(list));
       ok('the guest sees a clear, honest note that browsing needs no account', /no account needed/.test(list) && /only required when you sit a paper/.test(list));
@@ -615,7 +634,7 @@ settle(load(w1)).then(function () {
                     ok('Original Mode needs no chrome override', !om.doc.body.classList.contains('goc-original-area'));
                     om.sandbox.freeCbtPortal();
                     return settle(om).then(function () {
-                      ok('the CBT Portal entry stays reachable in Original Mode too', om.calls.go[om.calls.go.length - 1] === 'free-portal', om.calls.go.join(','));
+                      ok('the CBT Portal entry still opens the edition landing page in Original Mode', om.calls.go[om.calls.go.length - 1] === 'free-home', om.calls.go.join(','));
                     });
                   });
                 });

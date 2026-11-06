@@ -405,10 +405,18 @@ body.f27-mode .f27 .f27-nav .lp-actions .lp-link:focus { display: inline-block; 
 .dw-cbt, .dw-cbt-hint, #landing .dw-cbt-link { display: none; }
 
 /* Free Tutorial Mode ADDS the CBT Portal entry to the drawer and inline nav.
-   The original account actions (.dw-original: Create free account / Log in /
-   Get started) are deliberately NOT hidden — the original student registration
-   and login must stay available in every mode, beside the CBT Portal entry. */
+   The original SIGN-UP actions (.dw-original: Create free account / Get started)
+   are deliberately NOT hidden — the original student registration stays
+   available in every mode, beside the CBT Portal entry. The hub's Log in
+   shortcut is the one exception; see the mode-scoped rule just below. */
 body.f27-mode .dw-btns .dw-cbt { display: block; }
+/* In Free Tutorial Mode the CBT Portal entry leads to the edition's own landing
+   page, which offers Register free and Student log in. The hub's separate Log in
+   shortcut (desktop nav + mobile drawer) would take a free-tutorial student to an
+   account they never created, so it stands down in this mode only. It is NOT
+   deleted: Original Mode shows it exactly as before, and the hub's login screen
+   and account system keep working independently. */
+body.f27-mode .dw-hub-login { display: none !important; }
 body.f27-mode .dw-btns .dw-cbt-hint {
   display: block; font-size: 12.5px; color: var(--slate, #667085);
   margin: 8px 0 0; text-align: center;

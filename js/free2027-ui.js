@@ -186,36 +186,30 @@
     }).join('');
   }
 
+  /* "Register free" opens the edition's OWN registration page directly. It is
+     never an account-status decision and never a route into the hub's account
+     system. Entering the portal is a separate control (freePortalEnter). */
   F.freeHomeCta = function () {
-    if (F.me) { global.go('free-portal'); F.freePortalLoad(); return; }
-    if (api.hasToken()) {
-      /* A token exists but the identity was not read yet: ask once, then move. */
-      api.me().then(function (r) { F.me = r.participant; paintWho(); global.go('free-portal'); F.freePortalLoad(); },
-        function () {
-          /* The stored session is no longer valid: authenticate again. */
-          if (typeof api.forgetToken === 'function') api.forgetToken();
-          global.go('free-login');
-        });
-      return;
-    }
     global.go('free-register');
   };
 
-  /* DIRECT CBT Portal entry. No registration, no login, no Get Started and no
-     account-selection step: the visitor lands in the existing portal, which
-     renders the public catalogue when nobody is signed in. Sitting a paper
-     still uses the edition's existing verified identity — this deliberately
-     creates no second account system. */
+  /* The CBT Portal ENTRY POINT — homepage hero, desktop navigation and the
+     mobile drawer all call this. It opens the Free UTME Tutorial landing page
+     (free-home), which is the single place a student chooses what to do:
+     Register free, Student log in, or Enter the CBT Portal.
+     It deliberately makes no account decision here and never routes anyone to
+     the hub's own account screens. The authentication check happens when the
+     student chooses "Enter the CBT Portal" (freePortalEnter below). */
   F.freeCbtPortal = function () {
-    global.go('free-portal');
-    F.freePortalLoad();
+    navigate('free-home');
   };
 
-  /* STUDENT entry to their own portal. Separate from the public catalogue
-     above: a student who is not signed in gets the LOGIN page first, and only a
-     valid session opens their dashboard. After signing out or after the
-     inactivity timeout the token is gone, so this shows the login again —
-     nobody is silently logged back in, and nothing about the account is lost. */
+  /* "Enter the CBT Portal" / "Student log in" — the AUTHENTICATION-AWARE entry,
+     reached from the landing page. A valid session opens the student's own
+     dashboard with their existing account and records. No session, an expired
+     session or a signed-out student gets the edition's OWN login page, which
+     links straight to registration. It never sends a Free UTME student to the
+     G.O.C Academy Hub login, and nothing about the account is lost on the way. */
   F.freePortalEnter = function () {
     if (api.hasToken()) {
       api.me().then(function (r) {

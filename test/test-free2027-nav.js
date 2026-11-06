@@ -50,7 +50,7 @@ ok('the edition nav bar wraps instead of clipping on narrow phones', /@media \(m
 
 head('mode-specific navigation drawer and inline actions');
 ok('the drawer keeps the original Create free account button (not deleted)', /<button class="btn btn-red btn-block dw-original" onclick="dwGo\('signup'\)">Create free account<\/button>/.test(html));
-ok('the drawer keeps the original Log in button (not deleted)', /class="btn btn-outline btn-block dw-original" onclick="dwGo\('login-v2'\)"[^>]*>Log in</.test(html));
+ok('the drawer keeps the original Log in button (not deleted)', /class="btn btn-outline btn-block dw-original dw-hub-login" onclick="dwGo\('login-v2'\)"[^>]*>Log in</.test(html));
 ok('the drawer has one CBT Portal action with supporting wording', /dw-cbt" onclick="dwFreePortal\(\)">CBT Portal</.test(html) && /Access your weekly assessments and competitions\./.test(html));
 ok('the CBT Portal drawer entry is hidden in Original Mode (default)', /\.dw-cbt, \.dw-cbt-hint, #landing \.dw-cbt-link \{ display: none; \}/.test(flatCss));
 /* Owner correction: the original student account actions must NEVER be hidden.
@@ -60,7 +60,18 @@ ok('no rule hides the original drawer account actions in any mode', !/\.dw-origi
 ok('no rule hides the original inline-nav account actions in any mode', !/#landing \.lp-actions \.dw-original \{ display: none/.test(flatCss));
 ok('no rule hides the original hero sign-up CTA in any mode', !/\.hero-original-cta \{ display: none/.test(flatCss));
 ok('desktop (>=900px) shows the inline CBT Portal entry', /@media \(min-width: 900px\) \{\s*body\.f27-mode #landing \.lp-actions \.dw-cbt-link \{ display: inline-block; \}\s*\}/.test(flatCss));
-ok('the landing keeps its original Log in / Get started in the markup', /<button class="lp-link dw-original" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
+ok('the landing keeps its original Log in / Get started in the markup', /<button class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
+/* Owner correction (navigation): the edition landing page is the single student
+   entry point, so it no longer carries a duplicate Log in link in its own nav
+   bar, and the hub's Log in shortcut stands down in Free Tutorial Mode only. */
+(function () {
+  var i = html.indexOf('id="free-home"');
+  var seg = html.slice(i, html.indexOf('</div>\n      <div class="f27-hero">', i) > -1 ? html.indexOf('<div class="f27-hero">', i) : i + 2000);
+  ok('the edition landing nav bar has no separate Log in link', !/>Log in</.test(seg), seg.slice(0, 400));
+  ok('the edition landing nav bar still offers Register and CBT Portal', /freeHomeCta\(\)">Register</.test(seg) && /freePortalEnter\(\)">CBT Portal</.test(seg));
+})();
+ok('the landing page still offers Student log in and Enter the CBT Portal', /freePortalEnter\(\)">Student log in</.test(html) && /freePortalEnter\(\)">Enter the CBT Portal</.test(html));
+ok('the hub Log in shortcut stands down in Free Tutorial Mode only', /body\.f27-mode \.dw-hub-login \{ display: none !important; \}/.test(flatCss));
 ok('dwFreePortal is exposed by the edition script', /'dwFreePortal'/.test(uiSrc) && /F\.dwFreePortal = function/.test(uiSrc));
 
 head('stale service-worker assets cannot serve the old handlers');
@@ -174,13 +185,18 @@ settle(w1).then(function () {
   return settle(w2).then(function () {
     w2.sandbox.freeHomeCta();
     return settle(w2).then(function () {
-      ok('entry WITH a valid session goes straight to the dashboard', w2.calls.go[w2.calls.go.length - 1] === 'free-portal', w2.calls.go.join(','));
-      w2.sandbox.freeSignOut();
+      ok('Register free always opens the registration page directly, whatever the session', w2.calls.go[w2.calls.go.length - 1] === 'free-register', w2.calls.go.join(','));
+      w2.sandbox.freePortalEnter();
       return settle(w2).then(function () {
-        ok('logout calls the server and clears identity', w2.calls.api.some(function (c) { return c[0] === 'logout'; }));
-        w2.sandbox.freeHomeCta();
+        ok('Enter the CBT Portal WITH a valid session goes straight to the dashboard', w2.calls.go[w2.calls.go.length - 1] === 'free-portal', w2.calls.go.join(','));
+        w2.sandbox.freeSignOut();
         return settle(w2).then(function () {
-          ok('after logout the entry requires fresh registration/verification', w2.calls.go[w2.calls.go.length - 1] === 'free-register', w2.calls.go.join(','));
+          ok('logout calls the server and clears identity', w2.calls.api.some(function (c) { return c[0] === 'logout'; }));
+          w2.sandbox.freePortalEnter();
+          return settle(w2).then(function () {
+            ok('after signing out, Enter the CBT Portal requires the edition login', w2.calls.go[w2.calls.go.length - 1] === 'free-login', w2.calls.go.join(','));
+            ok('it never sends the student to the hub account login', w2.calls.go.indexOf('login-v2') < 0 && w2.calls.go.indexOf('signup') < 0, w2.calls.go.join(','));
+          });
         });
       });
     });
@@ -212,12 +228,22 @@ settle(w1).then(function () {
               return settle(w4).then(function () {
                 w4.sandbox.dwFreePortal();
                 return settle(w4).then(function () {
-                  /* Corrected contract: CBT Portal entry is DIRECT. A guest must
-                     land in the portal itself — never registration, login or an
-                     onboarding screen — and the public catalogue is read. */
-                  ok('the drawer CBT Portal action closes the drawer and opens the CBT Portal directly', w4.calls.api.some(function (c) { return c[0] === 'closeDrawer'; }) && w4.calls.go[w4.calls.go.length - 1] === 'free-portal', w4.calls.go.join(','));
-                  ok('direct CBT entry never routes a guest through registration', w4.calls.go.indexOf('free-register') < 0, w4.calls.go.join(','));
-                  ok('direct CBT entry reads the public catalogue without a token', w4.calls.api.some(function (c) { return c[0] === 'catalogue'; }));
+                  /* Corrected contract: every public CBT Portal entry opens the
+                     Free UTME Tutorial LANDING page, which is where the student
+                     chooses Register / Student log in / Enter the CBT Portal.
+                     No account decision is made on the way in. */
+                  ok('the drawer CBT Portal action closes the drawer and opens the Free Tutorial landing page', w4.calls.api.some(function (c) { return c[0] === 'closeDrawer'; }) && w4.calls.go[w4.calls.go.length - 1] === 'free-home', w4.calls.go.join(','));
+                  ok('the CBT entry never routes a guest through registration or the hub accounts', w4.calls.go.indexOf('free-register') < 0 && w4.calls.go.indexOf('login-v2') < 0 && w4.calls.go.indexOf('signup') < 0, w4.calls.go.join(','));
+                  ok('the homepage/desktop CBT entry opens the same landing page', (function () {
+                    w4.calls.go.length = 0;
+                    w4.sandbox.freeCbtPortal();
+                    return w4.calls.go[w4.calls.go.length - 1] === 'free-home';
+                  })(), w4.calls.go.join(','));
+                  ok('Enter the CBT Portal with no session opens the edition login page', (function () {
+                    w4.calls.go.length = 0;
+                    w4.sandbox.freePortalEnter();
+                    return w4.calls.go[w4.calls.go.length - 1] === 'free-login';
+                  })(), w4.calls.go.join(','));
                   head('behaviour: Back uses internal history, Home goes to the hub homepage');
                   var w5 = makeWorld({ token: 'PT' });
                   load(w5);

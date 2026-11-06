@@ -24,9 +24,17 @@ check('the CBT exam screen has both Back and Back to Home controls', /onclick="f
 const f27css = fs.readFileSync(path.join(__dirname, '..', 'css', 'free2027.css'), 'utf8').replace(/\s+/g, ' ');
 check('the original hero signup route is intact', /hero-original-cta" onclick="go\('signup'\)"/.test(html));
 check('the original hero login route is intact', /class="lp-btn-ghost" onclick="go\('login-v2'\)"/.test(html));
-check('the original nav Log in / Get started are intact', /class="lp-link dw-original" onclick="go\('login-v2'\)"/.test(html) && /class="lp-cta dw-original" onclick="go\('signup'\)"/.test(html));
-check('the original drawer Create free account / Log in are intact', /dw-original" onclick="dwGo\('signup'\)"/.test(html) && /dw-original" onclick="dwGo\('login-v2'\)"/.test(html));
-check('no stylesheet rule hides any original account action', !/\.dw-original \{ display: none/.test(f27css) && !/\.hero-original-cta \{ display: none/.test(f27css));
+check('the original nav Log in / Get started are intact', /class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)"/.test(html) && /class="lp-cta dw-original" onclick="go\('signup'\)"/.test(html));
+check('the original drawer Create free account / Log in are intact', /dw-original" onclick="dwGo\('signup'\)"/.test(html) && /dw-original dw-hub-login" onclick="dwGo\('login-v2'\)"/.test(html));
+check('no stylesheet rule deletes or hides an original account action outright', !/\.dw-original \{ display: none/.test(f27css) && !/\.hero-original-cta \{ display: none/.test(f27css));
+/* Owner correction: in Free Tutorial Mode the hub's own Log in shortcut would
+   send a free-tutorial student to an account they never created. It stands down
+   in THAT MODE ONLY — the button stays in the markup, Original Mode shows it,
+   and the hub login screen itself is untouched. */
+check('the hub Log in shortcut stands down in Free Tutorial Mode only', /body\.f27-mode \.dw-hub-login \{ display: none !important; \}/.test(f27css));
+check('no unscoped rule hides the hub Log in shortcut', !/^\s*\.dw-hub-login \{ display: none/m.test(f27css));
+check('the hub login and signup screens are still in the page', /id="login-v2"/.test(html) && /id="signup"/.test(html));
+check('the original Get started actions are NOT mode-hidden', !/dw-hub-login[^>]*onclick="go\('signup'\)/.test(html) && !/dw-hub-login[^>]*onclick="dwGo\('signup'\)/.test(html));
 check('the original registration and login screens render in Free Tutorial Mode', /body\.f27-mode #signup\.active/.test(f27css) && /body\.f27-mode #login-v2\.active/.test(f27css));
 check('the original post-login student area renders in Free Tutorial Mode', /body\.f27-mode #home\.active/.test(f27css) && /body\.f27-mode #profile\.active/.test(f27css));
 check('hero clipping guard is scoped to the homepage, not every app screen', !/\.screen\s*>\s*\*\s*\{\s*flex-shrink:\s*0;/.test(css));

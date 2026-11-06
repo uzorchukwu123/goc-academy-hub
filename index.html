@@ -48,11 +48,15 @@
           <span class="bt">G.O.C Academy Hub</span>
         </div>
         <div class="lp-actions">
-          <!-- The original Log in / Get started actions are always shown, in
-               every mode. 2027 Free Tutorial Mode only ADDS the CBT Portal entry
-               beside them (see css/free2027.css); it never replaces them. -->
+          <!-- CBT Portal opens the Free UTME Tutorial landing page, where the
+               student chooses Register / Student log in / Enter the CBT Portal.
+               "Get started" is the original hub sign-up and is shown in every
+               mode. The hub's own Log in shortcut is still here for Original
+               Mode; in Free Tutorial Mode it stands down (css/free2027.css) so
+               a free-tutorial student is never sent to an account they never
+               created. Nothing is deleted and the hub login page still works. -->
           <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
-          <button class="lp-link dw-original" onclick="go('login-v2')">Log in</button>
+          <button class="lp-link dw-original dw-hub-login" onclick="go('login-v2')">Log in</button>
           <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
         </div>
       </nav>
@@ -1432,8 +1436,7 @@
           <button class="lp-link" onclick="freeNavBack()">← Back</button>
           <button class="lp-link" onclick="freeNavHome()">Home</button>
           <button class="lp-link" onclick="freeHomeCta()">Register</button>
-          <button class="lp-link" onclick="freePortalEnter()">Log in</button>
-          <button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button>
+          <button class="lp-link" onclick="freePortalEnter()">CBT Portal</button>
         </div>
       </nav>
       <div class="f27-hero">
@@ -1443,7 +1446,7 @@
         <div class="f27-cta">
           <button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button>
           <button class="btn btn-outline btn-block" onclick="freePortalEnter()">Student log in</button>
-          <button class="btn btn-outline btn-block" onclick="freeGo('free-portal')">Enter the CBT Portal</button>
+          <button class="btn btn-outline btn-block" onclick="freePortalEnter()">Enter the CBT Portal</button>
         </div>
         <p class="f27-fine" id="freeHomeNote">Register with your name, email, password and course. We verify your email with a one-time code, then you log in with your email and password.</p>
       </div>
@@ -2015,12 +2018,15 @@
           <button onclick="dwGo('updates')" class="dw-updates-link"><span class="dwi-bell" aria-hidden="true">🔔</span>Updates &amp; News<span class="dw-new-badge">New</span></button>
         </nav>
         <div class="dw-btns">
-          <!-- Free Tutorial Mode replaces these two with the CBT Portal entry
-               (css/free2027.css); Original Mode shows them exactly as before. -->
+          <!-- The drawer's CBT Portal opens the Free UTME Tutorial landing page.
+               "Create free account" is shown in every mode. The hub's own Log in
+               shortcut stands down in Free Tutorial Mode (css/free2027.css) so a
+               free-tutorial student is not offered the wrong account system;
+               Original Mode shows it exactly as before. -->
           <button class="btn btn-red btn-block dw-cbt" onclick="dwFreePortal()">CBT Portal</button>
           <p class="dw-cbt-hint">Access your weekly assessments and competitions.</p>
           <button class="btn btn-red btn-block dw-original" onclick="dwGo('signup')">Create free account</button>
-          <button class="btn btn-outline btn-block dw-original" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
+          <button class="btn btn-outline btn-block dw-original dw-hub-login" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
         </div>
         <div class="dw-foot">
           <a href="mailto:godsowncenterinfo@gmail.com">godsowncenterinfo@gmail.com</a>

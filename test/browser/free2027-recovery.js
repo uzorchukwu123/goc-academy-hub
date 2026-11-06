@@ -136,7 +136,9 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     }));
     check('drawer', 'Free-mode CBT Portal entry visible', await visible(page, '#lpDrawer .dw-cbt'));
     check('drawer', 'Free mode keeps the original account buttons visible', await visible(page, '#lpDrawer .dw-original'));
-    check('drawer', 'the drawer offers CBT Portal AND the original account actions together', await visible(page, '#lpDrawer .dw-cbt') && await page.evaluate(() => Array.from(document.querySelectorAll('#lpDrawer .dw-original')).every((e) => getComputedStyle(e).display !== 'none')));
+    check('drawer', 'the drawer offers CBT Portal AND the original Create free account together', await visible(page, '#lpDrawer .dw-cbt') && await visible(page, '#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]'));
+    check('drawer', 'the confusing hub Log in shortcut is not offered to free-tutorial students', await page.evaluate(() => Array.from(document.querySelectorAll('#lpDrawer .dw-hub-login')).every((e) => getComputedStyle(e).display === 'none')));
+    check('drawer', 'the hub Log in button is still in the page, only stood down in this mode', await page.evaluate(() => !!document.querySelector('#lpDrawer .dw-hub-login')));
     check('drawer', 'contact info present', await page.evaluate(() => /godsowncenterinfo@gmail\.com/.test(document.getElementById('lpDrawer').textContent)));
     await shot(page, '02-drawer-mobile');
     await page.click('#lpDrawer .dw-x');
@@ -156,12 +158,17 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.evaluate(() => go('landing'));
     await page.click('#lpBurger');
     await page.click('#lpDrawer .dw-cbt');
-    /* Corrected contract: the drawer CBT Portal action enters the portal
-       DIRECTLY. A guest is never bounced into registration first. */
-    await active(page, 'free-portal');
-    check('drawer', 'CBT Portal action opens the portal directly without a session', true);
-    check('drawer', 'the drawer CBT action never opens registration', await page.evaluate(() => !document.getElementById('free-register').classList.contains('active')));
-    await page.click('#free-portal .lp-actions [onclick="freeNavBack()"]');
+    /* Corrected contract: every public CBT Portal entry opens the Free UTME
+       Tutorial LANDING page, where the student chooses what to do. */
+    await active(page, 'free-home');
+    check('drawer', 'the mobile sidebar CBT Portal opens the Free UTME Tutorial landing page', true);
+    check('drawer', 'that landing page shows the edition heading and its three choices', await page.evaluate(() => {
+      const t = document.getElementById('free-home').textContent;
+      return /2027 UTME · Free Tutorial Edition/.test(t) && /Free weekly assessments and competitions for the 2027 UTME/.test(t) &&
+        /Register free/.test(t) && /Student log in/.test(t) && /Enter the CBT Portal/.test(t);
+    }));
+    check('drawer', 'the drawer CBT action never opens registration or a hub account page', await page.evaluate(() => ['free-register', 'signup', 'login-v2'].every((id) => !document.getElementById(id).classList.contains('active'))));
+    await page.click('#free-home .lp-actions [onclick="freeNavBack()"]');
     await active(page, 'landing');
     check('navigation', 'Back returns inside the site, not to browser history', page.url() === BASE + '/');
 
@@ -217,9 +224,9 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await shot(page, '05-portal-mobile');
     const whoBefore = await page.textContent('#freeWho');
     await page.reload({ waitUntil: 'networkidle' });
-    await page.evaluate(() => freeHomeCta());
+    await page.evaluate(() => freePortalEnter());
     await active(page, 'free-portal');
-    check('registration', 'refresh keeps the verified tab session and identity', await page.textContent('#freeWho') === whoBefore);
+    check('registration', 'refresh keeps the verified session and identity', await page.textContent('#freeWho') === whoBefore);
 
     /* 4. Portal destinations + recovered nav */
     check('portal', 'Weekly Assessments tab', await visible(page, '[data-f27tab="weekly"]'));
@@ -351,6 +358,10 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.click('#f27AdmBody button:has-text("Create Activity")');
     await page.click('.f27-activity-category:has-text("COMPETITION")');
     await page.waitForSelector('#f27Kind');
+    /* This second form has no race-regression assertion of its own, so let the
+       availability reply settle before typing rather than racing it. The
+       weekly form above deliberately still types mid-flight. */
+    await page.waitForFunction(() => /Available eligible questions/.test((document.getElementById('f27Availability') || {}).textContent || ''));
     await page.fill('#f27Title', 'Recovered Competition');
     await page.fill('#f27Count', '2');
     await page.fill('#f27Dist-0', '1');
@@ -469,6 +480,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.evaluate(() => go('landing'));
     await page.click('#lpBurger');
     check('mode-control', 'Original Mode restores the original drawer account actions', await visible(page, '#lpDrawer .dw-original') && !(await visible(page, '#lpDrawer .dw-cbt')));
+    check('mode-control', 'Original Mode brings the hub Log in shortcut back', await visible(page, '#lpDrawer .dw-hub-login'));
+    check('mode-control', 'the hub login shortcut is only stood down by the Free Tutorial mode class', await page.evaluate(() => !document.body.classList.contains('f27-mode') && getComputedStyle(document.querySelector('#lpDrawer .dw-hub-login')).display !== 'none'));
     await shot(page, '17-original-mode-drawer');
     await page.click('#lpDrawer .dw-updates-link');
     await active(page, 'updates');
@@ -617,7 +630,27 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
   await page.evaluate(() => go('landing'));
   await active(page, 'landing');
   check('desktop', 'desktop Free-mode CBT entry is visible without duplicating mobile drawer', await visible(page, '#landing .dw-cbt-link') && !(await visible(page, '#lpDrawer')));
+  check('desktop', 'the separate hub Log in nav link is not shown to free-tutorial students', await page.evaluate(() => {
+    const e = document.querySelector('#landing .lp-actions .dw-hub-login');
+    return !!e && getComputedStyle(e).display === 'none';
+  }));
+  check('desktop', 'the original Get started nav action is still shown', await visible(page, '#landing .lp-actions .dw-original[onclick="go(\'signup\')"]'));
   await shot(page, '18-homepage-desktop');
+  /* The desktop navigation CBT Portal link must open the same landing page. */
+  await page.click('#landing .lp-actions .dw-cbt-link');
+  await active(page, 'free-home');
+  check('desktop', 'the desktop navigation CBT Portal link opens the Free UTME Tutorial landing page', true);
+  check('desktop', 'it is the same landing page the mobile sidebar opens', await page.evaluate(() => {
+    const t = document.getElementById('free-home').textContent;
+    return /2027 UTME · Free Tutorial Edition/.test(t) && /Register free/.test(t) && /Student log in/.test(t) && /Enter the CBT Portal/.test(t);
+  }));
+  check('desktop', 'the edition landing nav bar carries no separate Log in link', await page.evaluate(() => {
+    const nav = document.querySelector('#free-home .lp-actions');
+    return !!nav && !Array.from(nav.querySelectorAll('button')).some((b) => /^\s*Log in\s*$/.test(b.textContent));
+  }));
+  await shot(page, '18b-desktop-nav-cbt-landing');
+  await page.evaluate(() => go('landing'));
+  await active(page, 'landing');
   await page.evaluate(() => go('free-home'));
   await active(page, 'free-home');
   check('desktop', 'Free Tutorial landing fits the desktop viewport', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -637,10 +670,33 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       check('guest-entry', label + ': homepage has no bootcamp CTA', await gp.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
       check('guest-entry', label + ': CBT Portal button is visible', await visible(gp, '#landing .hero-cbt'));
       await gp.click('#landing .hero-cbt');
+      await active(gp, 'free-home');
+      check('guest-entry', label + ': the homepage CBT Portal button opens the Free UTME Tutorial landing page', await gp.evaluate(() => document.getElementById('free-home').classList.contains('active')));
+      check('guest-entry', label + ': the landing page shows the edition heading and its three choices', await gp.evaluate(() => {
+        const t = document.getElementById('free-home').textContent;
+        return /2027 UTME · Free Tutorial Edition/.test(t) && /Register free/.test(t) && /Student log in/.test(t) && /Enter the CBT Portal/.test(t);
+      }));
+      check('guest-entry', label + ': no registration screen was opened on the way in', await gp.evaluate(() => !document.getElementById('free-register').classList.contains('active')));
+      check('guest-entry', label + ': no hub signup or login screen was opened', await gp.evaluate(() => ['signup', 'login-v2', 'login'].every((id) => { const e = document.getElementById(id); return !e || !e.classList.contains('active'); })));
+      /* Register free opens the edition's own registration page directly. */
+      await gp.click('#free-home .f27-cta button[onclick="freeHomeCta()"]');
+      await active(gp, 'free-register');
+      check('guest-entry', label + ': Register free opens the Free UTME registration page', await gp.evaluate(() => !!document.getElementById('freePassword') && document.getElementById('free-register').classList.contains('active')));
+      await gp.evaluate(() => freeGo('free-home'));
+      await active(gp, 'free-home');
+      /* Enter the CBT Portal is the authentication-aware step. */
+      await gp.click('#free-home .f27-cta button:has-text("Enter the CBT Portal")');
+      await active(gp, 'free-login');
+      check('guest-entry', label + ': Enter the CBT Portal sends an unauthenticated student to the EDITION login page', await gp.evaluate(() => document.getElementById('free-login').classList.contains('active')));
+      check('guest-entry', label + ': that is the edition login, not the hub account login', await gp.evaluate(() => !!document.getElementById('freeLoginEmail') && !document.getElementById('login-v2').classList.contains('active')));
+      await shot(gp, '24-guest-login-' + label);
+      /* The login page's registration link works. */
+      await gp.click('#free-login a[onclick*="free-register"]');
+      await active(gp, 'free-register');
+      check('guest-entry', label + ': the login page registration link opens the edition registration page', true);
+      /* The public catalogue itself is unchanged and still renders for a guest. */
+      await gp.evaluate(() => freeGo('free-portal'));
       await active(gp, 'free-portal');
-      check('guest-entry', label + ': clicking CBT Portal opens the portal directly', await gp.evaluate(() => document.getElementById('free-portal').classList.contains('active')));
-      check('guest-entry', label + ': no registration screen was opened', await gp.evaluate(() => !document.getElementById('free-register').classList.contains('active')));
-      check('guest-entry', label + ': no signup or login screen was opened', await gp.evaluate(() => ['signup', 'login-v2', 'login'].every((id) => { const e = document.getElementById(id); return !e || !e.classList.contains('active'); })));
       await gp.waitForSelector('#freePortalList .f27-guest-note');
       check('guest-entry', label + ': the guest can browse real published listings', await gp.evaluate(() => document.querySelectorAll('#freePortalList .f27-item').length > 0));
       check('guest-entry', label + ': the guest is told browsing needs no account', await gp.evaluate(() => /no account needed/.test(document.getElementById('freePortalList').textContent)));
@@ -671,7 +727,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await active(page, 'landing');
     check('original-accounts', 'Free Mode keeps the original Get started action visible', await visible(page, '#landing .hero-original-cta'));
     check('original-accounts', 'Free Mode keeps the original login action visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
-    check('original-accounts', 'Free Mode keeps the original nav Log in / Get started visible', await visible(page, '#landing .lp-actions button[onclick="go(\'login-v2\')"]') && await visible(page, '#landing .lp-actions button[onclick="go(\'signup\')"]'));
+    check('original-accounts', 'Free Mode keeps the original nav Get started visible', await visible(page, '#landing .lp-actions button[onclick="go(\'signup\')"]'));
+    check('original-accounts', 'the hub Log in nav shortcut stands down in Free Mode but is not deleted', await page.evaluate(() => {
+      const e = document.querySelector('#landing .lp-actions .dw-hub-login');
+      return !!e && getComputedStyle(e).display === 'none';
+    }));
+    check('original-accounts', 'the hub login screen itself is still reachable and independent', await page.evaluate(() => !!document.getElementById('login-v2') && !!document.getElementById('loginId')));
 
     /* 1. A NEW student reaches the ORIGINAL registration form. */
     await page.click('#landing .hero-original-cta');
@@ -754,8 +815,9 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('original-accounts', 'the homepage is reachable again after using the original account', await page.evaluate(() => document.getElementById('landing').classList.contains('active')));
     check('original-accounts', 'Free Tutorial Mode is still active after student login', await page.evaluate(() => document.body.classList.contains('f27-mode')));
     await page.click('#landing .hero-cbt');
-    await active(page, 'free-portal');
-    check('original-accounts', 'the CBT Portal still opens directly alongside the original accounts', true);
+    await active(page, 'free-home');
+    check('original-accounts', 'the CBT Portal still opens the edition landing page alongside the original accounts', true);
+    check('original-accounts', 'using the hub account did not change where CBT Portal leads', await page.evaluate(() => document.getElementById('free-home').classList.contains('active')));
     check('original-accounts', 'the removed bootcamp CTA has not returned', await page.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
     const finalRec = (readData().students || []).find((x) => x.id === scholarId);
     check('original-accounts', 'the Scholar ID and account persist unchanged after login', !!finalRec && finalRec.id === scholarId && finalRec.active === true && finalRec.pendingApproval === false);
@@ -812,7 +874,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
        still be over the page after the original-account flow; dismiss it the
        way a student would rather than clicking through it. */
     await page.evaluate(() => freeCbtPortal());
+    await active(page, 'free-home');
+    check(AUTH, 'the CBT Portal entry leads to the edition landing page for a signed-in student too', true);
+    /* Enter the CBT Portal with a valid session goes straight to the dashboard. */
+    await page.evaluate(() => freePortalEnter());
     await active(page, 'free-portal');
+    check(AUTH, 'Enter the CBT Portal with a valid session opens the dashboard directly', true);
     if (await page.locator('#tutSkip').isVisible().catch(() => false)) {
       await page.click('#tutSkip');
       await page.waitForTimeout(300);
@@ -849,6 +916,30 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     });
     check(AUTH, 'the previous CBT results are readable again after logging back in', resultsShown > 0, String(resultsShown));
     await shot(page, '99-logged-back-in');
+
+    /* Inactivity expiry must land on the EDITION login page, not a hub page. */
+    const liveTok = await page.evaluate(() => localStorage.getItem('goc.free2027.token'));
+    const expDb = readData();
+    const expRec = (expDb.free2027.authSessions || []).find((x) => x.tokenHash === digestOf(liveTok));
+    check(AUTH, 'the live session is present before the expiry test', !!expRec);
+    if (expRec) {
+      expRec.expiresAt = Date.now() - 1;
+      fs.writeFileSync(DATA_FILE, JSON.stringify(expDb));
+      await page.evaluate(() => freeCbtPortal());
+      await active(page, 'free-home');
+      await page.evaluate(() => freePortalEnter());
+      await active(page, 'free-login');
+      check(AUTH, 'an expired session is redirected to the Free UTME login page', await page.evaluate(() => document.getElementById('free-login').classList.contains('active') && !document.getElementById('login-v2').classList.contains('active')));
+      check(AUTH, 'the expiry did not delete any student record', owned() === ownedBefore);
+      await page.fill('#freeLoginEmail', STUDENT_EMAIL);
+      await page.fill('#freeLoginPassword', STUDENT_PW);
+      await page.click('#freeLoginBtn');
+      await active(page, 'free-portal');
+      await page.waitForFunction((id) => (document.getElementById('freeWho').textContent || '').indexOf(id) > -1, authStudentId, { timeout: 20000 });
+      check(AUTH, 'logging in after expiry returns to the CBT Portal with the same account', await page.evaluate((id) => document.getElementById('freeWho').textContent.indexOf(id) > -1, authStudentId));
+      check(AUTH, 'every record survived the expiry and the new login', owned() === ownedBefore);
+      await shot(page, '99c-after-expiry-login');
+    }
 
     /* The public catalogue is still open to a visitor with no session. */
     const guestCatalogue = await page.evaluate(async () => {

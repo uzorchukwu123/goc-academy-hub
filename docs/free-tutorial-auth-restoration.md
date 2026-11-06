@@ -161,15 +161,37 @@ deliberate departure from `71e9ebb`, which had no reachable path for a
 pre-password account; it is what makes the upgrade possible without a second
 account system.
 
-## 7. The public CBT Portal is unchanged
+## 7. Navigation: one entry point, one authentication decision
 
-`freeCbtPortal()` still opens the portal directly with **no registration and no
-login**, rendering `publicActivities()` — public metadata only, never a question,
-option, answer, mark or student record. Browsing needs no account.
+Corrected after live testing. Every public **CBT Portal** entry point — the
+homepage button near the motto, the desktop navigation link and the mobile
+sidebar button — calls `freeCbtPortal()`, which opens the edition's **landing
+page** (`#free-home`). That page is unchanged in appearance and offers exactly
+three choices: **Register free**, **Student log in**, **Enter the CBT Portal**.
 
-Sitting a paper is a protected action and now routes through `freePortalEnter()`,
-which shows `#free-login` when there is no valid session. The guest card reads
-"Log in to sit this paper" with a "Register free" link beside it. The removed
+The entry itself makes no account decision. The decision happens one step later:
+
+| Control | Behaviour |
+| --- | --- |
+| **Register free** | Opens `#free-register` directly, always |
+| **Student log in** / **Enter the CBT Portal** | `freePortalEnter()` — valid session → `#free-portal`; no/expired/signed-out session → `#free-login` |
+
+`#free-login` links straight back to `#free-register`, so an unregistered student
+is never stranded. No step routes a Free UTME student to the hub's `login-v2`,
+`signup`, or any other account page.
+
+**Navigation links removed:** the duplicate `Log in` link in the edition landing
+page's own nav bar (its hero still carries **Student log in**), and the hub's
+`Log in` shortcut in the homepage nav and mobile drawer, which **stands down in
+Free Tutorial Mode only** (`body.f27-mode .dw-hub-login`). That shortcut pointed a
+free-tutorial student at an account they never created. It is not deleted:
+Original Mode shows it exactly as before, `#login-v2` is untouched, and the hub's
+"Get started" / "Create free account" actions remain visible in every mode.
+
+**The public catalogue is unchanged.** `GET /api/free2027/catalogue`,
+`publicActivities()` and the guest rendering still work exactly as before and
+still expose public metadata only — never a question, option, answer, mark or
+student record. Only the navigation route to the portal changed. The removed
 "Start Free UTME Bootcamp" homepage CTA has not returned.
 
 ## 8. Migration safety
@@ -192,7 +214,7 @@ and no student is invalidated. The permanent registry (`studentIds`,
 | `npm run build` | exit 0 — 1777690 → 1093714 bytes (38% smaller) |
 | `node test/test-free2027-auth.js` | **94 assertions passed** |
 | `node test/test-free2027-session-client.js` | **all passed** |
-| Real-browser harness (fresh isolated install) | **195/195 checks passed**, 0 page JS errors |
+| Real-browser harness (fresh isolated install) | **225/225 checks passed**, 0 page JS errors |
 | `git diff --check` | clean |
 
 `test/test-free2027-auth.js` runs against the real HTTP server and the real data
@@ -217,6 +239,15 @@ through `#free-login`, and finally **closes the browser completely and opens a n
 one** carrying only durable storage — the student is still signed in as the same
 account with their results intact.
 
+It also verifies the corrected navigation on **both mobile and desktop**: all
+three public CBT Portal entries open the same landing page; the separate Log in
+links are not displayed in Free Tutorial Mode; Register free opens the edition
+registration page; Enter the CBT Portal sends an unauthenticated visitor to the
+edition login; that page's registration link works; a valid session enters the
+portal directly; an **expired session** returns to the edition login and logging
+back in restores every record; and Original Mode brings the hub's Log in shortcut
+back with the hub's own registration and login still working.
+
 Limits, stated plainly: the browser run is headless Chromium 131 emulating
 390×844 and desktop viewports, not physical devices; the data store is the local
 JSON file, not a live Appwrite Database; email uses the SMTP capture adapter. The
@@ -227,8 +258,13 @@ it is pre-existing and unrelated.
 
 `js/goc-free-2027.js`, `server/lib/free2027.js`, `server/server.js`,
 `js/free2027-api.js`, `js/free2027-ui.js`, `index.html`, `css/free2027.css`,
-`js/free2027-admin.js` (console wording only), `sw.js` (`goc-v197`),
+`js/free2027-admin.js` (console wording only), `sw.js` (now `goc-v198`),
 `DEPLOY-CHECKLIST.md`, and the tests.
+
+The follow-up navigation correction touched only `index.html`,
+`css/free2027.css`, `js/free2027-ui.js`, `sw.js`, `DEPLOY-CHECKLIST.md` and four
+test files. No server code, authentication logic, data structure or hub file was
+modified by it.
 
 Two changes sit just outside the authentication code and were necessary:
 
