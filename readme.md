@@ -34,13 +34,29 @@ read each part on its own — and it now has a real backend behind it.
 node test\run.js
 ```
 
-182 suites and thousands of separate checks. Set `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` and `GOC_PASSCODE` first (the server refuses the published demo passwords), and run `npm install` once so the Appwrite and upload checks can run. It drives the
+197 suites and thousands of separate checks. Set `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` and `GOC_PASSCODE` first (the server refuses the published demo passwords), and run `npm install` once so the Appwrite and upload checks can run. It drives the
 real screens and the real server: signing in, sitting a paper, marking it in the
 console, the league order, practice runs, the mathematics renderer, the offline
 cache list. Every suite must say `passed`. If one says `FAILED`, the lines above it
 name exactly what broke.
 
 Run it before you give the app to anyone. It is faster than clicking through.
+
+The current Free Tutorial workflow and exact 14-column CSV contract are documented in
+[`docs/free-tutorial-2027.md`](docs/free-tutorial-2027.md). The optional real-browser
+recovery harness and its isolated setup are described in
+[`LOCAL-DEVELOPMENT.md`](LOCAL-DEVELOPMENT.md).
+The consolidated historical findings and verification evidence are in
+[`docs/recovery-verification.md`](docs/recovery-verification.md).
+The data-preservation contract (activity deletion, question-bank deletion),
+the homepage/CBT Portal entry corrections and their verification are in
+[`docs/round2-verification.md`](docs/round2-verification.md).
+The original student registration/login restoration, and the exact homepage CTA
+change it leaves in place, are documented in
+[`docs/account-restoration.md`](docs/account-restoration.md).
+The Free UTME Tutorial's own student registration, login, persistent sessions and
+inactivity timeout — separate from the hub accounts above — are documented in
+[`docs/free-tutorial-auth-restoration.md`](docs/free-tutorial-auth-restoration.md).
 
 ## Two ways to run it
 
@@ -67,12 +83,22 @@ first run are the two management consoles:
 | `GOC-A-001` | from `GOC_FOUNDER_PW` — set it yourself, never published here | Console access portal (Founder) |
 | `GOC-A-002` | from `GOC_ACADDIR_PW` — set it yourself, never published here | Console access portal (Academic Director) |
 
-Console passcode: from `GOC_PASSCODE`, also never published here. All three are
-environment variables, set before the first run. Change all three from
-Console → Access & firewall before a cohort registers — the server refuses to
-boot in production with any of them still at the published default. Any ID
-not on the roster is refused; students are created when anyone signs up (an
-**Open** account) or when management adds them from the console (GOC by default).
+Console passcode: from `GOC_PASSCODE`, also never published here. These are
+environment variables, set before the first run. Change the passwords and
+passcode from Console → Access & firewall before a cohort registers — the server
+refuses to boot in production with any of them still at the published default.
+Any ID not on the roster is refused; students are created when anyone signs up
+(an **Open** account) or when management adds them from the console (GOC by
+default).
+
+The Founder's hidden entrance is the recovered PR #9 contact-form entrance:
+homepage **Get in touch → Message**. Set `GOC_FOUNDER_EMAIL` and
+`GOC_FOUNDER_GATE_WORD` on the server to enable it. The exact, case-sensitive
+gate word is checked before any contact storage or email; a correct request
+opens the existing staff sign-in, then `GOC-A-001` + `GOC_FOUNDER_PW`, then the
+console passcode. The gate word is independent of the Founder password and the
+console passcode, and it is not stored or emailed. The old Science Subjects card
+and tutor secret-word entrances have been removed.
 
 ## Open sign-up (there is no access code)
 

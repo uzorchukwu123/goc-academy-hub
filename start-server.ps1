@@ -39,11 +39,13 @@ if (-not $node) {
 # $env:GOC_FOUNDER_PW = 'something-only-you-know'
 # $env:GOC_ACADDIR_PW = 'something-only-she-knows'
 
-# --- tutor entrance ---------------------------------------------------------
-# Tutors reach their sign-in by typing a secret word into the Scholar ID box on the
-# log-in screen and pressing Log in. Choose a word of at least 6 characters and
-# uncomment the next line. With no word set, nobody can open the tutor screens.
-# $env:GOC_TUTOR_DOOR = 'choose-your-own-word'
+# --- Founder contact entrance -----------------------------------------------
+# The Founder opens staff sign-in by entering the configured exact gate word in
+# the homepage Get in touch -> Message field, with the configured Founder email.
+# Set these in the environment/secret manager. The placeholders below are invalid
+# on purpose; replace them with private local values before testing the entrance.
+# $env:GOC_FOUNDER_EMAIL = 'REPLACE_ME'
+# $env:GOC_FOUNDER_GATE_WORD = 'REPLACE_ME'
 
 # --- sign-up --------------------------------------------------------------------
 # Sign-up is open: there is no access code. Limits on new accounts per connection

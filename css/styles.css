@@ -1788,6 +1788,11 @@ a.cv:hover{color:var(--red)}
    ===================================================================== */
 
 #landing{ overflow-x:hidden; }
+/* The shared .screen shell is a fixed-height flex column. Without this guard the
+   hero (overflow:hidden) and logo strip can shrink below their own content on a
+   phone, clipping the headline, supporting copy and calls to action. Keep the
+   original spacing/design, but let the homepage scroll through its full content. */
+#landing > * { flex-shrink: 0; }
 
 /* ---------- NAV : quietly upgraded, scoped to the homepage only ---------- */
 #landing .lp-nav{

@@ -579,7 +579,7 @@ function go(id){
      refuses the data anyway; this stops the empty shell being shown at all.
      The public screens stay open, because that is where an expired student is
      being sent. */
-  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship'];
+  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship','free-admin'];
   if(openScreens.indexOf(id) < 0 && ssExpired()){ ssEnd(); return; }
   if(id === 'login-v2' && typeof ssClearNotice === 'function' && !(ss && ss.ending)) ssClearNotice();
   // Access guard: the admin console is never reachable as a student, and only
@@ -648,7 +648,7 @@ function go(id){
     clearInterval(wtTimerId); wtTimerId = null;
   }
   // The preview banner belongs only to student-facing screens.
-  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2'){
+  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin'){
     previewing = false;
     document.body.classList.remove('previewing');
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
@@ -659,9 +659,16 @@ function go(id){
   // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
   tabbar.style.display = showTabs ? 'flex' : 'none';
-  // On desktop: public screens (landing, login, sign-up) are full-bleed, and
-  // every in-app screen shows the left sidebar. This class drives that split.
-  var publicScreens = ['landing','login-v2','signup','updates','legal'];
+  // On desktop: screens outside the authenticated hub are full-bleed, and every
+  // in-app screen shows the left sidebar. This class drives that split.
+  // The Free UTME Tutorial is a separate application with its own .f27-nav
+  // header, so its screens belong on the full-bleed side too. Listing them here
+  // is what stops .phone:not(.is-login) matching, so the hub sidebar is not
+  // rendered at all — rather than being drawn and then hidden by a CSS override
+  // (which lost on specificity and left a 256px sidebar over the tutorial).
+  // Hub screens are untouched: they still get the sidebar and the 256px offset.
+  var publicScreens = ['landing','login-v2','signup','updates','legal','free-admin',
+    'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard'];
   document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
   // highlight tab (map sub-screens to their section)
   var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
@@ -679,32 +686,13 @@ function go(id){
 
 /* The ID and password are checked by GOC.api — in demo mode against the local
    roster, in server mode against a password hash. Either way this function only
-   ever sees the answer, never the stored password. */
+   ever sees the answer, never the stored password. The old secret-word tutor
+   entrance has been removed; the Scholar ID box is only for account IDs. */
 function login(){
   var raw = ((document.getElementById('loginId')||{}).value||'').trim();
   var pw  = ((document.getElementById('loginPw')||{}).value||'');
   if(!raw){ toast('Enter your Scholar ID'); return; }
-  /* Every real ID starts with GOC-. Anything else is first offered to the server as a word that
-     may open something else; if the server does not take it, it is an ordinary wrong ID. */
-  if(!/^goc-/i.test(raw) && raw.length >= 6 && raw.length <= 80){
-    return GOC.api.ready.then(function(){ return GOC.api.knockDoor(raw, pw); }).catch(function(){ return null; }).then(function(tok){
-      if(!tok) return loginNow(raw, pw);
-      var a = document.getElementById('loginId'), b = document.getElementById('loginPw');
-      if(a) a.value = ''; if(b) b.value = '';
-      doorLoad(tok);
-    });
-  }
   return loginNow(raw, pw);
-}
-/* Fetches the extra screens a door token pays for. The script draws its own overlay; a failure
-   to load it says nothing, the same as a word that opened nothing. */
-function doorLoad(tok){
-  var s = document.createElement('script');
-  s.src = 'api/door/' + encodeURIComponent(tok) + '.js';
-  s.async = true;
-  s.onload = function(){ if(s.parentNode) s.parentNode.removeChild(s); };
-  s.onerror = function(){ if(s.parentNode) s.parentNode.removeChild(s); };
-  document.head.appendChild(s);
 }
 function loginNow(raw, pw){
   var btn = document.getElementById('loginBtn');
@@ -1429,20 +1417,37 @@ function scrollToContact(){
   var c=document.getElementById('contact');
   if(c && c.scrollIntoView) c.scrollIntoView({behavior:'smooth', block:'start'});
 }
+var contactSending = false;
 function sendContact(){
+  if(contactSending) return Promise.resolve();
   var n=document.getElementById('cName'), e=document.getElementById('cEmail'), m=document.getElementById('cMsg');
   var btn=document.getElementById('cSendBtn'), status=document.getElementById('cStatus');
   var firstName=(n&&n.value.trim().split(' ')[0])||'there';
   if(status){ status.className='lp-cstatus'; status.textContent=''; }
+  contactSending = true;
   if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
-  GOC.api.sendContact({
-    name: n && n.value, email: e && e.value, message: m && m.value
-  }).then(function(){
+  var nameVal = n && n.value, emailVal = e && e.value, msgVal = m && m.value;
+  /* Exactly one API submission. The message field is sent as typed; the
+     configured Founder gate word lives only on the server. The backend's
+     response alone decides whether this was a verified Founder request. */
+  return GOC.api.sendContact({
+    name: nameVal, email: emailVal, message: msgVal
+  }).then(function(r){
     if(n)n.value='';if(e)e.value='';if(m)m.value='';
+    if(r && r.founderRequest === true){
+      if(status){ status.className='lp-cstatus ok'; status.textContent='Founder request verified — sign in with your staff ID and password.'; }
+      /* Existing staff login only. role is still the visitor's role here, so
+         admin-gate remains guarded until normal staff authentication succeeds. */
+      go('free-admin');
+      return;
+    }
     if(status){ status.className='lp-cstatus ok'; status.textContent='Thanks '+firstName+'! Your message has been sent to the G.O.C Academy team — we usually reply within a day.'; }
   }).catch(function(err){
+    /* Keep the fields on a refusal so a failed Founder check is visible and
+       can be corrected; never show the ordinary success message for it. */
     if(status){ status.className='lp-cstatus err'; status.textContent=(err&&err.message)||'Please check the form and try again.'; }
   }).then(function(){
+    contactSending = false;
     if(btn){ btn.disabled=false; btn.textContent='Send message'; }
   });
 }
@@ -2581,7 +2586,7 @@ function gateKey(n){
   var attempt = gateBuf;
   // The passcode is checked by the API. A wrong code never reveals anything and
   // the console stays locked until the API says otherwise.
-  GOC.api.unlockConsole(attempt).then(function(){
+  return GOC.api.unlockConsole(attempt).then(function(){
     adminUnlocked = true;
     gateBuf=''; gatePaint();
     return Promise.all([loadStudents(), loadStaff(), loadSettings(), loadUpdates()]);

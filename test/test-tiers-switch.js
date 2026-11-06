@@ -139,9 +139,13 @@ async function demo() {
   await mock.login('GOC-A-002', 'acaddir2027');
   ok('a staff login that has not entered the passcode is refused', /passcode/i.test(await rejects(mock.setStudentTier(id, 'goc')) || ''));
   await mock.unlockConsole('2027');
+  ok('the Academic Director is denied a Finance-only student tier control', /role|permission/i.test(await rejects(mock.setStudentTier(id, 'goc')) || ''));
+  await mock.logout();
+  await mock.login('GOC-A-001', 'founder2027');
+  await mock.unlockConsole('2027');
   var up = await mock.setStudentTier(id, 'goc');
-  ok('Make GOC works and stamps the staff member\'s name and a time',
-     up.tier === 'goc' && up.tierChangedBy === 'Itsemeh Victorian' && Date.now() - Date.parse(up.tierChangedAt) < 5000, JSON.stringify(up));
+  ok('the Founder can Make GOC and stamps their name and a time',
+     up.tier === 'goc' && up.tierChangedBy === 'Ernest Uzorchukwu' && Date.now() - Date.parse(up.tierChangedAt) < 5000, JSON.stringify(up));
   var again = await mock.setStudentTier(id, 'GOC');
   ok('asking for the tier it already has changes and records nothing', again.tierChangedAt === up.tierChangedAt && again.tier === 'goc');
   var down = await mock.setStudentTier(id, 'open');
@@ -150,7 +154,7 @@ async function demo() {
   ok('an unknown Scholar ID is refused', /roster/.test(await rejects(mock.setStudentTier('GOC-S-999', 'goc')) || ''));
   var roster = await mock.listStudents();
   var row = roster.filter(function (r) { return r.id === id; })[0];
-  ok('the console roster carries tier and who/when', row && row.tier === 'open' && row.tierChangedBy === 'Itsemeh Victorian');
+  ok('the console roster carries tier and who/when', row && row.tier === 'open' && row.tierChangedBy === 'Ernest Uzorchukwu');
 }
 
 /* ---- the real server */
@@ -199,8 +203,14 @@ demo().then(function () { return start(); }).then(function () {
 }).then(function () {
   return sleep(30).then(function () { return call('PUT', '/api/students/' + stuId + '/tier', { tier: 'open' }, dirToken); });
 }).then(function (r) {
-  ok('the Academic Director can restrict her to Open', r.status === 200 && r.body.tier === 'open', r.raw);
-  ok('  and it is her name that is recorded, with a newer time', r.body.tierChangedBy === 'Itsemeh Victorian' && Date.parse(r.body.tierChangedAt) > Date.parse(stamp1), r.raw);
+  ok('the Academic Director is denied the Finance-only tier control', r.status === 403, r.raw);
+  return call('GET', '/api/me', undefined, stuToken);
+}).then(function (r) {
+  ok('the refused change leaves the student at GOC', r.body.tier === 'goc');
+  return sleep(30).then(function () { return call('PUT', '/api/students/' + stuId + '/tier', { tier: 'open' }, staffToken); });
+}).then(function (r) {
+  ok('the Founder can restrict her to Open', r.status === 200 && r.body.tier === 'open', r.raw);
+  ok('  and the Founder name is recorded, with a newer time', r.body.tierChangedBy === 'Ernest Uzorchukwu' && Date.parse(r.body.tierChangedAt) > Date.parse(stamp1), r.raw);
   stamp2 = r.body.tierChangedAt;
   return call('GET', '/api/me', undefined, stuToken);
 }).then(function (r) {

@@ -15,6 +15,8 @@
 <meta name="application-name" content="GOC Hub">
 <title>G.O.C Academy Hub</title>
 <link rel="stylesheet" href="css/styles.css">
+  <!-- 2027 Free Tutorial Edition styles (temporary; deleting this file leaves the original hub untouched). -->
+  <link rel="stylesheet" href="css/free2027.css">
 <!-- Critical inline guard: hides every screen and the question panel immediately,
      before the external stylesheet loads. This prevents a flash of all screens
      being visible if the service worker serves a stale css/styles.css that is
@@ -46,8 +48,16 @@
           <span class="bt">G.O.C Academy Hub</span>
         </div>
         <div class="lp-actions">
-          <button class="lp-link" onclick="go('login-v2')">Log in</button>
-          <button class="lp-cta" onclick="go('signup')">Get started</button>
+          <!-- CBT Portal opens the Free UTME Tutorial landing page, where the
+               student chooses Register / Student log in / Enter the CBT Portal.
+               "Get started" is the original hub sign-up and is shown in every
+               mode. The hub's own Log in shortcut is still here for Original
+               Mode; in Free Tutorial Mode it stands down (css/free2027.css) so
+               a free-tutorial student is never sent to an account they never
+               created. Nothing is deleted and the hub login page still works. -->
+          <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
+          <button class="lp-link dw-original dw-hub-login" onclick="go('login-v2')">Log in</button>
+          <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
         </div>
       </nav>
 
@@ -59,8 +69,18 @@
             <h1>Raising Smart Scholars for Academic Excellence</h1>
             <p class="sub">G.O.C Academy Hub blends expert tutoring, AI literacy and a gamified study app — so Nigerian students don't just pass exams, they learn to think and study on their own.</p>
             <div class="hero-btns">
-              <button class="lp-btn-light" onclick="go('signup')">Start free UTME Bootcamp</button>
-              <button class="lp-btn-ghost" onclick="go('login-v2')">I already have an account</button>
+              <!-- The obsolete bootcamp sign-up CTA is replaced by a direct
+                   CBT Portal entry. "Get started" keeps its original sign-up
+                   route and handler untouched; it is displayed in Original
+                   Mode only (css/free2027.css hides it in Free Tutorial Mode,
+                   where registration belongs to the edition's own landing
+                   page). "I already have an account" keeps its text, styling,
+                   position and visibility in both modes; only its destination
+                   is mode-aware (heroAccount): the hub login in Original Mode,
+                   the edition's student login in Free Tutorial Mode. -->
+              <button class="lp-btn-light hero-cbt" onclick="freeCbtPortal()">CBT Portal</button>
+              <button class="lp-btn-light hero-original-cta" onclick="go('signup')">Get started</button>
+              <button class="lp-btn-ghost" onclick="heroAccount()">I already have an account</button>
             </div>
             <div class="lp-trust">
               <span>✓ No card required</span>
@@ -91,7 +111,10 @@
       </div>
 
       <div class="lp-stats">
-        <div class="lp-stat"><b>4</b><span>Science subjects</span></div>
+        <!-- An ordinary statistics card with no special behaviour. The Founder
+             contact entrance is server-configured and documented in
+             LOCAL-DEVELOPMENT.md; no gate word is embedded in this page. -->
+        <div class="lp-stat" id="lpStat4"><b>4</b><span>Science subjects</span></div>
         <div class="lp-stat"><b>2027</b><span>UTME cohort focus</span></div>
         <div class="lp-stat"><b>3-in-1</b><span>Learn · Practise · Test</span></div>
       </div>
@@ -1399,6 +1422,293 @@
       </div>
     </section>
 
+    <!-- ====================================================================
+         2027 FREE TUTORIAL EDITION (temporary, switchable)
+         --------------------------------------------------------------------
+         These seven screens exist only while the site is in 2027 Free Tutorial
+         Mode. In Original Mode they are never shown — nothing about them is
+         deleted, and switching back restores the whole hub exactly as it is.
+         All data comes from /api/free2027/*; the markup here holds no records.
+         ==================================================================== -->
+    <section class="screen f27" id="free-home">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+          <button class="lp-link" onclick="freeHomeCta()">Register</button>
+          <button class="lp-link" onclick="freePortalEnter()">CBT Portal</button>
+        </div>
+      </nav>
+      <div class="f27-hero">
+        <span class="f27-kick">2027 UTME · Free Tutorial Edition</span>
+        <h1>Free weekly assessments and competitions for the 2027 UTME</h1>
+        <p class="f27-lead">No fee. Register once with your email and a password, then log in whenever you come back to sit this week's assessment or the current competition on the same engine the academy's own CBT papers run on. Your results stay on your own record.</p>
+        <div class="f27-cta">
+          <button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button>
+          <button class="btn btn-outline btn-block" onclick="freePortalEnter()">Student log in</button>
+          <button class="btn btn-outline btn-block" onclick="freePortalEnter()">Enter the CBT Portal</button>
+        </div>
+        <p class="f27-fine" id="freeHomeNote">Register with your name, email, password and course. We verify your email with a one-time code, then you log in with your email and password.</p>
+      </div>
+      <div class="f27-cards">
+        <div class="f27-card"><div class="f27-ico">📝</div><h3>Weekly Assessments</h3><p>Sit the week's paper inside its window. Results are immediate and private to you.</p></div>
+        <div class="f27-card"><div class="f27-ico">🏆</div><h3>Competitions</h3><p>Timed competitions ranked on score, then on who finished fastest.</p></div>
+        <div class="f27-card"><div class="f27-ico">📊</div><h3>Competition Leaderboard</h3><p>The top ten are published once the academy approves the board. Everyone else can see their own position.</p></div>
+      </div>
+      <div class="f27-sec">
+        <h2>Open now</h2>
+        <div id="freeHomeOpen" class="f27-open"><div class="ad-loading">Reading this week's programme…</div></div>
+      </div>
+      <p class="f27-foot">Temporary programme · G.O.C Academy · <span id="freeHomeMode">2027 Free Tutorial Mode</span></p>
+    </section>
+
+    <section class="screen f27" id="free-register">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+        </div>
+      </nav>
+      <div class="f27-form-wrap">
+        <div class="f27-form">
+          <h1>Register for the free tutorial</h1>
+          <p class="f27-lead">Your details, a password, and a code sent to your email.</p>
+          <div id="freeRegStep1">
+            <div class="field"><label for="freeName">Full name</label><input id="freeName" type="text" autocomplete="name" placeholder="e.g. Ada Obi"></div>
+            <div class="field"><label for="freeEmail">Email address</label><input id="freeEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+              <p class="field-hint">Used only to verify you and to keep your record. It is never shown publicly.</p></div>
+            <div class="field"><label for="freePassword">Password</label>
+              <div class="pw-wrap">
+                <input id="freePassword" type="password" autocomplete="new-password" placeholder="At least 8 characters, letters and numbers"
+                       oninput="var e=document.getElementById('freeRegErr'); if(e) e.textContent='';">
+                <button type="button" class="pw-toggle" onclick="togglePw('freePassword',this)">Show</button>
+              </div>
+              <p class="field-hint">You will use this email and password to log in to the CBT Portal.</p></div>
+            <div class="field"><label for="freeCourse">Intended course of study</label><input id="freeCourse" type="text" list="freeCourseList" autocomplete="off" placeholder="e.g. Medicine and Surgery">
+              <datalist id="freeCourseList"></datalist></div>
+            <p class="f27-err" id="freeRegErr" role="alert"></p>
+            <button class="btn btn-red btn-block" id="freeRegBtn" onclick="freeRegisterStart()">Send my verification code</button>
+            <p class="f27-fine" style="margin-top:10px;text-align:center">Already registered? <a href="#" onclick="freeGo('free-login');return false">Log in</a></p>
+          </div>
+          <div id="freeRegStep2" hidden>
+            <p class="f27-otp-lead">We sent a <b>6-digit code</b> to <b id="freeOtpTo">your email</b>. Enter it below to finish registering.</p>
+            <div class="field"><label for="freeOtp">Verification code</label>
+              <input id="freeOtp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="f27-otp-input"></div>
+            <p class="f27-err" id="freeOtpErr" role="alert"></p>
+            <p class="f27-dev-note" id="freeOtpDev" hidden></p>
+            <button class="btn btn-red btn-block" id="freeOtpBtn" onclick="freeRegisterVerify()">Verify and continue</button>
+            <button class="btn btn-outline btn-block" id="freeOtpResendBtn" style="margin-top:9px" onclick="freeRegisterResend()">Resend verification code</button>
+            <button class="btn btn-outline btn-block" style="margin-top:9px" onclick="freeRegisterRestart()">Use a different email</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Student login for the CBT Portal: email + the password chosen at
+         registration. Shown whenever there is no valid authenticated session
+         (first visit, after signing out, or after the inactivity timeout).
+         Completely separate from the G.O.C Academy Hub's own student login. -->
+    <section class="screen f27" id="free-login">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+        </div>
+      </nav>
+      <div class="f27-form-wrap">
+        <div class="f27-form">
+          <h1>Log in to the CBT Portal</h1>
+          <p class="f27-lead">Use the email address and password you registered with.</p>
+          <form onsubmit="freeLogin();return false">
+            <div class="field"><label for="freeLoginEmail">Email address</label>
+              <input id="freeLoginEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div>
+            <div class="field"><label for="freeLoginPassword">Password</label>
+              <div class="pw-wrap">
+                <input id="freeLoginPassword" type="password" autocomplete="current-password" placeholder="Your password"
+                       oninput="var e=document.getElementById('freeLoginErr'); if(e) e.textContent='';">
+                <button type="button" class="pw-toggle" onclick="togglePw('freeLoginPassword',this)">Show</button>
+              </div></div>
+            <p class="f27-err" id="freeLoginErr" role="alert"></p>
+            <button class="btn btn-red btn-block" id="freeLoginBtn" type="submit">Log in</button>
+          </form>
+          <p class="f27-fine" style="margin-top:10px;text-align:center">No account yet? <a href="#" onclick="freeGo('free-register');return false">Register free</a></p>
+          <p class="f27-fine" style="margin-top:6px;text-align:center">Registered before with a code only? <a href="#" onclick="freeGo('free-register');return false">Verify your email and set a password</a> — your student ID and records stay the same.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen f27" id="free-portal">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">CBT Portal</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+          <span class="f27-who" id="freeWho">—</span>
+          <button class="lp-link" onclick="freeSignOut()">Sign out</button>
+        </div>
+      </nav>
+      <div class="f27-sec">
+        <div class="f27-tabs" role="tablist">
+          <button class="f27-tab on" data-f27tab="weekly" onclick="freePortalTab('weekly')">Weekly Assessments</button>
+          <button class="f27-tab" data-f27tab="competition" onclick="freePortalTab('competition')">Competitions</button>
+          <button class="f27-tab" data-f27tab="leaderboard" onclick="freePortalTab('leaderboard')">Competition Leaderboard</button>
+        </div>
+        <!-- The candidate's own programme record: profile, course enrolment,
+             access and lesson completion. Drawn by js/free2027-ui.js from
+             /api/free2027/programme; nothing here is public. -->
+        <div id="freeProgramme" class="f27-programme" hidden></div>
+        <div id="freePortalList" class="f27-list"><div class="ad-loading">Loading this session's programme…</div></div>
+        <div id="freePortalResults" class="f27-mine"></div>
+      </div>
+    </section>
+
+    <section class="screen f27 f27-exam" id="free-exam">
+      <header class="f27-cbt-header">
+        <div class="f27-cbt-title-row">
+          <!-- An ongoing paper must not offer a way out: Back and Home are hidden
+               by css/free2027.css on this screen only. The buttons and their
+               freeExamLeave()/freeExamHome() handlers stay here, and every other
+               page keeps its own Back/Home navigation untouched. -->
+          <button type="button" class="f27-cbt-back" aria-label="Back to the previous page" onclick="freeExamLeave()" hidden>← Back</button>
+          <button type="button" class="f27-cbt-back f27-cbt-home" aria-label="Back to Home" onclick="freeExamHome()" hidden>Home</button>
+          <div class="f27-cbt-title-wrap">
+            <h1 id="freeExamTitle">Assessment</h1>
+            <div class="f27-cbt-meta"><span class="f27-cbt-kind" id="freeExamKind">Loading…</span><span id="freeExamMeta"></span></div>
+          </div>
+          <div class="f27-cbt-timer" id="freeExamTimer" aria-live="off">⏱ <span id="freeExamTime">--:--</span></div>
+        </div>
+        <div class="f27-cbt-progress"><span id="freeExamNum">Question 1 of 1</span></div>
+      </header>
+      <main class="f27-cbt-body">
+        <article class="f27-cbt-card">
+          <div class="f27-cbt-passage" id="freeExamPassage" hidden></div>
+          <div class="f27-cbt-image" id="freeExamImage" hidden></div>
+          <div class="f27-cbt-question" id="freeExamQ"></div>
+          <div class="f27-cbt-options" id="freeExamOpts" role="group" aria-label="Answer options"></div>
+        </article>
+      </main>
+      <nav class="f27-cbt-bar" aria-label="Question navigation">
+        <button type="button" class="f27-cbt-btn" id="freeExamPrev" onclick="freeExamMove(-1)">Previous</button>
+        <button type="button" class="f27-cbt-btn" id="freeExamNext" onclick="freeExamMove(1)">Next</button>
+        <!-- Submit occupies Next's slot and is revealed only on the final
+             question by paintExam(); reaching it never submits by itself. -->
+        <button type="button" class="f27-cbt-btn f27-cbt-btn-red" id="freeExamSubmit" onclick="freeExamSubmit()" hidden>Submit</button>
+        <button type="button" class="f27-cbt-btn f27-cbt-btn-outline" onclick="freeExamPanel()"><span id="freeExamPanelLabel">Q 1 / 1</span> · Question Navigator</button>
+      </nav>
+      <div class="f27-cbt-modal-back" id="freeExamPanelBack" onclick="freeExamPanelClose()" hidden></div>
+      <div class="f27-cbt-modal" id="freeExamPanel" role="dialog" aria-modal="true" aria-labelledby="freeExamPanelTitle" hidden>
+        <div class="f27-cbt-modal-top">
+          <h2 id="freeExamPanelTitle">Question Navigator</h2>
+          <button type="button" class="f27-cbt-close" onclick="freeExamPanelClose()" aria-label="Close">×</button>
+        </div>
+        <div class="f27-cbt-legend">
+          <span><i class="f27-cbt-dot answered"></i> Answered</span>
+          <span><i class="f27-cbt-dot unanswered"></i> Unanswered</span>
+          <span><i class="f27-cbt-dot current"></i> Current</span>
+        </div>
+        <div class="f27-cbt-navgrid" id="freeExamPanelGrid"></div>
+      </div>
+      <div class="f27-cbt-modal-back" id="freeExamConfirmBack" hidden></div>
+      <div class="f27-cbt-modal f27-cbt-confirm" id="freeExamConfirm" role="dialog" aria-modal="true" aria-labelledby="freeExamConfirmTitle" hidden>
+        <div class="f27-cbt-modal-top">
+          <h2 id="freeExamConfirmTitle">Submit paper?</h2>
+          <button type="button" class="f27-cbt-close" onclick="freeExamConfirmCancel()" aria-label="Close">×</button>
+        </div>
+        <p class="f27-cbt-confirm-lead">Review your progress before submitting. You cannot change answers after submission.</p>
+        <div class="f27-cbt-confirm-counts">
+          <div><b id="freeExamConfirmAnswered">0</b><span>Answered</span></div>
+          <div><b id="freeExamConfirmUnanswered">0</b><span>Unanswered</span></div>
+          <div><b id="freeExamConfirmTotal">0</b><span>Total</span></div>
+        </div>
+        <div class="f27-cbt-confirm-actions">
+          <button type="button" class="f27-cbt-btn f27-cbt-btn-outline" id="freeExamConfirmCancel" onclick="freeExamConfirmCancel()">Keep working</button>
+          <button type="button" class="f27-cbt-btn f27-cbt-btn-red" onclick="freeExamConfirmSubmit()">Submit paper</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen f27" id="free-result">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">Your result</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+          <button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button>
+        </div>
+      </nav>
+      <div class="f27-sec" id="freeResultBody"><div class="ad-loading">Marking your paper…</div></div>
+    </section>
+
+    <section class="screen f27" id="free-leaderboard">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">Competition Leaderboard</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+          <button class="lp-link" onclick="freeGo('free-portal')">← CBT Portal</button>
+        </div>
+      </nav>
+      <div class="f27-sec" id="freeBoardBody"><div class="ad-loading">Loading the board…</div></div>
+    </section>
+
+    <!-- Existing staff sign-in. A server-verified Founder contact request
+         opens this screen; standard staff authentication and the additional
+         console passcode gate are both retained. -->
+    <section class="screen auth" id="free-admin">
+      <div class="auth-brandbar">
+        <div class="lp-brand"><span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span><span class="bt">G.O.C Academy Hub</span></div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+        </div>
+      </div>
+      <div class="auth-scroll">
+        <div class="auth-formwrap">
+          <div class="auth-card">
+            <h1>Administrator sign-in</h1>
+            <p class="tagline">Management accounts only. The console stays locked until you also enter the access passcode.</p>
+            <form onsubmit="freeAdminLogin();return false" style="margin-top:20px">
+              <div class="field">
+                <label for="freeAdminId">Staff ID</label>
+                <input type="text" id="freeAdminId" placeholder="GOC-A-…" value="" autocomplete="username">
+              </div>
+              <div class="field">
+                <label for="freeAdminPw">Password</label>
+                <div class="pw-wrap">
+                  <input type="password" id="freeAdminPw" placeholder="Enter your password" autocomplete="current-password">
+                  <button type="button" class="pw-toggle" onclick="togglePw('freeAdminPw',this)">Show</button>
+                </div>
+              </div>
+              <p class="f27-err" id="freeAdminErr" role="alert"></p>
+              <button class="btn btn-red btn-block" type="submit" id="freeAdminBtn">Log in</button>
+            </form>
+            <p class="f27-fine" id="freeAdminNote"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ ADMIN ACCESS PORTAL (firewall) ============ -->
     <section class="screen" id="admin-gate">
       <div class="gate-wrap">
@@ -1718,8 +2028,15 @@
           <button onclick="dwGo('updates')" class="dw-updates-link"><span class="dwi-bell" aria-hidden="true">🔔</span>Updates &amp; News<span class="dw-new-badge">New</span></button>
         </nav>
         <div class="dw-btns">
-          <button class="btn btn-red btn-block" onclick="dwGo('signup')">Create free account</button>
-          <button class="btn btn-outline btn-block" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
+          <!-- The drawer's CBT Portal opens the Free UTME Tutorial landing page.
+               "Create free account" is shown in every mode. The hub's own Log in
+               shortcut stands down in Free Tutorial Mode (css/free2027.css) so a
+               free-tutorial student is not offered the wrong account system;
+               Original Mode shows it exactly as before. -->
+          <button class="btn btn-red btn-block dw-cbt" onclick="dwFreePortal()">CBT Portal</button>
+          <p class="dw-cbt-hint">Access your weekly assessments and competitions.</p>
+          <button class="btn btn-red btn-block dw-original" onclick="dwGo('signup')">Create free account</button>
+          <button class="btn btn-outline btn-block dw-original dw-hub-login" onclick="dwGo('login-v2')" style="margin-top:9px">Log in</button>
         </div>
         <div class="dw-foot">
           <a href="mailto:godsowncenterinfo@gmail.com">godsowncenterinfo@gmail.com</a>
@@ -1852,8 +2169,12 @@ window.__gocBootTimer = setTimeout(function() {
 }, 5000);
 </script>
 <script src="js/goc-core.js"></script>
+<script src="js/goc-free-2027.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/free2027-api.js"></script>
+<script src="js/free2027-ui.js"></script>
+<script src="js/free2027-admin.js"></script>
 <script src="js/pwa.js"></script>
 <!-- ============ TUTORIAL STYLES ============ -->
 <style>

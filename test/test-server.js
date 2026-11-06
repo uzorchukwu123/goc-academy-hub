@@ -757,23 +757,20 @@ waitForBoot(20).then(function (h) {
   var dir = dlin.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, dir);
   var dacc = await call('GET', '/api/staff/access', undefined, dir);
-  ok('the Academic Director reaches the console', dacc.status === 200, dacc.status);
-  ok('but is not the Founder', dacc.body.isFounder === false, dacc.body.isFounder);
+  ok('the Academic Director is denied Founder-only account/access controls', dacc.status === 403, dacc.status);
   var dpw = await call('PUT', '/api/staff/GOC-A-001/password', { password: 'takeover99' }, dir);
   ok('and cannot change the Founder\'s password', dpw.status === 403, dpw.status + ' ' + dpw.raw);
   ok('the refusal names the rule', /Only the Founder/i.test(dpw.raw), dpw.raw);
   var dpc = await call('PUT', '/api/settings/passcode', { passcode: '9999' }, dir);
   ok('nor the firewall passcode', dpc.status === 403, dpc.status);
-  /* The one setting she may change, as well as the Founder: the sign-up limits. Asked for by
-     the academy (both admit scholars), so the tier is asserted. */
+  /* Site-wide registration limits are Founder/system controls, not academic
+     programme controls. */
   var dsc = await call('PUT', '/api/settings/signup-limits', { perHour: 12, perDay: 60 }, dir);
-  ok('but the Academic Director may change the sign-up limits',
-     dsc.status === 200 && dsc.body.limits.perHour === 12 && dsc.body.limits.perDay === 60, dsc.status + ' ' + dsc.raw);
-  ok('the change is recorded against her', dsc.body.changedBy === 'GOC-A-002', dsc.raw);
-  var dAcc2 = await call('GET', '/api/staff/access', undefined, dir);
-  ok('the console now reports the new numbers and who changed them',
-     dAcc2.body.signupLimits.perHour === 12 && dAcc2.body.signupLimitsChangedBy === 'GOC-A-002' &&
-     !!dAcc2.body.signupLimitsChangedAt, dAcc2.raw);
+  ok('the Academic Director cannot change site-wide sign-up limits', dsc.status === 403, dsc.status + ' ' + dsc.raw);
+  var dAcc2 = await call('GET', '/api/staff/access', undefined, adm);
+  ok('the Founder sees unchanged sign-up limits after the Director was refused',
+     dAcc2.body.signupLimits.perHour === 5 && dAcc2.body.signupLimits.perDay === 20 &&
+     dAcc2.body.signupLimitsChangedBy === null && dAcc2.body.signupLimitsChangedAt === null, dAcc2.raw);
   ok('the Founder can still sign in',
      (await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' })).status === 200);
 

@@ -38,7 +38,7 @@ head('what is refused');
 function project(extra) {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-deploy-src-'));
   var files = {
-    'package.json': '{}', 'package-lock.json': '{}', 'js/goc-core.js': 'x', 'js/app.js': 'app',
+    'package.json': '{}', 'package-lock.json': '{}', 'js/goc-core.js': 'x', 'js/goc-free-2027.js': 'x', 'js/app.js': 'app',
     'server/server.js': 's', 'server/setup-appwrite.js': 's', 'server/verify-media.js': 's', 'server/export-questions.js': 's',
     'server/lib/appwrite.js': 'l', 'server/lib/reminders.js': 'l', 'server/tutor/tutor-app.js': 't',
     'test/run.js': 'tests', 'DEPLOYMENT.md': 'docs', 'index.html': '<html>'

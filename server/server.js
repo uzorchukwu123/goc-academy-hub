@@ -52,6 +52,12 @@ loadEnv();
 const core = require('../js/goc-core.js');
 const { pdfFromModel } = require('./pdf-writer');
 const reminders = require('./lib/reminders');
+/* The 2027 Free Tutorial Edition. One module, mounted below; see
+   server/lib/free2027.js and js/goc-free-2027.js. Removing this require (and the
+   `free2027` block further down) leaves the original hub exactly as it was. */
+const free2027Lib = require('./lib/free2027');
+const founderContact = require('./lib/founder-contact');
+const mailstatus = require('./lib/mailstatus');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -95,7 +101,44 @@ const ROOT = path.resolve(__dirname, '..');          // the GOC-Web-App folder
    that survives that restart. See TASKS-REMAINING.txt for the deployment
    step that actually wires this up on your host. */
 const DATA_DIR = process.env.GOC_DATA_DIR ? path.resolve(process.env.GOC_DATA_DIR) : __dirname;
-try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* already exists */ }
+/* An explicitly configured GOC_DATA_DIR is a promise about where this academy's
+   records live. The mkdir result used to be discarded, so a typo, a read-only
+   mount or a path that is really a file left the process running and failing
+   later. Verify that a CONFIGURED directory is a real, readable, writable
+   directory and refuse to boot in production if it is not. Nothing is deleted,
+   moved or redirected: there is deliberately no fallback to another directory,
+   so a bad path can never quietly start writing inside the application
+   checkout. When GOC_DATA_DIR is unset the original behaviour is unchanged. */
+if (process.env.GOC_DATA_DIR) {
+  let dirProblem = null;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.statSync(DATA_DIR).isDirectory()) dirProblem = 'the path exists but is not a directory';
+    else fs.accessSync(DATA_DIR, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (e) {
+    if (!dirProblem) dirProblem = (e && e.code) ? e.code : 'it cannot be created or accessed';
+  }
+  if (dirProblem) {
+    const dirBanner = [
+      '',
+      '**********************************************************************',
+      '*  [goc] GOC_DATA_DIR IS NOT USABLE                                 *',
+      '**********************************************************************',
+      '*  Configured directory: ' + DATA_DIR,
+      '*  Problem: ' + dirProblem,
+      '*  No data was written, moved or deleted, and the server has NOT',
+      '*  silently switched to another directory.',
+      '*  Point GOC_DATA_DIR at a writable directory outside the application',
+      '*  checkout (or fix its permissions) and start the server again.',
+      '**********************************************************************',
+      ''
+    ];
+    if (isProductionRun()) { dirBanner.forEach(l => console.error(l)); process.exit(1); }
+    dirBanner.forEach(l => console.warn(l));
+  }
+} else {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* already exists */ }
+}
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
@@ -143,6 +186,24 @@ let appwriteResourcesStorage = null;
 let appwriteDatabases = null;
 let appwriteUsers = null;
 let appwriteSaveChain = Promise.resolve();
+/* Set by hydrateBlobFromStorage() when the durable blob could not be READ
+   reliably, as distinct from it genuinely not existing yet. The startup path
+   uses this so an unreadable backup is never mistaken for a first install. */
+let blobHydrationFailure = null;
+/* Runtime persistence protection. When the cloud backup could not be verified
+   on this boot, the local data.json is the only copy we trust — so nothing may
+   push it over a cloud backup we were unable to read. scheduleBlobUpload()
+   checks this for EVERY caller (writeData, the migration route, any future
+   one), so no ordinary write, timer or request can bypass it. It is set only
+   by a failed/unclassifiable hydration and is never cleared during the life of
+   the process: recovery is a deliberate operator action (fix the cause and
+   restart), and the next boot only resumes uploads if hydration then verifies
+   the backup or positively identifies a first install. */
+let blobPersistenceProtected = false;
+/* Independent connectivity findings — a constructed SDK client is NOT evidence
+   that the Database is reachable or that the credentials were accepted. */
+let appwriteDatabaseStatus = 'not-checked';
+let appwriteStorageStatus = 'not-checked';
 
 async function createAppwriteAuthUser(rec) {
   if (!appwriteUsers) throw new Error('Appwrite Auth is not initialized.');
@@ -512,23 +573,39 @@ function docToAttempt(doc) {
    tutor numbers all read through here, so a question awaiting approval (or returned) can never
    reach them by a route that forgot to ask. The console's bank, imports and approval queue ask
    for all of them. A question with no status is live. */
+/* The same filtering the local branch has always done, extracted so the 2027
+   Free Tutorial Edition can read the bank without ever asking Appwrite. */
+function filterLocalQuestions(rows, filter, localDb) {
+  filter = filter || {};
+  const keep = list => filter.all ? list : list.filter(core.questionIsLive);
+  const src = rows !== undefined ? rows : ((localDb ? localDb.questions : readData().questions) || []);
+  let list = src || [];
+  /* Phase 4 — archived questions (soft-deleted) are excluded from every view
+     unless the caller explicitly asks for them. Student pools, blueprint
+     counts, and the normal admin bank never see archived questions.
+     { all: true } still excludes archived unless showArchived is also set,
+     so even the approval queue does not resurface soft-deleted records. */
+  if (!filter.showArchived) list = list.filter(q => !q.archived);
+  if (filter.subject) list = list.filter(q => q.subject === filter.subject);
+  if (filter.section) list = list.filter(q => q.section === filter.section);
+  if (filter.kind) list = list.filter(q => q.kind === filter.kind);
+  if (filter.activeOnly) list = list.filter(q => q.active !== false);
+  return keep(list).map(q => JSON.parse(JSON.stringify(q)));
+}
+
+/* Local-only question reader for the 2027 Free Tutorial Edition. It never
+   touches Appwrite, even on a deployment where APPWRITE_* is configured and
+   the Database API is unavailable — the edition's papers, marking and console
+   picker read db.questions in the hub's own data file. */
+function listLocalQuestions(filter, localDb) {
+  const db = localDb || readData();
+  return Promise.resolve(filterLocalQuestions((db && db.questions) || [], filter));
+}
+
 async function listQuestions(filter, localDb) {
   filter = filter || {};
+  if (!appwriteDatabases) return filterLocalQuestions(undefined, filter, localDb);
   const keep = rows => filter.all ? rows : rows.filter(core.questionIsLive);
-  if (!appwriteDatabases) {
-    let rows = (localDb ? localDb.questions : readData().questions) || [];
-    /* Phase 4 — archived questions (soft-deleted) are excluded from every view
-       unless the caller explicitly asks for them. Student pools, blueprint
-       counts, and the normal admin bank never see archived questions.
-       { all: true } still excludes archived unless showArchived is also set,
-       so even the approval queue does not resurface soft-deleted records. */
-    if (!filter.showArchived) rows = rows.filter(q => !q.archived);
-    if (filter.subject) rows = rows.filter(q => q.subject === filter.subject);
-    if (filter.section) rows = rows.filter(q => q.section === filter.section);
-    if (filter.kind) rows = rows.filter(q => q.kind === filter.kind);
-    if (filter.activeOnly) rows = rows.filter(q => q.active !== false);
-    return keep(rows).map(q => JSON.parse(JSON.stringify(q)));
-  }
   const Query = appwriteQuery();
   const baseQueries = [];
   if (filter.subject) baseQueries.push(Query.equal('subject', filter.subject));
@@ -935,12 +1012,86 @@ function blobStorageEnabled() {
   return !!(appwriteResourcesStorage && APPWRITE_BUCKET_ID && APPWRITE_FILE_ID);
 }
 
+/* Compatibility-aware structural validation of a downloaded backup.
+   Syntactically valid JSON is not enough: `{}` parses cleanly, and migrate()
+   would happily "repair" it by seeding a fresh question bank, a fresh note
+   bank and a new console passcode over a real academy's records.
+
+   The rules below come from what this application actually writes, not from a
+   guess at an ideal schema:
+     • every blob is produced by writeData() from a db that passed through
+       migrate() (or from seed()), so `settings` is ALWAYS a plain object;
+     • seed() and every real data file carry the academy's record collections,
+       so at least one core collection must be present as an array;
+     • everything else is optional — migrate() exists precisely to add fields
+       that older files lack, so a legacy blob without tutors/free2027/_savedAt
+       and with old period/tier values still validates;
+     • any recognised field that IS present must have the right type, because
+       migrate() would either throw on it (students.forEach on a string) or
+       silently replace it (a non-array questions is reseeded = data loss).
+   Nothing here mutates the candidate, and nothing here is applied to the
+   local file: readData()/migrate() keep their existing legacy tolerance. */
+const ACADEMY_ARRAY_FIELDS = [
+  'staff', 'students', 'updates', 'questions', 'notes', 'passages', 'attempts',
+  'tutors', 'alerts', 'notices', 'broadcasts', 'flags', 'challenges', 'tutorAudit',
+  'managerLog', 'scholarshipApplications', 'scholarshipWaitlist', 'topics',
+  'contactMessages', 'affirmations'
+];
+const ACADEMY_OBJECT_FIELDS = [
+  'settings', 'challengeState', 'broadcastMail', 'answerStats', 'practiceRuns',
+  'consentLog', 'bookmarks', 'reviewState', 'reminderState', 'free2027'
+];
+/* Presence of at least one of these proves the payload carries academy records
+   rather than being an empty stub or an unrelated JSON object. */
+const ACADEMY_CORE_COLLECTIONS = ['staff', 'students', 'questions', 'notes', 'attempts', 'updates', 'passages'];
+
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/* Returns null when the payload is a usable academy database, otherwise a
+   short machine-readable reason. The reason is logged; the payload never is. */
+function academyBackupProblem(db) {
+  if (!isPlainObject(db)) return 'not-a-database-object';
+  if (Object.keys(db).length === 0) return 'empty-object';
+  if (!Object.prototype.hasOwnProperty.call(db, 'settings')) return 'missing-settings';
+  if (!isPlainObject(db.settings)) return 'settings-not-an-object';
+  for (const f of ACADEMY_ARRAY_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(db, f) && !Array.isArray(db[f])) return f + '-not-an-array';
+  }
+  for (const f of ACADEMY_OBJECT_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(db, f) && !isPlainObject(db[f])) return f + '-not-an-object';
+  }
+  if (Object.prototype.hasOwnProperty.call(db, '_savedAt') && typeof db._savedAt !== 'string') return 'savedAt-not-a-string';
+  if (!ACADEMY_CORE_COLLECTIONS.some(f => Array.isArray(db[f]))) return 'no-academy-records';
+  return null;
+}
+
 async function hydrateBlobFromStorage() {
+  blobHydrationFailure = null;
   if (!blobStorageEnabled()) return false;
   try {
     const buf = await appwriteResourcesStorage.getFileDownload(APPWRITE_BUCKET_ID, APPWRITE_FILE_ID);
     const text = Buffer.isBuffer(buf) ? buf.toString('utf8')
       : (buf && buf.byteLength != null ? Buffer.from(buf).toString('utf8') : String(buf));
+    /* A payload that exists but is not a usable academy database is a DAMAGED
+       backup, not a missing one. This covers unreadable JSON AND syntactically
+       valid JSON that is not a G.O.C database (an empty object, a stub, or a
+       field of the wrong type). It must never replace a good local data.json,
+       and it is not deleted or overwritten here either — an operator can still
+       recover it. Cloud persistence is protected for the rest of this run. */
+    let parsedBlob = null;
+    try { parsedBlob = JSON.parse(text); } catch (_) { parsedBlob = null; }
+    const shapeProblem = parsedBlob === null ? 'not-readable-json' : academyBackupProblem(parsedBlob);
+    if (shapeProblem) {
+      blobHydrationFailure = 'invalid-backup';
+      protectBlobPersistence('the Storage backup is not a usable academy database (' + shapeProblem + ')');
+      appwriteStorageStatus = 'reachable-but-invalid-backup';
+      console.error('[goc] The Appwrite Storage backup exists but is not a usable G.O.C database ('
+        + shapeProblem + '). Keeping the local data.json untouched; the backup was NOT deleted or replaced.');
+      return false;
+    }
+    appwriteStorageStatus = 'readable';
     if (text && text.trim()) {
       /* ── Stale-blob guard ───────────────────────────────────────────────────
          If the local file already exists and carries a _savedAt timestamp that
@@ -973,15 +1124,79 @@ async function hydrateBlobFromStorage() {
       return true;
     }
   } catch (err) {
-    /* No file yet (first boot) or a transient error — fall back to whatever is
-       on disk, exactly as before this feature existed. */
-    console.log('[goc] No blob in Appwrite Storage yet (' + err.message + '); using local data.json.');
+    /* HTTP 404 is NOT sufficient evidence that the backup file is absent.
+       Appwrite returns 404 for at least four different conditions:
+         storage_file_not_found   — the file really is absent (first install)
+         storage_bucket_not_found — APPWRITE_BUCKET_ID is wrong
+         project_not_found        — APPWRITE_PROJECT_ID is wrong
+         general_route_not_found  — the endpoint/URL path is wrong
+       Only the first one may enable first-install handling. Everything else,
+       including a 404 whose type is missing or unrecognised, is an unverified
+       backup: it is treated as a failure and cloud persistence is protected.
+       The local file is left exactly as it is in every branch. */
+    const code = Number(err && (err.code != null ? err.code : err.status)) || 0;
+    const type = err && typeof err.type === 'string' ? err.type : '';
+    if (code === 404 && type === 'storage_file_not_found') {
+      appwriteStorageStatus = 'reachable-no-backup-yet';
+      console.log('[goc] No blob in Appwrite Storage yet (storage_file_not_found); using local data.json.');
+      return false;
+    }
+    if (code === 404) {
+      /* A configuration/route problem masquerading as a missing file. */
+      blobHydrationFailure = type === 'storage_bucket_not_found' ? 'bucket-not-found'
+        : type === 'project_not_found' ? 'project-not-found'
+        : type === 'general_route_not_found' ? 'route-not-found'
+        : 'ambiguous-404';
+      appwriteStorageStatus = 'misconfigured-or-ambiguous (' + blobHydrationFailure + ')';
+    } else {
+      blobHydrationFailure = code === 401 ? 'auth'
+        : code === 403 ? 'permission'
+        : 'network-or-service';
+      appwriteStorageStatus = 'unreadable (' + blobHydrationFailure + ')';
+    }
+    protectBlobPersistence('the Storage backup could not be verified (' + blobHydrationFailure + ')');
+    /* Log the classification, status and Appwrite error type only — never the
+       raw error or response, which can carry request detail. No secret value
+       is printed. */
+    console.error('[goc] The Appwrite Storage backup could NOT be verified ('
+      + blobHydrationFailure + ', status ' + (code || 'n/a') + (type ? ', type ' + type : '') + '). '
+      + 'This is NOT a first install: the local data.json is kept exactly as it is '
+      + 'and the backup was not touched.');
+    return false;
   }
   return false;
 }
 
+/* KNOWN LIMITATION (deliberately unchanged): this replacement is NOT atomic.
+   Appwrite Storage has no in-place content-replacement API — updateFile() takes
+   only bucketId/fileId/name/permissions, never file content — so replacing the
+   blob means deleteFile() followed by createFile(). If the process dies between
+   those two calls the cloud blob is briefly absent. Making that safe would need
+   a second file (write-new-then-switch), i.e. a new cloud resource and a
+   lifecycle to retire it, which is a new backup architecture rather than a
+   minimal fix. It is therefore left exactly as it is and recorded as an
+   operational risk instead of being half-solved. Mitigations that already
+   exist: the local data.json is written atomically (tmp + rename) before this
+   runs, the rotating local backups in BACKUP_DIR are independent of it, and
+   hydrateBlobFromStorage() now refuses to treat an unreadable blob as a first
+   install. Do not "fix" this by deleting the old blob earlier. */
+/* Engage runtime persistence protection. Idempotent, and deliberately has no
+   counterpart that clears it: see blobPersistenceProtected above. */
+function protectBlobPersistence(reason) {
+  if (blobPersistenceProtected) return;
+  blobPersistenceProtected = true;
+  console.error('[goc] CLOUD BACKUP PERSISTENCE PROTECTED: ' + reason + '. '
+    + 'Automatic Appwrite Storage replacement (deleteFile/createFile) is DISABLED for this run '
+    + 'so an unverified cloud backup cannot be overwritten. Local records continue to be saved '
+    + 'to ' + DATA_FILE + '. Cloud backup is NOT currently verified; fix the cause and restart '
+    + 'to resume cloud persistence.');
+}
+
 function scheduleBlobUpload() {
   if (!blobStorageEnabled()) return;
+  /* Checked here, inside the single funnel every caller goes through, so no
+     write, startup routine, timer or request can route around it. */
+  if (blobPersistenceProtected) return;
   appwriteSaveChain = appwriteSaveChain.then(async () => {
     const { InputFile } = require(
       path.join(path.dirname(require.resolve('node-appwrite')), 'inputFile.js'));
@@ -1051,6 +1266,12 @@ function migrate(db) {
    - An existing empty array is intentional: staff may have deleted every question.
      Never repopulate a question bank that management deliberately emptied. */
 if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
+  /* 2027 Free Tutorial Edition (temporary, switchable). Its records live in
+     their own top-level field so they can never be confused with — or touch —
+     db.students, db.attempts or any other original G.O.C record. A missing
+     field is created once here; an existing one is only ever shaped, never
+     reset. */
+  free2027Lib.ensureEdition(db, { env: process.env });
   /* Phase 3C: tutor accounts live in the data file (no Appwrite collection). */
   if (!Array.isArray(db.tutors)) db.tutors = [];
   /* Phase 3C slice 6.6: alerts for the console home (a tutor saved a fully marked theory script;
@@ -1470,6 +1691,21 @@ function tooManyContacts(ip) {
 function noteContact(ip) {
   const rec = contactAttempts.get(ip);
   if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) contactAttempts.set(ip, { count: 1, first: Date.now() });
+  else rec.count += 1;
+}
+/* Attempts using the configured Founder gate word get their own, stricter
+   limit so the identity check cannot be brute-forced through the public form. */
+const FOUNDER_MAX = 3;
+const founderAttempts = new Map();
+function tooManyFounderRequests(ip) {
+  const rec = founderAttempts.get(ip);
+  if (!rec) return false;
+  if (Date.now() - rec.first > CONTACT_WINDOW_MS) { founderAttempts.delete(ip); return false; }
+  return rec.count >= FOUNDER_MAX;
+}
+function noteFounderRequest(ip) {
+  const rec = founderAttempts.get(ip);
+  if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) founderAttempts.set(ip, { count: 1, first: Date.now() });
   else rec.count += 1;
 }
 
@@ -1936,7 +2172,10 @@ function clean(v, max) {
 let _mailTransport;
 function getMailTransport() {
   if (_mailTransport !== undefined) return _mailTransport;
-  if (!process.env.GOC_SMTP_HOST || !process.env.GOC_SMTP_USER || !process.env.GOC_SMTP_PASS) {
+  const host = String(process.env.GOC_SMTP_HOST || '').trim();
+  const user = String(process.env.GOC_SMTP_USER || '').trim();
+  const pass = String(process.env.GOC_SMTP_PASS || '');
+  if (!host || (!!user !== !!pass)) {
     _mailTransport = null;
     return _mailTransport;
   }
@@ -1944,13 +2183,13 @@ function getMailTransport() {
     // eslint-disable-next-line global-require
     const nodemailer = require('nodemailer');
     _mailTransport = nodemailer.createTransport({
-      host: process.env.GOC_SMTP_HOST,
+      host,
       port: Number(process.env.GOC_SMTP_PORT) || 587,
       secure: process.env.GOC_SMTP_SECURE === '1' || process.env.GOC_SMTP_SECURE === 'true',
-      auth: { user: process.env.GOC_SMTP_USER, pass: process.env.GOC_SMTP_PASS }
+      ...(user ? { auth: { user, pass } } : {})
     });
   } catch (e) {
-    console.warn('[contact] GOC_SMTP_* is set but the optional "nodemailer" package is not installed — run npm install. Falling back to the stored copy only.');
+    console.error('[mail] SMTP transport could not be initialized. Check dependencies and GOC_SMTP_* configuration.');
     _mailTransport = null;
   }
   return _mailTransport;
@@ -1966,6 +2205,156 @@ async function sendContactEmail(name, email, message) {
     subject: 'New message from the G.O.C Academy Hub website',
     text: 'From: ' + name + ' <' + email + '>\n\n' + message
   });
+}
+
+/* --------------------------------------------- 2027 Free Tutorial Edition
+   Verification uses the configured SMTP transport. Missing SMTP configuration
+   is surfaced as an explicit 503; codes are never returned to the browser or
+   written to logs. A local Mailpit/MailHog SMTP listener is supported by the
+   same environment-based transport for development/testing. */
+function freeOtpDelivery() {
+  /* Classification only — which variables are set, never their values. */
+  const cls = mailstatus.classifySmtpEnv(process.env);
+  const configured = cls.status === 'configured' && !!getMailTransport();
+  return { available: configured, status: cls.status, missing: cls.missing };
+}
+
+/* Founder's diagnostic (GET /api/free2027/admin/email-status). Distinguishes:
+     missing      — no SMTP variables at all
+     incomplete   — partially configured (a partially set environment is never
+                    reported as operational)
+     configured   — all required variables present, no live check yet
+     unreachable  — configured but the SMTP connection failed
+     ready        — configured and the SMTP connection verified
+   With ?verify=1 a live connection test is attempted. The response contains
+   variable NAMES and booleans only — never a secret value. */
+async function emailStatus(live) {
+  const cls = mailstatus.classifySmtpEnv(process.env);
+  if (!live) return { status: cls.status, missing: cls.missing, set: cls.set, brevoHint: cls.brevoHint, liveChecked: false };
+  if (cls.status !== 'configured') return mailstatus.withLiveCheck(cls, false);
+  const transport = getMailTransport();
+  if (!transport) return mailstatus.withLiveCheck(cls, false);
+  try {
+    await transport.verify();
+    return mailstatus.withLiveCheck(cls, true);
+  } catch (e) {
+    /* Provider error text may embed addresses; log nothing sensitive. */
+    console.error('[free2027] SMTP verify failed. Check the GOC_SMTP_* configuration.');
+    return mailstatus.withLiveCheck(cls, false);
+  }
+}
+async function deliverFreeOtp(m) {
+  const transport = getMailTransport();
+  if (!transport) return { delivered: false };
+  const from = process.env.GOC_SMTP_FROM || process.env.GOC_SMTP_USER || 'G.O.C Academy Hub <no-reply@gocacademy.com>';
+  const expires = FREE2027.OTP_TTL_MIN + ' minutes';
+  const safeName = String(m.name || 'Student').replace(/[&<>"']/g, function (c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+  });
+  try {
+    await transport.sendMail({
+      from,
+      to: m.email,
+      subject: 'Your G.O.C Academy Hub 2027 Free Tutorial verification code',
+      text: 'Hello ' + (m.name || 'Student') + ',\n\n' +
+        'Your G.O.C Academy Hub verification code is ' + m.code + '.\n\n' +
+        'This code expires in ' + expires + ' and can be used only once. If you did not request it, ignore this message.\n\n' +
+        'G.O.C Academy Hub\n2027 Free Tutorial Edition',
+      html: '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937;border:1px solid #e5e7eb;border-radius:12px">' +
+        '<div style="font-size:18px;font-weight:800;color:#991b1b">G.O.C Academy Hub</div>' +
+        '<p style="font-size:12px;color:#667085">2027 Free Tutorial Edition</p>' +
+        '<p>Hello ' + safeName + ',</p>' +
+        '<p>Use this verification code to complete your student registration:</p>' +
+        '<p style="font-size:32px;font-weight:800;letter-spacing:7px;margin:20px 0;color:#DC2626">' + m.code + '</p>' +
+        '<p style="color:#667085;font-size:13px">This code expires in ' + expires + ' and can be used only once. If you did not request it, ignore this email.</p>' +
+        '<hr style="border:0;border-top:1px solid #e5e7eb;margin:22px 0">' +
+        '<p style="color:#667085;font-size:12px">G.O.C Academy Hub · Raising Smart Scholars for Academic Excellence</p></div>'
+    });
+    return { delivered: true };
+  } catch (e) {
+    /* Provider errors may contain addresses or message fragments. Keep logs
+       intentionally non-sensitive. */
+    console.error('[free2027] Verification email delivery failed. Check SMTP provider configuration.');
+    return { delivered: false };
+  }
+}
+const free2027 = free2027Lib.createFree2027({
+  env: process.env,
+  otpSecret: process.env.GOC_FREE_2027_OTP_SECRET,
+  dataDir: DATA_DIR,
+  readData: () => readData(),
+  writeData: db => writeData(db),
+  withDataLock: fn => withDataLock(fn),
+  /* The edition's own papers and marking read the LOCAL question bank, never
+     Appwrite (see listLocalQuestions). GOC_FREE_2027_STORAGE is reported by
+     /api/health so a deployment can be checked without guessing. */
+  listQuestions: (filter, localDb) => listLocalQuestions(filter, localDb),
+  deliverOtp: deliverFreeOtp,
+  log: m => console.warn(m)
+});
+const FREE2027 = free2027.rules;
+
+/* One programme audit entry per successful administrative change, written by the
+   response hook in the dispatcher (the same place the hub's manager log is
+   written). Only the method, path and the resulting target are recorded; a body
+   is never copied, so no passcode or address can reach the audit trail. */
+const FREE_AUDIT_RULES = [
+  ['PUT', /^\/api\/free2027\/admin\/mode$/, 'mode.change'],
+  ['PUT', /^\/api\/free2027\/admin\/edition$/, 'edition.change'],
+  ['PUT', /^\/api\/free2027\/admin\/courses$/, 'courses.change'],
+  ['POST', /^\/api\/free2027\/admin\/activities$/, 'activity.create'],
+  ['PUT', /^\/api\/free2027\/admin\/activities\/([^/]+)$/, 'activity.edit'],
+  ['DELETE', /^\/api\/free2027\/admin\/activities\/([^/]+)$/, 'activity.delete'],
+  ['POST', /^\/api\/free2027\/admin\/activities\/([^/]+)\/(publish|close|reopen)$/, 'activity.verb'],
+  ['POST', /^\/api\/free2027\/admin\/activities\/([^/]+)\/leaderboard\/(approve|publish|unpublish|revoke)$/, 'leaderboard.verb'],
+  ['POST', /^\/api\/free2027\/admin\/lessons$/, 'lesson.create'],
+  ['PUT', /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, 'lesson.edit'],
+  ['DELETE', /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, 'lesson.delete'],
+  ['PUT', /^\/api\/free2027\/admin\/participants\/([^/]+)$/, 'participant.update'],
+  ['DELETE', /^\/api\/free2027\/admin\/participants\/([^/]+)$/, 'participant.delete'],
+  ['POST', /^\/api\/free2027\/admin\/sessions\/new$/, 'session.archive']
+];
+function freeAuditSpec(method, urlPath) {
+  const m = String(method || '').toUpperCase();
+  const p = String(urlPath || '').split('?')[0];
+  for (const rule of FREE_AUDIT_RULES) {
+    if (rule[0] !== m) continue;
+    const hit = rule[1].exec(p);
+    if (!hit) continue;
+    let action = rule[2];
+    let target = hit[1] ? String(hit[1]) : '';
+    if (action === 'activity.verb') action = 'activity.' + String(hit[2] || 'change');
+    if (action === 'leaderboard.verb') action = 'leaderboard.' + String(hit[2] || 'change');
+    return { action: action, target: target };
+  }
+  return null;
+}
+
+/* A console route needs the edition to be switched on; the two mode routes
+   themselves work either way, so the administrator can switch the edition back
+   ON from Original Mode. */
+function freeOnOrRefuse(res) {
+  const db = readData();
+  const ed = db.free2027 || {};
+  if (ed.enabled !== true) { errJson(res, 404, 'The 2027 Free Tutorial Edition is not active on this site.'); return false; }
+  return true;
+}
+/* Every free-tutorial handler is wrapped here, so a FreeError answers with its
+   own wording and status and anything else is logged and answered generically —
+   the same rule the hub's other routes follow. */
+function freeRoute(fn) {
+  return (req, res, body, sess, params) => {
+    let out;
+    try { out = fn(req, res, body, sess, params); }
+    catch (e) { return freeFail(res, e); }
+    return Promise.resolve(out).catch(e => freeFail(res, e));
+  };
+}
+function freeFail(res, e) {
+  if (res.headersSent) return;
+  if (e && e.expected && e.status) return errJson(res, e.status, e.message);
+  console.error('[free2027]', (e && e.stack) || e);
+  return errJson(res, 500, 'That request could not be completed.');
 }
 
 /* ------------------------------------------------------- study reminders
@@ -2732,65 +3121,6 @@ async function getCohortOrNull(cohortId) {
    Phase 3C slices 2-3. Tutor accounts are kept in db.tutors. The sign-in route,
    the session role 'tutor' and the scope guard below are separate from the console's
    routes on purpose: a tutor can only ever read or write their own subjects. */
-/* Phase 3C slice 4: the hidden door. A secret word typed into the Scholar ID box on the
-   log-in screen is sent here. The word lives ONLY in the GOC_TUTOR_DOOR environment variable
-   (never in any file the browser can download), a right word returns a single-use token valid
-   for 60 seconds, and only that token fetches the tutor screens' code, which sits in
-   server/tutor/ (the static server never serves server/). With no word set the door is
-   closed and answers exactly like an address that does not exist.
-   Honest limit: this hides the tutor screens, it is not what protects the data. The tutor
-   sign-in, its lock-outs and the scope guard on every tutor route are. */
-const DOOR_WORD_MIN = 6;
-function doorNormal(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80); }
-const DOOR_WORD_RAW = doorNormal(process.env.GOC_TUTOR_DOOR);
-const DOOR_WORD = DOOR_WORD_RAW.length >= DOOR_WORD_MIN ? DOOR_WORD_RAW : '';
-const DOOR_DIGEST = DOOR_WORD ? crypto.createHash('sha256').update(DOOR_WORD).digest() : null;
-const DOOR_TOKEN_MS = Number(process.env.GOC_DOOR_TOKEN_MS) || 60 * 1000;   // the override exists for the tests
-const DOOR_MISS_MAX = 6;
-const DOOR_MISS_WINDOW_MS = 15 * 60 * 1000;
-const doorMisses = new Map();                 // address -> { count, first }
-const doorTokens = new Map();                 // token -> expiry time
-const TUTOR_BUNDLE = path.join(__dirname, 'tutor', 'tutor-app.js');
-
-function doorLocked(ip) {
-  const rec = doorMisses.get(ip);
-  if (!rec) return false;
-  if (Date.now() - rec.first > DOOR_MISS_WINDOW_MS) { doorMisses.delete(ip); return false; }
-  return rec.count >= DOOR_MISS_MAX;
-}
-function doorMiss(ip) {
-  const rec = doorMisses.get(ip);
-  if (!rec || Date.now() - rec.first > DOOR_MISS_WINDOW_MS) doorMisses.set(ip, { count: 1, first: Date.now() });
-  else rec.count += 1;
-}
-function doorWordOk(word) {
-  if (!DOOR_DIGEST) return false;
-  const given = crypto.createHash('sha256').update(doorNormal(word)).digest();
-  return crypto.timingSafeEqual(given, DOOR_DIGEST);
-}
-/* Optional second part of the door: GOC_TUTOR_DOOR_PW (case and stray spaces ignored, so phone keyboards cannot break it). */
-const DOOR_PW_DIGEST = process.env.GOC_TUTOR_DOOR_PW
-  ? crypto.createHash('sha256').update(doorNormal(process.env.GOC_TUTOR_DOOR_PW)).digest() : null;
-function doorPwOk(pw) {
-  if (!DOOR_PW_DIGEST) return true;
-  const given = crypto.createHash('sha256').update(doorNormal(pw)).digest();
-  return crypto.timingSafeEqual(given, DOOR_PW_DIGEST);
-}
-function doorMint() {
-  const now = Date.now();
-  doorTokens.forEach((exp, k) => { if (exp <= now) doorTokens.delete(k); });
-  if (doorTokens.size >= 200) return null;
-  const token = crypto.randomBytes(24).toString('hex');
-  doorTokens.set(token, now + DOOR_TOKEN_MS);
-  return token;
-}
-/* Single use: the token is gone the moment it is looked at, right or late. */
-function doorSpend(token) {
-  const exp = doorTokens.get(token);
-  doorTokens.delete(token);
-  return !!exp && exp > Date.now();
-}
-
 const tutorFails = new Map();                 // tutor ID -> { count, first }
 const TUTOR_FAIL_MAX = 10;
 const TUTOR_FAIL_WINDOW_MS = 15 * 60 * 1000;
@@ -2906,7 +3236,26 @@ async function markTheoryScript(attemptId, marks, marker, guard) {
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
       const db = readData();
-      okJson(res, { service: 'goc-academy-hub', version: 1, passcodeLength: Number(db.settings.consolePasscodeLength) || 4 });
+      /* `free2027` is the central switch as the browser sees it: {on, mode}.
+         It only ever names a mode — no record, count or address. The page uses
+         it to decide whether to open the homepage in Original Mode or in 2027
+         Free Tutorial Mode. */
+      const fed = db.free2027 || {};
+      const fmode = FREE2027.activeMode(fed, fed.enabled === true);
+      okJson(res, {
+        service: 'goc-academy-hub', version: 1,
+        passcodeLength: Number(db.settings.consolePasscodeLength) || 4,
+        free2027: {
+          on: fed.enabled === true,
+          mode: fmode,
+          /* Where the edition keeps its records. Always the local data file:
+             the edition never reads or writes the Appwrite Database, even on a
+             deployment that has it configured. */
+          storage: 'local-json',
+          storageFile: DATA_FILE,
+          archiveDir: path.join(DATA_DIR, 'free2027-archives')
+        }
+      });
     } },
 
   { method: 'POST', path: /^\/api\/auth\/login$/, need: null, handler: async (req, res, body) => {
@@ -3545,7 +3894,7 @@ const ROUTES = [
       }
 
       /* Roles slice (d) follow-up: every management role may open the Overview, but each sees only
-         the figures its capabilities allow (core.overviewFor); the Founder and the seeded accounts see all four. */
+         the figures its capabilities allow (core.overviewFor); the Founder sees all four; the Academic Director sees only role-authorized figures. */
       okJson(res, core.overviewFor(sess.data.id, sess.data.roleKey, { studentsTotal, activeToday, avgScorePercent, lessonsPublished }));
     } },
 
@@ -3598,7 +3947,11 @@ const ROUTES = [
          affirmations/importLog) up to Storage and wait for that write to land,
          so the reconciliation below reflects a completed run. */
       let blobUploaded = false;
-      if (blobStorageEnabled()) {
+      if (blobStorageEnabled() && blobPersistenceProtected) {
+        /* Protection is active: report the truth rather than claiming a blob
+           write that scheduleBlobUpload() deliberately refused to make. */
+        errors.push('blob upload skipped: cloud backup persistence is protected (backup not verified on this boot)');
+      } else if (blobStorageEnabled()) {
         scheduleBlobUpload();
         try { await appwriteSaveChain; blobUploaded = true; }
         catch (err) { errors.push('blob upload: ' + err.message); }
@@ -3684,31 +4037,57 @@ const ROUTES = [
     } },
 
   /* Homepage "Talk to G.O.C Academy" form. Public on purpose — a visitor
-     hasn't signed in yet when they use it. js/api.js's sendContact() calls
-     the mail relay (FormSubmit, straight to godsowncenterinfo@gmail.com)
-     itself and calls this route in parallel purely to keep a durable copy;
-     this handler ALSO makes its own best-effort attempt to email the
-     academy inbox when SMTP is configured (GOC_SMTP_HOST/PORT/USER/PASS
-     env vars — see DEPLOYMENT.md), so the message still reaches the inbox
-     even from a visitor whose browser/network blocks the third-party
-     relay. Either way the submission is never lost: it is written to
-     data.json before any mail attempt is made. */
+     hasn't signed in yet when they use it. This route is the single
+     authoritative backend request for a submission: it records ordinary
+     messages once and makes at most one server-side SMTP attempt. Ordinary
+     messages keep the existing browser FormSubmit relay as well (js/api.js),
+     but a verified Founder request never goes through that third-party relay.
+     Recovered from PR #9 (71e9ebb), with one security adaptation required by
+     the current review: the configured gate word itself is neither stored as
+     a contact message nor emailed. */
   { method: 'POST', path: /^\/api\/contact$/, need: null, handler: (req, res, body) => {
       const ip = getClientIp(req);
       if (tooManyContacts(ip)) return errJson(res, 429, 'Too many messages sent from this connection. Please try again later.');
 
       const name = clean(body.name, 120);
       const email = clean(body.email, 160);
-      const message = clean(body.message, 4000);
+      /* Keep the raw message for the EXACT gate-word comparison. clean()
+         collapses whitespace and trims, which would change a configured
+         phrase; ordinary messages keep the existing cleaned/capped copy. */
+      const rawMessage = typeof body.message === 'string' ? body.message : '';
+      const message = clean(rawMessage, 4000);
       if (!name) return errJson(res, 400, 'Please add your name.');
       if (!email || email.indexOf('@') < 1 || email.indexOf('@') === email.length - 1) return errJson(res, 400, 'Please add a valid email address.');
       if (!message) return errJson(res, 400, 'Please add a short message.');
 
+      /* Founder entry through the contact form. The configured gate word is
+         a REQUEST, never a credential. Only the server knows it; the browser
+         simply submits the message field. The email must match the explicitly
+         configured GOC_FOUNDER_EMAIL — there is no derived-address fallback.
+         A match routes to the existing staff sign-in only; no token is issued
+         and the normal staff login + console passcode still apply afterwards. */
+      const gateWord = founderContact.configuredGateWord(process.env);
+      if (gateWord !== null && founderContact.matchesGateWord(rawMessage, gateWord)) {
+        if (tooManyFounderRequests(ip)) return errJson(res, 429, 'Too many requests from this connection. Please try again later.');
+        noteFounderRequest(ip);
+        const founderEmail = founderContact.configuredEmail(process.env);
+        if (!founderEmail) {
+          return errJson(res, 503, 'Founder sign-in is not configured on this deployment.');
+        }
+        if (email.trim().toLowerCase() !== founderEmail) {
+          return errJson(res, 403, 'Those details could not be verified. The message alone never grants access.');
+        }
+        noteContact(ip);
+        /* The gate word is not a contact message: do not write it to
+           contactMessages and do not hand it to SMTP or the browser relay. */
+        okJson(res, { ok: true, founderRequest: true, next: 'free-admin' });
+        return;
+      }
+
       noteContact(ip);
       const db = readData();
       db.contactMessages.push({ name, email, message, date: todayLabel(), receivedAt: new Date().toISOString() });
-      // Cap the log so an old install's data.json cannot grow forever; the
-      // mail relay is the real delivery path, this is only a safety net.
+      // Cap the log so an old install's data.json cannot grow forever.
       if (db.contactMessages.length > 500) db.contactMessages = db.contactMessages.slice(-500);
       writeData(db);
       okJson(res, { ok: true });
@@ -4040,38 +4419,6 @@ const ROUTES = [
     } },
 
 
-  /* ---- Phase 3C slice 4: the hidden door (see the note above DOOR_WORD) ---- */
-
-  { method: 'POST', path: /^\/api\/door$/, need: null, handler: (req, res, body) => {
-      const ip = getClientIp(req);
-      const gone = () => errJson(res, 404, 'No such endpoint.');
-      if (!DOOR_WORD) return gone();
-      if (doorLocked(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      if (!doorWordOk(body && body.word) || !doorPwOk(body && body.password)) { doorMiss(ip); return gone(); }
-      doorMisses.delete(ip);
-      const token = doorMint();
-      if (!token) return errJson(res, 429, 'Try again in a minute.');
-      okJson(res, { ok: true, token });
-    } },
-
-  { method: 'GET', path: /^\/api\/door\/([a-f0-9]{48})\.js$/, need: null, handler: (req, res, body, sess, params) => {
-      const ip = getClientIp(req);
-      const gone = () => errJson(res, 404, 'No such endpoint.');
-      if (!DOOR_WORD) return gone();
-      if (doorLocked(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      if (!doorSpend(params[0])) { doorMiss(ip); return gone(); }
-      fs.readFile(TUTOR_BUNDLE, (err, buf) => {
-        if (err) return errJson(res, 404, 'No such endpoint.');
-        res.writeHead(200, {
-          'Content-Type': 'text/javascript; charset=utf-8',
-          'Content-Length': buf.length,
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff'
-        });
-        res.end(buf);
-      });
-    } },
-
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
 
   { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
@@ -4396,7 +4743,7 @@ const ROUTES = [
 
   /* Management (Founder and Academic Director, via the console gate) reads every entry, optionally narrowed with
      ?tutorId=, ?studentId=, ?kind=tutor-view|contact-view, ?from= and ?to= (Nigeria days, YYYY-MM-DD). */
-  /* Roles slice (c), step 7: read the manager log. The Founder (and the two seeded accounts) read all of it;
+  /* Roles slice (c), step 7: read the manager log. The Founder reads all of it;
      any other manager reads only their own entries (core.managerLogFor decides, from the session, never the request). */
   { method: 'GET', path: /^\/api\/audit\/manager-actions$/, need: 'console', cap: 'overview.own', handler: (req, res, body, sess) => {
       const q = new URL(req.url, 'http://x').searchParams;
@@ -4833,7 +5180,7 @@ const ROUTES = [
 
   /* ---- Alerts on the console home. Unseen ones only; the admin taps Seen. ---- */
   /* Roles slice (c), step 6: each manager sees only the alerts that belong to their role (core.alertsFor);
-     the Founder and the two seeded accounts see all of them. */
+     the Founder sees all of them; */
   { method: 'GET', path: /^\/api\/alerts$/, need: 'console', cap: 'overview.own', handler: (req, res, body, sess) => {
       const list = core.unseenAlerts(core.alertsFor(readData().alerts, sess.data.id, sess.data.roleKey));
       okJson(res, { count: list.length, alerts: list });
@@ -8685,6 +9032,284 @@ const ROUTES = [
        Returns aggregated figures for the Founder / Publicity Manager dashboard:
        totalVisits, visitsToday, uniqueLast30, avgTimeSec, topPages[], recentVisits[]. */
 
+  /* ============================================ 2027 FREE TUTORIAL EDITION
+     A temporary, switchable edition of the same platform. Everything below is
+     namespaced under /api/free2027/ so it can be deleted in one block, and the
+     authorisation is decided by the guard in the dispatcher, never here:
+       need: null      — public (the mode, the course list, a one-time code)
+       need: 'free'    — a verified participant's own token
+       need: 'console' — a signed-in, unlocked management account, with the
+                         capability named on the route
+     Nothing in this block reads or writes a G.O.C student, attempt or staff
+     record; see server/lib/free2027.js. */
+
+  /* What the public page needs to know: is the edition on, which mode is the
+     site in, and the course list. Answered with `on:false` rather than an error
+     when the edition is off, so the page can simply stay in Original Mode. */
+  { method: 'GET', path: /^\/api\/free2027\/config$/, need: null, handler: freeRoute((req, res) => {
+      const out = free2027.publicConfig();
+      /* Whether a code can actually be emailed is a fact about the deployment,
+         not about the candidate, and the page needs it before the first
+         registration: without it the homepage would promise an email that no
+         sender can deliver. Only the two booleans are published. */
+      const d = freeOtpDelivery();
+      out.otpDelivery = { available: d.available };
+      okJson(res, out);
+    }) },
+
+  /* Register: prove the address first. Nothing is created by this call. */
+  { method: 'POST', path: /^\/api\/free2027\/register\/start$/, need: null, handler: freeRoute((req, res, body) => {
+      return free2027.startRegistration(body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/register\/verify$/, need: null, handler: freeRoute((req, res, body) => {
+      return free2027.verifyRegistration(body).then(r => okJson(res, r));
+    }) },
+
+  /* Student login: the email address and the password chosen at registration.
+     Guarded by the SAME per-address password-guessing throttle every other
+     password route on this server already uses. */
+  { method: 'POST', path: /^\/api\/free2027\/login$/, need: null, handler: freeRoute((req, res, body) => {
+      const ip = getClientIp(req);
+      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+      return free2027.login(body).then(r => okJson(res, r), e => {
+        if (e && e.status === 403) noteFailure(ip);
+        throw e;
+      });
+    }) },
+
+  /* The participant's own side. */
+  { method: 'GET', path: /^\/api\/free2027\/me$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.me(req.free2027.data));
+    }) },
+  /* Signing out ends THIS session only. The token is passed so the server can
+     delete exactly the session being ended; the student's account and every
+     record attached to it are left untouched. */
+  { method: 'POST', path: /^\/api\/free2027\/logout$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      return free2027.logout(req.free2027.data, req.free2027.token).then(r => okJson(res, r));
+    }) },
+  /* Public CBT Portal catalogue: a visitor enters the portal directly, with no
+     registration, login or onboarding step. Public metadata only. */
+  { method: 'GET', path: /^\/api\/free2027\/catalogue$/, need: null, handler: freeRoute((req, res) => {
+      okJson(res, free2027.publicActivities());
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/activities$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.listActivities(req.free2027.data));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/activities\/([^/]+)\/start$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.startActivity(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/attempts\/([^/]+)$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.resumeAttempt(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+  /* Post-submission review of the candidate's OWN paper (competition or weekly
+     assessment). Ownership and the submitted state are enforced in the library,
+     so an altered request cannot reach another candidate's responses or an
+     answer key before submission. */
+  { method: 'GET', path: /^\/api\/free2027\/attempts\/([^/]+)\/review$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.attemptReview(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/attempts\/([^/]+)\/answer$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.saveAnswer(req.free2027.data, params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/attempts\/([^/]+)\/submit$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.submitAttempt(req.free2027.data, params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/results$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.myResults(req.free2027.data));
+    }) },
+
+  /* The candidate's own programme: profile, enrolment, access, progress and
+     the lesson catalogue with their completion marks. Read from the local data
+     file, so it works on a box where Appwrite is unreachable. */
+  { method: 'GET', path: /^\/api\/free2027\/programme$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
+      okJson(res, free2027.programme(req.free2027.data));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/lessons\/([^/]+)\/complete$/, need: 'free', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.completeLesson(req.free2027.data, params[0]).then(r => okJson(res, r));
+    }) },
+
+  /* Competitions only, and only once the administrator has approved AND
+     published. Public on purpose: a leaderboard is meant to be seen. */
+  { method: 'GET', path: /^\/api\/free2027\/leaderboards$/, need: null, handler: freeRoute((req, res, body) => {
+      const d = free2027.sessionFromReq(req);
+      okJson(res, free2027.publishedLeaderboards(d ? d.data : null));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/leaderboards\/([^/]+)$/, need: null, handler: freeRoute((req, res, body, sess, params) => {
+      /* A signed-in candidate's own position is attached when their token is
+         present; the public ten never grows to include it. */
+      const d = free2027.sessionFromReq(req);
+      okJson(res, free2027.publicLeaderboardFor(params[0], d ? d.data : null));
+    }) },
+
+  /* ---- console: the edition itself ---- */
+
+  { method: 'GET', path: /^\/api\/free2027\/admin\/overview$/, need: 'console', cap: 'overview.own', handler: freeRoute((req, res) => {
+      const out = free2027.adminOverview();
+      out.otpDelivery = freeOtpDelivery();
+      okJson(res, out);
+    }) },
+
+  /* Diagnostic for the Brevo/SMTP verification-email setup, guarded by the
+     same site-configuration capability as the mode switch (homepage.edit);
+     students never hold console access at all. The response carries variable
+     names and booleans only — never a secret value. */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/email-status$/, need: 'console', cap: 'homepage.edit', handler: freeRoute(async (req, res) => {
+      const live = new URL(req.url, 'http://x').searchParams.get('verify') === '1';
+      okJson(res, await emailStatus(live));
+    }) },
+
+  /* The switch. `confirm: true` is required by the server as well as the page,
+     so a replayed request without the acknowledgement is refused. */
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/mode$/, need: 'console', cap: 'homepage.edit', handler: freeRoute((req, res, body) => {
+      return free2027.setMode(body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/edition$/, need: 'console', cap: 'homepage.edit', handler: freeRoute((req, res, body) => {
+      return free2027.setEdition(body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/courses$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body) => {
+      return free2027.setCourses(body).then(r => okJson(res, r));
+    }) },
+
+  /* ---- console: participants ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/participants$/, need: 'console', cap: 'roster.view', handler: freeRoute((req, res) => {
+      const q = new URL(req.url, 'http://x').searchParams;
+      okJson(res, free2027.listParticipants({ q: q.get('q') || '' }));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/participants\.csv$/, need: 'console', cap: 'roster.view', handler: freeRoute((req, res) => {
+      /* The one deliberate way a full email address leaves the server: a file
+         the administrator downloads. Never rendered in the console itself. */
+      const csv = free2027.participantsCsv();
+      const name = 'free2027-participants-' + new Date().toISOString().slice(0, 10) + '.csv';
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="' + name + '"',
+        'Content-Length': Buffer.byteLength(csv),
+        'Cache-Control': 'no-store'
+      });
+      res.end(csv);
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/participants\/([^/]+)$/, need: 'console', cap: 'students.deactivate', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.updateParticipant(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'DELETE', path: /^\/api\/free2027\/admin\/participants\/([^/]+)$/, need: 'console', cap: 'students.deactivate', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteParticipant(params[0]).then(r => okJson(res, r));
+    }) },
+
+  /* ---- console: activities ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/activities$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res) => {
+      okJson(res, free2027.adminActivities());
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/activities$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body) => {
+      return free2027.saveActivity(body, null).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/activities\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.saveActivity(body, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'DELETE', path: /^\/api\/free2027\/admin\/activities\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      /* Deletes ONLY the activity record. The body's confirm:true is required,
+         and student attempts/answers/scores/results are always preserved. */
+      return free2027.deleteActivity(params[0], body).then(r => okJson(res, r));
+    }) },
+  /* publish / close / reopen — reopening is the only door left open to a
+     latecomer, and it always carries the new closing time. */
+  { method: 'POST', path: /^\/api\/free2027\/admin\/activities\/([^/]+)\/(publish|close|reopen)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.setActivityState(params[0], params[1], body).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/activities\/([^/]+)\/results$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res, body, sess, params) => {
+      okJson(res, free2027.activityResults(params[0]));
+    }) },
+  /* approve / publish / unpublish / revoke a competition leaderboard */
+  { method: 'POST', path: /^\/api\/free2027\/admin\/activities\/([^/]+)\/leaderboard\/(approve|publish|unpublish|revoke)$/, need: 'console', cap: 'leaderboard.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.leaderboardAction(params[0], params[1]).then(r => okJson(res, r));
+    }) },
+
+  { method: 'GET', path: /^\/api\/free2027\/admin\/attempts\/([^/]+)$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res, body, sess, params) => {
+      okJson(res, free2027.attemptDetail(params[0]));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/records$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
+      okJson(res, free2027.sessionRecords());
+    }) },
+
+  /* ---- console: the two independent question banks ----
+     Weekly Assessment Question Bank and Competition Question Bank live in
+     db.free2027.questionBanks.{weekly,competition} — separate storages with
+     separate ID sequences, never db.questions and never Appwrite. The :bank
+     segment is validated against the allowlist inside the lib, so no request
+     can address an arbitrary collection. */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/question-banks$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res) => {
+      return free2027.bankOverview().then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      const q = new URL(req.url, 'http://x').searchParams;
+      return free2027.listBankQuestions(params[0], { q: q.get('q') || '', subject: q.get('subject') || '' })
+        .then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.createBankQuestion(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.updateBankQuestion(params[0], params[1], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions\/delete$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteBankQuestions(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/delete-all$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteAllBankQuestions(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/import$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.importBankCsv(params[0], body).then(r => okJson(res, r));
+    }) },
+  /* Legacy picker path, kept working but now bank-scoped and bank-required:
+     /api/free2027/admin/questions?bank=weekly|competition */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess) => {
+      const q = new URL(req.url, 'http://x').searchParams;
+      const bank = q.get('bank') || '';
+      if (['weekly', 'competition'].indexOf(bank) < 0) {
+        return errJson(res, 400, 'Pass ?bank=weekly or ?bank=competition — the edition no longer reads the shared question bank.');
+      }
+      return free2027.listBankQuestions(bank, { subject: q.get('subject') || '' }).then(r => okJson(res, {
+        questions: r.questions.map(qq => ({
+          id: qq.id, subject: qq.subject, topic: qq.topic, kind: qq.kind, section: qq.section,
+          difficulty: qq.difficulty, active: qq.active !== false,
+          text: String(qq.text == null ? '' : qq.text).slice(0, 240)
+        })),
+        total: r.total, bank: bank, source: 'free2027-question-bank'
+      }));
+    }) },
+
+  /* ---- console: programme lessons ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/lessons$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res) => {
+      okJson(res, free2027.adminLessons());
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/lessons$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body) => {
+      return free2027.saveLesson(body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.saveLesson(body, params[0]).then(r => okJson(res, r));
+    }) },
+  { method: 'DELETE', path: /^\/api\/free2027\/admin\/lessons\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteLesson(params[0]).then(r => okJson(res, r));
+    }) },
+
+  /* ---- console: programme progress and audit records ---- */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/progress$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
+      okJson(res, free2027.adminProgress());
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/audit$/, need: 'console', cap: 'results.view', handler: freeRoute((req, res) => {
+      okJson(res, free2027.auditLog(null));
+    }) },
+
+  /* ---- console: session archiving ---- */
+  { method: 'POST', path: /^\/api\/free2027\/admin\/sessions\/new$/, need: 'console', cap: 'system.migrate', handler: freeRoute((req, res, body) => {
+      return free2027.startSession(body).then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/archives$/, need: 'console', cap: 'system.migrate', handler: freeRoute((req, res) => {
+      okJson(res, free2027.listArchives());
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/archives\/([^/]+)$/, need: 'console', cap: 'system.migrate', handler: freeRoute((req, res, body, sess, params) => {
+      okJson(res, free2027.readArchive(params[0]));
+    }) },
+
   { method: 'POST', path: /^\/api\/analytics\/visit$/, need: null, handler: (req, res, body) => {
       /* Validate payload loosely — malformed beacons are silently dropped. */
       if (!body || typeof body !== 'object') return okJson(res, { ok: true });
@@ -8966,6 +9591,27 @@ const server = http.createServer(async (req, res) => {
     sess.tutor = tRec;
   }
 
+  /* 2027 Free Tutorial Edition. A participant is NOT a G.O.C student account:
+     they hold a free-tutorial token issued only after their email address was
+     verified, and that token opens the /api/free2027/ routes and nothing else.
+     It lives in its own in-memory table (server/lib/free2027.js), so the hub's
+     `sess` above is null for every one of these requests and no original route
+     below can ever see it. The guards for the original routes are untouched. */
+  if (route.need === 'free') {
+    const fsess = free2027.sessionFromReq(req);
+    if (!fsess) return errJson(res, 401, 'Verify your email to continue.');
+    const fed = readData().free2027 || {};
+    if (fed.enabled !== true) return errJson(res, 404, 'The 2027 Free Tutorial Edition is not active on this site.');
+    const fsessCur = (fed.sessions || []).find(x => x && x.id === fed.currentSessionId) || { participants: [] };
+    const who = (fsessCur.participants || []).find(p => p && String(p.id) === String(fsess.data.id));
+    if (!who) return errJson(res, 401, 'Your registration was not found. Verify your email again.');
+    if (who.active === false) return errJson(res, 403, 'This email address has been switched off for this programme.');
+    /* Handed to the handler on the request, exactly as `sess` is for the hub's
+       own accounts. Falls through to the same body reading and error handling
+       as every other route; the handlers are wrapped by freeRoute(). */
+    req.free2027 = fsess;
+  }
+
   if (route.need === 'student') {
     if (!sess) return errJson(res, 401, 'Your session has ended. Please log in again.');
     if (sess.data.role !== 'student') return errJson(res, 403, 'Student accounts only.');
@@ -8986,11 +9632,22 @@ const server = http.createServer(async (req, res) => {
     if (route.need !== 'staff' && !sess.data.unlocked) return errJson(res, 403, 'Enter the access passcode first.');
     if (route.need !== 'staff' && sess.data.mustChangePassword) return errJson(res, 403, 'Change your starting password first.');
     // Priority 8 — the Founder check is a server-side gate, not a hidden button.
-    /* Roles slice (b), step 2: a console route is checked against the role's capability.
-       No route carries a `cap` yet and the two seeded accounts keep full access, so today this
-       refuses no one; it starts to bite only for managers issued in a later slice. */
+    /* Console routes are checked against the session role's capability. The Founder
+       alone bypasses the map; the seeded Academic Director is not a superuser. */
+    if (route.need === 'console' && /^\/api\/free2027\/admin\//.test(urlPath) &&
+        ['founder', 'academic-director'].indexOf(sess.data.roleKey) < 0) {
+      return errJson(res, 403, 'The Free Tutorial Console is for the Founder and Academic Director.');
+    }
     if (route.need === 'console' && !core.adminMayUse(sess.data.id, sess.data.roleKey, route.cap)) {
       return errJson(res, 403, 'Your role does not include this.');
+    }
+    /* The Free Tutorial mode/edition switches and session archive controls are
+       system-level operations, reserved for the Founder rather than the
+       Academic Director's academic/programme role. */
+    if (route.need === 'console' && sess.data.roleKey === 'academic-director' &&
+        /^\/api\/free2027\/admin\//.test(urlPath) &&
+        (/^\/api\/free2027\/admin\/(mode|edition)$/.test(urlPath) || route.cap === 'system.migrate')) {
+      return errJson(res, 403, 'Only the Founder can change Free Tutorial system settings or archive programme data.');
     }
     if (route.need === 'founder' && sess.data.title !== 'Founder') {
       return errJson(res, 403, 'Only the Founder can change management credentials.');
@@ -9016,6 +9673,19 @@ const server = http.createServer(async (req, res) => {
             db.settings.managerLogSeq = (Number(db.settings.managerLogSeq) || 0) + 1;
             db.managerLog = core.addManagerAction(db.managerLog, core.stampManagerAction(actor, spec, db.settings.managerLogSeq, Date.now()));
             writeData(db);
+          }
+        }
+        /* The 2027 Free Tutorial Edition keeps its own audit trail with the rest
+           of its records (db.free2027), so the programme can be archived and
+           read on its own. Same rule as the manager log: a failed request is
+           never recorded, and a logging fault never breaks the request. */
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const freeSpec = freeAuditSpec(req.method, urlPath);
+          if (freeSpec && readData().free2027 && readData().free2027.enabled === true) {
+            free2027.recordAudit(
+              { id: sess.data.id, role: sess.data.roleKey || 'admin' },
+              freeSpec.action, freeSpec.target, ''
+            );
           }
         }
       } catch (e) { console.error('[goc] manager log write failed:', e && e.message ? e.message : e); }
@@ -9054,6 +9724,69 @@ process.on('unhandledRejection', err => {
 
 /* Any failure here leaves the local data file as the read/write fallback;
    startup never seeds or uploads here. */
+/* Read-only Database connectivity diagnostic.
+   Constructing the SDK clients only proves the endpoint string parsed and the
+   SDK loaded — it opens no connection and validates no credential. This probe
+   establishes whether the configured Database is actually reachable and the
+   credentials actually accepted, using GET /databases/{id}, which touches no
+   record. If the key lacks the database-metadata scope, it falls back to a
+   single-document read of an existing collection (the same read the app
+   already performs), which is still strictly read-only.
+
+   It never creates, updates, deletes, seeds or migrates anything, and it never
+   throws: an unreachable Database is a reported finding, not a crash. When the
+   credentials permit no read at all, it says connectivity could NOT be
+   verified rather than implying success. */
+async function probeAppwriteDatabase() {
+  if (!appwriteDatabases) { appwriteDatabaseStatus = 'not-configured'; return; }
+  const describe = (err) => {
+    const code = Number(err && (err.code != null ? err.code : err.status)) || 0;
+    const type = err && typeof err.type === 'string' ? err.type : '';
+    return { code, type, label: (code || 'n/a') + (type ? ' ' + type : '') };
+  };
+  try {
+    await appwriteDatabases.get(APPWRITE_DATABASE_ID);
+    appwriteDatabaseStatus = 'connected (database metadata read)';
+    return;
+  } catch (err) {
+    const e = describe(err);
+    if (e.code === 404) {
+      appwriteDatabaseStatus = 'not-found (' + e.label + ')';
+      return;
+    }
+    /* A scope limitation on database metadata (or an SDK/client that cannot
+       perform that particular read) is not proof the Database is down. Try the
+       narrowest read the application already relies on before concluding. */
+    try {
+      await appwriteDatabases.listDocuments(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENTS_COLLECTION_ID, [appwriteQuery().limit(1)]);
+      appwriteDatabaseStatus = 'connected (read-only documents query; database metadata scope not granted)';
+      return;
+    } catch (err2) {
+      const e2 = describe(err2);
+      appwriteDatabaseStatus = (e2.code === 401 || e2.code === 403)
+        ? 'UNVERIFIABLE - credentials accepted no permitted read (' + e2.label + ')'
+        : 'unreachable (' + e2.label + ')';
+    }
+  }
+}
+
+/* The four findings are reported separately on purpose: a constructed client
+   must never be presented as proof of a working Database. */
+function logAppwritePersistenceStatus() {
+  console.log('[goc] Appwrite status — SDK clients: ' + (appwriteDatabases ? 'constructed' : 'not constructed')
+    + ' | Storage: ' + appwriteStorageStatus
+    + ' | Database: ' + appwriteDatabaseStatus
+    + ' | cloud backup writes: ' + (blobPersistenceProtected ? 'PROTECTED (disabled)' : 'enabled') + '.');
+  if (appwriteDatabaseStatus.indexOf('UNVERIFIABLE') === 0) {
+    console.error('[goc] Appwrite Database connectivity could NOT be verified: the configured credentials '
+      + 'are not permitted to perform a read-only check. Connectivity has NOT been established.');
+  } else if (appwriteDatabaseStatus.indexOf('unreachable') === 0 || appwriteDatabaseStatus.indexOf('not-found') === 0) {
+    console.error('[goc] Appwrite Database connectivity FAILED: ' + appwriteDatabaseStatus
+      + '. The SDK client was constructed, but the Database is not usable.');
+  }
+}
+
 async function initAppwrite() {
   const clientBundle = createAppwriteClient();
   if (!clientBundle) {
@@ -9065,7 +9798,12 @@ async function initAppwrite() {
   appwriteDatabases = databases;
   appwriteUsers = users;
 
-  console.log('[goc] Appwrite Database initialized; using local data.json for unmigrated data.');
+  /* Accurate wording: this is client construction, not verified connectivity. */
+  console.log('[goc] Appwrite SDK clients constructed; using local data.json for unmigrated data.');
+  await probeAppwriteDatabase();
+  if (appwriteDatabaseStatus.indexOf('connected') === 0) {
+    console.log('[goc] Appwrite Database connectivity verified read-only: ' + appwriteDatabaseStatus + '.');
+  }
   return client;
 }
 
@@ -9261,10 +9999,15 @@ function start() {
       console.log('  Bound to ' + HOST + ' (reachable from the network / internet — use HTTPS).');
     }
     console.log('  Storage: ' + (appwriteDatabases ? 'Appwrite Database (cloud)' : 'local file (server/data.json)'));
+    /* The edition always uses the local file; say so, and say where, so a local
+       run is never in doubt about where programme records are going. */
+    if (free2027.modeInfo().on) {
+      console.log('  2027 Free Tutorial: ON — records in ' + DATA_FILE + ' (no Appwrite Database).');
+      console.log('  Free tutorial archives: ' + path.join(DATA_DIR, 'free2027-archives'));
+    }
     console.log('  Console passcode: ' + (process.env.GOC_PASSCODE ? '(from GOC_PASSCODE)' : '2027'));
-    if (DOOR_WORD) console.log('  Tutor entrance: open (word from GOC_TUTOR_DOOR).');
-    else if (DOOR_WORD_RAW) console.log('  Tutor entrance: CLOSED. GOC_TUTOR_DOOR must be at least ' + DOOR_WORD_MIN + ' characters.');
-    else console.log('  Tutor entrance: closed. Set GOC_TUTOR_DOOR to a secret word to let tutors in.');
+    /* Value-free diagnostic: never print the configured phrase or address. */
+    console.log('  Founder contact entrance: ' + founderContact.configurationStatus(process.env) + '.');
     console.log('');
     if (appwriteDatabases) {
       migrateAppwriteTiers().catch(function(err) {
@@ -9277,13 +10020,62 @@ function start() {
 // On a clean shutdown (a redeploy sends SIGTERM), flush any pending save first.
 process.on('SIGTERM', () => { appwriteSaveChain.finally(() => process.exit(0)); });
 
-if (hasAppwriteConfig()) {
+/* GOC_APPWRITE_OFF=1 — a deliberate local-only run.
+   The .env may still carry Appwrite credentials (a production copy), but the
+   Database API can be suspended, exhausted or simply unreachable. With this
+   switch set the server never builds an Appwrite client at all: every read and
+   write stays in the local data file, no Storage mirror is attempted, and the
+   2027 Free Tutorial Edition — which is local-only by design — can be developed
+   and tested in Chrome without waiting for a billing cycle. It changes nothing
+   unless a deployment asks for it, and production must not set it. */
+const APPWRITE_OFF = ['1', 'true', 'on', 'yes'].indexOf(String(process.env.GOC_APPWRITE_OFF || '').trim().toLowerCase()) > -1;
+if (APPWRITE_OFF) {
+  console.log('[goc] GOC_APPWRITE_OFF is set — running fully local. Appwrite is not contacted at all.');
+}
+/* Production fail-safe. When Appwrite IS configured, a failed initialization or
+   an unreadable durable backup must never be mistaken for a brand-new academy:
+   seeding here would publish demo staff/settings and start a fresh roster
+   alongside the real one. Refuse to boot instead, exactly as
+   auditDefaultSecrets() already does for a shipped default password. Nothing is
+   seeded, deleted, overwritten or reset, and no credential VALUE is printed —
+   only the variable names an operator needs to check. Local development, tests
+   and a deliberate GOC_APPWRITE_OFF run never reach this function. */
+function failClosedAppwriteStartup(reason) {
+  [
+    '',
+    '**********************************************************************',
+    '*  [goc] APPWRITE IS CONFIGURED BUT NOT USABLE - STARTUP REFUSED    *',
+    '**********************************************************************',
+    '*  ' + reason,
+    '*  This is a production run, so the server will NOT fall back to a',
+    '*  local-only academy and will NOT seed a fresh database.',
+    '*  Existing local data and the Appwrite backup are untouched.',
+    '*  Check APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID and APPWRITE_API_KEY,',
+    '*  the Appwrite service status, and APPWRITE_BUCKET_ID / APPWRITE_FILE_ID.',
+    '*  GOC_APPWRITE_OFF=1 selects a deliberate local-only run and must not be',
+    '*  set in production.',
+    '**********************************************************************',
+    ''
+  ].forEach(l => console.error(l));
+  process.exit(1);
+}
+
+if (hasAppwriteConfig() && !APPWRITE_OFF) {
   initAppwrite()
     .then(async () => {
       // Pull the durable blob down from Appwrite Storage before deciding
       // whether to seed, so a redeploy that wiped the code folder restores the
       // real settings/notes/topics instead of reseeding demo defaults.
       await hydrateBlobFromStorage();
+      /* The backup could not be read (permission/auth/network/damaged) and this
+         volume has no local data.json: seeding now would invent a new academy
+         where an existing one is simply unreachable. Refuse instead. When a
+         local data.json DOES exist it is authoritative and kept untouched. */
+      if (blobHydrationFailure && isProductionRun() && !fs.existsSync(DATA_FILE)) {
+        failClosedAppwriteStartup('The durable Appwrite Storage backup could not be read ('
+          + blobHydrationFailure + ') and there is no local data.json on this volume.');
+      }
+      logAppwritePersistenceStatus();
       // Students live in Appwrite, but staff/settings/etc. still come from the
       // local data.json blob (see initAppwrite()'s own comment) — a fresh
       // Appwrite deploy with no data.json on disk yet and no blob in Storage
@@ -9296,6 +10088,17 @@ if (hasAppwriteConfig()) {
       start();
     })
     .catch(err => {
+      /* Production: stop here, BEFORE the clients are reset and before any
+         seed()/start() below, so a bad key or an unreachable Appwrite can never
+         degrade into a freshly seeded local academy. Only a non-secret status
+         code / error type is reported, never the raw error or stack. */
+      if (isProductionRun()) {
+        const awCode = err && (err.code != null ? err.code : err.status);
+        const awType = err && typeof err.type === 'string' && /^[a-z0-9_]+$/i.test(err.type) ? err.type : '';
+        failClosedAppwriteStartup('Appwrite initialization failed'
+          + (awCode ? ' (status ' + awCode + ')' : '')
+          + (awType ? ' [' + awType + ']' : '') + '.');
+      }
       // Without this catch, a failed Appwrite init (missing node-appwrite
       // package, a malformed client, etc.) left start() never called at
       // all: no crash, no error banner, the process just sat there with
@@ -9311,6 +10114,14 @@ if (hasAppwriteConfig()) {
       start();
     });
 } else {
+  /* Unconfigured is a legitimate local install, so the control flow is exactly
+     as before. In production it is called out loudly rather than passed over in
+     silence, because "no Appwrite" there is almost always a misconfiguration. */
+  if (!APPWRITE_OFF && isProductionRun()) {
+    console.warn('[goc] WARNING: Appwrite is not configured (APPWRITE_ENDPOINT, '
+      + 'APPWRITE_PROJECT_ID and APPWRITE_API_KEY must all be set). This production '
+      + 'run is LOCAL-ONLY: no Appwrite data is read or written.');
+  }
   if (!fs.existsSync(DATA_FILE)) seed();
   start();
 }

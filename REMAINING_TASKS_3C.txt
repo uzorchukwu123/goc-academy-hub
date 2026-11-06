@@ -138,32 +138,14 @@ PHASE 3C IS COMPLETE: the console audit screen (Tutor access log) is built - see
    - Subjects & tutors: tutor per subject, and which papers are empty or thin.
    - Offline demo mode shows no tutors and says changes need a server connection.
 
-4. HIDDEN ENTRANCE AND TUTOR SHELL — done (cache goc-v114). test/test-tutors-door.js, test/test-tutors-shell.js.
-   - The way in: type the secret word into the Scholar ID box on the Log in screen and press Log in.
-     (Chosen instead of the footer-year taps.) The word is set by the owner in GOC_TUTOR_DOOR (6+
-     characters; case and extra spaces ignored). It is in no file the browser can download: the
-     page sends what was typed to POST /api/door and the server compares it.
-   - Anything starting GOC- is never sent to the door. Anything else is offered to it once; if the
-     server does not take it, it is an ordinary wrong ID and nothing looks different.
-   - A right word gives a single-use token (60 seconds). Only that token fetches the tutor screens'
-     code from GET /api/door/<token>.js. The code lives in server/tutor/tutor-app.js, which the static
-     server never serves; it is not in sw.js, the manifest, index.html or any public script.
-   - With GOC_TUTOR_DOOR unset (or under 6 characters) the door answers exactly like an address that
-     does not exist, and the boot log says so. Six wrong words from one address lock that address
-     out of the door for 15 minutes; this does not touch student, staff or tutor sign-in.
-   - The screens (overlay, own styles): sign-in sheet (ID, password, Show), forced new-password
-     screen at first sign-in, then the dashboard: subject switcher (only when the tutor has more
-     than one subject), a card with the paper depth for the open subject, and placeholder cards for
-     the analytics. A refused subject, an ended session, a switched-off account and a pending
-     password change each show the server's reason and put the tutor in the right place.
-   - The session lives in memory only: a reload signs the tutor out and they knock again.
-     Sign out also ends the session on the server.
-
-BEFORE YOU USE IT
-   - Set GOC_TUTOR_DOOR (start-server.ps1 has a commented line; DEPLOYMENT.md lists it). Without it
-     tutors cannot reach their sign-in. Give tutors the word in person or by private message.
-   - Hidden is not secure: anyone who reads the page code can see that a word is sent to the server,
-     but not what it is. What protects the data is the tutor sign-in and the scope guard.
+4. HIDDEN ENTRANCE AND TUTOR SHELL — historical note, entrance REMOVED.
+   - The old tutor secret-word door (Scholar ID box -> /api/door -> single-use bundle token)
+     has been removed, together with its environment variables and public login hook.
+   - The only hidden management entrance is the recovered PR #9 Founder contact entrance:
+     homepage Get in touch -> Message field, verified server-side against
+     GOC_FOUNDER_GATE_WORD + GOC_FOUNDER_EMAIL before opening the existing staff login.
+   - Tutor accounts, tutor sign-in API, password change, and subject scope guards remain on the
+     server; the old hidden route no longer serves the tutor overlay.
 
    - data.json now holds tutor password hashes: it is already on the "keep out of public deploys"
      list, and server/backups/ copies hold them too.
