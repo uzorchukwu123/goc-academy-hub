@@ -1580,8 +1580,12 @@
     <section class="screen f27 f27-exam" id="free-exam">
       <header class="f27-cbt-header">
         <div class="f27-cbt-title-row">
-          <button type="button" class="f27-cbt-back" aria-label="Back to the previous page" onclick="freeExamLeave()">← Back</button>
-          <button type="button" class="f27-cbt-back f27-cbt-home" aria-label="Back to Home" onclick="freeExamHome()">Home</button>
+          <!-- An ongoing paper must not offer a way out: Back and Home are hidden
+               by css/free2027.css on this screen only. The buttons and their
+               freeExamLeave()/freeExamHome() handlers stay here, and every other
+               page keeps its own Back/Home navigation untouched. -->
+          <button type="button" class="f27-cbt-back" aria-label="Back to the previous page" onclick="freeExamLeave()" hidden>← Back</button>
+          <button type="button" class="f27-cbt-back f27-cbt-home" aria-label="Back to Home" onclick="freeExamHome()" hidden>Home</button>
           <div class="f27-cbt-title-wrap">
             <h1 id="freeExamTitle">Assessment</h1>
             <div class="f27-cbt-meta"><span class="f27-cbt-kind" id="freeExamKind">Loading…</span><span id="freeExamMeta"></span></div>
@@ -1600,9 +1604,11 @@
       </main>
       <nav class="f27-cbt-bar" aria-label="Question navigation">
         <button type="button" class="f27-cbt-btn" id="freeExamPrev" onclick="freeExamMove(-1)">Previous</button>
-        <button type="button" class="f27-cbt-btn f27-cbt-btn-outline" onclick="freeExamPanel()"><span id="freeExamPanelLabel">Q 1 / 1</span> · Question Navigator</button>
         <button type="button" class="f27-cbt-btn" id="freeExamNext" onclick="freeExamMove(1)">Next</button>
-        <button type="button" class="f27-cbt-btn f27-cbt-btn-red" id="freeExamSubmit" onclick="freeExamSubmit()">Submit</button>
+        <!-- Submit occupies Next's slot and is revealed only on the final
+             question by paintExam(); reaching it never submits by itself. -->
+        <button type="button" class="f27-cbt-btn f27-cbt-btn-red" id="freeExamSubmit" onclick="freeExamSubmit()" hidden>Submit</button>
+        <button type="button" class="f27-cbt-btn f27-cbt-btn-outline" onclick="freeExamPanel()"><span id="freeExamPanelLabel">Q 1 / 1</span> · Question Navigator</button>
       </nav>
       <div class="f27-cbt-modal-back" id="freeExamPanelBack" onclick="freeExamPanelClose()" hidden></div>
       <div class="f27-cbt-modal" id="freeExamPanel" role="dialog" aria-modal="true" aria-labelledby="freeExamPanelTitle" hidden>

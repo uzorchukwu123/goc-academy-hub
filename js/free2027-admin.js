@@ -988,7 +988,7 @@
     weekly: 'Serves Weekly Assessments only. Import one mixed-subject CSV (all five subjects in one file) or add questions manually.',
     competition: 'Serves Competitions only. Completely separate from the Weekly bank — imports, edits and deletions here never touch Weekly questions.'
   };
-  A.banks = { weekly: { q: '', subject: '', sel: {}, rows: [], count: 0 }, competition: { q: '', subject: '', sel: {}, rows: [], count: 0 } };
+  A.banks = { weekly: { q: '', subject: '', sel: {}, rows: [], count: 0, pick: '' }, competition: { q: '', subject: '', sel: {}, rows: [], count: 0, pick: '' } };
 
   function loadBanks(keepPanels) {
     if (!keepPanels) loading('Reading the question banks…');
@@ -1134,22 +1134,62 @@
     });
   }
 
+  /* The row markup is unchanged — same checkbox, Edit and Delete controls, same
+     bank-scoped handlers. Only HOW MANY rows are on screen changes: one, chosen
+     from this bank's own dropdown, instead of the whole import listed inline. */
+  function bankRowHtml(bank, q) {
+    var on = !!A.banks[bank].sel[q.id];
+    return '<div class="f27-admin-row"><div>' +
+      '<label style="font-weight:700"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="f27BankToggle(\'' + bank + '\',\'' + esc(q.id) + '\',this.checked)"> ' +
+      '<b>' + esc(q.subject) + ' · ' + esc(q.topic || 'General') + '</b></label>' +
+      '<span>' + esc(String(q.text || '').slice(0, 180)) + '</span>' +
+      '<span>#' + esc(q.id) + ' · ' + esc(q.difficulty || 'medium') + '</span></div>' +
+      '<div class="ad-actions"><button class="ad-btn" onclick="f27BankAdd(\'' + bank + '\',\'' + esc(q.id) + '\')">Edit</button>' +
+      '<button class="ad-btn danger" onclick="f27BankDeleteOne(\'' + bank + '\',\'' + esc(q.id) + '\')">Delete</button></div></div>';
+  }
+
+  /* One dropdown per bank, built only from that bank's own filtered rows, so a
+     Weekly question can never appear in the Competition selector or vice versa.
+     Choosing an option is pure display: it never creates, edits or deletes. */
   function renderBankRows(bank) {
     var st = A.banks[bank];
     var host = $('f27BankList-' + bank);
     if (!host) return;
-    if (!st.rows.length) { host.innerHTML = '<div class="ad-empty">No questions in this bank yet — import a CSV or add one manually.</div>'; return; }
-    host.innerHTML = st.rows.map(function (q) {
-      var on = !!st.sel[q.id];
-      return '<div class="f27-admin-row"><div>' +
-        '<label style="font-weight:700"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="f27BankToggle(\'' + bank + '\',\'' + esc(q.id) + '\',this.checked)"> ' +
-        '<b>' + esc(q.subject) + ' · ' + esc(q.topic || 'General') + '</b></label>' +
-        '<span>' + esc(String(q.text || '').slice(0, 180)) + '</span>' +
-        '<span>#' + esc(q.id) + ' · ' + esc(q.difficulty || 'medium') + '</span></div>' +
-        '<div class="ad-actions"><button class="ad-btn" onclick="f27BankAdd(\'' + bank + '\',\'' + esc(q.id) + '\')">Edit</button>' +
-        '<button class="ad-btn danger" onclick="f27BankDeleteOne(\'' + bank + '\',\'' + esc(q.id) + '\')">Delete</button></div></div>';
+    if (!st.rows.length) {
+      st.pick = '';
+      host.innerHTML = '<div class="ad-empty">' + (st.q || st.subject
+        ? 'No questions in this bank match your search or subject filter.'
+        : 'No questions in this bank yet — import a CSV or add one manually.') + '</div>';
+      return;
+    }
+    var chosen = null;
+    for (var i = 0; i < st.rows.length; i++) {
+      if (String(st.rows[i].id) === String(st.pick)) { chosen = st.rows[i]; break; }
+    }
+    /* A new search, filter or import can remove the previous choice: fall back
+       to the first match rather than showing a question that is not listed. */
+    if (!chosen) { chosen = st.rows[0]; st.pick = String(chosen.id); }
+    var label = BANK_LABEL[bank];
+    var options = st.rows.map(function (q, i) {
+      var preview = String(q.text || '').replace(/\s+/g, ' ').slice(0, 60);
+      return '<option value="' + esc(q.id) + '"' + (String(q.id) === String(st.pick) ? ' selected' : '') + '>' +
+        'Q' + (i + 1) + ' · ' + esc(q.subject) + ' · ' + esc(q.topic || 'General') + ' — ' + esc(preview) + '</option>';
     }).join('');
+    host.innerHTML =
+      '<div class="ad-field f27-bank-picker">' +
+        '<label for="f27BankPick-' + bank + '">Select a ' + esc(label) + ' question (' + st.rows.length + ' available)</label>' +
+        '<select id="f27BankPick-' + bank + '" onchange="f27BankPick(\'' + bank + '\')">' + options + '</select>' +
+      '</div>' +
+      '<div id="f27BankSelected-' + bank + '">' + bankRowHtml(bank, chosen) + '</div>';
   }
+
+  /* Selection only. No API call, no write, and the other bank is not touched. */
+  global.f27BankPick = function (bank) {
+    var st = A.banks[bank];
+    if (!st) return;
+    st.pick = (($('f27BankPick-' + bank) || {}).value || '');
+    renderBankRows(bank);
+  };
 
   global.f27BankFilter = function (bank) {
     var st = A.banks[bank];

@@ -596,6 +596,75 @@ settle(load(w1)).then(function () {
     });
   });
 }).then(function () {
+  head('Active exam: no way out, and Next hands over to Submit on the last question');
+  ok('the exam Back button is hidden on the active paper', /class="f27-cbt-back"[^>]*onclick="freeExamLeave\(\)"[^>]*hidden/.test(html));
+  ok('the exam Home button is hidden on the active paper', /f27-cbt-home"[^>]*onclick="freeExamHome\(\)"[^>]*hidden/.test(html));
+  ok('both handlers are retained, not deleted', /F\.freeExamLeave = function/.test(uiSrc) && /F\.freeExamHome = function/.test(uiSrc));
+  ok('the hiding is scoped to the exam screen and the mode, never global', /body\.f27-mode #free-exam \.f27-cbt-header \.f27-cbt-back \{ display: none !important; \}/.test(css));
+  ok('Submit starts hidden and is revealed only on the final question', /id="freeExamSubmit"[^>]*hidden/.test(html) && /if \(sub\) sub\.hidden = !last;/.test(uiSrc));
+  ok('the bar order is Previous, Next, Submit, Navigator', (function () {
+    var i = html.indexOf('class="f27-cbt-bar"');
+    var seg = html.slice(i, html.indexOf('</nav>', i));
+    var a = seg.indexOf('id="freeExamPrev"'), b = seg.indexOf('id="freeExamNext"'),
+        c = seg.indexOf('id="freeExamSubmit"'), d = seg.indexOf('freeExamPanel()');
+    return a > -1 && a < b && b < c && c < d;
+  })());
+  ok('the timer is pinned to the far right of the header row', /\.f27-cbt-timer \{ flex: 0 0 auto; margin-left: auto;/.test(css));
+
+  /* A real 50-question paper, driven through the actual controls. */
+  var qs = [];
+  for (var i = 1; i <= 50; i++) qs.push({ id: 100 + i, n: i, subject: 'Physics', topic: 'T' + i, kind: 'objective', text: 'Question ' + i, options: ['a', 'b'], maxMark: 1 });
+  var w = makeWorld({ token: 'PT', startAttempt: { attempt: { id: 'F27-A50', title: 'Fifty', kind: 'weekly', remainingSec: 5400, responses: {} }, questions: qs, resumed: false } });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freeExamOpen('F27-Q1');
+    return settle(w).then(function () {
+      ok('Q1: Next is shown and Submit is not', w.els.freeExamNext.hidden === false && w.els.freeExamSubmit.hidden === true);
+      ok('Q1: Previous is disabled rather than removed', w.els.freeExamPrev.disabled === true);
+      ok('Q1: the timer reads 1:30:00 for a 90-minute paper', w.els.freeExamTime.textContent === '1:30:00', w.els.freeExamTime.textContent);
+      w.sandbox.freeExamPick(1);
+      return settle(w).then(function () {
+        w.sandbox.freeExamMove(1);
+        ok('Next advances to question 2', /Question 2 of 50/.test(w.els.freeExamNum.textContent), w.els.freeExamNum.textContent);
+        ok('Q2: Previous is enabled again', w.els.freeExamPrev.disabled === false);
+        ok('the answer chosen on Q1 is still saved', w.calls.api.some(function (c) { return c[0] === 'answer' && c[2] === 101 && c[3] === 1; }));
+        w.sandbox.freeExamPanel();
+        w.sandbox.freeExamPanelClose();
+        w.sandbox.freeExamMove(-1);
+        ok('returning to Q1 still shows the saved selection', /sel/.test(w.els.freeExamOpts.innerHTML));
+        ok('navigation and the navigator never restart the clock', w.els.freeExamTime.textContent === '1:30:00', w.els.freeExamTime.textContent);
+        /* Walk to the final question the way a candidate would. */
+        for (var k = 0; k < 49; k++) w.sandbox.freeExamMove(1);
+        ok('the final question is reached', /Question 50 of 50/.test(w.els.freeExamNum.textContent), w.els.freeExamNum.textContent);
+        ok('Q50: Submit is shown INSTEAD of Next', w.els.freeExamSubmit.hidden === false && w.els.freeExamNext.hidden === true);
+        ok('reaching the final question does not submit by itself', !w.calls.api.some(function (c) { return c[0] === 'submit'; }));
+        /* The sandbox does not seed [hidden] from markup, so assert on the
+           counts the confirmation dialog fills in: still empty means the
+           submit/confirm flow was never entered just by arriving at Q50. */
+        ok('arriving at the last question never opens the submit confirmation', w.els.freeExamConfirmAnswered.textContent === '' && w.els.freeExamConfirmTotal.textContent === '', w.els.freeExamConfirmTotal.textContent);
+        w.sandbox.freeExamMove(-1);
+        ok('stepping back from the last question restores Next', w.els.freeExamNext.hidden === false && w.els.freeExamSubmit.hidden === true);
+      });
+    });
+  });
+}).then(function () {
+  head('Countdown format: hours appear only above 59 minutes');
+  var cases = [[5400, '1:30:00'], [4500, '1:15:00'], [3600, '1:00:00'], [3540, '59:00'], [2700, '45:00'], [600, '10:00'], [60, '01:00'], [9, '00:09']];
+  var chain = Promise.resolve();
+  cases.forEach(function (c) {
+    chain = chain.then(function () {
+      var cw = makeWorld({ token: 'PT', startAttempt: { attempt: { id: 'F27-T', title: 'T', kind: 'weekly', remainingSec: c[0], responses: {} }, questions: [{ id: 1, text: 'q', options: ['a', 'b'] }], resumed: false } });
+      load(cw);
+      return settle(cw).then(function () {
+        cw.sandbox.freeExamOpen('F27-Q1');
+        return settle(cw).then(function () {
+          ok(c[0] + 's remaining displays ' + c[1], cw.els.freeExamTime.textContent === c[1], cw.els.freeExamTime.textContent);
+        });
+      });
+    });
+  });
+  return chain;
+}).then(function () {
   head('Homepage hero account link: one button, the right login page per mode');
   /* Free Tutorial Mode: the edition's own student login, never the hub's. */
   var hf = makeWorld({ token: null });

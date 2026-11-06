@@ -86,6 +86,20 @@ async function switchWebsiteMode(page, toFree) {
   await active(page, 'landing');
 }
 
+/* Submit only exists on the final question, so reach it with Next first. */
+async function toFinalQuestion(page) {
+  for (let i = 0; i < 80; i++) {
+    const last = await page.evaluate(() => {
+      const n = document.getElementById('freeExamNext');
+      return !n || n.hidden === true;
+    });
+    if (last) break;
+    await page.click('#freeExamNext');
+    await page.waitForTimeout(60);
+  }
+  await page.waitForSelector('#freeExamSubmit:not([hidden])');
+}
+
 /* Every hub account-creation entry point on the homepage and in the mobile
    drawer, identified by its actual handler rather than by label. In Free
    Tutorial Mode all of them must be hidden; in Original Mode none of them may
@@ -425,6 +439,89 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.waitForFunction(() => /2 questions/.test(document.getElementById('f27BankCount-competition').textContent));
     check('csv', 'competition bank remains independent', true);
 
+    /* 10b. Each bank selects questions from its OWN dropdown instead of listing
+       every import inline. Selection is display-only. */
+    for (const bank of ['weekly', 'competition']) {
+      const other = bank === 'weekly' ? 'competition' : 'weekly';
+      await page.waitForSelector('#f27BankPick-' + bank);
+      const info = await page.evaluate((b) => {
+        const sel = document.getElementById('f27BankPick-' + b);
+        return {
+          options: Array.from(sel.options).map((o) => ({ v: o.value, t: o.textContent })),
+          rows: document.querySelectorAll('#f27BankList-' + b + ' .f27-admin-row').length,
+          selected: document.querySelectorAll('#f27BankSelected-' + b + ' .f27-admin-row').length,
+          label: (document.querySelector('label[for="f27BankPick-' + b + '"]') || {}).textContent || ''
+        };
+      }, bank);
+      check('bank-dropdown', bank + ': a labelled question dropdown is present', /Select a/.test(info.label) && info.options.length > 0, info.label);
+      check('bank-dropdown', bank + ': questions are NOT listed continuously', info.rows === 1 && info.selected === 1, JSON.stringify({ rows: info.rows, selected: info.selected }));
+      check('bank-dropdown', bank + ': options carry number, subject, topic and a preview', /^Q1 · /.test(info.options[0].t) && / — /.test(info.options[0].t), info.options[0].t);
+      const before = JSON.stringify(readData().free2027.questionBanks);
+      const firstText = await page.textContent('#f27BankSelected-' + bank);
+      await page.selectOption('#f27BankPick-' + bank, info.options[1].v);
+      const secondText = await page.textContent('#f27BankSelected-' + bank);
+      check('bank-dropdown', bank + ': choosing another question changes the displayed details', firstText !== secondText);
+      check('bank-dropdown', bank + ': still exactly one question on screen after switching', await page.evaluate((b) => document.querySelectorAll('#f27BankList-' + b + ' .f27-admin-row').length === 1, bank));
+      check('bank-dropdown', bank + ': selecting never creates, edits or deletes questions', JSON.stringify(readData().free2027.questionBanks) === before);
+      /* Cross-bank isolation: no id from the other bank may appear here. */
+      /* Both panels load their rows independently; wait for the other bank's
+         picker rather than racing its first render. */
+      await page.waitForSelector('#f27BankPick-' + other);
+      const otherIds = await page.evaluate((b) => {
+        const s = document.getElementById('f27BankPick-' + b);
+        return s ? Array.from(s.options).map((o) => o.value) : [];
+      }, other);
+      const mine = info.options.map((o) => o.v);
+      check('bank-dropdown', bank + ': none of the other bank\'s questions appear in this dropdown', mine.every((id) => otherIds.indexOf(id) < 0), JSON.stringify({ mine: mine, other: otherIds }));
+      /* Search and subject filter still drive the same dropdown. */
+      await page.fill('#f27Q-' + bank, 'zzz-no-such-question');
+      await page.waitForFunction((b) => /No questions in this bank match/.test(document.getElementById('f27BankList-' + b).textContent), bank);
+      check('bank-dropdown', bank + ': search still filters, with a clear empty state', await page.evaluate((b) => !document.getElementById('f27BankPick-' + b), bank));
+      await page.fill('#f27Q-' + bank, '');
+      await page.waitForSelector('#f27BankPick-' + bank);
+      const subj = await page.evaluate((b) => {
+        const s = document.getElementById('f27Subj-' + b);
+        return s && s.options[1] ? s.options[1].value : '';
+      }, bank);
+      await page.selectOption('#f27Subj-' + bank, subj);
+      await page.waitForFunction((a) => {
+        const host = document.getElementById('f27BankList-' + a.b);
+        if (!host) return false;
+        const s = document.getElementById('f27BankPick-' + a.b);
+        if (!s) return /No questions in this bank match/.test(host.textContent);
+        return Array.from(s.options).every((o) => o.textContent.indexOf(' · ' + a.subj + ' · ') > -1);
+      }, { b: bank, subj: subj });
+      check('bank-dropdown', bank + ': subject filter narrows the dropdown to that subject only', await page.evaluate((a) => {
+        const s = document.getElementById('f27BankPick-' + a.b);
+        if (!s) return /No questions in this bank match/.test(document.getElementById('f27BankList-' + a.b).textContent);
+        return s.options.length > 0 && Array.from(s.options).every((o) => o.textContent.indexOf(' · ' + a.subj + ' · ') > -1);
+      }, { b: bank, subj: subj }));
+      await page.selectOption('#f27Subj-' + bank, '');
+      await page.waitForSelector('#f27BankPick-' + bank);
+      /* Edit and Delete are still reachable for the selected question. */
+      check('bank-dropdown', bank + ': the selected question keeps its Edit and Delete controls', await page.evaluate((b) => {
+        const h = document.getElementById('f27BankSelected-' + b);
+        return !!h.querySelector('button:not(.danger)') && !!h.querySelector('button.danger') && !!h.querySelector('input[type="checkbox"]');
+      }, bank));
+      await page.locator('#f27BankPick-' + bank).scrollIntoViewIfNeeded();
+      await shot(page, '10b-' + bank + '-dropdown');
+    }
+    /* The same console checks on a desktop viewport. */
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.waitForTimeout(250);
+    for (const bank of ['weekly', 'competition']) {
+      check('bank-dropdown', 'desktop ' + bank + ': dropdown is present and usable', await visible(page, '#f27BankPick-' + bank));
+      check('bank-dropdown', 'desktop ' + bank + ': only the selected question is rendered', await page.evaluate((b) => document.querySelectorAll('#f27BankList-' + b + ' .f27-admin-row').length === 1, bank));
+    }
+    check('bank-dropdown', 'desktop console has no horizontal overflow', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    check('bank-dropdown', 'desktop keeps two separate dropdowns, never one combined', await page.evaluate(() => {
+      const w = document.getElementById('f27BankPick-weekly'), c = document.getElementById('f27BankPick-competition');
+      return !!w && !!c && w !== c && document.querySelectorAll('.f27-bank-picker select').length === 2;
+    }));
+    await shot(page, '10c-banks-desktop');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(250);
+
     /* 11. Activity creation */
     await page.click('[data-f27adm="activities"]');
     await page.waitForSelector('#f27AdmBody button:has-text("Create Activity")');
@@ -480,14 +577,53 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await active(page, 'free-exam');
     check('cbt', 'mobile CBT renders question and options', await page.evaluate(() => !!document.getElementById('freeExamQ').textContent && document.querySelectorAll('#freeExamOpts button, #freeExamOpts .f27-cbt-option').length >= 2));
     check('cbt', 'countdown visible', await visible(page, '#freeExamTime'));
-    check('cbt', 'mobile exam header shows a working Back control', await visible(page, '.f27-cbt-back'));
-    check('cbt', 'mobile exam header shows a working Back to Home control', await visible(page, '.f27-cbt-home'));
-    check('cbt', 'the exam header controls do not overlap on a 390px screen', await page.evaluate(() => {
-      const b = document.querySelector('.f27-cbt-back').getBoundingClientRect();
-      const h = document.querySelector('.f27-cbt-home').getBoundingClientRect();
-      return b.right <= h.left + 1 && document.documentElement.scrollWidth <= window.innerWidth;
+    check('cbt', 'the active paper offers no Back button', !(await visible(page, '#free-exam .f27-cbt-back')));
+    check('cbt', 'the active paper offers no Home button', !(await visible(page, '#free-exam .f27-cbt-home')));
+    check('cbt', 'both exits are hidden, not deleted', await page.evaluate(() => !!document.querySelector('#free-exam .f27-cbt-home') && !!document.querySelector('#free-exam [onclick="freeExamLeave()"]') && typeof window.freeExamLeave === 'function' && typeof window.freeExamHome === 'function'));
+    check('cbt', 'Next is visible and Submit is not, on a non-final question', await visible(page, '#freeExamNext') && !(await visible(page, '#freeExamSubmit')));
+    check('cbt', 'the timer sits at the extreme top-right of the exam header', await page.evaluate(() => {
+      const t = document.getElementById('freeExamTimer').getBoundingClientRect();
+      const h = document.querySelector('#free-exam .f27-cbt-header').getBoundingClientRect();
+      return (h.right - t.right) <= 20 && t.top >= h.top - 1;
     }));
+    check('cbt', 'the timer never overlaps the title or the question card', await page.evaluate(() => {
+      const t = document.getElementById('freeExamTimer').getBoundingClientRect();
+      const w = document.querySelector('#free-exam .f27-cbt-title-wrap').getBoundingClientRect();
+      const c = document.querySelector('#free-exam .f27-cbt-card').getBoundingClientRect();
+      const hit = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+      return !hit(t, w) && !hit(t, c);
+    }));
+    check('cbt', 'the exam fits a 390px screen without horizontal overflow', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    check('cbt', 'the three navigation controls are all visible and usable', await visible(page, '#freeExamPrev') && await visible(page, '#freeExamNext') && await visible(page, '.f27-cbt-bar button[onclick="freeExamPanel()"]'));
     await shot(page, '12-cbt-question');
+    check('cbt', 'the 10-minute paper shows MM:SS, not hours', await page.evaluate(() => /^\d{2}:\d{2}$/.test(document.getElementById('freeExamTime').textContent.trim())));
+    /* The same exam checks on a desktop viewport. */
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.waitForTimeout(250);
+    check('cbt', 'desktop: no Back and no Home on the active paper', !(await visible(page, '#free-exam .f27-cbt-back')) && !(await visible(page, '#free-exam .f27-cbt-home')));
+    check('cbt', 'desktop: Next is visible, Submit is not', await visible(page, '#freeExamNext') && !(await visible(page, '#freeExamSubmit')));
+    check('cbt', 'desktop: the timer is at the extreme top-right', await page.evaluate(() => {
+      const t = document.getElementById('freeExamTimer').getBoundingClientRect();
+      const h = document.querySelector('#free-exam .f27-cbt-header').getBoundingClientRect();
+      return (h.right - t.right) <= 20;
+    }));
+    check('cbt', 'desktop: timer clear of the title and question card', await page.evaluate(() => {
+      const t = document.getElementById('freeExamTimer').getBoundingClientRect();
+      const w = document.querySelector('#free-exam .f27-cbt-title-wrap').getBoundingClientRect();
+      const hit = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+      return !hit(t, w);
+    }));
+    check('cbt', 'desktop: no horizontal overflow and no overlapping bar controls', await page.evaluate(() => {
+      if (document.documentElement.scrollWidth > window.innerWidth) return false;
+      const bs = Array.from(document.querySelectorAll('.f27-cbt-bar button')).filter((b) => !b.hidden).map((b) => b.getBoundingClientRect());
+      for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
+        if (bs[i].left < bs[j].right - 1 && bs[j].left < bs[i].right - 1 && bs[i].top < bs[j].bottom - 1 && bs[j].top < bs[i].bottom - 1) return false;
+      }
+      return bs.length === 3;
+    }));
+    await shot(page, '12b-cbt-desktop');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(250);
     check('cbt', 'option letter badges are separate from option text', await page.evaluate(() => !!document.querySelector('#freeExamOpts .f27-cbt-letter') && !!document.querySelector('#freeExamOpts .f27-cbt-text')));
     await page.click('#freeExamOpts button:first-child');
     await page.waitForFunction(() => { const j = document.querySelector('#freeExamOpts .sel'); return j && j.getAttribute('aria-pressed') === 'true'; });
@@ -505,19 +641,21 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('cbt', 'navigator distinguishes answered and unanswered questions', await page.evaluate(() => document.querySelectorAll('#freeExamPanelGrid .answered').length === 1 && document.querySelectorAll('#freeExamPanelGrid .unanswered').length === 2));
     await shot(page, '13-cbt-navigator');
     await page.click('#freeExamPanel .f27-cbt-close');
-    await page.click('.f27-cbt-back');
+    await page.evaluate(() => freeExamLeave());
     await active(page, 'free-portal');
-    check('cbt', 'leaving an active paper asks for confirmation', true);
+    check('cbt', 'the retained leave handler still asks for confirmation', true);
     await page.click('#freePortalList button:has-text("Resume")');
     await active(page, 'free-exam');
     check('cbt', 'resuming restores the saved selected option', await page.evaluate(() => document.querySelector('#freeExamOpts .sel')?.getAttribute('aria-pressed') === 'true'));
     const resumedAttempt = currentSession()?.attempts.find((a) => a.activityId === 'F27-Q1' && !a.submittedAt);
     check('cbt', 'resuming reuses the same attempt and paper', resumedAttempt?.id === openAttempt?.id && JSON.stringify(resumedAttempt?.questionIds) === JSON.stringify(openAttempt?.questionIds));
+    await toFinalQuestion(page);
     await page.click('#freeExamSubmit');
     await page.waitForSelector('#freeExamConfirm:not([hidden])');
     check('cbt', 'submit confirmation appears', true);
     await page.click('#freeExamConfirmCancel');
     check('cbt', 'cancel keeps the paper open', await page.evaluate(() => document.getElementById('freeExamConfirm').hidden && document.getElementById('free-exam').classList.contains('active')));
+    await toFinalQuestion(page);
     await page.click('#freeExamSubmit');
     await page.click('#freeExamConfirm button:has-text("Submit paper")');
     await active(page, 'free-result');
@@ -535,6 +673,7 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.click('#freeExamNext');
     await page.waitForTimeout(200);
     await page.click('#freeExamOpts button, #freeExamOpts .f27-cbt-option');
+    await toFinalQuestion(page);
     await page.click('#freeExamSubmit');
     await page.waitForSelector('#freeExamConfirm:not([hidden])');
     await page.click('#freeExamConfirm button:has-text("Submit paper")');
@@ -723,8 +862,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       await page.waitForSelector('#f27BankList-weekly .f27-admin-row, #f27BankList-weekly input[type="checkbox"]');
       const compCountBefore = readData().free2027.questionBanks.competition.questions.length;
       const attemptsBeforeBank = JSON.stringify(currentSession().attempts);
+      /* Only the chosen question is on screen now, so select two by switching
+         the dropdown between them. This also proves selection state survives. */
       await page.locator('#f27BankList-weekly input[type="checkbox"]').nth(0).check();
-      await page.locator('#f27BankList-weekly input[type="checkbox"]').nth(1).check();
+      const weeklyIds = await page.locator('#f27BankPick-weekly option').evaluateAll((os) => os.map((o) => o.value));
+      await page.selectOption('#f27BankPick-weekly', weeklyIds[1]);
+      await page.locator('#f27BankList-weekly input[type="checkbox"]').nth(0).check();
       await page.click('#f27Bank-weekly button:has-text("Delete selected")');
       await page.waitForFunction(() => /2 questions/.test(document.getElementById('f27BankCount-weekly').textContent), null, { timeout: 20000 });
       check('bulk-delete', 'multi-selected questions are bulk-deleted from the chosen bank', readData().free2027.questionBanks.weekly.questions.length === 2);

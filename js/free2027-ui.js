@@ -709,9 +709,15 @@
     if (kind) kind.textContent = rules.kindLabel(F.exam.kind);
     var num = $('freeExamNum');
     if (num) num.textContent = 'Question ' + (F.exam.index + 1) + ' of ' + n;
-    var prev = $('freeExamPrev'), next = $('freeExamNext');
+    var prev = $('freeExamPrev'), next = $('freeExamNext'), sub = $('freeExamSubmit');
+    var last = F.exam.index >= n - 1;
     if (prev) prev.disabled = F.exam.index <= 0;
-    if (next) next.disabled = F.exam.index >= n - 1;
+    /* Next everywhere except the final question; Submit only on the final
+       question, in Next's place. Reaching the last question never submits —
+       the candidate still has to press Submit and confirm. The clock is owned
+       by startClock() and is untouched by this repaint. */
+    if (next) { next.disabled = last; next.hidden = last; }
+    if (sub) sub.hidden = !last;
     var label = $('freeExamPanelLabel');
     if (label) label.textContent = 'Q ' + (F.exam.index + 1) + ' / ' + n;
     var pass = $('freeExamPassage');

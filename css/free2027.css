@@ -204,7 +204,7 @@ body.f27-mode .phone { }
 .f27-cbt-title-wrap h1 { font-size: 15px; line-height: 1.25; font-weight: 900; margin: 0; overflow-wrap: anywhere; }
 .f27-cbt-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; font-size: 11.5px; color: #667085; }
 .f27-cbt-kind { display: inline-block; background: #FEF2F2; color: #B91C1C; border-radius: 999px; padding: 2px 8px; font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-.f27-cbt-timer { flex: 0 0 auto; background: #141821; color: #fff; border-radius: 12px; padding: 8px 10px; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.f27-cbt-timer { flex: 0 0 auto; margin-left: auto; background: #141821; color: #fff; border-radius: 12px; padding: 8px 10px; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .f27-cbt-timer.warn { background: #B91C1C; }
 .f27-cbt-progress { margin-top: 8px; font-size: 12px; font-weight: 800; color: #475467; }
 .f27-cbt-body { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 14px; }
@@ -220,7 +220,7 @@ body.f27-mode .phone { }
 .f27-cbt-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 32px; border-radius: 10px; background: #F2F4F7; color: #344054; font-size: 13px; font-weight: 900; letter-spacing: .04em; }
 .f27-cbt-option.sel .f27-cbt-letter { background: #DC2626; color: #fff; }
 .f27-cbt-text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.f27-cbt-bar { position: sticky; bottom: 0; z-index: 20; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #fff; border-top: 1px solid #E4E7EC; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.f27-cbt-bar { position: sticky; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff; border-top: 1px solid #E4E7EC; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
 .f27-cbt-btn { min-height: 46px; border-radius: 12px; border: 1px solid #D0D5DD; background: #fff; color: #141821; font-size: 13px; font-weight: 800; padding: 10px 12px; cursor: pointer; white-space: normal; line-height: 1.3; }
 .f27-cbt-btn:disabled { opacity: .5; cursor: not-allowed; }
 .f27-cbt-btn-outline { border-color: #DC2626; color: #B91C1C; background: #fff; }
@@ -247,7 +247,7 @@ body.f27-mode .phone { }
 .f27-cbt-confirm-counts span { font-size: 11px; color: #667085; font-weight: 700; }
 .f27-cbt-confirm-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
 @media (min-width: 640px) {
-  .f27-cbt-bar { grid-template-columns: repeat(4, auto); justify-content: center; }
+  .f27-cbt-bar { grid-template-columns: repeat(3, auto); justify-content: center; }
   .f27-cbt-confirm-actions { grid-template-columns: 1fr 1fr; }
   .f27-cbt-question { font-size: 17px; }
 }
@@ -276,6 +276,9 @@ body.f27-mode .phone { }
 .f27-admin-note { font-size: 12px; line-height: 1.55; color: #475467; }
 .f27-admin-grid { display: grid; gap: 10px; }
 @media (min-width: 620px) { .f27-admin-grid.two { grid-template-columns: 1fr 1fr; } }
+/* Bank question selector. Inherits the console's existing .ad-field control
+   styling; only the spacing around the new picker is set here. */
+.f27-bank-picker { margin: 10px 0 4px; }
 .f27-admin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid #F2F4F7; }
 .f27-admin-row:last-child { border-bottom: none; }
 .f27-admin-row > div:first-child { flex: 1; min-width: 160px; }
@@ -474,10 +477,18 @@ body.f27-mode #landing .hero-btns .hero-original-cta { display: none !important;
 }
 .f27-guest-note b { color: var(--ink, #101828); }
 
-/* CBT Back / Back to Home: both stay visible and tappable on every width. */
-.f27-cbt-header .f27-cbt-back { min-height: 40px; white-space: nowrap; }
+/* An ongoing examination must not offer a way out. Back and Home are hidden on
+   the ACTIVE exam screen only — the buttons and their freeExamLeave() /
+   freeExamHome() handlers stay in index.html, and every other page keeps its own
+   Back / Back to Home navigation exactly as before. */
+body.f27-mode #free-exam .f27-cbt-header .f27-cbt-back { display: none !important; }
+/* Next and Submit swap places on the final question. paintExam() sets [hidden];
+   this makes that authoritative over the button's own display. */
+body.f27-mode #free-exam .f27-cbt-bar .f27-cbt-btn[hidden] { display: none !important; }
+/* With the two exits gone the timer owns the far right of the header row on
+   every width (margin-left:auto above), clear of the title and question card. */
 @media (max-width: 480px) {
   .f27-cbt-header .f27-cbt-title-row { flex-wrap: wrap; row-gap: 6px; }
-  .f27-cbt-header .f27-cbt-back { padding: 8px 10px; font-size: 12.5px; }
   .f27-cbt-header .f27-cbt-title-wrap { flex: 1 1 100%; order: 3; }
+  .f27-cbt-header .f27-cbt-timer { order: 2; }
 }
