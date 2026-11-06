@@ -190,6 +190,20 @@ let appwriteSaveChain = Promise.resolve();
    reliably, as distinct from it genuinely not existing yet. The startup path
    uses this so an unreadable backup is never mistaken for a first install. */
 let blobHydrationFailure = null;
+/* Runtime persistence protection. When the cloud backup could not be verified
+   on this boot, the local data.json is the only copy we trust — so nothing may
+   push it over a cloud backup we were unable to read. scheduleBlobUpload()
+   checks this for EVERY caller (writeData, the migration route, any future
+   one), so no ordinary write, timer or request can bypass it. It is set only
+   by a failed/unclassifiable hydration and is never cleared during the life of
+   the process: recovery is a deliberate operator action (fix the cause and
+   restart), and the next boot only resumes uploads if hydration then verifies
+   the backup or positively identifies a first install. */
+let blobPersistenceProtected = false;
+/* Independent connectivity findings — a constructed SDK client is NOT evidence
+   that the Database is reachable or that the credentials were accepted. */
+let appwriteDatabaseStatus = 'not-checked';
+let appwriteStorageStatus = 'not-checked';
 
 async function createAppwriteAuthUser(rec) {
   if (!appwriteUsers) throw new Error('Appwrite Auth is not initialized.');
@@ -998,6 +1012,61 @@ function blobStorageEnabled() {
   return !!(appwriteResourcesStorage && APPWRITE_BUCKET_ID && APPWRITE_FILE_ID);
 }
 
+/* Compatibility-aware structural validation of a downloaded backup.
+   Syntactically valid JSON is not enough: `{}` parses cleanly, and migrate()
+   would happily "repair" it by seeding a fresh question bank, a fresh note
+   bank and a new console passcode over a real academy's records.
+
+   The rules below come from what this application actually writes, not from a
+   guess at an ideal schema:
+     • every blob is produced by writeData() from a db that passed through
+       migrate() (or from seed()), so `settings` is ALWAYS a plain object;
+     • seed() and every real data file carry the academy's record collections,
+       so at least one core collection must be present as an array;
+     • everything else is optional — migrate() exists precisely to add fields
+       that older files lack, so a legacy blob without tutors/free2027/_savedAt
+       and with old period/tier values still validates;
+     • any recognised field that IS present must have the right type, because
+       migrate() would either throw on it (students.forEach on a string) or
+       silently replace it (a non-array questions is reseeded = data loss).
+   Nothing here mutates the candidate, and nothing here is applied to the
+   local file: readData()/migrate() keep their existing legacy tolerance. */
+const ACADEMY_ARRAY_FIELDS = [
+  'staff', 'students', 'updates', 'questions', 'notes', 'passages', 'attempts',
+  'tutors', 'alerts', 'notices', 'broadcasts', 'flags', 'challenges', 'tutorAudit',
+  'managerLog', 'scholarshipApplications', 'scholarshipWaitlist', 'topics',
+  'contactMessages', 'affirmations'
+];
+const ACADEMY_OBJECT_FIELDS = [
+  'settings', 'challengeState', 'broadcastMail', 'answerStats', 'practiceRuns',
+  'consentLog', 'bookmarks', 'reviewState', 'reminderState', 'free2027'
+];
+/* Presence of at least one of these proves the payload carries academy records
+   rather than being an empty stub or an unrelated JSON object. */
+const ACADEMY_CORE_COLLECTIONS = ['staff', 'students', 'questions', 'notes', 'attempts', 'updates', 'passages'];
+
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/* Returns null when the payload is a usable academy database, otherwise a
+   short machine-readable reason. The reason is logged; the payload never is. */
+function academyBackupProblem(db) {
+  if (!isPlainObject(db)) return 'not-a-database-object';
+  if (Object.keys(db).length === 0) return 'empty-object';
+  if (!Object.prototype.hasOwnProperty.call(db, 'settings')) return 'missing-settings';
+  if (!isPlainObject(db.settings)) return 'settings-not-an-object';
+  for (const f of ACADEMY_ARRAY_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(db, f) && !Array.isArray(db[f])) return f + '-not-an-array';
+  }
+  for (const f of ACADEMY_OBJECT_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(db, f) && !isPlainObject(db[f])) return f + '-not-an-object';
+  }
+  if (Object.prototype.hasOwnProperty.call(db, '_savedAt') && typeof db._savedAt !== 'string') return 'savedAt-not-a-string';
+  if (!ACADEMY_CORE_COLLECTIONS.some(f => Array.isArray(db[f]))) return 'no-academy-records';
+  return null;
+}
+
 async function hydrateBlobFromStorage() {
   blobHydrationFailure = null;
   if (!blobStorageEnabled()) return false;
@@ -1005,17 +1074,24 @@ async function hydrateBlobFromStorage() {
     const buf = await appwriteResourcesStorage.getFileDownload(APPWRITE_BUCKET_ID, APPWRITE_FILE_ID);
     const text = Buffer.isBuffer(buf) ? buf.toString('utf8')
       : (buf && buf.byteLength != null ? Buffer.from(buf).toString('utf8') : String(buf));
-    /* A payload that exists but is not readable JSON is a DAMAGED backup, not a
-       missing one. It must never replace a good local data.json, and it is not
-       deleted or overwritten here either — an operator can still recover it. */
+    /* A payload that exists but is not a usable academy database is a DAMAGED
+       backup, not a missing one. This covers unreadable JSON AND syntactically
+       valid JSON that is not a G.O.C database (an empty object, a stub, or a
+       field of the wrong type). It must never replace a good local data.json,
+       and it is not deleted or overwritten here either — an operator can still
+       recover it. Cloud persistence is protected for the rest of this run. */
     let parsedBlob = null;
     try { parsedBlob = JSON.parse(text); } catch (_) { parsedBlob = null; }
-    if (!parsedBlob || typeof parsedBlob !== 'object' || Array.isArray(parsedBlob)) {
+    const shapeProblem = parsedBlob === null ? 'not-readable-json' : academyBackupProblem(parsedBlob);
+    if (shapeProblem) {
       blobHydrationFailure = 'invalid-backup';
-      console.error('[goc] The Appwrite Storage backup exists but is not readable JSON. '
-        + 'Keeping the local data.json untouched; the backup was NOT deleted or replaced.');
+      protectBlobPersistence('the Storage backup is not a usable academy database (' + shapeProblem + ')');
+      appwriteStorageStatus = 'reachable-but-invalid-backup';
+      console.error('[goc] The Appwrite Storage backup exists but is not a usable G.O.C database ('
+        + shapeProblem + '). Keeping the local data.json untouched; the backup was NOT deleted or replaced.');
       return false;
     }
+    appwriteStorageStatus = 'readable';
     if (text && text.trim()) {
       /* ── Stale-blob guard ───────────────────────────────────────────────────
          If the local file already exists and carries a _savedAt timestamp that
@@ -1048,23 +1124,42 @@ async function hydrateBlobFromStorage() {
       return true;
     }
   } catch (err) {
-    /* Only a real not-found means "no backup yet". Every other failure —
-       permission, authentication, network/service — means the backup could not
-       be READ, which is not a first install and must not be logged as one.
-       404 is the same not-found signal the rest of this file already uses for
-       Appwrite. The local file is left exactly as it is in every branch. */
+    /* HTTP 404 is NOT sufficient evidence that the backup file is absent.
+       Appwrite returns 404 for at least four different conditions:
+         storage_file_not_found   — the file really is absent (first install)
+         storage_bucket_not_found — APPWRITE_BUCKET_ID is wrong
+         project_not_found        — APPWRITE_PROJECT_ID is wrong
+         general_route_not_found  — the endpoint/URL path is wrong
+       Only the first one may enable first-install handling. Everything else,
+       including a 404 whose type is missing or unrecognised, is an unverified
+       backup: it is treated as a failure and cloud persistence is protected.
+       The local file is left exactly as it is in every branch. */
     const code = Number(err && (err.code != null ? err.code : err.status)) || 0;
-    if (code === 404) {
-      console.log('[goc] No blob in Appwrite Storage yet (' + err.message + '); using local data.json.');
+    const type = err && typeof err.type === 'string' ? err.type : '';
+    if (code === 404 && type === 'storage_file_not_found') {
+      appwriteStorageStatus = 'reachable-no-backup-yet';
+      console.log('[goc] No blob in Appwrite Storage yet (storage_file_not_found); using local data.json.');
       return false;
     }
-    blobHydrationFailure = code === 401 ? 'auth'
-      : code === 403 ? 'permission'
-      : 'network-or-service';
-    /* Log the classification and status only — never the raw error, which can
-       carry request detail. No secret value is printed. */
-    console.error('[goc] The Appwrite Storage backup could NOT be read ('
-      + blobHydrationFailure + ', status ' + (code || 'n/a') + '). '
+    if (code === 404) {
+      /* A configuration/route problem masquerading as a missing file. */
+      blobHydrationFailure = type === 'storage_bucket_not_found' ? 'bucket-not-found'
+        : type === 'project_not_found' ? 'project-not-found'
+        : type === 'general_route_not_found' ? 'route-not-found'
+        : 'ambiguous-404';
+      appwriteStorageStatus = 'misconfigured-or-ambiguous (' + blobHydrationFailure + ')';
+    } else {
+      blobHydrationFailure = code === 401 ? 'auth'
+        : code === 403 ? 'permission'
+        : 'network-or-service';
+      appwriteStorageStatus = 'unreadable (' + blobHydrationFailure + ')';
+    }
+    protectBlobPersistence('the Storage backup could not be verified (' + blobHydrationFailure + ')');
+    /* Log the classification, status and Appwrite error type only — never the
+       raw error or response, which can carry request detail. No secret value
+       is printed. */
+    console.error('[goc] The Appwrite Storage backup could NOT be verified ('
+      + blobHydrationFailure + ', status ' + (code || 'n/a') + (type ? ', type ' + type : '') + '). '
       + 'This is NOT a first install: the local data.json is kept exactly as it is '
       + 'and the backup was not touched.');
     return false;
@@ -1085,8 +1180,23 @@ async function hydrateBlobFromStorage() {
    runs, the rotating local backups in BACKUP_DIR are independent of it, and
    hydrateBlobFromStorage() now refuses to treat an unreadable blob as a first
    install. Do not "fix" this by deleting the old blob earlier. */
+/* Engage runtime persistence protection. Idempotent, and deliberately has no
+   counterpart that clears it: see blobPersistenceProtected above. */
+function protectBlobPersistence(reason) {
+  if (blobPersistenceProtected) return;
+  blobPersistenceProtected = true;
+  console.error('[goc] CLOUD BACKUP PERSISTENCE PROTECTED: ' + reason + '. '
+    + 'Automatic Appwrite Storage replacement (deleteFile/createFile) is DISABLED for this run '
+    + 'so an unverified cloud backup cannot be overwritten. Local records continue to be saved '
+    + 'to ' + DATA_FILE + '. Cloud backup is NOT currently verified; fix the cause and restart '
+    + 'to resume cloud persistence.');
+}
+
 function scheduleBlobUpload() {
   if (!blobStorageEnabled()) return;
+  /* Checked here, inside the single funnel every caller goes through, so no
+     write, startup routine, timer or request can route around it. */
+  if (blobPersistenceProtected) return;
   appwriteSaveChain = appwriteSaveChain.then(async () => {
     const { InputFile } = require(
       path.join(path.dirname(require.resolve('node-appwrite')), 'inputFile.js'));
@@ -3837,7 +3947,11 @@ const ROUTES = [
          affirmations/importLog) up to Storage and wait for that write to land,
          so the reconciliation below reflects a completed run. */
       let blobUploaded = false;
-      if (blobStorageEnabled()) {
+      if (blobStorageEnabled() && blobPersistenceProtected) {
+        /* Protection is active: report the truth rather than claiming a blob
+           write that scheduleBlobUpload() deliberately refused to make. */
+        errors.push('blob upload skipped: cloud backup persistence is protected (backup not verified on this boot)');
+      } else if (blobStorageEnabled()) {
         scheduleBlobUpload();
         try { await appwriteSaveChain; blobUploaded = true; }
         catch (err) { errors.push('blob upload: ' + err.message); }
@@ -9603,6 +9717,69 @@ process.on('unhandledRejection', err => {
 
 /* Any failure here leaves the local data file as the read/write fallback;
    startup never seeds or uploads here. */
+/* Read-only Database connectivity diagnostic.
+   Constructing the SDK clients only proves the endpoint string parsed and the
+   SDK loaded — it opens no connection and validates no credential. This probe
+   establishes whether the configured Database is actually reachable and the
+   credentials actually accepted, using GET /databases/{id}, which touches no
+   record. If the key lacks the database-metadata scope, it falls back to a
+   single-document read of an existing collection (the same read the app
+   already performs), which is still strictly read-only.
+
+   It never creates, updates, deletes, seeds or migrates anything, and it never
+   throws: an unreachable Database is a reported finding, not a crash. When the
+   credentials permit no read at all, it says connectivity could NOT be
+   verified rather than implying success. */
+async function probeAppwriteDatabase() {
+  if (!appwriteDatabases) { appwriteDatabaseStatus = 'not-configured'; return; }
+  const describe = (err) => {
+    const code = Number(err && (err.code != null ? err.code : err.status)) || 0;
+    const type = err && typeof err.type === 'string' ? err.type : '';
+    return { code, type, label: (code || 'n/a') + (type ? ' ' + type : '') };
+  };
+  try {
+    await appwriteDatabases.get(APPWRITE_DATABASE_ID);
+    appwriteDatabaseStatus = 'connected (database metadata read)';
+    return;
+  } catch (err) {
+    const e = describe(err);
+    if (e.code === 404) {
+      appwriteDatabaseStatus = 'not-found (' + e.label + ')';
+      return;
+    }
+    /* A scope limitation on database metadata (or an SDK/client that cannot
+       perform that particular read) is not proof the Database is down. Try the
+       narrowest read the application already relies on before concluding. */
+    try {
+      await appwriteDatabases.listDocuments(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENTS_COLLECTION_ID, [appwriteQuery().limit(1)]);
+      appwriteDatabaseStatus = 'connected (read-only documents query; database metadata scope not granted)';
+      return;
+    } catch (err2) {
+      const e2 = describe(err2);
+      appwriteDatabaseStatus = (e2.code === 401 || e2.code === 403)
+        ? 'UNVERIFIABLE - credentials accepted no permitted read (' + e2.label + ')'
+        : 'unreachable (' + e2.label + ')';
+    }
+  }
+}
+
+/* The four findings are reported separately on purpose: a constructed client
+   must never be presented as proof of a working Database. */
+function logAppwritePersistenceStatus() {
+  console.log('[goc] Appwrite status — SDK clients: ' + (appwriteDatabases ? 'constructed' : 'not constructed')
+    + ' | Storage: ' + appwriteStorageStatus
+    + ' | Database: ' + appwriteDatabaseStatus
+    + ' | cloud backup writes: ' + (blobPersistenceProtected ? 'PROTECTED (disabled)' : 'enabled') + '.');
+  if (appwriteDatabaseStatus.indexOf('UNVERIFIABLE') === 0) {
+    console.error('[goc] Appwrite Database connectivity could NOT be verified: the configured credentials '
+      + 'are not permitted to perform a read-only check. Connectivity has NOT been established.');
+  } else if (appwriteDatabaseStatus.indexOf('unreachable') === 0 || appwriteDatabaseStatus.indexOf('not-found') === 0) {
+    console.error('[goc] Appwrite Database connectivity FAILED: ' + appwriteDatabaseStatus
+      + '. The SDK client was constructed, but the Database is not usable.');
+  }
+}
+
 async function initAppwrite() {
   const clientBundle = createAppwriteClient();
   if (!clientBundle) {
@@ -9614,7 +9791,12 @@ async function initAppwrite() {
   appwriteDatabases = databases;
   appwriteUsers = users;
 
-  console.log('[goc] Appwrite Database initialized; using local data.json for unmigrated data.');
+  /* Accurate wording: this is client construction, not verified connectivity. */
+  console.log('[goc] Appwrite SDK clients constructed; using local data.json for unmigrated data.');
+  await probeAppwriteDatabase();
+  if (appwriteDatabaseStatus.indexOf('connected') === 0) {
+    console.log('[goc] Appwrite Database connectivity verified read-only: ' + appwriteDatabaseStatus + '.');
+  }
   return client;
 }
 
@@ -9886,6 +10068,7 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
         failClosedAppwriteStartup('The durable Appwrite Storage backup could not be read ('
           + blobHydrationFailure + ') and there is no local data.json on this volume.');
       }
+      logAppwritePersistenceStatus();
       // Students live in Appwrite, but staff/settings/etc. still come from the
       // local data.json blob (see initAppwrite()'s own comment) — a fresh
       // Appwrite deploy with no data.json on disk yet and no blob in Storage

@@ -233,8 +233,11 @@ function recordsIntact(s) {
 function fileDetail(s) {
   try { return fs.readFileSync(s.file, 'utf8').slice(0, 200); } catch (e) { return String(e && e.message); }
 }
-function blobNewer() { return JSON.stringify({ _savedAt: '2030-01-01T00:00:00.000Z', settings: { from: 'cloud-backup' } }); }
-function blobOlder() { return JSON.stringify({ _savedAt: '2020-01-01T00:00:00.000Z', settings: { from: 'stale-cloud-backup' } }); }
+/* A blob fixture must be a structurally valid academy database (settings plus
+   at least one core record collection) or structural validation rightly rejects
+   it before the stale-blob guard is ever reached. */
+function blobNewer() { return JSON.stringify({ _savedAt: '2030-01-01T00:00:00.000Z', staff: [], students: [], settings: { from: 'cloud-backup' } }); }
+function blobOlder() { return JSON.stringify({ _savedAt: '2020-01-01T00:00:00.000Z', staff: [], students: [], settings: { from: 'stale-cloud-backup' } }); }
 
 var PROD = { NODE_ENV: 'production' };
 
@@ -291,12 +294,15 @@ function phaseA() {
     stop(r);
 
     head('A — the success path is unchanged');
-    return startStub({ status: 404, message: 'File with the requested ID could not be found' });
+    return startStub({ status: 404, type: 'storage_file_not_found', message: 'The requested file could not be found.' });
   }).then(function (stub) {
     return boot({ env: appwriteEnv(stub.url, PROD) }).then(function (r) {
       ok('production boots normally when Appwrite initializes', r.booted === true, r.log.slice(-300));
       ok('it reports cloud storage exactly as before', /Storage: Appwrite Database \(cloud\)/.test(r.log));
-      ok('the original init message is unchanged', /Appwrite Database initialized/.test(r.log));
+      ok('client construction is no longer reported as Database initialization',
+        /Appwrite SDK clients constructed/.test(r.log) && !/Appwrite Database initialized/.test(r.log));
+      ok('Database connectivity is reported separately from client construction',
+        /Appwrite status — SDK clients: constructed \| Storage: .* \| Database: /.test(r.log), r.log.slice(-400));
       ok('a genuinely absent blob still allows the first-install seed', fs.existsSync(path.join(r.dataDir, 'data.json')));
       stop(r);
     });
@@ -306,10 +312,10 @@ function phaseA() {
 /* =============================================================== B */
 function phaseB() {
   head('B — a genuinely missing backup is still a first install');
-  return startStub({ status: 404, message: 'File with the requested ID could not be found' }).then(function (stub) {
+  return startStub({ status: 404, type: 'storage_file_not_found', message: 'The requested file could not be found.' }).then(function (stub) {
     return boot({ env: appwriteEnv(stub.url) }).then(function (r) {
       ok('404 is logged as "no blob yet"', /No blob in Appwrite Storage yet/.test(r.log), r.log.slice(-260));
-      ok('404 is not misreported as a read failure', !/could NOT be read/.test(r.log));
+      ok('a genuine missing file is not misreported as a read failure', !/could NOT be (read|verified)/.test(r.log));
       stop(r);
     });
   }).then(function () {
@@ -325,7 +331,7 @@ function phaseB() {
           var sb = mkSandbox(), dd = path.join(sb, 'data');
           var s = writeSentinel(dd);
           return boot({ sandbox: sb, dataDir: dd, env: appwriteEnv(stub.url) }).then(function (r) {
-            ok(c.label + ' is classified as ' + c.kind, r.log.indexOf('could NOT be read (' + c.kind) > -1, r.log.slice(-300));
+            ok(c.label + ' is classified as ' + c.kind, r.log.indexOf('could NOT be verified (' + c.kind) > -1, r.log.slice(-300));
             ok(c.label + ' is explicitly not a first install', /This is NOT a first install/.test(r.log));
             ok(c.label + ' is never logged as "no blob yet"', !/No blob in Appwrite Storage yet/.test(r.log));
             ok(c.label + ' leaves the local data.json untouched', recordsIntact(s), fileDetail(s));
@@ -340,7 +346,7 @@ function phaseB() {
       var sb = mkSandbox(), dd = path.join(sb, 'data');
       var s = writeSentinel(dd);
       return boot({ sandbox: sb, dataDir: dd, env: appwriteEnv(stub.url) }).then(function (r) {
-        ok('an unreadable payload is reported as a damaged backup', /exists but is not readable JSON/.test(r.log), r.log.slice(-260));
+        ok('an unreadable payload is reported as a damaged backup', /exists but is not a usable G\.O\.C database \(not-readable-json\)/.test(r.log), r.log.slice(-300));
         ok('it is not passed off as a missing backup', !/No blob in Appwrite Storage yet/.test(r.log));
         ok('the valid local data.json is preserved', recordsIntact(s), fileDetail(s));
         stop(r);
