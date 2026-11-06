@@ -116,3 +116,70 @@ The portal has three destinations:
 Published weekly assessments appear only under Weekly Assessments. Published competitions appear only under Competitions. Only competition results can feed the competition leaderboard, and a board is public only after administrator approval and publication.
 
 The CBT runner uses a light background, dark readable text, white question cards, separated answer cards, red accents, and mobile-first spacing. Option letters are separate visual elements, for example `[ A ]` beside the option text. The header shows title, category, question number/total, and countdown. Navigation provides Previous, Question Navigator, Next, and Submit. The navigator distinguishes answered, unanswered, and current questions. Submission opens a confirmation dialog showing answered, unanswered, and total counts.
+
+## Navigation and mobile behaviour
+
+- The original homepage remains the first screen. Its branding, hero, ecosystem,
+  subjects, how-it-works, contact section and drawer destinations are preserved.
+  A homepage-scoped flex guard prevents the hero/logo strip from being clipped by
+  the fixed-height screen shell on phones.
+- In 2027 Free Tutorial Mode the homepage drawer and desktop header expose the
+  CBT Portal entry instead of the original account actions. In Original Mode the
+  original account actions and Updates & News destination return. The drawer
+  still carries the ecosystem, subjects, how-it-works, contact, Updates & News,
+  and contact information.
+- The Free Tutorial landing, registration, portal, result and leaderboard screens
+  have visible mobile Back/Home actions. Back uses an internal navigation stack,
+  refreshes portal/home data on arrival, and never exits the site by falling
+  through to browser history.
+- Leaving an active CBT paper asks for confirmation. Resuming returns the same
+  attempt, paper, saved answers and server countdown.
+
+## Website Mode Control
+
+The Founder console has a separate **Website Mode Control** tile/panel. It uses
+the existing confirmed, reversible mode API; programme settings are not duplicated
+inside the 2027 Free Tutorial panel. Switching modes does not delete question
+banks, activities, attempts, participant records or original-hub data. Academic
+Directors and students cannot change the website mode.
+
+## Founder contact entrance and removed entrances
+
+The Founder entrance is the existing homepage contact form: the configured exact
+gate word in Message plus the explicit configured Founder email. The server
+verifies it, rate-limits attempts, and opens the existing staff login flow; the
+Founder then signs in with `GOC-A-001` and the Founder password and unlocks the
+console with the separate passcode. The gate word is not stored in the page,
+contact records, email, or browser storage, and there is no separate gate input.
+Ordinary contact messages continue through the normal contact route.
+
+The five-click science-card entrance, Scholar-ID tutor secret-word entrance, and
+their obsolete public triggers/configurations stay removed. Legitimate staff
+authentication, roles and console passcode protection remain intact.
+
+## SMTP diagnostics
+
+`GET /api/free2027/admin/email-status` is guarded by the Founder site-configuration
+capability. It reports only variable names/booleans and `missing`, `incomplete`,
+or `configured`; `?verify=1` attempts a live transport check and reports `ready`
+or `unreachable` without exposing secrets. Registration availability messaging
+uses the same safe classification.
+
+## Verification
+
+Run the full automated suite and production build:
+
+```bash
+npm ci
+npm test
+npm run build
+```
+
+The optional real-browser harness is
+[`test/browser/free2027-recovery.js`](../test/browser/free2027-recovery.js). Setup
+and isolation requirements are in [`LOCAL-DEVELOPMENT.md`](../LOCAL-DEVELOPMENT.md).
+It exercises the mobile drawer, Free landing, registration/OTP, banks/CSV/manual
+questions, activities, CBT save/resume/submit, leaderboard publication, Founder
+entrance, staff login/passcode, reversible mode switching, removed entrances and
+desktop fit. It is Android viewport/user-agent emulation in headless Chromium;
+a physical Android/Chrome smoke test is still recommended before release.

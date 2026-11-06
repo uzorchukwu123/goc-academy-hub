@@ -34,13 +34,20 @@ read each part on its own — and it now has a real backend behind it.
 node test\run.js
 ```
 
-182 suites and thousands of separate checks. Set `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` and `GOC_PASSCODE` first (the server refuses the published demo passwords), and run `npm install` once so the Appwrite and upload checks can run. It drives the
+197 suites and thousands of separate checks. Set `GOC_FOUNDER_PW`, `GOC_ACADDIR_PW` and `GOC_PASSCODE` first (the server refuses the published demo passwords), and run `npm install` once so the Appwrite and upload checks can run. It drives the
 real screens and the real server: signing in, sitting a paper, marking it in the
 console, the league order, practice runs, the mathematics renderer, the offline
 cache list. Every suite must say `passed`. If one says `FAILED`, the lines above it
 name exactly what broke.
 
 Run it before you give the app to anyone. It is faster than clicking through.
+
+The current Free Tutorial workflow and exact 14-column CSV contract are documented in
+[`docs/free-tutorial-2027.md`](docs/free-tutorial-2027.md). The optional real-browser
+recovery harness and its isolated setup are described in
+[`LOCAL-DEVELOPMENT.md`](LOCAL-DEVELOPMENT.md).
+The consolidated historical findings and verification evidence are in
+[`docs/recovery-verification.md`](docs/recovery-verification.md).
 
 ## Two ways to run it
 

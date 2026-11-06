@@ -324,3 +324,51 @@ body.f27-mode .phone { }
   .f27-question-actions .ad-btn, .f27-csv-download { width: 100%; flex: 0 0 auto; }
   .f27-bank-panel > .ad-actions .ad-btn { flex: 1 1 auto; white-space: normal; min-height: 44px; }
 }
+
+/* ============================================================================
+   Recovered PR #9 Termux/Android-Chrome navigation corrections
+   ----------------------------------------------------------------------------
+   1. Back/Home visibility. The hub's base stylesheet hides every
+      `.lp-nav .lp-actions .lp-link` below 900px (the drawer carries those
+      links on mobile there). The edition's screens have no drawer, so their
+      own nav controls (← Back, Home, Register, CBT Portal) must stay visible
+      on phones. These rules are edition-scoped and do not touch Original Mode.
+   2. Mode-specific navigation actions. In Free Tutorial Mode the landing
+      inline actions and the mobile drawer show one CBT Portal entry instead of
+      the original account actions; in Original Mode everything below is inert
+      and the original markup shows exactly as it always did.
+   ========================================================================== */
+
+/* 1a. The edition's nav links stay visible at EVERY width. */
+body.f27-mode .f27 .f27-nav .lp-actions .lp-link,
+body.f27-mode .f27 .f27-nav .lp-actions .lp-link:hover,
+body.f27-mode .f27 .f27-nav .lp-actions .lp-link:focus { display: inline-block; }
+
+/* 1b. Keep the edition's nav bar from overflowing on narrow phones. */
+.f27 .f27-nav { flex-wrap: wrap; row-gap: 6px; }
+.f27 .f27-nav .lp-brand .bt { white-space: nowrap; }
+@media (max-width: 480px) {
+  .f27 .f27-nav { padding: 10px 10px; gap: 8px; }
+  .f27 .f27-nav .lp-actions { gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+  .f27 .f27-nav .lp-actions .lp-link { padding: 8px 7px; font-size: 12.5px; }
+  .f27 .f27-nav .f27-who { max-width: 38vw; }
+}
+
+/* 2. Mode-specific navigation actions. Default (Original Mode): the CBT
+   Portal entries are hidden, the original account buttons show untouched. */
+.dw-cbt, .dw-cbt-hint, #landing .dw-cbt-link { display: none; }
+
+/* Free Tutorial Mode: drawer and inline nav show CBT Portal, hide the
+   original account actions. Reversible with the mode switch alone. */
+body.f27-mode .dw-btns .dw-cbt { display: block; }
+body.f27-mode .dw-btns .dw-cbt-hint {
+  display: block; font-size: 12.5px; color: var(--slate, #667085);
+  margin: 8px 0 0; text-align: center;
+}
+body.f27-mode .dw-btns .dw-original { display: none !important; }
+body.f27-mode #landing .lp-actions .dw-original { display: none !important; }
+/* Desktop only: the inline CBT Portal entry. Below 900px the mobile CBT
+   Portal entry lives in the drawer, so the two are never duplicated. */
+@media (min-width: 900px) {
+  body.f27-mode #landing .lp-actions .dw-cbt-link { display: inline-block; }
+}

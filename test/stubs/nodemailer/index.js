@@ -12,6 +12,11 @@ module.exports = {
         if (!file) throw new Error('test mail capture path missing');
         fs.appendFileSync(file, JSON.stringify({ options: options, message: message }) + '\n', { mode: 0o600 });
         return { accepted: [message.to] };
+      },
+      verify: async function () {
+        /* 'fail' in the host simulates a connection failure for diagnostics tests. */
+        if (/fail/.test(String(options.host))) throw new Error('test SMTP connection refused');
+        return true;
       }
     };
   }

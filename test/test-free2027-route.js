@@ -142,6 +142,17 @@ waitForBoot(40).then(async function (h) {
   ok('a wrong passcode is still refused', (await call('POST', '/api/auth/unlock', { passcode: '9999' }, adm)).status === 403);
   ok('the passcode opens it', (await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm)).status === 200);
 
+  head('recovered SMTP diagnostics: names and booleans only, console-guarded');
+  var anonMail = await call('GET', '/api/free2027/admin/email-status');
+  ok('ordinary visitors cannot read the admin email diagnostic', anonMail.status === 401 || anonMail.status === 403, anonMail.status);
+  var mailSt = await call('GET', '/api/free2027/admin/email-status', undefined, adm);
+  ok('the Founder diagnostic reports the configured state without a live check',
+    mailSt.status === 200 && mailSt.body.status === 'configured' && mailSt.body.liveChecked === false && Array.isArray(mailSt.body.missing), mailSt.raw.slice(0, 200));
+  ok('the diagnostic never returns the configured host, sender or OTP secret',
+    mailSt.raw.indexOf('mailpit-test') < 0 && mailSt.raw.indexOf('verification@gocacademy.test') < 0 && mailSt.raw.indexOf('local-test-otp-secret') < 0, mailSt.raw.slice(0, 200));
+  var mailLive = await call('GET', '/api/free2027/admin/email-status?verify=1', undefined, adm);
+  ok('a live check against the test transport reports ready', mailLive.status === 200 && mailLive.body.status === 'ready' && mailLive.body.liveChecked === true, mailLive.raw.slice(0, 200));
+
   head('registration: a code is required before anything exists');
   var noCode = await call('POST', '/api/free2027/register/verify', { email: 'ada@example.com', code: '123456' });
   ok('verifying without ever asking for a code is refused', noCode.status === 400, noCode.status);

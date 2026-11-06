@@ -225,10 +225,12 @@ or rewrite them. Existing Appwrite integration for original G.O.C modules stays
 in place; Free Tutorial routes use the local question-bank snapshot and do not
 call Appwrite Database APIs. Do not set `GOC_APPWRITE_OFF` in production.
 
-**Enable the edition** with `GOC_FREE_2027=1` or from the Founder-only Free
-Tutorial settings. It is disabled by default on a fresh deployment. Turning it
-off restores the original hub without deleting either programme or original
-hub records.
+**Enable the edition** with `GOC_FREE_2027=1` or from the separate Founder-only
+**Website Mode Control** console panel. It is disabled by default on a fresh
+deployment. Switching back to Original Mode restores the original hub without
+deleting either programme or original-hub records. Programme edition/session
+settings stay in the 2027 Free Tutorial panel; the mode switch is not duplicated
+there.
 
 #### SMTP email verification
 
@@ -238,6 +240,14 @@ it never claims a message was sent, returns a code to the browser, logs a code,
 or stores a code in plaintext. Codes are random, salted-hash persisted, expire
 after the configured interval, single-use, and rate-limited. The registration
 page and Admin Console show whether mail delivery is configured.
+
+For diagnostics, an unlocked Founder console session with the site-configuration
+capability may call `GET /api/free2027/admin/email-status`. It returns variable
+names/booleans and a classified status (`missing`, `incomplete`, or `configured`),
+never credential values or verification codes. Add `?verify=1` to attempt a live
+SMTP connection check; a configured transport becomes `ready` or `unreachable`
+with only a safe failure explanation. Students and roles without that capability
+cannot use the route.
 
 Set the following environment variables (do not commit credentials). Generate the OTP secret with a cryptographically secure random generator, for example `openssl rand -hex 32`:
 
@@ -282,9 +292,10 @@ records and search.
 `GOC_DATA_DIR` must point to persistent storage in production so profiles,
 enrolments, progress, quiz attempts, settings, audit records, and identity
 registry survive restarts. Session archives should be separately backed up.
-Only the Founder may change Free Tutorial mode/edition settings or archive
-programme sessions; the Academic Director can manage academic programme content
-and review participation/progress, but cannot access these system controls.
+Only the Founder may use Website Mode Control, change Free Tutorial edition
+settings, or archive programme sessions; the Academic Director can manage
+academic programme content and review participation/progress, but cannot access
+these system controls.
 
 See [`LOCAL-DEVELOPMENT.md`](./LOCAL-DEVELOPMENT.md) for the commands and
 role-specific authentication details.

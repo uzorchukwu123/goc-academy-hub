@@ -57,6 +57,7 @@ const reminders = require('./lib/reminders');
    `free2027` block further down) leaves the original hub exactly as it was. */
 const free2027Lib = require('./lib/free2027');
 const founderContact = require('./lib/founder-contact');
+const mailstatus = require('./lib/mailstatus');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -2019,12 +2020,35 @@ async function sendContactEmail(name, email, message) {
    written to logs. A local Mailpit/MailHog SMTP listener is supported by the
    same environment-based transport for development/testing. */
 function freeOtpDelivery() {
-  const host = String(process.env.GOC_SMTP_HOST || '').trim();
-  const user = String(process.env.GOC_SMTP_USER || '').trim();
-  const pass = String(process.env.GOC_SMTP_PASS || '');
-  const otpSecret = String(process.env.GOC_FREE_2027_OTP_SECRET || '');
-  const configured = otpSecret.length >= 32 && !!host && (!!user === !!pass) && !!getMailTransport();
-  return { available: configured };
+  /* Classification only — which variables are set, never their values. */
+  const cls = mailstatus.classifySmtpEnv(process.env);
+  const configured = cls.status === 'configured' && !!getMailTransport();
+  return { available: configured, status: cls.status, missing: cls.missing };
+}
+
+/* Founder's diagnostic (GET /api/free2027/admin/email-status). Distinguishes:
+     missing      — no SMTP variables at all
+     incomplete   — partially configured (a partially set environment is never
+                    reported as operational)
+     configured   — all required variables present, no live check yet
+     unreachable  — configured but the SMTP connection failed
+     ready        — configured and the SMTP connection verified
+   With ?verify=1 a live connection test is attempted. The response contains
+   variable NAMES and booleans only — never a secret value. */
+async function emailStatus(live) {
+  const cls = mailstatus.classifySmtpEnv(process.env);
+  if (!live) return { status: cls.status, missing: cls.missing, set: cls.set, brevoHint: cls.brevoHint, liveChecked: false };
+  if (cls.status !== 'configured') return mailstatus.withLiveCheck(cls, false);
+  const transport = getMailTransport();
+  if (!transport) return mailstatus.withLiveCheck(cls, false);
+  try {
+    await transport.verify();
+    return mailstatus.withLiveCheck(cls, true);
+  } catch (e) {
+    /* Provider error text may embed addresses; log nothing sensitive. */
+    console.error('[free2027] SMTP verify failed. Check the GOC_SMTP_* configuration.');
+    return mailstatus.withLiveCheck(cls, false);
+  }
 }
 async function deliverFreeOtp(m) {
   const transport = getMailTransport();
@@ -8899,6 +8923,15 @@ const ROUTES = [
       const out = free2027.adminOverview();
       out.otpDelivery = freeOtpDelivery();
       okJson(res, out);
+    }) },
+
+  /* Diagnostic for the Brevo/SMTP verification-email setup, guarded by the
+     same site-configuration capability as the mode switch (homepage.edit);
+     students never hold console access at all. The response carries variable
+     names and booleans only — never a secret value. */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/email-status$/, need: 'console', cap: 'homepage.edit', handler: freeRoute(async (req, res) => {
+      const live = new URL(req.url, 'http://x').searchParams.get('verify') === '1';
+      okJson(res, await emailStatus(live));
     }) },
 
   /* The switch. `confirm: true` is required by the server as well as the page,

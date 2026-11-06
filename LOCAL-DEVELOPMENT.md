@@ -163,17 +163,33 @@ supported way to inspect the actual email.
 
 From the Founder account, open the **2027 Free Tutorial** console panel:
 
-- Create and publish Free Tutorial lessons and learning activities.
-- Select questions through the Free Tutorial local question picker.
-- Complete lessons and quizzes as a student and inspect participant progress,
-  quiz attempts/results, reports, and the audit trail.
-- Use the Founder account to change edition settings or archive a programme
-  session. Archives are written under `local-test-data/free2027-archives/`.
+- Manage the independent Weekly Assessment and Competition question banks.
+  Import the exact 14-column CSV contract or enter A–E questions manually;
+  preview before saving. Option E is available only when filled.
+- Create and publish the two activity categories. The server allocates questions
+  automatically from the bound bank, with optional subject distribution,
+  question/option randomisation, scheduling, duration and attempt limits. There
+  is no individual question picker.
+- Complete assessments/competitions as a student and inspect participant
+  progress, attempts/results, reports, and the audit trail. Competition boards
+  require explicit approval and publication; weekly results stay private.
+- Use the separate Founder-only **Website Mode Control** panel to switch between
+  Original Mode and 2027 Free Tutorial Mode. Switching is reversible and does not
+  delete either programme or original-hub records. Programme edition/session
+  settings remain in the 2027 Free Tutorial panel; archives are written under
+  `local-test-data/free2027-archives/`.
 - Sign in as Academic Director and verify academic programme management works,
-  but Free Tutorial mode/edition changes and session archive routes are rejected
-  by the server.
+  but website-mode/edition changes and session archive routes are rejected by
+  the server.
 - Try a student token against another student's record or an administrative
   route; the server must reject access.
+
+On a phone, check the homepage drawer (ecosystem, subjects, how it works,
+contact, Updates & News, contact details, and the mode-appropriate account/CBT
+action), the Free Tutorial landing/registration/portal Back and Home actions,
+and the CBT navigator/countdown/submit confirmation. Leaving an active paper
+asks for confirmation; resuming restores the same paper, answers and server
+countdown. Internal Back navigation must not exit the site.
 
 Unrelated original student modules are disabled while the testing edition is
 active, not deleted. The original homepage and its content remain visible. The
@@ -184,11 +200,58 @@ switch above is the only way to suppress Appwrite calls for a development run.
 
 Stop the server and restart it with the same `GOC_DATA_DIR`. Confirm:
 
-- Free Tutorial profiles, permanent IDs, enrolments, lessons, progress,
-  activities, quiz attempts/results, settings, and audit records remain.
+- Free Tutorial profiles, permanent IDs, enrolments, independent question banks,
+  progress, activities, attempts/results, settings, and audit records remain.
 - A student's ID is unchanged after they re-verify.
 - Session archives remain readable from the Founder console.
 - The original store is not overwritten by the isolated Free Tutorial tests.
+
+## 7. Optional real-browser regression
+
+`test/browser/free2027-recovery.js` drives the real pages in headless Chromium
+with an Android-sized viewport/user agent. It is optional and is not part of
+`npm test`, because it needs a browser binary and a fresh isolated server. It
+checks the homepage/drawer, Free landing, registration/OTP validation and resend
+cooldown, verified-session refresh, contact/Founder entrance, staff login and
+passcode, both banks, invalid/valid CSV, manual A–E entry, activity allocation,
+CBT navigation/save/resume/submit, leaderboard approval/publication, reversible
+website-mode switching, removed hidden entrances, and desktop fit. Screenshots
+and a JSON result file are written outside the repository by default.
+
+Install the browser tooling separately so the app dependency tree is unchanged:
+
+```bash
+mkdir -p /tmp/goc-browser-tools
+npm --prefix /tmp/goc-browser-tools install playwright-core
+export PLAYWRIGHT_CORE_PATH=/tmp/goc-browser-tools/node_modules/playwright-core
+export CHROMIUM_EXECUTABLE_PATH=/path/to/chrome-or-chromium
+```
+
+For this automated run, use the repository's test-only SMTP capture rather than
+Mailpit: start a fresh isolated copy/export of the app **without installed app
+`node_modules`**, set `NODE_PATH=./test/stubs`, and set `GOC_TEST_MAIL_FILE` to a
+file outside the repository. The stub records the actual message handed to
+Nodemailer so the harness can read the emailed code; the server's OTP generation,
+hashing, expiry and verification remain the real implementation. This capture
+adapter is for isolated tests only, never production.
+
+Then run the harness with the same isolated environment plus:
+
+```bash
+export GOC_BROWSER_ISOLATED=1
+export GOC_BROWSER_DATA_FILE="$GOC_DATA_DIR/data.json"
+export GOC_BROWSER_BASE=http://127.0.0.1:8080
+# GOC_FOUNDER_GATE_WORD, GOC_FOUNDER_PW and GOC_PASSCODE must match that server.
+node test/browser/free2027-recovery.js
+```
+
+The harness refuses to run unless `GOC_BROWSER_ISOLATED=1`, the data file is
+outside the repository, and the banks/activities/contact inbox are empty. It
+never prints the configured gate word. `GOC_BROWSER_ARTIFACTS` can set an
+explicit output directory; `GOC_BROWSER_CHROME_ARGS` can supply extra Chromium
+flags as a JSON array (or comma-separated simple flags) for constrained CI
+environments. This is browser emulation,
+not a substitute for a final smoke test on a physical Android device.
 
 The local JSON and archive paths are ignored by Git. To remove this local test
 installation, stop the server and delete only `local-test-data/`.

@@ -44,6 +44,7 @@
   F.tab = 'weekly';
   F.exam = null;                    // { attempt, questions, index, answers, tick }
   F.saveQueue = {};
+  F.navStack = ['landing'];         // internal history; Back never exits the hub
 
   function $(id) { return document.getElementById(id); }
   function esc(v) {
@@ -180,6 +181,43 @@
       return;
     }
     global.go('free-register');
+  };
+
+  /* Internal navigation history recovered from PR #9. Back NEVER calls
+     window.history.back(): a browser history entry can point at an external
+     website, and a direct URL or refresh leaves no useful internal entry.
+     Every free screen shown is pushed onto F.navStack; Back pops to the
+     previous internal screen and falls back to the homepage. Home always goes
+     straight to the homepage. */
+  function trackScreen(id) {
+    if (!F.on || F.mode !== rules.MODE_FREE) return;
+    if (rules.SCREENS.indexOf(id) < 0 && id !== 'landing') return;
+    var s = F.navStack;
+    if (s[s.length - 1] !== id) s.push(id);
+    if (s.length > 50) s.splice(0, s.length - 50);
+  }
+  /* Use the same arrival refresh as ordinary portal links. In particular,
+     Back from a result must re-read attempts/results instead of showing the
+     portal snapshot from before the paper was submitted. */
+  function navigate(id) {
+    global.go(id);
+    if (id === 'free-portal') F.freePortalLoad();
+    else if (id === 'free-home') freeHomeLoad();
+  }
+  F.freeNavBack = function () {
+    var s = F.navStack;
+    if (s.length > 1) { s.pop(); navigate(s[s.length - 1]); return; }
+    s.length = 0; s.push('landing');
+    global.go('landing');
+  };
+  F.freeNavHome = function () { F.navStack = ['landing']; global.go('landing'); };
+
+  /* The navigation drawer's CBT Portal action (Free Tutorial Mode only — the
+     button is hidden by CSS in Original Mode). Closes the drawer, then runs
+     the same entry chain as the homepage button. */
+  F.dwFreePortal = function () {
+    if (typeof global.closeDrawer === 'function') global.closeDrawer();
+    setTimeout(function () { F.freeHomeCta(); }, 180);
   };
 
   /* ================================================= 3. REGISTRATION (OTP) */
@@ -615,11 +653,17 @@
   /* Leaving keeps the attempt open on the server, with every answer already
      saved: coming back resumes it rather than starting again. */
   F.freeExamLeave = function () {
+    if (!F.exam) { F.freeNavBack(); return; }
+    if (typeof global.confirm === 'function' && !global.confirm(
+      'Leave this paper? Your answers and remaining time are saved — you can resume it from the CBT Portal.')) return;
     stopClock();
     F.exam = null;
     say('Your paper is saved. Open it again from the portal to carry on.');
-    global.go('free-portal');
-    F.freePortalLoad();
+    /* Internal-history back: the previous free screen (normally the portal),
+       never the browser history — answers and remaining time stay on the
+       server either way. */
+    F.freeNavBack();
+    if (F.navStack.indexOf('free-portal') > -1) F.freePortalLoad();
   };
 
   F.freeExamSubmit = function () {
@@ -849,6 +893,7 @@
       if (F.on && F.mode === rules.MODE_FREE) {
         var allowed = rules.SCREENS.concat(['landing', 'admin-gate', 'admin', 'staff-change-password', 'free-admin']);
         if (allowed.indexOf(id) < 0) id = 'free-home';
+        trackScreen(id);
       }
       return original(id);
     };
@@ -861,17 +906,13 @@
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
-    'freeProgrammeLoad', 'freeLessonDone'];
+    'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });
   /* Portal links must re-read the programme on arrival: a result or leaderboard
      opened since the last visit changes what the portal should show. */
-  global.freeGo = function (id) {
-    global.go(id);
-    if (id === 'free-portal') F.freePortalLoad();
-    else if (id === 'free-home') freeHomeLoad();
-  };
+  global.freeGo = navigate;
 
   GOC.freeUI = {
     applyMode: applyMode,
