@@ -29,7 +29,8 @@ var suites = ['test-rules.js', 'test-p1.js', 'test-p2.js', 'test-p6.js', 'test-p
                  and the local-only run (Appwrite Database unavailable + restart). */
               'test-free2027.js', 'test-free2027-route.js', 'test-free2027-ui.js', 'test-free2027-local.js', 'test-free2027-nav.js', 'test-free2027-admin.js', 'test-free2027-email.js', 'test-free2027-founder.js',
               'test-free2027-banks.js', 'test-free2027-question-form.js', 'test-free2027-allocation.js', 'test-landing-layout.js', 'test-free2027-data-safety.js',
-              'test-free2027-auth.js', 'test-free2027-session-client.js'];
+              'test-free2027-auth.js', 'test-free2027-session-client.js',
+              'test-production-persistence.js'];
 var failed = [];
 
 suites.forEach(function (s) {

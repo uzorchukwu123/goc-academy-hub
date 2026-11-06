@@ -7,4 +7,4 @@
    Set `GOC_PUBLIC_DIR=public`, `GOC_DATA_DIR=<persistent folder>`.
 5. Start: `pm2 start ecosystem.config.cjs` (or `node server/server.js`), behind HTTPS.
 6. Verify `https://YOUR-DOMAIN/api/health`.
-7. Before each release bump `CACHE` in `sw.js` (currently goc-v202).
+7. Before each release bump `CACHE` in `sw.js` (currently goc-v203).

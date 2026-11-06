@@ -101,7 +101,44 @@ const ROOT = path.resolve(__dirname, '..');          // the GOC-Web-App folder
    that survives that restart. See TASKS-REMAINING.txt for the deployment
    step that actually wires this up on your host. */
 const DATA_DIR = process.env.GOC_DATA_DIR ? path.resolve(process.env.GOC_DATA_DIR) : __dirname;
-try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* already exists */ }
+/* An explicitly configured GOC_DATA_DIR is a promise about where this academy's
+   records live. The mkdir result used to be discarded, so a typo, a read-only
+   mount or a path that is really a file left the process running and failing
+   later. Verify that a CONFIGURED directory is a real, readable, writable
+   directory and refuse to boot in production if it is not. Nothing is deleted,
+   moved or redirected: there is deliberately no fallback to another directory,
+   so a bad path can never quietly start writing inside the application
+   checkout. When GOC_DATA_DIR is unset the original behaviour is unchanged. */
+if (process.env.GOC_DATA_DIR) {
+  let dirProblem = null;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.statSync(DATA_DIR).isDirectory()) dirProblem = 'the path exists but is not a directory';
+    else fs.accessSync(DATA_DIR, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (e) {
+    if (!dirProblem) dirProblem = (e && e.code) ? e.code : 'it cannot be created or accessed';
+  }
+  if (dirProblem) {
+    const dirBanner = [
+      '',
+      '**********************************************************************',
+      '*  [goc] GOC_DATA_DIR IS NOT USABLE                                 *',
+      '**********************************************************************',
+      '*  Configured directory: ' + DATA_DIR,
+      '*  Problem: ' + dirProblem,
+      '*  No data was written, moved or deleted, and the server has NOT',
+      '*  silently switched to another directory.',
+      '*  Point GOC_DATA_DIR at a writable directory outside the application',
+      '*  checkout (or fix its permissions) and start the server again.',
+      '**********************************************************************',
+      ''
+    ];
+    if (isProductionRun()) { dirBanner.forEach(l => console.error(l)); process.exit(1); }
+    dirBanner.forEach(l => console.warn(l));
+  }
+} else {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* already exists */ }
+}
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
@@ -149,6 +186,10 @@ let appwriteResourcesStorage = null;
 let appwriteDatabases = null;
 let appwriteUsers = null;
 let appwriteSaveChain = Promise.resolve();
+/* Set by hydrateBlobFromStorage() when the durable blob could not be READ
+   reliably, as distinct from it genuinely not existing yet. The startup path
+   uses this so an unreadable backup is never mistaken for a first install. */
+let blobHydrationFailure = null;
 
 async function createAppwriteAuthUser(rec) {
   if (!appwriteUsers) throw new Error('Appwrite Auth is not initialized.');
@@ -958,11 +999,23 @@ function blobStorageEnabled() {
 }
 
 async function hydrateBlobFromStorage() {
+  blobHydrationFailure = null;
   if (!blobStorageEnabled()) return false;
   try {
     const buf = await appwriteResourcesStorage.getFileDownload(APPWRITE_BUCKET_ID, APPWRITE_FILE_ID);
     const text = Buffer.isBuffer(buf) ? buf.toString('utf8')
       : (buf && buf.byteLength != null ? Buffer.from(buf).toString('utf8') : String(buf));
+    /* A payload that exists but is not readable JSON is a DAMAGED backup, not a
+       missing one. It must never replace a good local data.json, and it is not
+       deleted or overwritten here either — an operator can still recover it. */
+    let parsedBlob = null;
+    try { parsedBlob = JSON.parse(text); } catch (_) { parsedBlob = null; }
+    if (!parsedBlob || typeof parsedBlob !== 'object' || Array.isArray(parsedBlob)) {
+      blobHydrationFailure = 'invalid-backup';
+      console.error('[goc] The Appwrite Storage backup exists but is not readable JSON. '
+        + 'Keeping the local data.json untouched; the backup was NOT deleted or replaced.');
+      return false;
+    }
     if (text && text.trim()) {
       /* ── Stale-blob guard ───────────────────────────────────────────────────
          If the local file already exists and carries a _savedAt timestamp that
@@ -995,13 +1048,43 @@ async function hydrateBlobFromStorage() {
       return true;
     }
   } catch (err) {
-    /* No file yet (first boot) or a transient error — fall back to whatever is
-       on disk, exactly as before this feature existed. */
-    console.log('[goc] No blob in Appwrite Storage yet (' + err.message + '); using local data.json.');
+    /* Only a real not-found means "no backup yet". Every other failure —
+       permission, authentication, network/service — means the backup could not
+       be READ, which is not a first install and must not be logged as one.
+       404 is the same not-found signal the rest of this file already uses for
+       Appwrite. The local file is left exactly as it is in every branch. */
+    const code = Number(err && (err.code != null ? err.code : err.status)) || 0;
+    if (code === 404) {
+      console.log('[goc] No blob in Appwrite Storage yet (' + err.message + '); using local data.json.');
+      return false;
+    }
+    blobHydrationFailure = code === 401 ? 'auth'
+      : code === 403 ? 'permission'
+      : 'network-or-service';
+    /* Log the classification and status only — never the raw error, which can
+       carry request detail. No secret value is printed. */
+    console.error('[goc] The Appwrite Storage backup could NOT be read ('
+      + blobHydrationFailure + ', status ' + (code || 'n/a') + '). '
+      + 'This is NOT a first install: the local data.json is kept exactly as it is '
+      + 'and the backup was not touched.');
+    return false;
   }
   return false;
 }
 
+/* KNOWN LIMITATION (deliberately unchanged): this replacement is NOT atomic.
+   Appwrite Storage has no in-place content-replacement API — updateFile() takes
+   only bucketId/fileId/name/permissions, never file content — so replacing the
+   blob means deleteFile() followed by createFile(). If the process dies between
+   those two calls the cloud blob is briefly absent. Making that safe would need
+   a second file (write-new-then-switch), i.e. a new cloud resource and a
+   lifecycle to retire it, which is a new backup architecture rather than a
+   minimal fix. It is therefore left exactly as it is and recorded as an
+   operational risk instead of being half-solved. Mitigations that already
+   exist: the local data.json is written atomically (tmp + rename) before this
+   runs, the rotating local backups in BACKUP_DIR are independent of it, and
+   hydrateBlobFromStorage() now refuses to treat an unreadable blob as a first
+   install. Do not "fix" this by deleting the old blob earlier. */
 function scheduleBlobUpload() {
   if (!blobStorageEnabled()) return;
   appwriteSaveChain = appwriteSaveChain.then(async () => {
@@ -9760,6 +9843,34 @@ const APPWRITE_OFF = ['1', 'true', 'on', 'yes'].indexOf(String(process.env.GOC_A
 if (APPWRITE_OFF) {
   console.log('[goc] GOC_APPWRITE_OFF is set — running fully local. Appwrite is not contacted at all.');
 }
+/* Production fail-safe. When Appwrite IS configured, a failed initialization or
+   an unreadable durable backup must never be mistaken for a brand-new academy:
+   seeding here would publish demo staff/settings and start a fresh roster
+   alongside the real one. Refuse to boot instead, exactly as
+   auditDefaultSecrets() already does for a shipped default password. Nothing is
+   seeded, deleted, overwritten or reset, and no credential VALUE is printed —
+   only the variable names an operator needs to check. Local development, tests
+   and a deliberate GOC_APPWRITE_OFF run never reach this function. */
+function failClosedAppwriteStartup(reason) {
+  [
+    '',
+    '**********************************************************************',
+    '*  [goc] APPWRITE IS CONFIGURED BUT NOT USABLE - STARTUP REFUSED    *',
+    '**********************************************************************',
+    '*  ' + reason,
+    '*  This is a production run, so the server will NOT fall back to a',
+    '*  local-only academy and will NOT seed a fresh database.',
+    '*  Existing local data and the Appwrite backup are untouched.',
+    '*  Check APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID and APPWRITE_API_KEY,',
+    '*  the Appwrite service status, and APPWRITE_BUCKET_ID / APPWRITE_FILE_ID.',
+    '*  GOC_APPWRITE_OFF=1 selects a deliberate local-only run and must not be',
+    '*  set in production.',
+    '**********************************************************************',
+    ''
+  ].forEach(l => console.error(l));
+  process.exit(1);
+}
+
 if (hasAppwriteConfig() && !APPWRITE_OFF) {
   initAppwrite()
     .then(async () => {
@@ -9767,6 +9878,14 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
       // whether to seed, so a redeploy that wiped the code folder restores the
       // real settings/notes/topics instead of reseeding demo defaults.
       await hydrateBlobFromStorage();
+      /* The backup could not be read (permission/auth/network/damaged) and this
+         volume has no local data.json: seeding now would invent a new academy
+         where an existing one is simply unreachable. Refuse instead. When a
+         local data.json DOES exist it is authoritative and kept untouched. */
+      if (blobHydrationFailure && isProductionRun() && !fs.existsSync(DATA_FILE)) {
+        failClosedAppwriteStartup('The durable Appwrite Storage backup could not be read ('
+          + blobHydrationFailure + ') and there is no local data.json on this volume.');
+      }
       // Students live in Appwrite, but staff/settings/etc. still come from the
       // local data.json blob (see initAppwrite()'s own comment) — a fresh
       // Appwrite deploy with no data.json on disk yet and no blob in Storage
@@ -9779,6 +9898,17 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
       start();
     })
     .catch(err => {
+      /* Production: stop here, BEFORE the clients are reset and before any
+         seed()/start() below, so a bad key or an unreachable Appwrite can never
+         degrade into a freshly seeded local academy. Only a non-secret status
+         code / error type is reported, never the raw error or stack. */
+      if (isProductionRun()) {
+        const awCode = err && (err.code != null ? err.code : err.status);
+        const awType = err && typeof err.type === 'string' && /^[a-z0-9_]+$/i.test(err.type) ? err.type : '';
+        failClosedAppwriteStartup('Appwrite initialization failed'
+          + (awCode ? ' (status ' + awCode + ')' : '')
+          + (awType ? ' [' + awType + ']' : '') + '.');
+      }
       // Without this catch, a failed Appwrite init (missing node-appwrite
       // package, a malformed client, etc.) left start() never called at
       // all: no crash, no error banner, the process just sat there with
@@ -9794,6 +9924,14 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
       start();
     });
 } else {
+  /* Unconfigured is a legitimate local install, so the control flow is exactly
+     as before. In production it is called out loudly rather than passed over in
+     silence, because "no Appwrite" there is almost always a misconfiguration. */
+  if (!APPWRITE_OFF && isProductionRun()) {
+    console.warn('[goc] WARNING: Appwrite is not configured (APPWRITE_ENDPOINT, '
+      + 'APPWRITE_PROJECT_ID and APPWRITE_API_KEY must all be set). This production '
+      + 'run is LOCAL-ONLY: no Appwrite data is read or written.');
+  }
   if (!fs.existsSync(DATA_FILE)) seed();
   start();
 }
