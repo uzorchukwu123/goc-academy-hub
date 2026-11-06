@@ -9020,19 +9020,50 @@ const ROUTES = [
       okJson(res, free2027.sessionRecords());
     }) },
 
-  /* ---- console: the edition's own question picker ----
-     The hub's /api/questions reads Appwrite when it is configured; the
-     edition's picker must not, or no activity could be built on a box where
-     the Database API is unavailable. Same rows, read from db.questions. */
+  /* ---- console: the two independent question banks ----
+     Weekly Assessment Question Bank and Competition Question Bank live in
+     db.free2027.questionBanks.{weekly,competition} — separate storages with
+     separate ID sequences, never db.questions and never Appwrite. The :bank
+     segment is validated against the allowlist inside the lib, so no request
+     can address an arbitrary collection. */
+  { method: 'GET', path: /^\/api\/free2027\/admin\/question-banks$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res) => {
+      return free2027.bankOverview().then(r => okJson(res, r));
+    }) },
+  { method: 'GET', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      const q = new URL(req.url, 'http://x').searchParams;
+      return free2027.listBankQuestions(params[0], { q: q.get('q') || '', subject: q.get('subject') || '' })
+        .then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.createBankQuestion(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'PUT', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions\/([^/]+)$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.updateBankQuestion(params[0], params[1], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/questions\/delete$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteBankQuestions(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/delete-all$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.deleteAllBankQuestions(params[0], body).then(r => okJson(res, r));
+    }) },
+  { method: 'POST', path: /^\/api\/free2027\/admin\/question-banks\/([a-z]+)\/import$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess, params) => {
+      return free2027.importBankCsv(params[0], body).then(r => okJson(res, r));
+    }) },
+  /* Legacy picker path, kept working but now bank-scoped and bank-required:
+     /api/free2027/admin/questions?bank=weekly|competition */
   { method: 'GET', path: /^\/api\/free2027\/admin\/questions$/, need: 'console', cap: 'questions.manage', handler: freeRoute((req, res, body, sess) => {
-      return listLocalQuestions({ all: true }).then(rows => okJson(res, {
-        questions: rows.map(q => ({
-          id: q.id, subject: q.subject, topic: q.topic, kind: q.kind, section: q.section,
-          difficulty: q.difficulty, status: q.status, archived: q.archived === true, active: q.active !== false,
-          text: String(q.text == null ? '' : q.text).slice(0, 240)
+      const q = new URL(req.url, 'http://x').searchParams;
+      const bank = q.get('bank') || '';
+      if (['weekly', 'competition'].indexOf(bank) < 0) {
+        return errJson(res, 400, 'Pass ?bank=weekly or ?bank=competition — the edition no longer reads the shared question bank.');
+      }
+      return free2027.listBankQuestions(bank, { subject: q.get('subject') || '' }).then(r => okJson(res, {
+        questions: r.questions.map(qq => ({
+          id: qq.id, subject: qq.subject, topic: qq.topic, kind: qq.kind, section: qq.section,
+          difficulty: qq.difficulty, active: qq.active !== false,
+          text: String(qq.text == null ? '' : qq.text).slice(0, 240)
         })),
-        total: rows.length,
-        source: 'local-data-file'
+        total: r.total, bank: bank, source: 'free2027-question-bank'
       }));
     }) },
 

@@ -104,8 +104,125 @@ function ensureEdition(db, opts) {
     if (typeof cur[k] !== 'number') cur[k] = 0;
   });
 
+  /* The two INDEPENDENT question banks (PR #9): db.free2027.questionBanks.
+     'weekly' serves Weekly Assessments, 'competition' serves Competitions.
+     They are separate storages with separate ID sequences, never aliases of
+     db.questions, and never shared with each other. Initialised additively:
+     an older data file simply gains empty banks, existing records untouched. */
+  if (!ed.questionBanks || typeof ed.questionBanks !== 'object' || Array.isArray(ed.questionBanks)) ed.questionBanks = {};
+  BANKS.forEach(function (b) {
+    var bank = ed.questionBanks[b];
+    if (!bank || typeof bank !== 'object' || Array.isArray(bank)) bank = {};
+    if (!Array.isArray(bank.questions)) bank.questions = [];
+    if (typeof bank.questionSeq !== 'number' || !isFinite(bank.questionSeq)) {
+      /* seed the per-bank sequence from any IDs already present, so a restart
+         never re-issues an ID */
+      var m = 0;
+      var idPattern = new RegExp('^' + bankPrefix(b) + '-(\\d+)$', 'i');
+      bank.questions.forEach(function (q) {
+        var hit = q && idPattern.exec(String(q.id || ''));
+        if (hit) m = Math.max(m, Number(hit[1]) || 0);
+      });
+      bank.questionSeq = m;
+    }
+    ed.questionBanks[b] = bank;
+  });
+
   db.free2027 = ed;
   return ed;
+}
+
+/* The only bank identifiers the API will ever accept — an explicit allowlist,
+   so no request can point at an arbitrary path or collection. */
+var BANKS = ['weekly', 'competition'];
+/* The five subjects the edition's banks support (a subset of the hub's own
+   ALL_SUBJECTS, which is exactly these five). */
+var BANK_SUBJECTS = ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+/* The activity kind decides the bank — enforced server-side, never inferred
+   from a subject, a filename or the client. */
+function bankForKind(kind) {
+  return kind === rules.KIND_COMPETITION ? 'competition' : 'weekly';
+}
+function cleanBank(b) {
+  b = String(b == null ? '' : b).trim().toLowerCase();
+  return BANKS.indexOf(b) > -1 ? b : null;
+}
+function bankPrefix(bank) { return bank === 'competition' ? 'CQ' : 'WQ'; }
+
+/* ---------------------------------------------------------------------------
+   Free Tutorial CSV contract (14 columns, no section/expected/maxMark).
+   Parses into the hub's existing objective question shape, with `section`
+   defaulted to 'objective' only for internal compatibility. The destination
+   bank is supplied by the caller and is never inferred from the file.
+   ------------------------------------------------------------------------- */
+function csvNorm(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
+function freeBankDupKey(rec) { return csvNorm(rec.subject) + '|' + csvNorm(rec.text); }
+function freeCsvActive(v) {
+  var s = String(v == null ? '' : v).trim().toLowerCase();
+  if (!s) return { active: true };
+  if (s === 'true') return { active: true };
+  if (s === 'false') return { active: false };
+  return { error: 'active must be TRUE or FALSE.' };
+}
+function parseFreeBankCsv(text, existing, opts) {
+  opts = opts || {};
+  var parsed = core.csvRows(String(text == null ? '' : text));
+  if (parsed.error) return { error: parsed.error };
+  var expected = rules.CSV_COLUMNS.map(function (c) { return c.toLowerCase(); });
+  if ((parsed.header || []).join(',') !== expected.join(',')) {
+    return { error: 'Use the exact Free Tutorial header: ' + rules.CSV_HEADER + '.' };
+  }
+  if (!parsed.rows.length) return { error: 'That file names its columns but holds no rows.' };
+  if (parsed.rows.length > core.CSV_MAX_ROWS) {
+    return { error: 'Import at most ' + core.CSV_MAX_ROWS + ' rows at a time — this file holds ' + parsed.rows.length + '.' };
+  }
+  var seenExisting = {};
+  (existing || []).forEach(function (q) { if (q) seenExisting[freeBankDupKey(q)] = true; });
+  var seenInFile = {}, records = [], errors = [], preview = [];
+  parsed.rows.forEach(function (row) {
+    function fail(msg) { errors.push({ line: row.line, error: msg }); }
+    var subject = String(row.subject || '').trim();
+    if (BANK_SUBJECTS.indexOf(subject) < 0) { fail('Choose one of the five supported subjects: ' + BANK_SUBJECTS.join(', ') + '.'); return; }
+    var optionCols = ['optiona', 'optionb', 'optionc', 'optiond', 'optione'].map(function (k) { return String(row[k] == null ? '' : row[k]).trim(); });
+    for (var i = 0; i < 4; i++) {
+      if (!optionCols[i]) { fail('Option ' + 'ABCD'[i] + ' is required.'); return; }
+    }
+    var options = optionCols.slice(0, 4);
+    if (optionCols[4]) options.push(optionCols[4]);
+    var letter = String(row.answer || '').trim().toUpperCase();
+    if (!/^[A-E]$/.test(letter)) { fail('answer must be a letter from A to E.'); return; }
+    var answer = letter.charCodeAt(0) - 65;
+    if (answer >= options.length || !options[answer]) { fail('answer ' + letter + ' does not match a filled option.'); return; }
+    var difficulty = String(row.difficulty || '').trim().toLowerCase();
+    if (!difficulty) difficulty = 'medium';
+    if (['easy', 'medium', 'hard'].indexOf(difficulty) < 0) { fail('difficulty must be Easy, Medium or Hard.'); return; }
+    var active = freeCsvActive(row.active);
+    if (active.error) { fail(active.error); return; }
+    var year = core.cleanQuestionYear(row.year);
+    if (year.error) { fail(year.error); return; }
+    var passage = core.cleanPassageId(row.passageid);
+    if (passage.error) { fail(passage.error); return; }
+    var v = core.validateQuestion({
+      subject: subject, section: 'objective', topic: row.topic, text: row.text,
+      options: options, answer: answer, difficulty: difficulty,
+      explanation: row.explanation, active: active.active,
+      year: row.year, passageId: row.passageid
+    });
+    if (v.error) { fail(v.error); return; }
+    v.rec.kind = 'objective';
+    v.rec.section = 'objective';
+    v.rec.year = year.year;
+    v.rec.passageId = passage.passageId;
+    var key = freeBankDupKey(v.rec);
+    if (seenExisting[key]) { fail('Skipped as a duplicate — an identical question is already in this bank.'); return; }
+    if (seenInFile[key]) { fail('Skipped as a duplicate — this file already carries the same question on line ' + seenInFile[key] + '.'); return; }
+    seenInFile[key] = row.line;
+    records.push(v.rec);
+    if (opts.preview) preview.push({ line: row.line, subject: v.rec.subject, topic: v.rec.topic, text: v.rec.text, optionCount: v.rec.options.length, answerLetter: letter });
+  });
+  var out = { records: records, errors: errors, read: parsed.rows.length };
+  if (opts.preview) out.preview = preview;
+  return out;
 }
 
 /* ---------------------------------------------------------------------------
@@ -238,14 +355,132 @@ function createFree2027(deps) {
   }
 
   /* Question records for an activity, read-only out of the hub's bank. */
-  async function questionRecords(db, ids) {
-    var all = await d.listQuestions({ all: true }, db);
+  /* Question records for an activity, read from the activity's OWN bank:
+     weekly assessments draw on db.free2027.questionBanks.weekly, competitions
+     on db.free2027.questionBanks.competition. The shared db.questions is never
+     consulted for the edition, and a question ID from the other bank simply
+     does not resolve here (callers treat that as a forged ID). */
+  function bankQuestionsSync(db, bank) {
+    var ed = edition(db);
+    ensureEdition(db);
+    var b = (ed.questionBanks || {})[bank];
+    return (b && Array.isArray(b.questions)) ? b.questions : [];
+  }
+  async function questionRecords(db, ids, kind) {
+    var bank = bankForKind(kind);
+    return questionsInBank(db, bank, ids).questions;
+  }
+
+  /* Bank membership check used by allocation, editing and publication. It never
+     reads the other bank or the shared db.questions. */
+  function questionsInBank(db, bank, ids) {
+    var all = bankQuestionsSync(db, bank);
     var byId = {};
-    all.forEach(function (q) { byId[String(q.id)] = q; });
-    var out = [];
-    ids.forEach(function (id) {
+    all.forEach(function (q) { if (q && q.id) byId[String(q.id)] = q; });
+    var questions = [], missing = [];
+    (ids || []).forEach(function (id) {
       var q = byId[String(id)];
-      if (q) out.push(q);
+      if (q) questions.push(q); else missing.push(String(id));
+    });
+    return { questions: questions, missing: missing };
+  }
+
+  /* Eligible questions are the live, active multiple-choice records in ONE
+     bank. Subject is metadata used only for optional distribution counts. */
+  function eligibleBankQuestions(db, bank) {
+    return bankQuestionsSync(db, bank).filter(function (q) {
+      return q && q.active !== false && !q.archived && core.questionIsLive(q) &&
+        q.kind === 'objective' && Array.isArray(q.options) && q.options.length >= 2 &&
+        Number.isInteger(Number(q.answer)) && Number(q.answer) >= 0 && Number(q.answer) < q.options.length;
+    });
+  }
+  function bankAvailability(db, bank) {
+    var rows = eligibleBankQuestions(db, bank);
+    var bySubject = {};
+    rows.forEach(function (q) { bySubject[q.subject] = (bySubject[q.subject] || 0) + 1; });
+    return { bank: bank, total: rows.length, bySubject: bySubject };
+  }
+  function secureShuffle(list) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = crypto.randomInt ? crypto.randomInt(0, i + 1) : Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function allocateActivityQuestions(db, bank, rec) {
+    var pool = eligibleBankQuestions(db, bank);
+    var want = Number(rec.questionCount);
+    if (want > pool.length) {
+      throw FreeError(400, 'Only ' + pool.length + ' eligible question' + (pool.length === 1 ? '' : 's') +
+        ' are available in the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') +
+        ' Question Bank, but ' + want + ' were requested.');
+    }
+    var chosen = [];
+    var dist = rec.subjectDistribution || null;
+    if (dist) {
+      Object.keys(dist).forEach(function (subject) {
+        var need = Number(dist[subject]) || 0;
+        if (!need) return;
+        var sub = pool.filter(function (q) { return q.subject === subject; });
+        if (need > sub.length) {
+          throw FreeError(400, 'Only ' + sub.length + ' eligible ' + subject +
+            ' question' + (sub.length === 1 ? '' : 's') + ' are available in the ' +
+            (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank, but ' + need + ' were requested.');
+        }
+        chosen = chosen.concat((rec.randomizeQuestions ? secureShuffle(sub) : sub).slice(0, need));
+      });
+    } else {
+      chosen = (rec.randomizeQuestions ? secureShuffle(pool) : pool).slice(0, want);
+    }
+    if (rec.randomizeQuestions && dist) chosen = secureShuffle(chosen);
+    return chosen.map(function (q) { return String(q.id); });
+  }
+  function sameDistribution(a, b) {
+    a = a || {}; b = b || {};
+    var ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every(function (k) { return Number(a[k]) === Number(b[k]); });
+  }
+  function makeOptionOrders(questions) {
+    var orders = {};
+    questions.forEach(function (q) {
+      var idx = (q.options || []).map(function (_, i) { return i; });
+      orders[String(q.id)] = secureShuffle(idx);
+    });
+    return orders;
+  }
+  function optionOrderFor(attempt, qid) {
+    var o = attempt && attempt.optionOrders && attempt.optionOrders[String(qid)];
+    return Array.isArray(o) && o.length ? o : null;
+  }
+  function displayedResponse(attempt, qid, original) {
+    var order = optionOrderFor(attempt, qid);
+    if (!order) return original;
+    var i = order.indexOf(Number(original));
+    return i < 0 ? null : i;
+  }
+  function originalChoice(attempt, qid, displayed, optionCount) {
+    var n = Number(displayed);
+    if (!isFinite(n) || Math.floor(n) !== n || n < 0 || n >= optionCount) return null;
+    var order = optionOrderFor(attempt, qid);
+    if (!order) return n;
+    var original = Number(order[n]);
+    return Number.isInteger(original) && original >= 0 && original < optionCount ? original : null;
+  }
+  function studentQuestions(questions, attempt) {
+    return questions.map(function (q, i) {
+      var out = core.forStudent(q, i);
+      var order = optionOrderFor(attempt, q.id);
+      if (order && Array.isArray(out.options)) out.options = order.map(function (idx) { return q.options[idx]; });
+      return out;
+    });
+  }
+  function studentResponses(attempt) {
+    var out = {};
+    Object.keys(attempt.responses || {}).forEach(function (qid) {
+      var d = displayedResponse(attempt, qid, attempt.responses[qid]);
+      if (d !== null && d !== undefined) out[qid] = d;
     });
     return out;
   }
@@ -539,7 +774,7 @@ function createFree2027(deps) {
          paper honest: the clock cannot be dodged by walking away. */
       var stale = mine.filter(function (a) { return !a.submittedAt && rules.attemptExpired(a, t); });
       if (stale.length) {
-        var qs = await questionRecords(db, stale[0].questionIds || []);
+        var qs = await questionRecords(db, stale[0].questionIds || [], activity.kind);
         stale.forEach(function (a) { finaliseAttempt(a, qs, t, true); });
         writeData(db);
         mine = attemptsFor(ctx.session, activity.id, p.id);
@@ -550,20 +785,27 @@ function createFree2027(deps) {
       }
       var open = rules.openAttempt(mine, t);
       if (open) {
-        var openQs = await questionRecords(db, open.questionIds || []);
+        var openQs = await questionRecords(db, open.questionIds || [], activity.kind);
         return attemptPayload(ctx.session, activity, open, openQs, p, t, true);
       }
       if (rules.attemptsLeft(activity, mine) <= 0) {
         throw FreeError(403, 'You have used all ' + activity.maxAttempts + ' attempt(s) for this activity.');
       }
-      var paperQs = await questionRecords(db, activity.questionIds || []);
+      var paperQs = await questionRecords(db, activity.questionIds || [], activity.kind);
+      /* Every chosen ID must resolve in THIS activity's bank: an ID from the
+         other bank (or a forged one) is rejected, not silently dropped. */
+      if (paperQs.length !== (activity.questionIds || []).length) {
+        throw FreeError(400, 'Some questions of this activity are not in its own question bank.');
+      }
       if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
       ctx.session.attemptSeq = (ctx.session.attemptSeq || 0) + 1;
       var attempt = {
         id: 'F27-A' + ctx.session.attemptSeq + '-' + crypto.randomBytes(3).toString('hex'),
         activityId: activity.id,
         participantId: p.id,
+        bank: bankForKind(activity.kind),
         questionIds: paperQs.map(function (q) { return String(q.id); }),
+        optionOrders: activity.randomizeOptions ? makeOptionOrders(paperQs) : null,
         responses: {},
         startedAt: t,
         durationSec: Math.round(activity.durationMin * 60),
@@ -592,10 +834,10 @@ function createFree2027(deps) {
         deadline: rules.attemptDeadline(attempt),
         maxAttempts: activity.maxAttempts,
         attemptsUsed: rules.attemptsUsed(attemptsFor(session, activity.id, participant.id)),
-        responses: Object.assign({}, attempt.responses || {})
+        responses: studentResponses(attempt)
       },
       participant: rules.publicParticipant(participant),
-      questions: questions.map(core.forStudent)
+      questions: studentQuestions(questions, attempt)
     };
   }
 
@@ -617,18 +859,18 @@ function createFree2027(deps) {
 
       var qid = String((body && body.questionId) || '');
       if ((attempt.questionIds || []).indexOf(qid) < 0) throw FreeError(400, 'That question is not part of this paper.');
-      var qs = await questionRecords(db, [qid]);
+      var qs = await questionRecords(db, [qid], attempt.bank || (activity && activity.kind));
       var q = qs[0];
-      if (!q) throw FreeError(404, 'That question is no longer available.');
+      if (!q) throw FreeError(404, 'That question is not in this paper\'s question bank.');
       var value = body ? body.choice : null;
       if (value === null || value === undefined || value === '') {
         delete attempt.responses[qid];
       } else {
-        var n = Number(value);
-        if (!isFinite(n) || Math.floor(n) !== n || n < 0 || n >= (q.options || []).length) {
+        var original = originalChoice(attempt, qid, value, (q.options || []).length);
+        if (original === null) {
           throw FreeError(400, 'That is not one of the options.');
         }
-        attempt.responses[qid] = n;
+        attempt.responses[qid] = original;
       }
       attempt.lastAnswerAt = t;
       writeData(db);
@@ -649,7 +891,7 @@ function createFree2027(deps) {
     }
     var activity = findActivity(ctx.session, attempt.activityId);
     if (!activity) throw FreeError(404, 'That activity was not found.');
-    var qs = await questionRecords(db, attempt.questionIds || []);
+    var qs = await questionRecords(db, attempt.questionIds || [], attempt.bank || activity.kind);
     if (rules.attemptExpired(attempt, t)) {
       /* Closing it out here rather than on the next start keeps the result
          available on a device that comes back after the clock ran out. */
@@ -658,7 +900,8 @@ function createFree2027(deps) {
         var ctx2 = sessionForCallerWithDb(db2, data);
         var a2 = findAttempt(ctx2.session, attemptId);
         if (a2 && !a2.submittedAt) {
-          var qs2 = await questionRecords(db2, a2.questionIds || []);
+          var act2 = findActivity(ctx2.session, a2.activityId);
+          var qs2 = await questionRecords(db2, a2.questionIds || [], a2.bank || (act2 && act2.kind));
           finaliseAttempt(a2, qs2, t, true);
           writeData(db2);
         }
@@ -730,7 +973,7 @@ function createFree2027(deps) {
       if (attempt.submittedAt) return { alreadySubmitted: true, result: resultOf(attempt, ctx.session) };
       var activity = findActivity(ctx.session, attempt.activityId);
       if (!activity) throw FreeError(404, 'That activity was not found.');
-      var qs = await questionRecords(db, attempt.questionIds || []);
+      var qs = await questionRecords(db, attempt.questionIds || [], attempt.bank || activity.kind);
 
       /* Answers sent with the submit are only ever used to fill gaps: the
          server's own copy wins, and each value is validated the same way an
@@ -743,9 +986,9 @@ function createFree2027(deps) {
         Object.keys(sent).forEach(function (qid) {
           var q = byId[String(qid)];
           if (!q) return;
-          var n = Number(sent[qid]);
-          if (!isFinite(n) || Math.floor(n) !== n || n < 0 || n >= (q.options || []).length) return;
-          if (attempt.responses[qid] === undefined) attempt.responses[qid] = n;
+          var original = originalChoice(attempt, qid, sent[qid], (q.options || []).length);
+          if (original === null) return;
+          if (attempt.responses[qid] === undefined) attempt.responses[qid] = original;
         });
       }
 
@@ -1210,6 +1453,9 @@ function createFree2027(deps) {
           opensAt: a.opensAt, closesAt: a.closesAt, durationMin: a.durationMin, maxAttempts: a.maxAttempts,
           questionIds: (a.questionIds || []).slice(),
           questionCount: (a.questionIds || []).length,
+          subjectDistribution: a.subjectDistribution || null,
+          randomizeQuestions: a.randomizeQuestions !== false,
+          randomizeOptions: !!a.randomizeOptions,
           status: a.status, published: !!a.published,
           reopenedAt: a.reopenedAt || null, reopenClosesAt: a.reopenClosesAt || null,
           state: rules.activityState(a, t),
@@ -1236,9 +1482,47 @@ function createFree2027(deps) {
       var existing = id ? findActivity(session, id) : null;
       if (id && !existing) throw FreeError(404, 'That activity was not found.');
       if (existing && existing.status === rules.STATUS_ARCHIVED) throw FreeError(409, 'That activity belongs to an archived session.');
+      if (body && body.questionIds !== undefined) {
+        throw FreeError(400, 'Questions are allocated automatically from the selected category\'s Question Bank; individual question selection is not available.');
+      }
       var v = rules.validateActivity(body, existing || {});
       if (v.error) throw FreeError(400, v.error);
+      /* Bank binding enforced at save time: the server allocates question IDs
+         from the activity's OWN bank (weekly assessment -> weekly bank,
+         competition -> competition bank) and persists that assignment. An
+         existing assignment is kept when its allocation settings are unchanged,
+         so attempts/resumes and historical references stay stable. */
+      var bank = bankForKind(v.rec.kind);
+      var bankLabel = bank === 'weekly' ? 'Weekly Assessment' : 'Competition';
+      var existingIds = existing && Array.isArray(existing.questionIds) ? existing.questionIds.map(String) : [];
+      var existingCount = existing ? (existing.questionCount || existingIds.length) : 0;
+      var existingDist = existing ? (existing.subjectDistribution || null) : null;
+      var existingRandom = existing ? existing.randomizeQuestions !== false : true;
+      var allocationChanged = !existing || !existingIds.length ||
+        Number(v.rec.questionCount) !== Number(existingCount) ||
+        !sameDistribution(v.rec.subjectDistribution, existingDist) ||
+        !!v.rec.randomizeQuestions !== !!existingRandom ||
+        existing.kind !== v.rec.kind;
+      var ids;
+      if (!allocationChanged) {
+        var kept = await questionsInBank(db, bank, existingIds);
+        if (kept.missing.length) {
+          throw FreeError(409, 'This activity\'s saved questions no longer belong to the ' + bankLabel +
+            ' Question Bank: ' + kept.missing.join(', ') + '.');
+        }
+        ids = existingIds;
+      } else {
+        ids = allocateActivityQuestions(db, bank, v.rec);
+      }
+      v.rec.questionIds = ids;
+      v.rec.questionCount = ids.length;
       var t = now();
+      var requestedStatus = body && body.status;
+      if (requestedStatus === rules.STATUS_PUBLISHED || requestedStatus === rules.STATUS_DRAFT) {
+        v.rec.status = requestedStatus;
+        v.rec.published = requestedStatus === rules.STATUS_PUBLISHED;
+        if (v.rec.published) v.rec.publishedAt = (existing && existing.publishedAt) || t;
+      }
       if (existing) {
         Object.assign(existing, v.rec, { updatedAt: t });
       } else {
@@ -1253,7 +1537,7 @@ function createFree2027(deps) {
         session.activities.push(existing);
       }
       writeData(db);
-      return { activity: existing };
+      return { activity: existing, allocation: { bank: bank, questionCount: ids.length, questionIds: ids.slice() } };
     });
   }
 
@@ -1272,6 +1556,15 @@ function createFree2027(deps) {
       if (act === 'publish') {
         var v = rules.validateActivity({}, a);
         if (v.error) throw FreeError(400, v.error + ' Correct the settings before publishing.');
+        var ids = Array.isArray(a.questionIds) ? a.questionIds.map(String) : [];
+        if (!ids.length || ids.length !== Number(a.questionCount || ids.length)) {
+          throw FreeError(400, 'This activity has no persisted question allocation yet.');
+        }
+        var pool = await questionsInBank(db, bankForKind(a.kind), ids);
+        if (pool.missing.length) {
+          throw FreeError(409, 'Every allocated question must belong to the ' +
+            (a.kind === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank. Missing: ' + pool.missing.join(', ') + '.');
+        }
         a.status = rules.STATUS_PUBLISHED;
         a.published = true;
         a.publishedAt = a.publishedAt || t;
@@ -1534,6 +1827,257 @@ function createFree2027(deps) {
     return { on: ed.enabled === true, mode: rules.activeMode(ed, ed.enabled), label: rules.modeLabel(rules.activeMode(ed, ed.enabled)) };
   }
 
+  /* =======================================================================
+     THE TWO INDEPENDENT QUESTION BANKS (PR #9)
+     db.free2027.questionBanks.weekly       -> Weekly Assessments only
+     db.free2027.questionBanks.competition  -> Competitions only
+     Separate storage, separate ID sequences (WQ-nnn / CQ-nnn), separate
+     CRUD, separate CSV imports, separate deletion. Never db.questions.
+
+     Deletion safety policy: a question referenced by ANY activity (current
+     or archived session) is refused — deletion and editing both — so
+     attempts, results, leaderboards and attempt details can never be
+     corrupted by a bank change. Destructive calls additionally require
+     confirm: true on the server, not just in the UI.
+     ===================================================================== */
+  function activitiesReferencing(db, qid) {
+    var ed = edition(db);
+    var refs = [];
+    (ed.sessions || []).forEach(function (s) {
+      ((s && s.activities) || []).forEach(function (a) {
+        if (a && (a.questionIds || []).map(String).indexOf(String(qid)) > -1) {
+          refs.push({ sessionId: s.id, activityId: a.id, title: a.title || '', kind: a.kind, status: a.status });
+        }
+      });
+    });
+    return refs;
+  }
+
+  function bankOverview() {
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var out = { banks: {}, subjects: BANK_SUBJECTS.slice() };
+      BANKS.forEach(function (b) {
+        var rows = bankQuestionsSync(db, b);
+        var bySubject = {};
+        rows.forEach(function (q) { bySubject[q.subject] = (bySubject[q.subject] || 0) + 1; });
+        var avail = bankAvailability(db, b);
+        out.banks[b] = { bank: b, label: b === 'weekly' ? 'Weekly Assessment Question Bank' : 'Competition Question Bank', count: rows.length, questionSeq: (db.free2027.questionBanks[b] || {}).questionSeq || 0, bySubject: bySubject, eligibleCount: avail.total, eligibleBySubject: avail.bySubject };
+      });
+      return out;
+    });
+  }
+
+  function listBankQuestions(bank, q) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    q = q || {};
+    return locked(async function () {
+      var db = readData();
+      var rows = bankQuestionsSync(db, bank).slice();
+      if (q.subject) rows = rows.filter(function (r) { return String(r.subject) === String(q.subject); });
+      if (q.q) {
+        var needle = String(q.q).toLowerCase();
+        rows = rows.filter(function (r) {
+          return String(r.text || '').toLowerCase().indexOf(needle) > -1 || String(r.topic || '').toLowerCase().indexOf(needle) > -1;
+        });
+      }
+      rows.sort(function (a, b) { return String(a.id).localeCompare(String(b.id), undefined, { numeric: true }); });
+      return { bank: bank, total: bankQuestionsSync(db, bank).length, count: rows.length, subjects: BANK_SUBJECTS.slice(), questions: rows };
+    });
+  }
+
+  /* Manual create/edit share one validator: the hub's own validateQuestion,
+     restricted to the five bank subjects and to multiple-choice questions with
+     options A–D required and E optional. `section` is an internal compatibility
+     default only; it is never a Free Tutorial category or a bank selector. */
+  function cleanBankQuestion(bank, body) {
+    var b = (body && typeof body === 'object') ? body : {};
+    var subject = String(b.subject || '').trim();
+    if (BANK_SUBJECTS.indexOf(subject) < 0) {
+      return { error: 'Choose one of the five supported subjects: ' + BANK_SUBJECTS.join(', ') + '.' };
+    }
+    var rawOptions = Array.isArray(b.options) ? b.options : String(b.options || '').split('\n');
+    rawOptions = rawOptions.map(function (o) { return String(o == null ? '' : o).trim(); });
+    if (rawOptions.length > 5) return { error: 'A question can have at most five options (A–E).' };
+    for (var i = 0; i < 4; i++) {
+      if (!rawOptions[i]) return { error: 'Option ' + 'ABCD'[i] + ' is required.' };
+    }
+    var options = rawOptions.slice(0, 4);
+    if (rawOptions[4]) options.push(rawOptions[4]);
+    var answer = Number(b.answer);
+    if (!isFinite(answer) || Math.floor(answer) !== answer || answer < 0 || answer >= options.length) {
+      return { error: 'Select the correct answer from the filled options (A–E).' };
+    }
+    var year = core.cleanQuestionYear(b.year);
+    if (year.error) return { error: year.error };
+    var draft = {
+      subject: subject,
+      section: 'objective',
+      topic: b.topic,
+      text: b.text,
+      options: options,
+      answer: answer,
+      explanation: b.explanation,
+      difficulty: b.difficulty,
+      active: b.active === undefined ? true : !!b.active,
+      year: b.year,
+      passageId: b.passageId,
+      imageId: b.imageId,
+      imageAlt: b.imageAlt
+    };
+    var v = core.validateQuestion(draft);
+    if (v.error) return { error: v.error };
+    v.rec.kind = 'objective';
+    v.rec.section = 'objective';
+    v.rec.year = year.year;
+    return { rec: v.rec };
+  }
+
+  function createBankQuestion(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var v = cleanBankQuestion(bank, body);
+      if (v.error) throw FreeError(400, v.error);
+      var b = db.free2027.questionBanks[bank];
+      b.questionSeq = (b.questionSeq || 0) + 1;
+      var rec = Object.assign({}, v.rec, {
+        id: bankPrefix(bank) + '-' + String(b.questionSeq).padStart(3, '0'),
+        bank: bank, createdAt: now(), updatedAt: now()
+      });
+      b.questions.push(rec);
+      writeData(db);
+      return { bank: bank, question: rec };
+    });
+  }
+
+  function updateBankQuestion(bank, id, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var b = db.free2027.questionBanks[bank];
+      var q = (b.questions || []).filter(function (x) { return x && String(x.id) === String(id); })[0];
+      if (!q) throw FreeError(404, 'That question is not in the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank.');
+      var refs = activitiesReferencing(db, q.id);
+      if (refs.length) {
+        throw FreeError(409, 'That question is used by ' + refs.length + ' activity(ies) (e.g. ' + (refs[0].title || refs[0].activityId) + '), so it cannot be edited — attempts and results must stay intact.');
+      }
+      var v = cleanBankQuestion(bank, Object.assign({}, q, body));
+      if (v.error) throw FreeError(400, v.error);
+      Object.assign(q, v.rec, { id: q.id, bank: bank, updatedAt: now() });
+      writeData(db);
+      return { bank: bank, question: q };
+    });
+  }
+
+  /* Bulk delete of selected questions from ONE bank. Requires confirm:true on
+     the server; refuses any question referenced by an activity. */
+  function deleteBankQuestions(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      if (!body || body.confirm !== true) {
+        throw FreeError(400, 'Deleting questions is destructive. Confirm it explicitly (confirm: true) — the response names the bank and the number of questions.');
+      }
+      var b = db.free2027.questionBanks[bank];
+      var ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
+      if (!ids.length) throw FreeError(400, 'Select at least one question to delete.');
+      var blocked = [];
+      ids.forEach(function (id) {
+        var refs = activitiesReferencing(db, id);
+        if (refs.length) blocked.push({ id: id, refs: refs });
+      });
+      if (blocked.length) {
+        throw FreeError(409, blocked.length + ' selected question(s) are used by existing activities and cannot be deleted (first: ' + blocked[0].id + ').');
+      }
+      var before = b.questions.length;
+      b.questions = b.questions.filter(function (q) { return ids.indexOf(String(q && q.id)) < 0; });
+      writeData(db);
+      return { bank: bank, requested: ids.length, deleted: before - b.questions.length, remaining: b.questions.length };
+    });
+  }
+
+  /* Delete ALL questions of ONE bank. Never touches the other bank; the bank
+     parameter is validated against the allowlist, so no request can name an
+     arbitrary path. Requires confirm:true; refuses while any question in the
+     bank is referenced by an activity. */
+  function deleteAllBankQuestions(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      if (!body || body.confirm !== true) {
+        var n0 = bankQuestionsSync(db, bank).length;
+        throw FreeError(400, 'Delete-all on the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank would remove ' + n0 + ' question(s). This is destructive — confirm explicitly (confirm: true).');
+      }
+      var b = db.free2027.questionBanks[bank];
+      var rows = b.questions || [];
+      var blocked = 0;
+      rows.forEach(function (q) { if (q && activitiesReferencing(db, q.id).length) blocked++; });
+      if (blocked) {
+        throw FreeError(409, blocked + ' of the ' + rows.length + ' question(s) in the ' + (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank are used by existing activities and cannot be deleted.');
+      }
+      var n = rows.length;
+      b.questions = [];
+      /* the sequence keeps moving forward, so deleted IDs are never re-issued */
+      writeData(db);
+      return { bank: bank, deleted: n, remaining: 0 };
+    });
+  }
+
+  /* CSV import into ONE bank using the Free Tutorial 14-column contract
+     (quoted commas, escaped quotes, multiline fields, UTF-8 BOM, A–D required,
+     E optional, answer A–E, duplicate and row-level error reporting, 500-row
+     cap, preview mode). The destination is the explicitly selected bank and
+     nothing else: duplicates are checked against THIS bank only, and rows keep
+     the subject named in their own subject column (one mixed-subject file is
+     fine). */
+  function importBankCsv(bank, body) {
+    bank = cleanBank(bank);
+    if (!bank) throw FreeError(400, 'Unknown question bank — choose "weekly" or "competition".');
+    return locked(async function () {
+      var db = readData();
+      ensureEdition(db);
+      var b = db.free2027.questionBanks[bank];
+      var text = String((body && body.csv) || '');
+      if (!text.trim()) throw FreeError(400, 'Choose a CSV file to import first.');
+      var preview = !!(body && body.preview);
+      var out = parseFreeBankCsv(text, b.questions, { preview: preview });
+      if (out.error) throw FreeError(400, out.error);
+      /* Belt and braces: only the five bank subjects may enter the bank,
+         regardless of what the shared validator allows. */
+      out.records = (out.records || []).filter(function (r) { return BANK_SUBJECTS.indexOf(r.subject) > -1; });
+      if (preview) {
+        return { bank: bank, preview: true, read: out.read, wouldImport: out.records.length, skipped: (out.errors || []).length, errors: (out.errors || []).slice(0, 100), rows: out.preview || [] };
+      }
+      var imported = [];
+      out.records.forEach(function (r) {
+        b.questionSeq = (b.questionSeq || 0) + 1;
+        var rec = Object.assign({}, r, {
+          id: bankPrefix(bank) + '-' + String(b.questionSeq).padStart(3, '0'),
+          bank: bank, importedAt: now(), updatedAt: now()
+        });
+        b.questions.push(rec);
+        imported.push({ id: rec.id, subject: rec.subject, topic: rec.topic, text: rec.text });
+      });
+      writeData(db);
+      return {
+        bank: bank, read: out.read, imported: imported.length,
+        skipped: (out.errors || []).length, errors: (out.errors || []).slice(0, 100),
+        questions: imported
+      };
+    });
+  }
+
   return {
     rules: rules,
     ensureEdition: ensureEdition,
@@ -1582,6 +2126,17 @@ function createFree2027(deps) {
     activityResults: activityResults,
     attemptDetail: attemptDetail,
     sessionRecords: sessionRecords,
+    /* the two independent question banks */
+    BANKS: BANKS,
+    BANK_SUBJECTS: BANK_SUBJECTS,
+    bankForKind: bankForKind,
+    bankOverview: bankOverview,
+    listBankQuestions: listBankQuestions,
+    createBankQuestion: createBankQuestion,
+    updateBankQuestion: updateBankQuestion,
+    deleteBankQuestions: deleteBankQuestions,
+    deleteAllBankQuestions: deleteAllBankQuestions,
+    importBankCsv: importBankCsv,
     startSession: startSession,
     listArchives: listArchives,
     readArchive: readArchive,
@@ -1594,5 +2149,6 @@ module.exports = {
   FreeError: FreeError,
   ensureEdition: ensureEdition,
   featureOffFromEnv: featureOffFromEnv,
+  parseFreeBankCsv: parseFreeBankCsv,
   createFree2027: createFree2027
 };

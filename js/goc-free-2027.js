@@ -234,6 +234,40 @@
   var MAX_ATTEMPTS = 10;
   var MAX_QUESTIONS = 100;
 
+  /* The edition's banks support exactly these five subjects. They are metadata
+     on a question, never a destination: the selected bank panel / activity
+     category alone decides where a question lives and serves. */
+  var SUBJECTS = ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+
+  /* The Free Tutorial CSV contract. It deliberately has no section, expected
+     or maxMark column: every row is a multiple-choice question for the bank
+     the administrator selected. The internal question model still carries an
+     optional/default `section` for compatibility with the hub's validator. */
+  var CSV_HEADER = 'subject,topic,text,optionA,optionB,optionC,optionD,optionE,answer,difficulty,explanation,active,year,passageId';
+  var CSV_COLUMNS = ['subject', 'topic', 'text', 'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'answer', 'difficulty', 'explanation', 'active', 'year', 'passageId'];
+
+  /* Optional subject distribution for automatic allocation. Blank / null means
+     "draw from all eligible questions". When present, the positive counts must
+     add up to the requested question count; the server checks each subject's
+     available eligible questions before assigning anything. */
+  function cleanSubjectDistribution(v, questionCount) {
+    if (v === undefined || v === null || v === '') return { distribution: null };
+    if (typeof v !== 'object' || Array.isArray(v)) return { error: 'Subject distribution must be an object of subject counts.' };
+    var out = {}, sum = 0, bad = false;
+    Object.keys(v).forEach(function (k) {
+      var subject = String(k).trim();
+      if (SUBJECTS.indexOf(subject) < 0) return;
+      var n = Number(v[k]);
+      if (!isFinite(n) || n < 0 || Math.floor(n) !== n) { bad = true; return; }
+      if (n > 0) { out[subject] = n; sum += n; }
+    });
+    if (bad) return { error: 'Subject distribution counts must be whole numbers of zero or more.' };
+    var keys = Object.keys(out);
+    if (!keys.length) return { distribution: null };
+    if (sum !== questionCount) return { error: 'Subject distribution must add up to the requested number of questions (' + questionCount + ').' };
+    return { distribution: out };
+  }
+
   function parseWhen(v) {
     if (v == null || v === '') return null;
     if (typeof v === 'number' && isFinite(v)) return new Date(v).getTime();
@@ -296,12 +330,23 @@
     if (!isFinite(maxAttempts) || maxAttempts < MIN_ATTEMPTS || maxAttempts > MAX_ATTEMPTS) {
       return { error: 'Set a maximum of between ' + MIN_ATTEMPTS + ' and ' + MAX_ATTEMPTS + ' attempts.' };
     }
+    /* Historical activities stored an explicit questionIds list. New activities
+       store a requested questionCount and the server allocates questionIds from
+       the bound bank. Both shapes remain readable so old records keep working. */
     var ids = Array.isArray(pick('questionIds', [])) ? pick('questionIds', []) : [];
     ids = ids.map(function (x) { return String(x); }).filter(Boolean);
     var seen = {};
     ids = ids.filter(function (x) { if (seen[x]) return false; seen[x] = true; return true; });
     if (ids.length > MAX_QUESTIONS) return { error: 'An activity can hold at most ' + MAX_QUESTIONS + ' questions.' };
-    if (!ids.length) return { error: 'Choose at least one question from the question bank.' };
+
+    var questionCount = Math.round(Number(pick('questionCount', ids.length || 0)));
+    if (!isFinite(questionCount) || questionCount < 1 || questionCount > MAX_QUESTIONS) {
+      return { error: 'Set how many questions to include, between 1 and ' + MAX_QUESTIONS + '.' };
+    }
+    var dist = cleanSubjectDistribution(pick('subjectDistribution', null), questionCount);
+    if (dist.error) return { error: dist.error };
+    var randomizeQuestions = pick('randomizeQuestions', true) !== false;
+    var randomizeOptions = pick('randomizeOptions', false) === true;
 
     return {
       rec: {
@@ -309,7 +354,11 @@
         instructions: String(pick('instructions', '') == null ? '' : pick('instructions', '')).trim().slice(0, 2000),
         opensAt: opensAt, closesAt: closesAt,
         durationMin: durationMin, maxAttempts: maxAttempts,
-        questionIds: ids
+        questionIds: ids,
+        questionCount: questionCount,
+        subjectDistribution: dist.distribution,
+        randomizeQuestions: randomizeQuestions,
+        randomizeOptions: randomizeOptions
       }
     };
   }
@@ -649,6 +698,10 @@
     MIN_ATTEMPTS: MIN_ATTEMPTS,
     MAX_ATTEMPTS: MAX_ATTEMPTS,
     MAX_QUESTIONS: MAX_QUESTIONS,
+    SUBJECTS: SUBJECTS.slice(),
+    CSV_HEADER: CSV_HEADER,
+    CSV_COLUMNS: CSV_COLUMNS.slice(),
+    cleanSubjectDistribution: cleanSubjectDistribution,
     parseWhen: parseWhen,
     activityState: activityState,
     canSit: canSit,

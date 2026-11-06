@@ -1508,37 +1508,60 @@
     </section>
 
     <section class="screen f27 f27-exam" id="free-exam">
-      <div class="cbt-top">
-        <div class="row gap12">
-          <button class="back" style="background:rgba(255,255,255,.14)" aria-label="Leave this examination" onclick="freeExamLeave()">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
-          </button>
-          <div><div style="font-weight:800;font-size:14px" id="freeExamTitle">Assessment</div>
-               <div style="font-size:11.5px;color:#cbd2dc" id="freeExamMeta">Loading…</div></div>
+      <header class="f27-cbt-header">
+        <div class="f27-cbt-title-row">
+          <button type="button" class="f27-cbt-back" aria-label="Leave this examination" onclick="freeExamLeave()">←</button>
+          <div class="f27-cbt-title-wrap">
+            <h1 id="freeExamTitle">Assessment</h1>
+            <div class="f27-cbt-meta"><span class="f27-cbt-kind" id="freeExamKind">Loading…</span><span id="freeExamMeta"></span></div>
+          </div>
+          <div class="f27-cbt-timer" id="freeExamTimer" aria-live="off">⏱ <span id="freeExamTime">--:--</span></div>
         </div>
-        <div class="timer" id="freeExamTimer"><svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="freeExamTime">--:--</span></div>
-      </div>
-      <div class="exam-body">
-        <div class="q-num" id="freeExamNum">Question 1 of 1</div>
-        <div class="q-passage" id="freeExamPassage" hidden></div>
-        <div class="q-image" id="freeExamImage" hidden></div>
-        <div class="q-text exam-q" id="freeExamQ"></div>
-        <div class="exam-opts" id="freeExamOpts"></div>
-      </div>
-      <div class="exam-bar">
-        <button class="btn btn-ghost exam-nav-btn" onclick="freeExamMove(-1)">Prev</button>
-        <button class="btn exam-qnum-btn" onclick="freeExamPanel()"><span id="freeExamPanelLabel">Q 1 / 1</span> <span class="exam-grid-icon">&#9783;</span></button>
-        <button class="btn btn-outline exam-nav-btn" onclick="freeExamMove(1)">Next</button>
-        <button class="btn btn-red exam-nav-btn" id="freeExamSubmit" onclick="freeExamSubmit()">Submit</button>
-      </div>
-      <div class="qnav" id="freeExamNav" style="display:none"></div>
-      <div class="qpanel-backdrop" id="freeExamPanelBack" onclick="freeExamPanelClose()" hidden></div>
-      <div class="qpanel" id="freeExamPanel" hidden>
-        <div class="qpanel-top">
-          <span class="qpanel-title">Jump to question</span>
-          <button class="qpanel-close" onclick="freeExamPanelClose()" aria-label="Close">&times;</button>
+        <div class="f27-cbt-progress"><span id="freeExamNum">Question 1 of 1</span></div>
+      </header>
+      <main class="f27-cbt-body">
+        <article class="f27-cbt-card">
+          <div class="f27-cbt-passage" id="freeExamPassage" hidden></div>
+          <div class="f27-cbt-image" id="freeExamImage" hidden></div>
+          <div class="f27-cbt-question" id="freeExamQ"></div>
+          <div class="f27-cbt-options" id="freeExamOpts" role="group" aria-label="Answer options"></div>
+        </article>
+      </main>
+      <nav class="f27-cbt-bar" aria-label="Question navigation">
+        <button type="button" class="f27-cbt-btn" id="freeExamPrev" onclick="freeExamMove(-1)">Previous</button>
+        <button type="button" class="f27-cbt-btn f27-cbt-btn-outline" onclick="freeExamPanel()"><span id="freeExamPanelLabel">Q 1 / 1</span> · Question Navigator</button>
+        <button type="button" class="f27-cbt-btn" id="freeExamNext" onclick="freeExamMove(1)">Next</button>
+        <button type="button" class="f27-cbt-btn f27-cbt-btn-red" id="freeExamSubmit" onclick="freeExamSubmit()">Submit</button>
+      </nav>
+      <div class="f27-cbt-modal-back" id="freeExamPanelBack" onclick="freeExamPanelClose()" hidden></div>
+      <div class="f27-cbt-modal" id="freeExamPanel" role="dialog" aria-modal="true" aria-labelledby="freeExamPanelTitle" hidden>
+        <div class="f27-cbt-modal-top">
+          <h2 id="freeExamPanelTitle">Question Navigator</h2>
+          <button type="button" class="f27-cbt-close" onclick="freeExamPanelClose()" aria-label="Close">×</button>
         </div>
-        <div class="qpanel-grid" id="freeExamPanelGrid"></div>
+        <div class="f27-cbt-legend">
+          <span><i class="f27-cbt-dot answered"></i> Answered</span>
+          <span><i class="f27-cbt-dot unanswered"></i> Unanswered</span>
+          <span><i class="f27-cbt-dot current"></i> Current</span>
+        </div>
+        <div class="f27-cbt-navgrid" id="freeExamPanelGrid"></div>
+      </div>
+      <div class="f27-cbt-modal-back" id="freeExamConfirmBack" hidden></div>
+      <div class="f27-cbt-modal f27-cbt-confirm" id="freeExamConfirm" role="dialog" aria-modal="true" aria-labelledby="freeExamConfirmTitle" hidden>
+        <div class="f27-cbt-modal-top">
+          <h2 id="freeExamConfirmTitle">Submit paper?</h2>
+          <button type="button" class="f27-cbt-close" onclick="freeExamConfirmCancel()" aria-label="Close">×</button>
+        </div>
+        <p class="f27-cbt-confirm-lead">Review your progress before submitting. You cannot change answers after submission.</p>
+        <div class="f27-cbt-confirm-counts">
+          <div><b id="freeExamConfirmAnswered">0</b><span>Answered</span></div>
+          <div><b id="freeExamConfirmUnanswered">0</b><span>Unanswered</span></div>
+          <div><b id="freeExamConfirmTotal">0</b><span>Total</span></div>
+        </div>
+        <div class="f27-cbt-confirm-actions">
+          <button type="button" class="f27-cbt-btn f27-cbt-btn-outline" id="freeExamConfirmCancel" onclick="freeExamConfirmCancel()">Keep working</button>
+          <button type="button" class="f27-cbt-btn f27-cbt-btn-red" onclick="freeExamConfirmSubmit()">Submit paper</button>
+        </div>
       </div>
     </section>
 

@@ -174,10 +174,10 @@
   }
 
   F.freeHomeCta = function () {
-    if (F.me) { global.go('free-portal'); return; }
+    if (F.me) { global.go('free-portal'); F.freePortalLoad(); return; }
     if (api.hasToken()) {
       /* A token exists but the identity was not read yet: ask once, then move. */
-      api.me().then(function (r) { F.me = r.participant; paintWho(); global.go('free-portal'); },
+      api.me().then(function (r) { F.me = r.participant; paintWho(); global.go('free-portal'); F.freePortalLoad(); },
         function () { global.go('free-register'); });
       return;
     }
@@ -377,12 +377,17 @@
   };
 
   function stateClass(a) { return 'f27-state ' + (a.state === 'open' ? 'open' : a.state === 'upcoming' ? 'soon' : 'shut'); }
+  function emptyState(title, body, actionHtml) {
+    return '<div class="f27-empty f27-empty-state" role="status">' +
+      '<div class="f27-empty-icon" aria-hidden="true">◎</div>' +
+      '<h3>' + esc(title) + '</h3><p>' + esc(body) + '</p>' + (actionHtml || '') + '</div>';
+  }
   function paintLists(host, mine) {
     var rows = F.activities.filter(function (a) { return a.kind === F.tab; });
     if (!rows.length) {
-      host.innerHTML = '<p class="f27-fine">' + (F.tab === 'weekly'
-        ? 'No weekly assessment has been published for this session yet.'
-        : 'No competition has been published for this session yet.') + '</p>';
+      host.innerHTML = F.tab === 'weekly'
+        ? emptyState('No weekly assessments yet', 'Published weekly assessments will appear here. Your results stay private to you.')
+        : emptyState('No competitions yet', 'Published competitions will appear here. Approved competition leaderboards are listed separately.');
       if (mine) mine.innerHTML = '';
       return;
     }
@@ -419,6 +424,26 @@
     }).join('');
     if (mine) mine.innerHTML = '';
     paintMyResults();
+  }
+
+  function paintBoards(host, mine) {
+    if (mine) mine.innerHTML = '';
+    host.innerHTML = '<div class="ad-loading">Loading published competition leaderboards…</div>';
+    api.leaderboards().then(function (r) {
+      var rows = r.leaderboards || [];
+      if (!rows.length) {
+        host.innerHTML = emptyState('No competition leaderboard yet', 'The academy approves and publishes each competition board before it appears here.');
+        return;
+      }
+      host.innerHTML = rows.map(function (b) {
+        return '<div class="f27-item"><div class="f27-item-top"><span class="f27-tag">Competition</span></div>' +
+          '<h3>' + esc(b.title) + '</h3>' +
+          '<div class="f27-facts"><span><b>' + b.competitors + '</b> competitors</span></div>' +
+          '<button class="btn btn-red btn-block" onclick="freeBoardOpen(\'' + esc(b.id) + '\')">View leaderboard</button></div>';
+      }).join('');
+    }, function (er) {
+      host.innerHTML = emptyState('Leaderboards unavailable', (er && er.message) || 'Could not load the competition leaderboards just now.');
+    });
   }
 
   function paintMyResults() {
@@ -495,9 +520,14 @@
     var title = $('freeExamTitle');
     if (title) title.textContent = F.exam.title;
     var meta = $('freeExamMeta');
-    if (meta) meta.textContent = rules.kindLabel(F.exam.kind) + ' · ' + n + ' question' + (n === 1 ? '' : 's');
+    if (meta) meta.textContent = n + ' question' + (n === 1 ? '' : 's') + ' in this paper';
+    var kind = $('freeExamKind');
+    if (kind) kind.textContent = rules.kindLabel(F.exam.kind);
     var num = $('freeExamNum');
     if (num) num.textContent = 'Question ' + (F.exam.index + 1) + ' of ' + n;
+    var prev = $('freeExamPrev'), next = $('freeExamNext');
+    if (prev) prev.disabled = F.exam.index <= 0;
+    if (next) next.disabled = F.exam.index >= n - 1;
     var label = $('freeExamPanelLabel');
     if (label) label.textContent = 'Q ' + (F.exam.index + 1) + ' / ' + n;
     var pass = $('freeExamPassage');
@@ -516,8 +546,11 @@
     if (host && q) {
       host.innerHTML = (q.options || []).map(function (o, i) {
         var on = F.exam.answers[q.id] === i;
-        return '<button class="exam-opt' + (on ? ' sel' : '') + '" onclick="freeExamPick(' + i + ')">' +
-          '<span class="eo-key">' + String.fromCharCode(65 + i) + '</span><span class="eo-txt">' + esc(o) + '</span></button>';
+        var letter = String.fromCharCode(65 + i);
+        return '<button type="button" class="f27-cbt-option' + (on ? ' sel' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+          'aria-label="Option ' + letter + ': ' + esc(o) + '" onclick="freeExamPick(' + i + ')">' +
+          '<span class="f27-cbt-letter" aria-hidden="true">[ ' + letter + ' ]</span>' +
+          '<span class="f27-cbt-text">' + esc(o) + '</span></button>';
       }).join('');
     }
   }
@@ -560,8 +593,9 @@
     var grid = $('freeExamPanelGrid');
     if (grid) {
       grid.innerHTML = F.exam.questions.map(function (q, i) {
-        var cls = i === F.exam.index ? 'qn cur' : (F.exam.answers[q.id] != null ? 'qn ans' : 'qn');
-        return '<button class="' + cls + '" onclick="freeExamJump(' + i + ')">' + (i + 1) + '</button>';
+        var answered = F.exam.answers[q.id] != null;
+        var cls = 'f27-cbt-navq' + (i === F.exam.index ? ' current' : '') + (answered ? ' answered' : ' unanswered');
+        return '<button type="button" class="' + cls + '" aria-label="Question ' + (i + 1) + (answered ? ', answered' : ', unanswered') + '" onclick="freeExamJump(' + i + ')">' + (i + 1) + '</button>';
       }).join('');
     }
     var back = $('freeExamPanelBack'), pan = $('freeExamPanel');
@@ -592,11 +626,27 @@
 
   F.freeExamSubmit = function () {
     if (!F.exam) return;
-    var unanswered = F.exam.questions.length - Object.keys(F.exam.answers).length;
-    var msg = unanswered > 0
-      ? 'You have ' + unanswered + ' unanswered question' + (unanswered === 1 ? '' : 's') + '. Submit anyway?'
-      : 'Submit your paper?';
-    if (typeof global.confirm === 'function' && !global.confirm(msg)) return;
+    var total = F.exam.questions.length;
+    var answered = F.exam.questions.filter(function (q) { return F.exam.answers[q.id] != null; }).length;
+    var unanswered = Math.max(0, total - answered);
+    var back = $('freeExamConfirmBack'), box = $('freeExamConfirm');
+    if (!back || !box) return doSubmit(false);
+    var a = $('freeExamConfirmAnswered'), u = $('freeExamConfirmUnanswered'), t = $('freeExamConfirmTotal');
+    if (a) a.textContent = String(answered);
+    if (u) u.textContent = String(unanswered);
+    if (t) t.textContent = String(total);
+    back.hidden = false;
+    box.hidden = false;
+    var cancel = $('freeExamConfirmCancel');
+    if (cancel && cancel.focus) cancel.focus();
+  };
+  F.freeExamConfirmCancel = function () {
+    var back = $('freeExamConfirmBack'), box = $('freeExamConfirm');
+    if (back) back.hidden = true;
+    if (box) box.hidden = true;
+  };
+  F.freeExamConfirmSubmit = function () {
+    F.freeExamConfirmCancel();
     doSubmit(false);
   };
 
@@ -677,7 +727,7 @@
               '<div class="f27-facts"><span><b>' + b.competitors + '</b> competitors</span></div>' +
               '<button class="btn btn-red btn-block" onclick="freeBoardOpen(\'' + esc(b.id) + '\')">View board</button></div>';
           }).join('')
-        : '<p class="f27-fine">No competition leaderboard has been published for this session yet. The academy approves each board before it appears here.</p>';
+        : emptyState('No competition leaderboard yet', 'The academy approves and publishes each competition board before it appears here.');
     }, function (er) {
       host.innerHTML = '<p class="f27-fine">' + esc(er.message || 'Could not load the boards.') + '</p>';
     });
@@ -834,13 +884,19 @@
   /* Expose the handful of names the markup calls. */
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
-    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeResultShow', 'freeBoardOpen',
+    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });
-  global.freeGo = function (id) { return global.go(id); };
+  /* Portal links must re-read the programme on arrival: a result or leaderboard
+     opened since the last visit changes what the portal should show. */
+  global.freeGo = function (id) {
+    global.go(id);
+    if (id === 'free-portal') F.freePortalLoad();
+    else if (id === 'free-home') freeHomeLoad();
+  };
 
   GOC.freeUI = {
     applyMode: applyMode,

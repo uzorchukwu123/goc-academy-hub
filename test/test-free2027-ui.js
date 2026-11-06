@@ -97,7 +97,8 @@ function makeWorld(opts) {
    'freeEmail', 'freeCourse', 'freeCourseList', 'freeRegBtn', 'freeOtp', 'freeOtpErr', 'freeOtpTo', 'freeOtpDev',
    'freeOtpBtn', 'freeOtpResendBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
-   'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeResultBody', 'freeBoardBody',
+   'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeExamKind', 'freeExamPrev', 'freeExamNext',
+   'freeExamConfirmBack', 'freeExamConfirm', 'freeExamConfirmAnswered', 'freeExamConfirmUnanswered', 'freeExamConfirmTotal', 'freeExamConfirmCancel', 'freeResultBody', 'freeBoardBody',
    'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing', 'freeProgramme',
    'free-admin', 'free-home', 'free-portal', 'free-result', 'free-exam', 'free-leaderboard', 'admin-gate', 'admin'
   ].forEach(el);
@@ -127,12 +128,12 @@ function makeWorld(opts) {
     registerVerify: function (d) { calls.api.push(['registerVerify', d]); return Promise.resolve(o.verifyReply || { token: 'T1', participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', email: 'ad••@example.com' } }); },
     me: function () { return Promise.resolve({ participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law' } }); },
     logout: function () { return Promise.resolve({ ok: true }); },
-    activities: function () { return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } }); },
+    activities: function () { calls.api.push(['activities']); return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } }); },
     start: function (id) { calls.api.push(['start', id]); return Promise.resolve(o.startAttempt || { attempt: { id: 'F27-A1', title: 'Week 1', kind: 'weekly', remainingSec: 615, responses: {} }, questions: [], resumed: false }); },
     resume: function () { return Promise.resolve({}); },
     answer: function (a, q, c) { calls.api.push(['answer', a, q, c]); return Promise.resolve({ saved: true }); },
     submit: function (a, r) { calls.api.push(['submit', a, r]); return Promise.resolve(o.submitReply || { result: { title: 'Week 1', kind: 'weekly', score: 2, maxScore: 4, private: true, timeUsedSec: 30 } }); },
-    results: function () { return Promise.resolve({ results: [] }); },
+    results: function () { calls.api.push(['results']); return Promise.resolve(o.resultsReply || { results: [] }); },
     leaderboards: function () { return Promise.resolve({ leaderboards: [] }); },
     leaderboard: function () { return Promise.resolve({ leaderboard: { rows: [], totalCompetitors: 0 }, mine: null }); },
     programme: function () {
@@ -360,7 +361,7 @@ settle(load(w1)).then(function () {
     return settle().then(function () {
       ok('the paper is opened through the server', w.calls.api.some(function (c) { return c[0] === 'start' && c[1] === 'F27-Q1'; }));
       ok('the screen is the examiner', w.calls.go[w.calls.go.length - 1] === 'free-exam', w.calls.go.join(','));
-      ok('the title and the count come from the paper', w.els.freeExamTitle.textContent === 'Week 1' && /2 question/.test(w.els.freeExamMeta.textContent), w.els.freeExamMeta.textContent);
+      ok('the title and the count come from the paper', w.els.freeExamTitle.textContent === 'Week 1' && w.els.freeExamKind.textContent === 'Weekly Assessment' && /Question 1 of 2/.test(w.els.freeExamNum.textContent), w.els.freeExamNum.textContent);
       ok('the clock starts from the SERVER\'s remaining time, not the full duration', w.els.freeExamTime.textContent === '10:15', w.els.freeExamTime.textContent);
       ok('question 1 is painted with its options', /A body moves/.test(w.els.freeExamQ.textContent) && w.els.freeExamOpts.innerHTML.indexOf('12 m') > -1);
       ok('a resumed answer is already marked', /sel/.test(w.els.freeExamOpts.innerHTML));
@@ -378,7 +379,10 @@ settle(load(w1)).then(function () {
       w.sandbox.freeExamSubmit();
       return settle();
     }).then(function () {
-      ok('submitting asks first', w.calls.confirmsAsked.length >= 1 && /Submit/.test(w.calls.confirmsAsked[0]), w.calls.confirmsAsked[0]);
+      ok('submitting opens the confirmation dialog with answered/unanswered counts', w.els.freeExamConfirm.hidden === false && w.els.freeExamConfirmAnswered.textContent === '2' && w.els.freeExamConfirmUnanswered.textContent === '0' && w.els.freeExamConfirmTotal.textContent === '2');
+      w.sandbox.freeExamConfirmSubmit();
+      return settle();
+    }).then(function () {
       ok('the saved answers are what is submitted', (function () {
         var s = w.calls.api.filter(function (c) { return c[0] === 'submit'; })[0];
         return !!s && s[2]['11'] === 1 && s[2]['12'] === 0;
@@ -411,6 +415,25 @@ settle(load(w1)).then(function () {
         ok('and the programme is re-read afterwards',
           w.calls.api.filter(function (c) { return c[0] === 'programme'; }).length === 2, JSON.stringify(w.calls.api));
       });
+    });
+  });
+}).then(function () {
+  console.log('\nReturning to the CBT Portal refreshes the programme and results');
+  var w = makeWorld({
+    token: 'T1',
+    listReply: { activities: [{ id: 'F27-Q1', kind: 'weekly', title: 'Week 1', state: 'open', questionCount: 1, durationMin: 10, maxAttempts: 1, attemptsLeft: 1, attemptsUsed: 0 }], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } },
+    resultsReply: { results: [{ title: 'Week 1', kind: 'weekly', score: 1, maxScore: 1, submittedAt: 0 }] }
+  });
+  load(w);
+  return settle(w).then(function () {
+    var activitiesBefore = w.calls.api.filter(function (c) { return c[0] === 'activities'; }).length;
+    var resultsBefore = w.calls.api.filter(function (c) { return c[0] === 'results'; }).length;
+    w.sandbox.freeGo('free-portal');
+    return settle().then(function () {
+      ok('a portal link opens the portal', w.calls.go[w.calls.go.length - 1] === 'free-portal', w.calls.go.join(','));
+      ok('and re-reads the activity list on arrival', w.calls.api.filter(function (c) { return c[0] === 'activities'; }).length > activitiesBefore);
+      ok('and re-reads the candidate\'s results on arrival', w.calls.api.filter(function (c) { return c[0] === 'results'; }).length > resultsBefore);
+      ok('so a just-submitted result is not left stale', /Week 1/.test(w.els.freePortalResults.innerHTML), w.els.freePortalResults.innerHTML.slice(0, 160));
     });
   });
 }).then(function () {
