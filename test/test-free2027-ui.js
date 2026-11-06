@@ -7,8 +7,8 @@
        or switched-off server produces;
      • 2027 Free Tutorial Mode adds one class to <body> and nothing else, and
        taking the class away restores the hub;
-     • one click on the existing "4 Science subjects" card opens the administrator
-       sign-in, while the original homepage remains intact;
+     • the old Science Subjects card entrance is gone; the existing staff
+       sign-in remains available to the verified contact-form entrance;
      • the registration form refuses a bad address before it calls the server;
      • the examination paints the paper it is served, saves an answer, moves,
        and keeps its clock running down from the SERVER's remaining time.
@@ -74,7 +74,6 @@ El.prototype.insertAdjacentHTML = function (where, h) { this._html += h; };
 El.prototype.closest = function (sel) {
   var n = this;
   while (n) {
-    if (sel === '[data-f27-gate]' && n.attributes && n.attributes['data-f27-gate'] !== undefined) return n;
     n = n.parentNode;
   }
   return null;
@@ -238,10 +237,8 @@ settle(load(w1)).then(function () {
   ok('the page was not moved off the homepage', w1.calls.go.length === 0 || w1.calls.go[w1.calls.go.length - 1] === 'landing', w1.calls.go.join(','));
   ok('the edition\'s screens were not opened', w1.calls.go.indexOf('free-home') < 0);
   ok('GOC.freeUI reports Original Mode', w1.sandbox.GOC.freeUI.mode().mode === 'original');
-  /* the designated homepage card is the entry in either mode */
-  w1.sandbox.GOC.freeUI.gateClick();
-  ok('the homepage statistics card opens the admin sign-in in Original Mode too',
-    w1.calls.go.indexOf('free-admin') > -1, w1.calls.go.join(','));
+  ok('the removed card entrance is not exposed by the edition UI',
+    typeof w1.sandbox.GOC.freeUI.gateClick !== 'function' && w1.calls.go.indexOf('free-admin') < 0, w1.calls.go.join(','));
 
   console.log('\nA server that cannot be reached also leaves the hub alone');
   w2 = makeWorld({ healthFails: true });
@@ -283,23 +280,20 @@ settle(load(w1)).then(function () {
     ok('and switching on again is the same one class', w3.doc.body.classList.contains('f27-mode'));
   });
 }).then(function () {
-  console.log('\nThe Science Subjects Statistics card is the only Admin Console entry');
+  console.log('\nThe Science Subjects card is no longer an Admin Console entrance');
   var w = makeWorld({});
   load(w);
   return settle().then(function () {
-    var card = w.els.lpStat4;
-    ok('the existing homepage statistics card is the marked entry point', card && html.indexOf('id="lpStat4"') > -1 && /data-f27-gate/.test(html));
-    ok('the card still reads exactly "4" and "Science subjects"', /<b>4<\/b><span>Science subjects<\/span>/.test(html));
-    ok('the click is handled by the existing card using a delegated listener', /closest\('\[data-f27-gate\]'\)/.test(uiSrc));
-    w.sandbox.GOC.freeUI.gateClick();
-    ok('a single card click immediately opens the existing admin login',
-      w.calls.go.indexOf('free-admin') > -1 && w.els['free-admin'].classList.contains('active'), w.calls.go.join(','));
+    ok('the statistics card still reads exactly "4" and "Science subjects"', /<b>4<\/b><span>Science subjects<\/span>/.test(html));
+    ok('the card carries no hidden entrance marker', html.indexOf('data-f27-gate') < 0);
+    ok('the edition UI has no card click handler or delegated gate listener',
+      !/freeGateClick|gateClicks|wireLanding|data-f27-gate/.test(uiSrc));
     ok('the homepage has no other Admin Console entry point', (function () { var landing = html.slice(html.indexOf('id="landing"'), html.indexOf('id="landing"') + 60000); return !/onclick="[^"]*(?:free-admin|admin-gate|go\('admin')/i.test(landing); })());
-    ok('the admin-login hint says the console still has its passcode',
-      /own passcode/i.test(w.els.freeAdminNote.textContent), w.els.freeAdminNote.textContent);
-    ok('the sign-in uses the existing administrator form', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
+    ok('the existing staff sign-in screen and handler remain', html.indexOf('free-admin') > -1 && /freeAdminLogin/.test(html));
     ok('the stylesheet shows the login screen without requiring Free mode',
       /#free-admin\.active/.test(css.replace(/\s+/g, ' ')));
+    w.sandbox.go('free-admin');
+    ok('the verified contact entrance can open the existing staff sign-in', w.els['free-admin'].classList.contains('active'));
 
     console.log('\nThe administrator sign-in keeps the server authorisation');
     w.els.freeAdminId.value = 'GOC-A-001';

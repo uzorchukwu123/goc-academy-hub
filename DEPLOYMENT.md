@@ -82,17 +82,43 @@ GOC_DATA_DIR=/var/lib/goc-academy-hub/data
 GOC_FOUNDER_PW=<new-founder-password>
 GOC_ACADDIR_PW=<new-academic-director-password>
 GOC_PASSCODE=<new-console-passcode>
-GOC_TUTOR_DOOR=<secret-word-for-tutors>
 GOC_NO_DEMO_SEED=1
 GOC_TRUST_PROXY=1
 # GOC_PUBLIC_DIR=dist   # serve the minified build made by `npm run build` (see "Production build")
 ```
 
-`GOC_TUTOR_DOOR` is the secret word tutors type into the Scholar ID box on the log-in screen to reach
-their sign-in (6 characters or more; case and extra spaces do not matter). Leave it unset and the tutor
-screens cannot be opened at all. Tell tutors the word in person or by private message, never in a public
-place, and change it by editing the variable and restarting. The tutor screens' code lives in
-`server/tutor/` and is never served as a file, so keep that folder with the rest of `server/`.
+### Founder contact entrance
+
+Set both variables to enable the Founder identity request through the public
+contact form. Store the real values only in the environment/secret manager:
+
+```text
+GOC_FOUNDER_EMAIL=<real-founder-email>
+GOC_FOUNDER_GATE_WORD=<private-exact-phrase>
+```
+
+- `GOC_FOUNDER_GATE_WORD` is the exact, case-sensitive phrase the Founder types
+  into the contact form's Message field. It must be 12–200 characters with no
+  leading/trailing whitespace or control characters. An unset/invalid value
+  closes the Founder entrance safely; ordinary contact messages still work.
+- `GOC_FOUNDER_EMAIL` is the only email identity accepted by that entrance.
+  It must be explicitly configured and valid. There is no derived-address or
+  staff-record fallback; a missing/invalid address returns a safe
+  configuration error for an exact gate-word request.
+- Neither value is returned by public configuration endpoints, embedded in
+  frontend JavaScript, or printed in server logs. A matching request only
+  opens the existing staff login (`free-admin`). The Founder must still
+  authenticate with `GOC-A-001` and the normal staff password, then unlock the
+  existing Admin Console Gate with the console passcode. The gate word alone
+  never authenticates anyone.
+- The verified gate word is not stored as a contact message and is not emailed
+  (neither through SMTP nor through the browser's FormSubmit relay). Ordinary
+  contact messages keep the existing storage/email behaviour and the academy
+  inbox remains `godsowncenterinfo@gmail.com`.
+
+The old tutor secret-word door has been removed. Do not configure
+`GOC_TUTOR_DOOR`, `GOC_TUTOR_DOOR_PW`, or `GOC_DOOR_TOKEN_MS`; they no longer
+open anything. Tutor accounts and tutor API authentication remain unchanged.
 
 ### Optional environment variables
 

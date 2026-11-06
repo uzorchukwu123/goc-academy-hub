@@ -67,12 +67,22 @@ first run are the two management consoles:
 | `GOC-A-001` | from `GOC_FOUNDER_PW` — set it yourself, never published here | Console access portal (Founder) |
 | `GOC-A-002` | from `GOC_ACADDIR_PW` — set it yourself, never published here | Console access portal (Academic Director) |
 
-Console passcode: from `GOC_PASSCODE`, also never published here. All three are
-environment variables, set before the first run. Change all three from
-Console → Access & firewall before a cohort registers — the server refuses to
-boot in production with any of them still at the published default. Any ID
-not on the roster is refused; students are created when anyone signs up (an
-**Open** account) or when management adds them from the console (GOC by default).
+Console passcode: from `GOC_PASSCODE`, also never published here. These are
+environment variables, set before the first run. Change the passwords and
+passcode from Console → Access & firewall before a cohort registers — the server
+refuses to boot in production with any of them still at the published default.
+Any ID not on the roster is refused; students are created when anyone signs up
+(an **Open** account) or when management adds them from the console (GOC by
+default).
+
+The Founder's hidden entrance is the recovered PR #9 contact-form entrance:
+homepage **Get in touch → Message**. Set `GOC_FOUNDER_EMAIL` and
+`GOC_FOUNDER_GATE_WORD` on the server to enable it. The exact, case-sensitive
+gate word is checked before any contact storage or email; a correct request
+opens the existing staff sign-in, then `GOC-A-001` + `GOC_FOUNDER_PW`, then the
+console passcode. The gate word is independent of the Founder password and the
+console passcode, and it is not stored or emailed. The old Science Subjects card
+and tutor secret-word entrances have been removed.
 
 ## Open sign-up (there is no access code)
 

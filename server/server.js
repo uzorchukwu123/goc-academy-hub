@@ -56,6 +56,7 @@ const reminders = require('./lib/reminders');
    server/lib/free2027.js and js/goc-free-2027.js. Removing this require (and the
    `free2027` block further down) leaves the original hub exactly as it was. */
 const free2027Lib = require('./lib/free2027');
+const founderContact = require('./lib/founder-contact');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -1498,6 +1499,21 @@ function noteContact(ip) {
   if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) contactAttempts.set(ip, { count: 1, first: Date.now() });
   else rec.count += 1;
 }
+/* Attempts using the configured Founder gate word get their own, stricter
+   limit so the identity check cannot be brute-forced through the public form. */
+const FOUNDER_MAX = 3;
+const founderAttempts = new Map();
+function tooManyFounderRequests(ip) {
+  const rec = founderAttempts.get(ip);
+  if (!rec) return false;
+  if (Date.now() - rec.first > CONTACT_WINDOW_MS) { founderAttempts.delete(ip); return false; }
+  return rec.count >= FOUNDER_MAX;
+}
+function noteFounderRequest(ip) {
+  const rec = founderAttempts.get(ip);
+  if (!rec || Date.now() - rec.first > CONTACT_WINDOW_MS) founderAttempts.set(ip, { count: 1, first: Date.now() });
+  else rec.count += 1;
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -2888,65 +2904,6 @@ async function getCohortOrNull(cohortId) {
    Phase 3C slices 2-3. Tutor accounts are kept in db.tutors. The sign-in route,
    the session role 'tutor' and the scope guard below are separate from the console's
    routes on purpose: a tutor can only ever read or write their own subjects. */
-/* Phase 3C slice 4: the hidden door. A secret word typed into the Scholar ID box on the
-   log-in screen is sent here. The word lives ONLY in the GOC_TUTOR_DOOR environment variable
-   (never in any file the browser can download), a right word returns a single-use token valid
-   for 60 seconds, and only that token fetches the tutor screens' code, which sits in
-   server/tutor/ (the static server never serves server/). With no word set the door is
-   closed and answers exactly like an address that does not exist.
-   Honest limit: this hides the tutor screens, it is not what protects the data. The tutor
-   sign-in, its lock-outs and the scope guard on every tutor route are. */
-const DOOR_WORD_MIN = 6;
-function doorNormal(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80); }
-const DOOR_WORD_RAW = doorNormal(process.env.GOC_TUTOR_DOOR);
-const DOOR_WORD = DOOR_WORD_RAW.length >= DOOR_WORD_MIN ? DOOR_WORD_RAW : '';
-const DOOR_DIGEST = DOOR_WORD ? crypto.createHash('sha256').update(DOOR_WORD).digest() : null;
-const DOOR_TOKEN_MS = Number(process.env.GOC_DOOR_TOKEN_MS) || 60 * 1000;   // the override exists for the tests
-const DOOR_MISS_MAX = 6;
-const DOOR_MISS_WINDOW_MS = 15 * 60 * 1000;
-const doorMisses = new Map();                 // address -> { count, first }
-const doorTokens = new Map();                 // token -> expiry time
-const TUTOR_BUNDLE = path.join(__dirname, 'tutor', 'tutor-app.js');
-
-function doorLocked(ip) {
-  const rec = doorMisses.get(ip);
-  if (!rec) return false;
-  if (Date.now() - rec.first > DOOR_MISS_WINDOW_MS) { doorMisses.delete(ip); return false; }
-  return rec.count >= DOOR_MISS_MAX;
-}
-function doorMiss(ip) {
-  const rec = doorMisses.get(ip);
-  if (!rec || Date.now() - rec.first > DOOR_MISS_WINDOW_MS) doorMisses.set(ip, { count: 1, first: Date.now() });
-  else rec.count += 1;
-}
-function doorWordOk(word) {
-  if (!DOOR_DIGEST) return false;
-  const given = crypto.createHash('sha256').update(doorNormal(word)).digest();
-  return crypto.timingSafeEqual(given, DOOR_DIGEST);
-}
-/* Optional second part of the door: GOC_TUTOR_DOOR_PW (case and stray spaces ignored, so phone keyboards cannot break it). */
-const DOOR_PW_DIGEST = process.env.GOC_TUTOR_DOOR_PW
-  ? crypto.createHash('sha256').update(doorNormal(process.env.GOC_TUTOR_DOOR_PW)).digest() : null;
-function doorPwOk(pw) {
-  if (!DOOR_PW_DIGEST) return true;
-  const given = crypto.createHash('sha256').update(doorNormal(pw)).digest();
-  return crypto.timingSafeEqual(given, DOOR_PW_DIGEST);
-}
-function doorMint() {
-  const now = Date.now();
-  doorTokens.forEach((exp, k) => { if (exp <= now) doorTokens.delete(k); });
-  if (doorTokens.size >= 200) return null;
-  const token = crypto.randomBytes(24).toString('hex');
-  doorTokens.set(token, now + DOOR_TOKEN_MS);
-  return token;
-}
-/* Single use: the token is gone the moment it is looked at, right or late. */
-function doorSpend(token) {
-  const exp = doorTokens.get(token);
-  doorTokens.delete(token);
-  return !!exp && exp > Date.now();
-}
-
 const tutorFails = new Map();                 // tutor ID -> { count, first }
 const TUTOR_FAIL_MAX = 10;
 const TUTOR_FAIL_WINDOW_MS = 15 * 60 * 1000;
@@ -3859,31 +3816,57 @@ const ROUTES = [
     } },
 
   /* Homepage "Talk to G.O.C Academy" form. Public on purpose — a visitor
-     hasn't signed in yet when they use it. js/api.js's sendContact() calls
-     the mail relay (FormSubmit, straight to godsowncenterinfo@gmail.com)
-     itself and calls this route in parallel purely to keep a durable copy;
-     this handler ALSO makes its own best-effort attempt to email the
-     academy inbox when SMTP is configured (GOC_SMTP_HOST/PORT/USER/PASS
-     env vars — see DEPLOYMENT.md), so the message still reaches the inbox
-     even from a visitor whose browser/network blocks the third-party
-     relay. Either way the submission is never lost: it is written to
-     data.json before any mail attempt is made. */
+     hasn't signed in yet when they use it. This route is the single
+     authoritative backend request for a submission: it records ordinary
+     messages once and makes at most one server-side SMTP attempt. Ordinary
+     messages keep the existing browser FormSubmit relay as well (js/api.js),
+     but a verified Founder request never goes through that third-party relay.
+     Recovered from PR #9 (71e9ebb), with one security adaptation required by
+     the current review: the configured gate word itself is neither stored as
+     a contact message nor emailed. */
   { method: 'POST', path: /^\/api\/contact$/, need: null, handler: (req, res, body) => {
       const ip = getClientIp(req);
       if (tooManyContacts(ip)) return errJson(res, 429, 'Too many messages sent from this connection. Please try again later.');
 
       const name = clean(body.name, 120);
       const email = clean(body.email, 160);
-      const message = clean(body.message, 4000);
+      /* Keep the raw message for the EXACT gate-word comparison. clean()
+         collapses whitespace and trims, which would change a configured
+         phrase; ordinary messages keep the existing cleaned/capped copy. */
+      const rawMessage = typeof body.message === 'string' ? body.message : '';
+      const message = clean(rawMessage, 4000);
       if (!name) return errJson(res, 400, 'Please add your name.');
       if (!email || email.indexOf('@') < 1 || email.indexOf('@') === email.length - 1) return errJson(res, 400, 'Please add a valid email address.');
       if (!message) return errJson(res, 400, 'Please add a short message.');
 
+      /* Founder entry through the contact form. The configured gate word is
+         a REQUEST, never a credential. Only the server knows it; the browser
+         simply submits the message field. The email must match the explicitly
+         configured GOC_FOUNDER_EMAIL — there is no derived-address fallback.
+         A match routes to the existing staff sign-in only; no token is issued
+         and the normal staff login + console passcode still apply afterwards. */
+      const gateWord = founderContact.configuredGateWord(process.env);
+      if (gateWord !== null && founderContact.matchesGateWord(rawMessage, gateWord)) {
+        if (tooManyFounderRequests(ip)) return errJson(res, 429, 'Too many requests from this connection. Please try again later.');
+        noteFounderRequest(ip);
+        const founderEmail = founderContact.configuredEmail(process.env);
+        if (!founderEmail) {
+          return errJson(res, 503, 'Founder sign-in is not configured on this deployment.');
+        }
+        if (email.trim().toLowerCase() !== founderEmail) {
+          return errJson(res, 403, 'Those details could not be verified. The message alone never grants access.');
+        }
+        noteContact(ip);
+        /* The gate word is not a contact message: do not write it to
+           contactMessages and do not hand it to SMTP or the browser relay. */
+        okJson(res, { ok: true, founderRequest: true, next: 'free-admin' });
+        return;
+      }
+
       noteContact(ip);
       const db = readData();
       db.contactMessages.push({ name, email, message, date: todayLabel(), receivedAt: new Date().toISOString() });
-      // Cap the log so an old install's data.json cannot grow forever; the
-      // mail relay is the real delivery path, this is only a safety net.
+      // Cap the log so an old install's data.json cannot grow forever.
       if (db.contactMessages.length > 500) db.contactMessages = db.contactMessages.slice(-500);
       writeData(db);
       okJson(res, { ok: true });
@@ -4214,38 +4197,6 @@ const ROUTES = [
       });
     } },
 
-
-  /* ---- Phase 3C slice 4: the hidden door (see the note above DOOR_WORD) ---- */
-
-  { method: 'POST', path: /^\/api\/door$/, need: null, handler: (req, res, body) => {
-      const ip = getClientIp(req);
-      const gone = () => errJson(res, 404, 'No such endpoint.');
-      if (!DOOR_WORD) return gone();
-      if (doorLocked(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      if (!doorWordOk(body && body.word) || !doorPwOk(body && body.password)) { doorMiss(ip); return gone(); }
-      doorMisses.delete(ip);
-      const token = doorMint();
-      if (!token) return errJson(res, 429, 'Try again in a minute.');
-      okJson(res, { ok: true, token });
-    } },
-
-  { method: 'GET', path: /^\/api\/door\/([a-f0-9]{48})\.js$/, need: null, handler: (req, res, body, sess, params) => {
-      const ip = getClientIp(req);
-      const gone = () => errJson(res, 404, 'No such endpoint.');
-      if (!DOOR_WORD) return gone();
-      if (doorLocked(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      if (!doorSpend(params[0])) { doorMiss(ip); return gone(); }
-      fs.readFile(TUTOR_BUNDLE, (err, buf) => {
-        if (err) return errJson(res, 404, 'No such endpoint.');
-        res.writeHead(200, {
-          'Content-Type': 'text/javascript; charset=utf-8',
-          'Content-Length': buf.length,
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff'
-        });
-        res.end(buf);
-      });
-    } },
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
 
@@ -9728,9 +9679,8 @@ function start() {
       console.log('  Free tutorial archives: ' + path.join(DATA_DIR, 'free2027-archives'));
     }
     console.log('  Console passcode: ' + (process.env.GOC_PASSCODE ? '(from GOC_PASSCODE)' : '2027'));
-    if (DOOR_WORD) console.log('  Tutor entrance: open (word from GOC_TUTOR_DOOR).');
-    else if (DOOR_WORD_RAW) console.log('  Tutor entrance: CLOSED. GOC_TUTOR_DOOR must be at least ' + DOOR_WORD_MIN + ' characters.');
-    else console.log('  Tutor entrance: closed. Set GOC_TUTOR_DOOR to a secret word to let tutors in.');
+    /* Value-free diagnostic: never print the configured phrase or address. */
+    console.log('  Founder contact entrance: ' + founderContact.configurationStatus(process.env) + '.');
     console.log('');
     if (appwriteDatabases) {
       migrateAppwriteTiers().catch(function(err) {

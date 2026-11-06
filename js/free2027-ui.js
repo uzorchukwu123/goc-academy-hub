@@ -20,8 +20,9 @@
         enforced on the server, which is the authority: this side exists so the
         page behaves sensibly, not so it can be trusted.
 
-     3. THE ADMIN ENTRY. One click on the existing "4 Science subjects" card
-        opens the administrator sign-in. It is the only public console entry.
+     3. THE ADMIN ENTRY. The existing homepage contact form can route a
+        server-verified Founder request to the existing staff sign-in. The
+        statistics card is ordinary content, not an entrance.
 
    Loading order: js/goc-free-2027.js (rules), js/api.js, js/app.js, then this
    file. Requires js/free2027-api.js. */
@@ -43,8 +44,6 @@
   F.tab = 'weekly';
   F.exam = null;                    // { attempt, questions, index, answers, tick }
   F.saveQueue = {};
-  F.gateClicks = 0;
-  F.gateAt = 0;
 
   function $(id) { return document.getElementById(id); }
   function esc(v) {
@@ -98,7 +97,6 @@
         : 'Registration is verified by a one-time code sent to your email address.';
     }
     if (free) {
-      wireLanding(0);
       freeHomeLoad();
     }
   }
@@ -776,17 +774,11 @@
   };
 
   /* =================================================== 9. ADMIN ENTRY
-     The existing homepage statistic is the single public console gateway.
-     It opens the existing staff sign-in; authentication and the console's
-     passcode gate remain enforced by the original server mechanisms. */
-  F.freeGateClick = function () {
-    revealAdminGate();
-  };
-  function revealAdminGate() {
-    global.go('free-admin');
-    var note = $('freeAdminNote');
-    if (note) note.textContent = 'The console keeps its own passcode. Attempts are limited and logged.';
-  }
+     The homepage statistics card is ordinary content (no gate/listener).
+     A Founder request verified by the contact route opens this existing
+     staff sign-in; authentication and the console passcode gate remain
+     enforced by the original server mechanisms. The gate word is never
+     present in this script or fetched from a public configuration endpoint. */
 
   /* The administrator signs in with the hub's own login (js/app.js loginNow),
      which the server authorises exactly as it always did. This only feeds the
@@ -799,37 +791,29 @@
     if (!id) { if (err) err.textContent = 'Enter your Staff ID.'; return; }
     var btn = $('freeAdminBtn');
     busy(btn, true);
-    GOC.api.ready.then(function () { return GOC.api.login(id, pw); }).then(function (user) {
+    return GOC.api.ready.then(function () { return GOC.api.login(id, pw); }).then(function (user) {
       busy(btn, false);
       if (!user || user.role !== 'admin') {
         if (err) err.textContent = 'That is not a management account.';
         return;
       }
       if (typeof global.applyIdentity === 'function') global.applyIdentity(user);
-      /* Into the hub's own secure access portal: the passcode is still asked
-         for, and the console is still locked until the server accepts it. */
-      global.go('admin-gate');
-      say('Staff ID recognised — enter your access passcode');
+      var pwField = $('freeAdminPw'); if (pwField) pwField.value = '';
+      /* A manager still on a starting password keeps the existing forced
+         change step. Otherwise this is the hub's own secure access portal:
+         the console stays locked until the server accepts the passcode. */
+      if (user.mustChangePassword) {
+        global.go('staff-change-password');
+        say('Choose your own password to continue');
+      } else {
+        global.go('admin-gate');
+        say('Staff ID recognised — enter your access passcode');
+      }
     }, function (er) {
       busy(btn, false);
       if (err) err.textContent = (er && er.message) || 'That ID and password do not match.';
     });
   };
-
-  /* Wire the card once the landing page exists. The listener is attached to the
-     card itself as well as delegated on the document, because the landing page
-     is rebuilt by some of the hub's own animations — a delegated listener is
-     what keeps the entrance working across that. */
-  /* The card is found (never modified) so the entrance is only armed once the
-     homepage markup is really there. The click itself is handled by the one
-     delegated listener in hydrate(), which survives the landing page being
-     re-rendered by the hub's own animations. */
-  var wired = false;
-  function wireLanding(tries) {
-    if (wired) return;
-    if ($('lpStat4')) { wired = true; return; }
-    if ((tries || 0) < 20) setTimeout(function () { wireLanding((tries || 0) + 1); }, 150);
-  }
 
   /* ====================================================== 10. HYDRATION */
   /* Fill the course list from the server's own copy, so the console's list and
@@ -843,15 +827,6 @@
   }
 
   function hydrate() {
-    wireLanding(0);
-    /* Delegated listener survives homepage animation/re-rendering. */
-    document.addEventListener('click', function (ev) {
-      var t = ev.target;
-      if (!t || !t.closest) return;
-      var card = t.closest('[data-f27-gate]');
-      if (card) F.freeGateClick();
-    }, true);
-
     /* `ready` is the one boot promise: the page awaits it, and so can a test. */
     F.ready = boot().then(function () {
       /* The original hub's `go()` is wrapped, not replaced: every screen, the
@@ -901,8 +876,6 @@
   GOC.freeUI = {
     applyMode: applyMode,
     mode: function () { return { on: F.on, mode: F.mode }; },
-    gateClick: function () { return F.freeGateClick(); },
-    gateClicks: function () { return F.gateClicks; },
     config: function () { return F.config; },
     /* The boot promise, so a caller can wait for the mode to be settled. */
     ready: function () { return F.ready || Promise.resolve(); },
@@ -910,7 +883,7 @@
   };
 
   /* Run once the document is ready. js/app.js has already painted the landing
-     page at this point, so the card exists; wireLanding retries if it is late. */
+     page at this point; the edition only hydrates its own screens and mode. */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', hydrate);
   } else {
