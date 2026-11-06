@@ -516,7 +516,13 @@ settle(load(w1)).then(function () {
   ok('"I already have an account" is preserved', /I already have an account/.test(html));
   ok('the homepage hero offers CBT Portal directly', /hero-cbt" onclick="freeCbtPortal\(\)"/.test(html));
   ok('the hero CBT action is not a signup route', !/hero-cbt" onclick="go\('signup'\)/.test(html));
-  ok('the hero keeps the original account action, scoped to Original Mode', /hero-original-cta/.test(html) && /hero-original-cta/.test(css));
+  /* Owner correction: the ORIGINAL account actions are never hidden or
+     rerouted. "Get started" is the original signup route and "I already have
+     an account" is the original login route, in every mode. */
+  ok('the hero keeps the ORIGINAL signup route', /hero-original-cta" onclick="go\('signup'\)">Get started</.test(html));
+  ok('the hero keeps the ORIGINAL login route (not an edition reroute)', /class="lp-btn-ghost" onclick="go\('login-v2'\)">I already have an account</.test(html));
+  ok('no CSS rule hides the original hero signup CTA', !/\.hero-original-cta \{ display: none/.test(css));
+  ok('the edition no longer defines an account-entry reroute', !/freeAccountEntry/.test(uiSrc) && !/freeAccountEntry/.test(html));
   ok('the CTA styling is mode-scoped rather than hiding a live bootcamp button', /body\.f27-mode #landing \.hero-btns \.hero-cbt/.test(css));
   ok('the exam header exposes Back and Home', /freeExamLeave\(\)/.test(html) && /freeExamHome\(\)/.test(html) && /Back to Home/.test(html));
   ok('the small-screen exam header wraps instead of overlapping', /max-width: 480px[\s\S]{0,200}flex-wrap: wrap/.test(css));
@@ -541,7 +547,7 @@ settle(load(w1)).then(function () {
       ok('the portal lists the available weekly assessment', /Week 1/.test(list));
       ok('the guest sees a clear, honest note that browsing needs no account', /no account needed/.test(list) && /only required when you sit a paper/.test(list));
       ok('the guest list never renders a Start button that would 401', !/freeExamOpen/.test(list));
-      ok('the only action offered to a guest is the existing email verification', /freeAccountEntry\(\)/.test(list) && /Verify email to sit this paper/.test(list));
+      ok('the guest card uses the edition\'s own pre-existing verification CTA', /freeHomeCta\(\)/.test(list) && /Verify email to sit this paper/.test(list));
       gp.sandbox.freePortalTab('competition');
       return settle(gp).then(function () {
         ok('the competition tab lists the available competition', /Grand Prize/.test(gp.els.freePortalList._html), gp.els.freePortalList._html.slice(0, 160));
@@ -552,27 +558,55 @@ settle(load(w1)).then(function () {
     });
   });
 }).then(function () {
-  head('Website Mode Control: the account action follows the active mode');
+  head('Original student accounts stay reachable in BOTH website modes');
+  /* These are the ORIGINAL hub screens. The edition must let them through so a
+     new student can register and a returning student can log in and reach their
+     own account, in either mode. */
   var fm = makeWorld({ token: null });
   load(fm);
   return settle(fm).then(function () {
-    fm.sandbox.freeAccountEntry();
+    fm.sandbox.go('signup');
     return settle(fm).then(function () {
-      ok('in Free Tutorial Mode the account action opens the edition sign-in', fm.calls.go[fm.calls.go.length - 1] === 'free-register', fm.calls.go.join(','));
-      var om = makeWorld({
-        token: null,
-        health: { service: 'goc-academy-hub', free2027: { on: true, mode: 'original' } },
-        config: { on: true, mode: 'original', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10 }
-      });
-      load(om);
-      return settle(om).then(function () {
-        om.sandbox.freeAccountEntry();
-        return settle(om).then(function () {
-          ok('in Original Mode the account action restores the original login', om.calls.go[om.calls.go.length - 1] === 'login-v2', om.calls.go.join(','));
-          ok('Original Mode does not add the free-tutorial body class', !om.doc.body.classList.contains('f27-mode'));
-          om.sandbox.freeCbtPortal();
-          return settle(om).then(function () {
-            ok('the CBT Portal entry stays reachable in Original Mode too', om.calls.go[om.calls.go.length - 1] === 'free-portal', om.calls.go.join(','));
+      ok('Free Mode: the original registration screen is reachable', fm.calls.go[fm.calls.go.length - 1] === 'signup', fm.calls.go.join(','));
+      fm.sandbox.go('login-v2');
+      return settle(fm).then(function () {
+        ok('Free Mode: the original login screen is reachable', fm.calls.go[fm.calls.go.length - 1] === 'login-v2', fm.calls.go.join(','));
+        fm.sandbox.go('signup-pending');
+        return settle(fm).then(function () {
+          ok('Free Mode: the original pending-registration step is reachable', fm.calls.go[fm.calls.go.length - 1] === 'signup-pending', fm.calls.go.join(','));
+          fm.sandbox.go('home');
+          return settle(fm).then(function () {
+            ok('Free Mode: the post-login student dashboard is reachable (session not broken)', fm.calls.go[fm.calls.go.length - 1] === 'home', fm.calls.go.join(','));
+            ok('the original student area restores the hub navigation chrome', fm.doc.body.classList.contains('goc-original-area'));
+            fm.sandbox.go('profile');
+            return settle(fm).then(function () {
+              ok('Free Mode: an existing student can open their profile', fm.calls.go[fm.calls.go.length - 1] === 'profile', fm.calls.go.join(','));
+              fm.sandbox.go('login-v2');
+              return settle(fm).then(function () {
+                ok('an auth form is not treated as the student area', !fm.doc.body.classList.contains('goc-original-area'));
+                ok('the original registration and login forms are untouched in the markup', /id="signup"/.test(html) && /id="login-v2"/.test(html) && /id="signName"/.test(html) && /id="signEmail"/.test(html) && /id="loginBtn"/.test(html));
+                var om = makeWorld({
+                  token: null,
+                  health: { service: 'goc-academy-hub', free2027: { on: true, mode: 'original' } },
+                  config: { on: true, mode: 'original', courses: rules.DEFAULT_COURSES, otp: { length: 6 }, topN: 10 }
+                });
+                load(om);
+                return settle(om).then(function () {
+                  om.sandbox.go('signup');
+                  om.sandbox.go('login-v2');
+                  om.sandbox.go('home');
+                  return settle(om).then(function () {
+                    ok('Original Mode: registration, login and dashboard all resolve normally', om.calls.go.slice(-3).join(',') === 'signup,login-v2,home', om.calls.go.join(','));
+                    ok('Original Mode does not add the free-tutorial body class', !om.doc.body.classList.contains('f27-mode'));
+                    ok('Original Mode needs no chrome override', !om.doc.body.classList.contains('goc-original-area'));
+                    om.sandbox.freeCbtPortal();
+                    return settle(om).then(function () {
+                      ok('the CBT Portal entry stays reachable in Original Mode too', om.calls.go[om.calls.go.length - 1] === 'free-portal', om.calls.go.join(','));
+                    });
+                  });
+                });
+              });
+            });
           });
         });
       });

@@ -88,6 +88,8 @@
     if (!body || !body.classList) return;
     var free = on && mode === rules.MODE_FREE;
     body.classList.toggle('f27-mode', free);
+    /* Original Mode needs no chrome override at all — the hub draws its own. */
+    if (!free) body.classList.remove('goc-original-area');
     var note = $('freeHomeMode');
     if (note) note.textContent = rules.modeLabel(mode);
     var fine = $('freeHomeNote');
@@ -191,15 +193,6 @@
   F.freeCbtPortal = function () {
     global.go('free-portal');
     F.freePortalLoad();
-  };
-
-  /* "I already have an account" stays on the homepage in both modes. In
-     Original Mode it opens the original login exactly as before; in Free
-     Tutorial Mode it opens the edition's own email-code sign-in, which returns
-     a returning student to the same permanent ID. */
-  F.freeAccountEntry = function () {
-    if (F.on && F.mode === rules.MODE_FREE) { global.go('free-register'); return; }
-    global.go('login-v2');
   };
 
   /* Internal navigation history recovered from PR #9. Back NEVER calls
@@ -520,7 +513,7 @@
         '<span>up to <b>' + a.maxAttempts + '</b> attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
         '<span>closes <b>' + esc(when(a.closesAt)) + '</b></span></div>' +
         (open
-          ? '<button class="btn btn-red btn-block" onclick="freeAccountEntry()">Verify email to sit this paper</button>'
+          ? '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Verify email to sit this paper</button>'
           : '<button class="btn btn-outline btn-block" disabled>' +
             (a.state === 'upcoming' ? 'Opens ' + esc(when(a.opensAt)) : 'Closed') + '</button>') +
         (a.kind === rules.KIND_COMPETITION && a.leaderboardPublished
@@ -967,15 +960,39 @@
   /* The original public homepage always remains the initial page. In Free
      Tutorial mode, legacy student routes resolve to that edition's portal, but
      no mode switch hides or replaces the G.O.C Academy Hub homepage. */
+  /* The ORIGINAL G.O.C Academy Hub student account screens. These are never
+     intercepted by the edition: registration, login, the pending-verification
+     step and the signed-in student's own area belong to the original hub and
+     must keep working in EVERY mode. Rewriting them to 'free-home' would
+     disconnect the original account system, so they are always allowed through
+     and the hub's own chrome is restored while one of them is open. */
+  var ORIGINAL_ACCOUNT_SCREENS = [
+    'login-v2', 'signup', 'signup-pending', 'change-password',
+    'home', 'profile', 'results', 'league', 'timetable',
+    'study', 'studySet', 'reading', 'bookmarks', 'mistakes', 'review', 'studyRes',
+    'lesson', 'practice', 'cbt', 'webtest', 'wtRun', 'wtResult', 'resources', 'classes'
+  ];
+  /* The auth screens are full-page forms; the rest is the student's own area
+     and needs the tab bar / sidebar back. */
+  var ORIGINAL_AUTH_SCREENS = ['login-v2', 'signup', 'signup-pending', 'change-password'];
+  function paintOriginalArea(id) {
+    var body = document.body;
+    if (!body || !body.classList) return;
+    var inOriginal = ORIGINAL_ACCOUNT_SCREENS.indexOf(id) > -1 && ORIGINAL_AUTH_SCREENS.indexOf(id) < 0;
+    body.classList.toggle('goc-original-area', !!(F.on && F.mode === rules.MODE_FREE && inOriginal));
+  }
+
   function hookGo() {
     if (!global.go || global.go.__f27) return;
     var original = global.go;
     var wrapped = function (id) {
       if (F.on && F.mode === rules.MODE_FREE) {
-        var allowed = rules.SCREENS.concat(['landing', 'admin-gate', 'admin', 'staff-change-password', 'free-admin']);
+        var allowed = rules.SCREENS.concat(ORIGINAL_ACCOUNT_SCREENS,
+          ['landing', 'admin-gate', 'admin', 'staff-change-password', 'free-admin']);
         if (allowed.indexOf(id) < 0) id = 'free-home';
         trackScreen(id);
       }
+      paintOriginalArea(id);
       return original(id);
     };
     wrapped.__f27 = true;
@@ -988,7 +1005,7 @@
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
-    'freeCbtPortal', 'freeAccountEntry', 'freeExamHome'];
+    'freeCbtPortal', 'freeExamHome'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

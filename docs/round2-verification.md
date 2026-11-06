@@ -77,6 +77,13 @@ reset, and an older data file opens unchanged.
 
 ## 3. Homepage and CBT entry
 
+> **Superseded in part.** The account-related parts of this section went further
+> than requested: they hid the original sign-up action and rerouted the original
+> login. That has been corrected — see
+> [`account-restoration.md`](account-restoration.md). The original student
+> registration and login are visible and working in every mode, alongside the
+> CBT Portal entry.
+
 - `Start Free UTME Bootcamp` is **removed from the markup**, not hidden with CSS.
   `grep -ci 'start free utme bootcamp' index.html` → `0`. No nav, drawer, hero or
   dynamic CTA renders it, and no obsolete handler or route remains.

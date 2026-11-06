@@ -458,8 +458,19 @@ waitForBoot(40).then(async function (h) {
     acts.indexOf('activity.create') > -1 && acts.indexOf('activity.publish') > -1 && acts.indexOf('leaderboard.publish') > -1, acts.join(','));
   ok('each entry names the administrator and their role',
     audit.body.entries.every(function (e) { return !!e.actorId && !!e.actorRole; }), JSON.stringify(audit.body.entries.slice(0, 2)));
+  /* Check every MEANINGFUL field of every entry. Scanning the raw JSON for the
+     four-digit passcode also matched epoch-millisecond timestamps that happen
+     to contain "2027" (e.g. 1793952027000), which failed the check on a clean
+     trail. The timestamp is asserted to be a number instead, so a leak into any
+     text field is still caught and a harmless clock value is not. */
+  var auditText = audit.body.entries.map(function (e) {
+    return [e.actorId, e.actorRole, e.action, e.target, e.detail].join('|');
+  }).join('\n');
   ok('no address, passcode or code is ever written to it',
-    audit.raw.indexOf('@') < 0 && audit.raw.indexOf('2027') < 0 && audit.raw.indexOf('ada') < 0, audit.raw.slice(0, 200));
+    auditText.indexOf('@') < 0 && auditText.indexOf('2027') < 0 && auditText.toLowerCase().indexOf('ada') < 0,
+    auditText.slice(0, 240));
+  ok('every audit timestamp is a number, not text that could carry a secret',
+    audit.body.entries.every(function (e) { return typeof e.at === 'number'; }));
   ok('a candidate cannot read the audit trail', (await call('GET', '/api/free2027/admin/audit', undefined, ada.token)).status === 401);
   ok('getting a list is not an administrative change', acts.filter(function (a) { return /^(questions|progress|audit)\./.test(a); }).length === 0);
 

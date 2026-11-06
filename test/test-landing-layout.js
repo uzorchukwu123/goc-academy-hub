@@ -19,6 +19,16 @@ check('"I already have an account" is preserved on the homepage', /I already hav
 check('a direct CBT Portal action is present in the hero', /class="lp-btn-light hero-cbt" onclick="freeCbtPortal\(\)">CBT Portal</.test(html));
 check('the hero CBT action does not route through signup or registration', !/hero-cbt" onclick="go\('signup'\)/.test(html) && !/hero-cbt" onclick="freeHomeCta\(\)/.test(html));
 check('the CBT exam screen has both Back and Back to Home controls', /onclick="freeExamLeave\(\)"/.test(html) && /onclick="freeExamHome\(\)"/.test(html));
+/* Owner correction: the original student registration and login experience must
+   coexist with the CBT Portal entry. Nothing may hide or reroute it. */
+const f27css = fs.readFileSync(path.join(__dirname, '..', 'css', 'free2027.css'), 'utf8').replace(/\s+/g, ' ');
+check('the original hero signup route is intact', /hero-original-cta" onclick="go\('signup'\)"/.test(html));
+check('the original hero login route is intact', /class="lp-btn-ghost" onclick="go\('login-v2'\)"/.test(html));
+check('the original nav Log in / Get started are intact', /class="lp-link dw-original" onclick="go\('login-v2'\)"/.test(html) && /class="lp-cta dw-original" onclick="go\('signup'\)"/.test(html));
+check('the original drawer Create free account / Log in are intact', /dw-original" onclick="dwGo\('signup'\)"/.test(html) && /dw-original" onclick="dwGo\('login-v2'\)"/.test(html));
+check('no stylesheet rule hides any original account action', !/\.dw-original \{ display: none/.test(f27css) && !/\.hero-original-cta \{ display: none/.test(f27css));
+check('the original registration and login screens render in Free Tutorial Mode', /body\.f27-mode #signup\.active/.test(f27css) && /body\.f27-mode #login-v2\.active/.test(f27css));
+check('the original post-login student area renders in Free Tutorial Mode', /body\.f27-mode #home\.active/.test(f27css) && /body\.f27-mode #profile\.active/.test(f27css));
 check('hero clipping guard is scoped to the homepage, not every app screen', !/\.screen\s*>\s*\*\s*\{\s*flex-shrink:\s*0;/.test(css));
 check('original homepage sections remain present', ['lpFeatures', 'lpSubjects', 'lpHow', 'contact'].every((id) => html.includes('id="' + id + '"')));
 console.log('\n' + pass + '/' + (pass + fail) + ' checks passed');

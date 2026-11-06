@@ -51,6 +51,9 @@ The consolidated historical findings and verification evidence are in
 The data-preservation contract (activity deletion, question-bank deletion),
 the homepage/CBT Portal entry corrections and their verification are in
 [`docs/round2-verification.md`](docs/round2-verification.md).
+The original student registration/login restoration, and the exact homepage CTA
+change it leaves in place, are documented in
+[`docs/account-restoration.md`](docs/account-restoration.md).
 
 ## Two ways to run it
 

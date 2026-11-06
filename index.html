@@ -48,9 +48,9 @@
           <span class="bt">G.O.C Academy Hub</span>
         </div>
         <div class="lp-actions">
-          <!-- In 2027 Free Tutorial Mode the edition swaps the original account
-               actions for one CBT Portal entry (see css/free2027.css); in Original
-               Mode the original Log in / Get started show again, unchanged. -->
+          <!-- The original Log in / Get started actions are always shown, in
+               every mode. 2027 Free Tutorial Mode only ADDS the CBT Portal entry
+               beside them (see css/free2027.css); it never replaces them. -->
           <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
           <button class="lp-link dw-original" onclick="go('login-v2')">Log in</button>
           <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
@@ -65,13 +65,14 @@
             <h1>Raising Smart Scholars for Academic Excellence</h1>
             <p class="sub">G.O.C Academy Hub blends expert tutoring, AI literacy and a gamified study app — so Nigerian students don't just pass exams, they learn to think and study on their own.</p>
             <div class="hero-btns">
-              <!-- The obsolete bootcamp sign-up CTA was removed outright here.
-                   Free Tutorial Mode offers a DIRECT CBT Portal entry (no
-                   registration or login step); Original Mode keeps its own
-                   account CTA. The existing-account action is preserved in both. -->
+              <!-- ONLY change here: the obsolete bootcamp sign-up CTA is
+                   replaced by a direct CBT Portal entry. The original student
+                   account actions are untouched and available in EVERY mode:
+                   "Get started" is the original sign-up route, and "I already
+                   have an account" is the original login route. -->
               <button class="lp-btn-light hero-cbt" onclick="freeCbtPortal()">CBT Portal</button>
               <button class="lp-btn-light hero-original-cta" onclick="go('signup')">Get started</button>
-              <button class="lp-btn-ghost" onclick="freeAccountEntry()">I already have an account</button>
+              <button class="lp-btn-ghost" onclick="go('login-v2')">I already have an account</button>
             </div>
             <div class="lp-trust">
               <span>✓ No card required</span>

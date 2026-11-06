@@ -53,8 +53,12 @@ ok('the drawer keeps the original Create free account button (not deleted)', /<b
 ok('the drawer keeps the original Log in button (not deleted)', /class="btn btn-outline btn-block dw-original" onclick="dwGo\('login-v2'\)"[^>]*>Log in</.test(html));
 ok('the drawer has one CBT Portal action with supporting wording', /dw-cbt" onclick="dwFreePortal\(\)">CBT Portal</.test(html) && /Access your weekly assessments and competitions\./.test(html));
 ok('the CBT Portal drawer entry is hidden in Original Mode (default)', /\.dw-cbt, \.dw-cbt-hint, #landing \.dw-cbt-link \{ display: none; \}/.test(flatCss));
-ok('Free Tutorial Mode shows the drawer CBT Portal and hides the original pair', /body\.f27-mode \.dw-btns \.dw-cbt \{ display: block; \}/.test(flatCss) && /body\.f27-mode \.dw-btns \.dw-original \{ display: none !important; \}/.test(flatCss));
-ok('the landing inline bar hides the original actions in free mode', /body\.f27-mode #landing \.lp-actions \.dw-original \{ display: none !important; \}/.test(flatCss));
+/* Owner correction: the original student account actions must NEVER be hidden.
+   Free Tutorial Mode only ADDS the CBT Portal entry beside them. */
+ok('Free Tutorial Mode adds the drawer CBT Portal entry', /body\.f27-mode \.dw-btns \.dw-cbt \{ display: block; \}/.test(flatCss));
+ok('no rule hides the original drawer account actions in any mode', !/\.dw-original \{ display: none/.test(flatCss));
+ok('no rule hides the original inline-nav account actions in any mode', !/#landing \.lp-actions \.dw-original \{ display: none/.test(flatCss));
+ok('no rule hides the original hero sign-up CTA in any mode', !/\.hero-original-cta \{ display: none/.test(flatCss));
 ok('desktop (>=900px) shows the inline CBT Portal entry', /@media \(min-width: 900px\) \{\s*body\.f27-mode #landing \.lp-actions \.dw-cbt-link \{ display: inline-block; \}\s*\}/.test(flatCss));
 ok('the landing keeps its original Log in / Get started in the markup', /<button class="lp-link dw-original" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
 ok('dwFreePortal is exposed by the edition script', /'dwFreePortal'/.test(uiSrc) && /F\.dwFreePortal = function/.test(uiSrc));

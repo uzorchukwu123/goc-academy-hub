@@ -32,6 +32,46 @@ body.f27-mode #admin.active,
 body.f27-mode #free-admin.active,
 body.f27-mode #staff-change-password.active { display: flex !important; }
 
+/* The ORIGINAL student account experience stays fully reachable in Free
+   Tutorial Mode. Registration, login, the pending-verification step and the
+   signed-in student's own screens are the original hub's, unchanged — the
+   edition runs alongside them and never replaces them. Without this the
+   homepage account buttons would resolve to a screen the rule above hides. */
+body.f27-mode #login-v2.active,
+body.f27-mode #signup.active,
+body.f27-mode #signup-pending.active,
+body.f27-mode #change-password.active,
+body.f27-mode #home.active,
+body.f27-mode #profile.active,
+body.f27-mode #results.active,
+body.f27-mode #league.active,
+body.f27-mode #timetable.active,
+body.f27-mode #study.active,
+body.f27-mode #studySet.active,
+body.f27-mode #reading.active,
+body.f27-mode #bookmarks.active,
+body.f27-mode #mistakes.active,
+body.f27-mode #review.active,
+body.f27-mode #studyRes.active,
+body.f27-mode #lesson.active,
+body.f27-mode #practice.active,
+body.f27-mode #cbt.active,
+body.f27-mode #webtest.active,
+body.f27-mode #wtRun.active,
+body.f27-mode #wtResult.active,
+body.f27-mode #resources.active,
+body.f27-mode #classes.active { display: flex !important; }
+
+/* While an ORIGINAL student screen is open the hub's own navigation chrome
+   comes back, so a signed-in student can actually use their account. The class
+   is set by the navigation wrapper and only applies to those screens. */
+body.f27-mode.goc-original-area .tabbar,
+body.f27-mode.goc-original-area #pvBar { display: flex !important; }
+@media (min-width: 900px) {
+  body.f27-mode.goc-original-area .phone:not(.is-login) .tabbar { display: flex !important; }
+  body.f27-mode.goc-original-area .phone:not(.is-login) .screens { left: 256px !important; }
+}
+
 /* On a wide screen the hub draws a sidebar for everything except its public
    screens; the edition's screens are public, so they get the full width. */
 body.f27-mode .phone { }
@@ -358,15 +398,18 @@ body.f27-mode .f27 .f27-nav .lp-actions .lp-link:focus { display: inline-block; 
    Portal entries are hidden, the original account buttons show untouched. */
 .dw-cbt, .dw-cbt-hint, #landing .dw-cbt-link { display: none; }
 
-/* Free Tutorial Mode: drawer and inline nav show CBT Portal, hide the
-   original account actions. Reversible with the mode switch alone. */
+/* Free Tutorial Mode ADDS the CBT Portal entry to the drawer and inline nav.
+   The original account actions (.dw-original: Create free account / Log in /
+   Get started) are deliberately NOT hidden — the original student registration
+   and login must stay available in every mode, beside the CBT Portal entry. */
 body.f27-mode .dw-btns .dw-cbt { display: block; }
 body.f27-mode .dw-btns .dw-cbt-hint {
   display: block; font-size: 12.5px; color: var(--slate, #667085);
   margin: 8px 0 0; text-align: center;
 }
-body.f27-mode .dw-btns .dw-original { display: none !important; }
-body.f27-mode #landing .lp-actions .dw-original { display: none !important; }
+/* Keep a little breathing room between the added CBT entry and the original
+   account buttons that follow it. */
+body.f27-mode .dw-btns .dw-cbt-hint + .dw-original { margin-top: 12px; }
 /* Desktop only: the inline CBT Portal entry. Below 900px the mobile CBT
    Portal entry lives in the drawer, so the two are never duplicated. */
 @media (min-width: 900px) {
@@ -377,13 +420,12 @@ body.f27-mode #landing .lp-actions .dw-original { display: none !important; }
    Homepage CTA corrections
    ----------------------------------------------------------------------------
    The obsolete bootcamp sign-up button is deleted from index.html — it is not
-   hidden here. These rules only choose which of the REMAINING hero
-   actions each mode shows, using the same reversible mode scoping as the
-   drawer. Original Mode keeps its own account CTA and login untouched.
+   hidden here. The CBT Portal entry is ADDED beside the original account
+   actions; the original "Get started" (sign-up) and "I already have an account"
+   (login) are never hidden, in either mode.
    ========================================================================== */
 .hero-cbt { display: none; }
 body.f27-mode #landing .hero-btns .hero-cbt { display: block; }
-body.f27-mode #landing .hero-btns .hero-original-cta { display: none !important; }
 
 /* A guest browsing the CBT Portal is told plainly that no account is needed to
    look around, and that verifying an email is only for sitting a paper. */

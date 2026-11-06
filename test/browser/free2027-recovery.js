@@ -119,7 +119,10 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('homepage', 'no "Start Free UTME Bootcamp" text anywhere in the rendered page', await page.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
     check('homepage', 'no bootcamp CTA element survives in the DOM', await page.evaluate(() => !Array.from(document.querySelectorAll('button, a')).some((e) => /start free utme bootcamp/i.test(e.textContent))));
     check('homepage', 'Free-mode hero shows a visible CBT Portal button', await visible(page, '#landing .hero-cbt'));
-    check('homepage', 'the obsolete hero account CTA is not shown in Free mode', !(await visible(page, '#landing .hero-original-cta')));
+    /* Owner correction: the original account actions are NEVER hidden. Free
+       Tutorial Mode adds the CBT Portal beside them. */
+    check('homepage', 'Free mode keeps the original Get started visible beside CBT Portal', await visible(page, '#landing .hero-original-cta'));
+    check('homepage', 'Free mode keeps the original login action visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
     check('homepage', 'the drawer keeps no bootcamp action', await page.evaluate(() => !/bootcamp/i.test(document.getElementById('lpDrawer').textContent)));
     check('homepage', 'mobile hero is not clipped by the flex screen shell', await page.evaluate(() => { const hero = document.querySelector('#landing .lp-hero'); const h1 = hero.querySelector('h1'); const buttons = hero.querySelector('.hero-btns'); return getComputedStyle(hero).flexShrink === '0' && h1.getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom && buttons.getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom && hero.querySelector('.lp-trust').getBoundingClientRect().bottom < hero.getBoundingClientRect().bottom; }));
     check('homepage', 'mobile logo strip is not clipped', await page.evaluate(() => { const e = document.querySelector('#landing .lp-logos'); return e.getBoundingClientRect().height >= e.scrollHeight - 2; }));
@@ -131,7 +134,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       const t = document.getElementById('lpDrawer').textContent; return /The ecosystem/.test(t) && /Subjects offered/.test(t) && /How it works/.test(t) && /Contact us/.test(t) && /Updates/.test(t);
     }));
     check('drawer', 'Free-mode CBT Portal entry visible', await visible(page, '#lpDrawer .dw-cbt'));
-    check('drawer', 'original account buttons hidden in Free mode', await page.evaluate(() => getComputedStyle(document.querySelector('#lpDrawer .dw-original')).display === 'none'));
+    check('drawer', 'Free mode keeps the original account buttons visible', await visible(page, '#lpDrawer .dw-original'));
+    check('drawer', 'the drawer offers CBT Portal AND the original account actions together', await visible(page, '#lpDrawer .dw-cbt') && await page.evaluate(() => Array.from(document.querySelectorAll('#lpDrawer .dw-original')).every((e) => getComputedStyle(e).display !== 'none')));
     check('drawer', 'contact info present', await page.evaluate(() => /godsowncenterinfo@gmail\.com/.test(document.getElementById('lpDrawer').textContent)));
     await shot(page, '02-drawer-mobile');
     await page.click('#lpDrawer .dw-x');
@@ -642,6 +646,124 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       await shot(gp, '97-guest-failure-' + label);
     }
     await gbrowser.close();
+  }
+
+  /* =====================================================================
+     ORIGINAL STUDENT ACCOUNTS — registration and login must work through
+     the hub's own forms, in Free Tutorial Mode, beside the CBT Portal.
+     Uses the real signup form, the real approval flow and the real login.
+     ===================================================================== */
+  const ACCT_EMAIL = 'original.account.' + Date.now() + '@example.com';
+  const ACCT_PW = 'Original-Pw-' + Date.now();
+  let scholarId = null;
+  try {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+    check('original-accounts', 'Free Mode keeps the original Get started action visible', await visible(page, '#landing .hero-original-cta'));
+    check('original-accounts', 'Free Mode keeps the original login action visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
+    check('original-accounts', 'Free Mode keeps the original nav Log in / Get started visible', await visible(page, '#landing .lp-actions button[onclick="go(\'login-v2\')"]') && await visible(page, '#landing .lp-actions button[onclick="go(\'signup\')"]'));
+
+    /* 1. A NEW student reaches the ORIGINAL registration form. */
+    await page.click('#landing .hero-original-cta');
+    await active(page, 'signup');
+    check('original-accounts', 'Get started opens the ORIGINAL registration screen (not the edition)', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !document.getElementById('free-home').classList.contains('active')));
+    check('original-accounts', 'the original registration form is actually rendered', await visible(page, '#signup #signName') && await visible(page, '#signup #signupBtn'));
+    check('original-accounts', 'the original fields and validation are intact', await page.evaluate(() => ['signName', 'signEmail', 'signPhone', 'signGoal', 'signPw', 'signConsent', 'subjGrid'].every((id) => !!document.getElementById(id))));
+    await shot(page, '26-original-registration');
+
+    /* 2. Register through the existing implementation. */
+    await page.fill('#signName', 'Original Account Student');
+    await page.fill('#signEmail', ACCT_EMAIL);
+    await page.fill('#signPhone', '08012345678');
+    await page.selectOption('#signGoal', { label: 'JAMB / UTME 2027' });
+    for (const sub of ['Physics', 'Chemistry', 'Biology']) await page.check('#subjGrid input[data-subject="' + sub + '"]');
+    await page.fill('#signPw', ACCT_PW);
+    await page.check('#signConsent');
+    await page.click('#signupBtn');
+    await active(page, 'signup-pending');
+    scholarId = (await page.textContent('#pendingScholarId') || '').trim();
+    check('original-accounts', 'registration succeeds through the existing approval flow', /^GOC-S-/.test(scholarId), scholarId);
+    check('original-accounts', 'the original pending screen shows the issued Scholar ID', await visible(page, '#signup-pending #pendingScholarId'));
+    const roster = readData();
+    const rec = (roster.students || []).find((x) => x.id === scholarId);
+    check('original-accounts', 'the student record is persisted by the original implementation', !!rec && rec.email === ACCT_EMAIL && rec.pendingApproval === true, JSON.stringify(rec || {}).slice(0, 160));
+    await shot(page, '27-original-registration-pending');
+
+    /* 3. Approve through the existing console API, then log in normally. */
+    /* Approve with the app's OWN api object, which holds the console session
+       in its closure — exactly the call the console's Approve button makes. */
+    const approved = await page.evaluate(async (id) => {
+      try { const r = await window.GOC.api.approveStudent(id); return { ok: true, active: r && r.active, pending: r && r.pendingApproval }; }
+      catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+    }, scholarId);
+    check('original-accounts', 'the existing approval call activates the account', approved.ok === true && approved.active === true && approved.pending === false, JSON.stringify(approved).slice(0, 200));
+
+    /* 4. A returning student logs in through the ORIGINAL login form. */
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+    await page.click('#landing .hero-btns .lp-btn-ghost');
+    await active(page, 'login-v2');
+    check('original-accounts', '"I already have an account" opens the ORIGINAL login (no edition reroute)', await page.evaluate(() => document.getElementById('login-v2').classList.contains('active') && !document.getElementById('free-register').classList.contains('active')));
+    check('original-accounts', 'the original login form is actually rendered', await visible(page, '#login-v2 #loginId') && await visible(page, '#login-v2 #loginBtn'));
+    await shot(page, '28-original-login');
+    await page.fill('#loginId', scholarId);
+    await page.fill('#loginPw', ACCT_PW);
+    await page.click('#loginBtn');
+    await active(page, 'home');
+    check('original-accounts', 'the registered student logs in and reaches the ORIGINAL dashboard', await page.evaluate(() => document.getElementById('home').classList.contains('active') && !document.getElementById('free-home').classList.contains('active')));
+    check('original-accounts', 'the original dashboard is visible, not hidden by the edition', await visible(page, '#home'));
+    check('original-accounts', 'the hub navigation chrome is restored for the signed-in student', await page.evaluate(() => document.body.classList.contains('goc-original-area')));
+    await shot(page, '29-original-dashboard');
+
+    /* 5. The existing account remains accessible, and CBT still works. */
+    await page.evaluate(() => go('profile'));
+    await active(page, 'profile');
+    check('original-accounts', 'the student can open their existing profile', await visible(page, '#profile'));
+    /* A brand-new student gets the hub's OWN first-run tour (it fires ~1.2s
+       after the dashboard renders). That is original behaviour, so let it
+       appear and dismiss it the way a student would before continuing. */
+    await page.waitForTimeout(1800);
+    const tourShown = await page.locator('#tutSkip').isVisible().catch(() => false);
+    if (tourShown) {
+      await page.click('#tutSkip');
+      await page.waitForFunction(() => {
+        const o = document.getElementById('tutOverlay');
+        return !o || getComputedStyle(o).display === 'none';
+      }, null, { timeout: 10000 });
+    }
+    check('original-accounts', 'the original first-run tour no longer covers the page', await page.evaluate(() => {
+      const o = document.getElementById('tutOverlay');
+      return !o || getComputedStyle(o).display === 'none';
+    }));
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+    /* The signed-in student's own boot sequence can still be settling. */
+    await page.waitForTimeout(800);
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+    check('original-accounts', 'the homepage is reachable again after using the original account', await page.evaluate(() => document.getElementById('landing').classList.contains('active')));
+    check('original-accounts', 'Free Tutorial Mode is still active after student login', await page.evaluate(() => document.body.classList.contains('f27-mode')));
+    await page.click('#landing .hero-cbt');
+    await active(page, 'free-portal');
+    check('original-accounts', 'the CBT Portal still opens directly alongside the original accounts', true);
+    check('original-accounts', 'the removed bootcamp CTA has not returned', await page.evaluate(() => !/start free utme bootcamp/i.test(document.body.innerText)));
+    const finalRec = (readData().students || []).find((x) => x.id === scholarId);
+    check('original-accounts', 'the Scholar ID and account persist unchanged after login', !!finalRec && finalRec.id === scholarId && finalRec.active === true && finalRec.pendingApproval === false);
+  } catch (e) {
+    check('original-accounts', 'original registration/login flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e);
+    console.log('ACCOUNT-STATE ' + JSON.stringify(await page.evaluate(() => ({
+      screen: document.querySelector('.screen.active') && document.querySelector('.screen.active').id,
+      f27: document.body.classList.contains('f27-mode'),
+      area: document.body.classList.contains('goc-original-area'),
+      heroCbt: !!document.querySelector('#landing .hero-cbt'),
+      heroCbtDisplay: document.querySelector('#landing .hero-cbt') ? getComputedStyle(document.querySelector('#landing .hero-cbt')).display : null,
+      rect: (function(){ var e=document.querySelector('#landing .hero-cbt'); if(!e) return null; var r=e.getBoundingClientRect(); var st=getComputedStyle(e); return {x:r.x,y:r.y,w:r.width,h:r.height,vis:st.visibility,op:st.opacity,pe:st.pointerEvents}; })(),
+      landingRect: (function(){ var e=document.getElementById('landing'); var r=e.getBoundingClientRect(); var st=getComputedStyle(e); return {x:r.x,y:r.y,w:r.width,h:r.height,disp:st.display,vis:st.visibility}; })(),
+      matchCount: document.querySelectorAll('#landing .hero-cbt').length,
+      topAtCentre: (function(){ var e=document.querySelector('#landing .hero-cbt'); if(!e) return null; var r=e.getBoundingClientRect(); var t=document.elementFromPoint(r.x+r.width/2, r.y+r.height/2); return t ? (t.id || t.className || t.tagName) : 'none'; })()
+    })).catch(String)));
+    await shot(page, '96-original-accounts-failure');
   }
 
   check('harness', 'no uncaught page JavaScript errors', jsErrors.length === 0, jsErrors.join(' | '));
