@@ -405,10 +405,9 @@ body.f27-mode .f27 .f27-nav .lp-actions .lp-link:focus { display: inline-block; 
 .dw-cbt, .dw-cbt-hint, #landing .dw-cbt-link { display: none; }
 
 /* Free Tutorial Mode ADDS the CBT Portal entry to the drawer and inline nav.
-   The original SIGN-UP actions (.dw-original: Create free account / Get started)
-   are deliberately NOT hidden — the original student registration stays
-   available in every mode, beside the CBT Portal entry. The hub's Log in
-   shortcut is the one exception; see the mode-scoped rule just below. */
+   The hub's own account shortcuts stand down in this mode only — see the two
+   mode-scoped rules below (Log in, and every homepage sign-up entry point).
+   Nothing is deleted: Original Mode shows all of them exactly as before. */
 body.f27-mode .dw-btns .dw-cbt { display: block; }
 /* In Free Tutorial Mode the CBT Portal entry leads to the edition's own landing
    page, which offers Register free and Student log in. The hub's separate Log in
@@ -417,6 +416,22 @@ body.f27-mode .dw-btns .dw-cbt { display: block; }
    deleted: Original Mode shows it exactly as before, and the hub's login screen
    and account system keep working independently. */
 body.f27-mode .dw-hub-login { display: none !important; }
+/* Account CREATION on the homepage belongs to the original G.O.C Academy Hub
+   experience, not the Free UTME Tutorial. In Free Tutorial Mode every hub
+   sign-up entry point on the homepage stands down: the header/desktop-nav
+   "Get started", the hero "Get started", the pricing-card "Create account", the
+   "Create your free account" band, the footer's "Sign up free", and the mobile
+   drawer's "Create free account". Free UTME students register through the
+   edition landing page's own "Register free" instead.
+
+   This is VISIBILITY ONLY, scoped to the mode class and to the homepage/drawer.
+   The buttons, their text, styling, position and go('signup')/dwGo('signup')
+   handlers all stay in index.html untouched, so removing the mode class
+   (switching back to Original Mode) restores every one of them exactly as it
+   was. The hub's registration screen, its authentication, and any sign-up
+   entry point outside the homepage are not affected. */
+body.f27-mode #landing button[onclick="go('signup')"],
+body.f27-mode #lpDrawer button[onclick="dwGo('signup')"] { display: none !important; }
 body.f27-mode .dw-btns .dw-cbt-hint {
   display: block; font-size: 12.5px; color: var(--slate, #667085);
   margin: 8px 0 0; text-align: center;

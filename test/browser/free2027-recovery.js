@@ -86,6 +86,44 @@ async function switchWebsiteMode(page, toFree) {
   await active(page, 'landing');
 }
 
+/* Every hub account-creation entry point on the homepage and in the mobile
+   drawer, identified by its actual handler rather than by label. In Free
+   Tutorial Mode all of them must be hidden; in Original Mode none of them may
+   be hidden by the mode rule. The set must be identical in both modes, proving
+   nothing was deleted and nothing accumulated across switches. */
+async function checkAccountCreationVisibility(page, label, free) {
+  const tag = label + ' (' + (free ? 'Free Tutorial' : 'Original') + ')';
+  const r = await page.evaluate(() => {
+    const wanted = ["go('signup')", "dwGo('signup')"];
+    const all = Array.from(document.querySelectorAll('#landing button, #lpDrawer button'))
+      .filter((b) => wanted.indexOf(b.getAttribute('onclick')) > -1);
+    return {
+      count: all.length,
+      hidden: all.filter((b) => getComputedStyle(b).display === 'none').length,
+      labels: all.map((b) => b.textContent.trim()),
+      handlers: all.map((b) => b.getAttribute('onclick'))
+    };
+  });
+  check('account-creation', tag + ': all 6 hub sign-up entry points still exist in the DOM', r.count === 6, JSON.stringify(r));
+  check('account-creation', tag + ': ' + (free ? 'every one is hidden' : 'none is hidden by the mode rule'), free ? r.hidden === r.count : r.hidden === 0, JSON.stringify(r));
+  check('account-creation', tag + ': handlers and labels are untouched', r.handlers.filter((h) => h === "go('signup')").length === 5 && r.handlers.filter((h) => h === "dwGo('signup')").length === 1 && r.labels.indexOf('Get started') > -1 && r.labels.indexOf('Create free account') > -1, JSON.stringify(r.labels));
+  /* Nothing labelled "Get started" or "Create free account" may be rendered as
+     a clickable control anywhere on the Free UTME homepage. */
+  const shown = await page.evaluate(() => Array.from(document.querySelectorAll('#landing button, #landing a, #lpDrawer button'))
+    .filter((b) => /^(Get started|Create free account|Create your free account|Create account|Sign up free)$/.test(b.textContent.trim()))
+    .filter((b) => { const s = getComputedStyle(b); const q = b.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && q.width > 0 && q.height > 0; })
+    .map((b) => b.textContent.trim()));
+  check('account-creation', tag + ': no rendered account-creation control on the homepage' + (free ? '' : ' (Original Mode keeps them)'), free ? shown.length === 0 : true, JSON.stringify(shown));
+  if (!free) {
+    /* Visible is not enough — the original destination must still work. */
+    await page.click('#landing .lp-actions button[onclick="go(\'signup\')"]');
+    await active(page, 'signup');
+    check('account-creation', tag + ': header Get started still opens the ORIGINAL #signup', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !!document.getElementById('signName')));
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+  }
+}
+
 /* The homepage hero contract, clicked for real in the given mode. */
 async function checkHeroForMode(page, label, free) {
   const tag = label + ' (' + (free ? 'Free Tutorial' : 'Original') + ')';
@@ -185,8 +223,16 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       const t = document.getElementById('lpDrawer').textContent; return /The ecosystem/.test(t) && /Subjects offered/.test(t) && /How it works/.test(t) && /Contact us/.test(t) && /Updates/.test(t);
     }));
     check('drawer', 'Free-mode CBT Portal entry visible', await visible(page, '#lpDrawer .dw-cbt'));
-    check('drawer', 'Free mode keeps the original account buttons visible', await visible(page, '#lpDrawer .dw-original'));
-    check('drawer', 'the drawer offers CBT Portal AND the original Create free account together', await visible(page, '#lpDrawer .dw-cbt') && await visible(page, '#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]'));
+    /* Owner correction: the hub's "Create free account" is not part of the Free
+       UTME experience. It stands down in this mode only — never deleted. */
+    check('drawer', 'Free Mode hides the drawer Create free account button', !(await visible(page, '#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]')));
+    check('drawer', 'the drawer Create free account button is hidden, not deleted', await page.evaluate(() => {
+      const e = document.querySelector('#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]');
+      return !!e && e.textContent.trim() === 'Create free account' && getComputedStyle(e).display === 'none';
+    }));
+    check('drawer', 'the drawer still offers its CBT Portal entry', await visible(page, '#lpDrawer .dw-cbt'));
+    check('drawer', 'the mobile sidebar shows no account-creation button at all', await page.evaluate(() => !Array.from(document.querySelectorAll('#lpDrawer button'))
+      .some((b) => /Create free account|Get started|Sign up free/.test(b.textContent) && getComputedStyle(b).display !== 'none')));
     check('drawer', 'the confusing hub Log in shortcut is not offered to free-tutorial students', await page.evaluate(() => Array.from(document.querySelectorAll('#lpDrawer .dw-hub-login')).every((e) => getComputedStyle(e).display === 'none')));
     check('drawer', 'the hub Log in button is still in the page, only stood down in this mode', await page.evaluate(() => !!document.querySelector('#lpDrawer .dw-hub-login')));
     check('drawer', 'contact info present', await page.evaluate(() => /godsowncenterinfo@gmail\.com/.test(document.getElementById('lpDrawer').textContent)));
@@ -530,9 +576,16 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.evaluate(() => go('landing'));
     await page.click('#lpBurger');
     check('mode-control', 'Original Mode restores the original drawer account actions', await visible(page, '#lpDrawer .dw-original') && !(await visible(page, '#lpDrawer .dw-cbt')));
+    check('mode-control', 'Original Mode brings the drawer Create free account back, clickable', await visible(page, '#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]'));
     check('mode-control', 'Original Mode brings the hub Log in shortcut back', await visible(page, '#lpDrawer .dw-hub-login'));
     check('mode-control', 'the hub login shortcut is only stood down by the Free Tutorial mode class', await page.evaluate(() => !document.body.classList.contains('f27-mode') && getComputedStyle(document.querySelector('#lpDrawer .dw-hub-login')).display !== 'none'));
     await shot(page, '17-original-mode-drawer');
+    await page.click('#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]');
+    await active(page, 'signup');
+    check('mode-control', 'Original Mode: drawer Create free account still opens the ORIGINAL #signup', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !!document.getElementById('signName')));
+    await page.evaluate(() => go('landing'));
+    await active(page, 'landing');
+    await page.click('#lpBurger');
     await page.click('#lpDrawer .dw-updates-link');
     await active(page, 'updates');
     check('drawer', 'Original Mode restores the Updates & News destination', true);
@@ -556,8 +609,10 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       for (let pass = 1; pass <= 2; pass++) {
         await switchWebsiteMode(page, false);
         await checkHeroForMode(page, label + ' round ' + pass, false);
+        await checkAccountCreationVisibility(page, label + ' round ' + pass, false);
         await switchWebsiteMode(page, true);
         await checkHeroForMode(page, label + ' round ' + pass, true);
+        await checkAccountCreationVisibility(page, label + ' round ' + pass, true);
       }
       check('mode-hero', label + ': student records survive every mode switch', currentSession()?.participants.length >= 1 && currentSession()?.attempts.filter((a) => a.submittedAt).length === 2);
     }
@@ -701,7 +756,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     const e = document.querySelector('#landing .lp-actions .dw-hub-login');
     return !!e && getComputedStyle(e).display === 'none';
   }));
-  check('desktop', 'the original Get started nav action is still shown', await visible(page, '#landing .lp-actions .dw-original[onclick="go(\'signup\')"]'));
+  check('desktop', 'the desktop nav Get started action is hidden in Free Mode', !(await visible(page, '#landing .lp-actions .dw-original[onclick="go(\'signup\')"]')));
+  check('desktop', 'the desktop nav Get started button is hidden, not deleted', await page.evaluate(() => {
+    const e = document.querySelector('#landing .lp-actions .dw-original[onclick="go(\'signup\')"]');
+    return !!e && e.textContent.trim() === 'Get started' && getComputedStyle(e).display === 'none';
+  }));
+  await checkAccountCreationVisibility(page, 'desktop homepage', true);
   check('desktop', 'the desktop hero hides the original Get started button in Free Mode', !(await visible(page, '#landing .hero-original-cta')));
   check('desktop', 'the desktop hero keeps the account link visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
   await shot(page, '18-homepage-desktop');
@@ -805,18 +865,19 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await active(page, 'landing');
     check('original-accounts', 'Free Mode hides the hero Get started action', !(await visible(page, '#landing .hero-original-cta')));
     check('original-accounts', 'Free Mode keeps the hero account link visible', await visible(page, '#landing .hero-btns .lp-btn-ghost'));
-    check('original-accounts', 'Free Mode keeps the original nav Get started visible', await visible(page, '#landing .lp-actions button[onclick="go(\'signup\')"]'));
+    check('original-accounts', 'Free Mode hides the nav Get started action', !(await visible(page, '#landing .lp-actions button[onclick="go(\'signup\')"]')));
     check('original-accounts', 'the hub Log in nav shortcut stands down in Free Mode but is not deleted', await page.evaluate(() => {
       const e = document.querySelector('#landing .lp-actions .dw-hub-login');
       return !!e && getComputedStyle(e).display === 'none';
     }));
     check('original-accounts', 'the hub login screen itself is still reachable and independent', await page.evaluate(() => !!document.getElementById('login-v2') && !!document.getElementById('loginId')));
 
-    /* 1. A NEW student reaches the ORIGINAL registration form. The hero CTA is
-       hidden in Free Tutorial Mode, so this uses the hub's own nav sign-up,
-       which is unchanged — proving the original account system still works
-       independently while the site is in Free Tutorial Mode. */
-    await page.click('#landing .lp-actions button[onclick="go(\'signup\')"]');
+    /* 1. A NEW student reaches the ORIGINAL registration form. Every homepage
+       sign-up shortcut is hidden in Free Tutorial Mode by design, so reach the
+       hub's registration screen by its own unchanged route — proving the
+       original account system still works independently in Free Tutorial Mode.
+       Original Mode below clicks the real buttons. */
+    await page.evaluate(() => go('signup'));
     await active(page, 'signup');
     check('original-accounts', 'Get started opens the ORIGINAL registration screen (not the edition)', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !document.getElementById('free-home').classList.contains('active')));
     check('original-accounts', 'the original registration form is actually rendered', await visible(page, '#signup #signName') && await visible(page, '#signup #signupBtn'));
