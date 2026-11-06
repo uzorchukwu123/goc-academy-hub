@@ -132,7 +132,7 @@ var PORT = Number(process.env.GOC_F27_MAIL_PORT) || 8481;
   var s2 = bootServer('none', PORT, {});
   try {
     await waitForBoot(s2, 40);
-    var reg = await call(s2, 'POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Law' });
+    var reg = await call(s2, 'POST', '/api/free2027/register/start', { name: 'Ada Obi', email: 'ada@example.com', course: 'Law', password: 'AdaPass-2027' });
     ok('21. registration is refused with the explicit not-configured message', reg.status === 503 && /email verification is not configured/i.test(reg.raw), reg.status + ' ' + reg.raw.slice(0, 120));
     ok('32. no six-digit code leaks into the error response', !/\b\d{6}\b/.test(reg.raw), reg.raw.slice(0, 160));
     var anon = await call(s2, 'GET', '/api/free2027/admin/email-status');
@@ -149,7 +149,7 @@ var PORT = Number(process.env.GOC_F27_MAIL_PORT) || 8481;
   var s3 = bootServer('partial', PORT + 1, { GOC_SMTP_HOST: 'smtp-relay.brevo.com' });
   try {
     await waitForBoot(s3, 40);
-    var reg3 = await call(s3, 'POST', '/api/free2027/register/start', { name: 'Ben', email: 'ben@example.com', course: 'Law' });
+    var reg3 = await call(s3, 'POST', '/api/free2027/register/start', { name: 'Ben', email: 'ben@example.com', course: 'Law', password: 'AdaPass-2027' });
     ok('22. partial configuration still refuses registration', reg3.status === 503 && /not configured/i.test(reg3.raw), reg3.status);
     var adm3 = await founderToken(s3);
     var st3 = await call(s3, 'GET', '/api/free2027/admin/email-status', undefined, adm3);
@@ -182,7 +182,7 @@ var PORT = Number(process.env.GOC_F27_MAIL_PORT) || 8481;
     ok('24b. live verify -> ready', st5v.body.status === 'ready', st5v.raw.slice(0, 160));
     ok('32. the diagnostic response contains no secret values', st5v.raw.indexOf(SECRET) < 0 && st5v.raw.indexOf(SMTPPASS) < 0 && st5v.raw.indexOf('test-login') < 0, st5v.raw.slice(0, 300));
 
-    var start = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Cat Ada', email: 'cat@example.com', course: 'Law' });
+    var start = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Cat Ada', email: 'cat@example.com', course: 'Law', password: 'AdaPass-2027' });
     ok('registration start succeeds and reports delivery', start.status === 200 && start.body.delivered === true, start.raw.slice(0, 160));
     var code = mailedCode(s5, 'cat@example.com');
     ok('25. a six-digit OTP is generated and emailed', !!code && /^\d{6}$/.test(code), code ? 'six digits captured' : 'no captured code');
@@ -190,32 +190,30 @@ var PORT = Number(process.env.GOC_F27_MAIL_PORT) || 8481;
     var wrong = await call(s5, 'POST', '/api/free2027/register/verify', { email: 'cat@example.com', code: code === '000000' ? '000001' : '000000' });
     ok('28. an incorrect code is rejected', wrong.status === 400 || wrong.status === 403, wrong.status + ' ' + wrong.raw.slice(0, 100));
     var good = await call(s5, 'POST', '/api/free2027/register/verify', { email: 'cat@example.com', code: code });
-    ok('30. correct verification completes registration and issues a token', good.status === 200 && !!good.body.token && good.body.participant && good.body.participant.verified === true && /^GOC-F27-[A-F0-9]{20}$/.test(good.body.participant.id), good.status);
+    ok('30. correct verification completes registration and issues a token', good.status === 200 && !!good.body.token && good.body.participant && good.body.participant.verified === true && /^GOC-F-\d{3,}$/.test(good.body.participant.id), good.status + ' ' + JSON.stringify(good.body.participant || {}));
     var again = await call(s5, 'POST', '/api/free2027/register/verify', { email: 'cat@example.com', code: code });
     ok('29. a used code cannot be replayed', again.status === 400, again.status);
-    var reReg = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Cat Again', email: 'cat@example.com', course: 'Law' });
-    ok('27b. the current resend cooldown also protects a verified address', reReg.status === 429, reReg.status);
-    /* Advance only this throwaway server's stored timestamp; never wait a minute
-       and never rewrite a live/local-development data file. */
-    var cooldownDb = JSON.parse(fs.readFileSync(path.join(s5.data, 'data.json'), 'utf8'));
-    cooldownDb.free2027.otps.filter(function (o) { return o.email === 'cat@example.com'; }).forEach(function (o) { o.createdAt = Date.now() - 61000; });
-    fs.writeFileSync(path.join(s5.data, 'data.json'), JSON.stringify(cooldownDb));
-    var reStart = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Cat Again', email: 'cat@example.com', course: 'Law' });
+    var reReg = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Cat Again', email: 'cat@example.com', course: 'Law', password: 'AdaPass-2027' });
+    ok('27b. an address that already holds a verified password account is not re-registered', reReg.status === 409, reReg.status + ' ' + reReg.raw.slice(0, 120));
+    /* The same preservation property, through the mechanism students now use:
+       signing out and logging back in must return the SAME account. */
     var reCode = mailedCode(s5, 'cat@example.com');
-    var reVerify = await call(s5, 'POST', '/api/free2027/register/verify', { email: 'cat@example.com', code: reCode });
-    ok('30b. re-verification keeps the same permanent ID and creates no duplicate', reStart.status === 200 && reVerify.status === 200 && reVerify.body.participant.id === good.body.participant.id, reVerify.status);
+    var signOut = await call(s5, 'POST', '/api/free2027/logout', {}, good.body.token);
+    var reVerify = await call(s5, 'POST', '/api/free2027/login', { email: 'cat@example.com', password: 'AdaPass-2027' });
+    ok('30b. logging in again keeps the same permanent ID and creates no duplicate', signOut.status === 200 && reVerify.status === 200 && reVerify.body.participant.id === good.body.participant.id, reVerify.status + ' ' + reVerify.raw.slice(0, 120));
+    ok('30d. the signed-out session is really gone', (await call(s5, 'GET', '/api/free2027/me', undefined, good.body.token)).status === 401);
     var countDb = JSON.parse(fs.readFileSync(path.join(s5.data, 'data.json'), 'utf8'));
     var current = countDb.free2027.sessions.find(function (s) { return s.id === countDb.free2027.currentSessionId; });
     ok('30c. exactly one participant owns that verified address', current.participants.filter(function (p) { return p.email === 'cat@example.com'; }).length === 1);
     var burst = [];
-    for (var i = 0; i < 8; i++) burst.push(call(s5, 'POST', '/api/free2027/register/start', { name: 'Burst User ' + i, email: 'burst' + i + '@example.com', course: 'Law' }));
+    for (var i = 0; i < 8; i++) burst.push(call(s5, 'POST', '/api/free2027/register/start', { name: 'Burst User ' + i, email: 'burst' + i + '@example.com', course: 'Law', password: 'AdaPass-2027' }));
     var rs = await Promise.all(burst);
     ok('27. concurrent registrations stay valid or rate-limited without a server failure', rs.every(function (r) { return r.status === 200 || r.status === 429; }), rs.map(function (r) { return r.status; }).join(','));
     ok('32. no secret appears in the server log', s5.log().indexOf(SECRET) < 0 && s5.log().indexOf(SMTPPASS) < 0, s5.log().slice(-200));
     var db = JSON.parse(fs.readFileSync(path.join(s5.data, 'data.json'), 'utf8'));
     var otps = (db.free2027 && db.free2027.otps) || [];
     ok('26. OTPs are stored hashed with an expiry, never in plain text', otps.length > 0 && otps.every(function (o) { return o.hash && o.expiresAt > 0; }) && JSON.stringify(otps).indexOf(code) < 0 && JSON.stringify(otps).indexOf(reCode) < 0);
-    var exStart = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Expiry Test', email: 'expiry@example.com', course: 'Law' });
+    var exStart = await call(s5, 'POST', '/api/free2027/register/start', { name: 'Expiry Test', email: 'expiry@example.com', course: 'Law', password: 'AdaPass-2027' });
     var exCode = mailedCode(s5, 'expiry@example.com');
     var exDb = JSON.parse(fs.readFileSync(path.join(s5.data, 'data.json'), 'utf8'));
     exDb.free2027.otps.filter(function (o) { return o.email === 'expiry@example.com'; }).forEach(function (o) { o.expiresAt = Date.now() - 1; });

@@ -127,7 +127,7 @@ function mailedCode(email) {
   return m ? m[1] : null;
 }
 function register(name, email) {
-  return call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Medicine and Surgery' })
+  return call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Medicine and Surgery', password: 'AdaPass-2027' })
     .then(function (r) {
       var code = mailedCode(email);
       if (!r.body || r.status !== 200 || !code) return Promise.reject(new Error('verification email unavailable: ' + r.raw));
@@ -162,7 +162,7 @@ function adminLogin(id, password, passcode) {
     stub.hits = 0; stub.databaseHits = 0; stub.paths = [];
 
     var reg = await register('Ada Obi', 'ada@example.com');
-    ok('a candidate registers without Appwrite', reg.status === 200 && /^GOC-F27-[A-F0-9]{20}$/.test(reg.body.participant.id), reg.raw);
+    ok('a candidate registers without Appwrite and receives the first sequential student ID', reg.status === 200 && reg.body.participant.id === 'GOC-F-001', reg.raw);
     var ada = reg.body.token;
 
     var prog0 = await call('GET', '/api/free2027/programme', undefined, ada);

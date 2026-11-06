@@ -29,6 +29,7 @@ const dataPath = path.resolve(DATA_FILE);
 if (dataPath === repoRoot || dataPath.startsWith(repoRoot + path.sep)) { console.error('GOC_BROWSER_DATA_FILE must be outside the repository.'); process.exit(1); }
 if (!/^[0-9]{4,10}$/.test(PASSCODE)) { console.error('GOC_PASSCODE must be the numeric console passcode configured for the isolated server.'); process.exit(1); }
 const STUDENT_EMAIL = 'recovery.' + Date.now() + '@example.com';
+const STUDENT_PW = 'BrowserPass-2027';
 function readData() { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
 function currentSession() { const j = readData(); return j.free2027.sessions.find((s) => s.id === j.free2027.currentSessionId); }
 const initial = readData();
@@ -179,7 +180,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     /* 3. Registration + OTP */
     await page.click('#free-home .f27-cta .btn-red');
     await active(page, 'free-register');
-    check('registration', 'full name/email/course fields', await page.evaluate(() => !!document.getElementById('freeName') && !!document.getElementById('freeEmail') && !!document.getElementById('freeCourse')));
+    check('registration', 'name/email/password/course fields', await page.evaluate(() => !!document.getElementById('freeName') && !!document.getElementById('freeEmail') && !!document.getElementById('freePassword') && !!document.getElementById('freeCourse')));
+    check('registration', 'the registration page links to the student login page', await page.evaluate(() => /free-login/.test(document.getElementById('free-register').innerHTML)));
     await page.click('#freeRegBtn');
     check('registration', 'empty submission is validated', await page.evaluate(() => document.getElementById('freeRegErr').textContent.length > 0));
     await page.fill('#freeName', 'Ada Browser');
@@ -189,6 +191,12 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('registration', 'invalid email is validated', await page.evaluate(() => /email/i.test(document.getElementById('freeRegErr').textContent)));
     await page.fill('#freeEmail', STUDENT_EMAIL);
     await page.fill('#freeCourse', 'Medicine and Surgery');
+    await page.click('#freeRegBtn');
+    check('registration', 'a missing password is validated in the page', await page.evaluate(() => /password/i.test(document.getElementById('freeRegErr').textContent)));
+    await page.fill('#freePassword', 'abcdefgh');
+    await page.click('#freeRegBtn');
+    check('registration', 'a password without a number is validated in the page', await page.evaluate(() => /letters and numbers/i.test(document.getElementById('freeRegErr').textContent)));
+    await page.fill('#freePassword', STUDENT_PW);
     await shot(page, '04-registration-mobile');
     await page.click('#freeRegBtn');
     await page.waitForFunction(() => !document.getElementById('freeRegStep2').hidden);
@@ -204,7 +212,8 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.fill('#freeOtp', code || '000000');
     await page.click('#freeOtpBtn');
     await active(page, 'free-portal');
-    check('registration', 'verified student reaches CBT Portal', await page.evaluate(() => /GOC-F27-/.test(document.getElementById('freeWho').textContent)));
+    check('registration', 'verified student reaches CBT Portal with a sequential GOC-F-NNN identifier', await page.evaluate(() => /GOC-F-\d{3,}/.test(document.getElementById('freeWho').textContent)));
+    check('registration', 'the password field is cleared once the code is sent', await page.evaluate(() => document.getElementById('freePassword').value === ''));
     await shot(page, '05-portal-mobile');
     const whoBefore = await page.textContent('#freeWho');
     await page.reload({ waitUntil: 'networkidle' });
@@ -444,7 +453,7 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await page.click('#freePortalList button:has-text("View leaderboard")');
     await active(page, 'free-leaderboard');
     await page.waitForSelector('#freeBoardBody tbody tr');
-    check('leaderboard', 'ranked competition table contains the submitted student', await page.evaluate(() => /GOC-F27-/.test(document.querySelector('#freeBoardBody tbody').textContent) && /Score/.test(document.querySelector('#freeBoardBody thead').textContent)));
+    check('leaderboard', 'ranked competition table contains the submitted student', await page.evaluate(() => /GOC-F-\d{3,}|GOC-F27-[A-F0-9]{20}/.test(document.querySelector('#freeBoardBody tbody').textContent) && /Score/.test(document.querySelector('#freeBoardBody thead').textContent)));
     await shot(page, '15-leaderboard');
 
     /* 14. Recovered dedicated Website Mode Control, reversible without data loss. */
@@ -766,11 +775,130 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     await shot(page, '96-original-accounts-failure');
   }
 
+  /* ======================================================================
+     12. The Free UTME student's OWN account: signing out ends the session and
+     nothing else; logging back in restores the same account and every record;
+     and a still-valid session survives closing and reopening the browser.
+     ====================================================================== */
+  const AUTH = 'student-auth';
+  let reopenState = null;
+  let authStudentId = null;
+  try {
+    const crypto = require('crypto');
+    const s0 = currentSession();
+    const p0 = s0.participants.find((x) => x.email === STUDENT_EMAIL);
+    authStudentId = p0 ? p0.id : null;
+    check(AUTH, 'the browser-registered student holds a sequential identifier', !!p0 && /^GOC-F-\d{3,}$/.test(p0.id), p0 && p0.id);
+    check(AUTH, 'the password is stored only as a scrypt hash', !!p0 && /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(p0.passwordHash || ''));
+    check(AUTH, 'the plaintext password is nowhere in the data file', JSON.stringify(readData()).indexOf(STUDENT_PW) < 0);
+    /* lastSeenAt is a visit stamp and legitimately moves on login; every other
+       field, and every attempt/answer/score, must be identical. */
+    const owned = () => {
+      const ss = currentSession();
+      const pp = ss.participants.find((x) => x.id === authStudentId);
+      const clone = pp ? JSON.parse(JSON.stringify(pp)) : null;
+      if (clone) clone.lastSeenAt = 0;
+      return JSON.stringify({ participant: clone, attempts: ss.attempts.filter((a) => a.participantId === authStudentId) });
+    };
+    const ownedBefore = owned();
+    check(AUTH, 'the student has CBT attempts on record before signing out', JSON.parse(ownedBefore).attempts.length > 0, String(JSON.parse(ownedBefore).attempts.length));
+    const tokBefore = await page.evaluate(() => localStorage.getItem('goc.free2027.token'));
+    check(AUTH, 'the session token is held durably, not per tab', !!tokBefore && await page.evaluate(() => !sessionStorage.getItem('goc.free2027.token')));
+    const digestOf = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+    check(AUTH, 'the server persisted only a digest of that token', (readData().free2027.authSessions || []).some((x) => x.tokenHash === digestOf(tokBefore)) && JSON.stringify(readData().free2027.authSessions).indexOf(tokBefore) < 0);
+    reopenState = await context.storageState();
+
+    /* Sign out through the real UI control. The hub's own first-run tour can
+       still be over the page after the original-account flow; dismiss it the
+       way a student would rather than clicking through it. */
+    await page.evaluate(() => freeCbtPortal());
+    await active(page, 'free-portal');
+    if (await page.locator('#tutSkip').isVisible().catch(() => false)) {
+      await page.click('#tutSkip');
+      await page.waitForTimeout(300);
+    }
+    await page.click('#free-portal [onclick="freeSignOut()"]');
+    await active(page, 'free-home');
+    await page.waitForTimeout(400);
+    check(AUTH, 'signing out clears the browser token', await page.evaluate(() => !localStorage.getItem('goc.free2027.token') && !sessionStorage.getItem('goc.free2027.token')));
+    check(AUTH, 'signing out deleted the server session', !(readData().free2027.authSessions || []).some((x) => x.tokenHash === digestOf(tokBefore)));
+    check(AUTH, 'signing out left the account and every record byte-identical', owned() === ownedBefore);
+    check(AUTH, 'the identifier is still in the permanent registry', readData().free2027.studentIds.indexOf(authStudentId) > -1);
+    await shot(page, '97-signed-out');
+
+    /* The student-only entry now demands authentication again. */
+    await page.evaluate(() => freePortalEnter());
+    await active(page, 'free-login');
+    check(AUTH, 'after signing out the student entry shows the login page', true);
+    await page.fill('#freeLoginEmail', STUDENT_EMAIL);
+    await page.fill('#freeLoginPassword', 'NotThePassword-1');
+    await page.click('#freeLoginBtn');
+    await page.waitForFunction(() => document.getElementById('freeLoginErr').textContent.length > 0);
+    check(AUTH, 'an incorrect password is refused in the page', await page.evaluate(() => /not right/i.test(document.getElementById('freeLoginErr').textContent)));
+    await shot(page, '98-login-wrong-password');
+    await page.fill('#freeLoginPassword', STUDENT_PW);
+    await page.click('#freeLoginBtn');
+    await active(page, 'free-portal');
+    await page.waitForFunction((id) => (document.getElementById('freeWho').textContent || '').indexOf(id) > -1, authStudentId, { timeout: 20000 });
+    check(AUTH, 'logging back in restores the SAME student identifier', await page.evaluate((id) => document.getElementById('freeWho').textContent.indexOf(id) > -1, authStudentId));
+    check(AUTH, 'logging back in restored every record byte-for-byte', owned() === ownedBefore);
+    check(AUTH, 'logging back in created no duplicate account', currentSession().participants.filter((x) => x.email === STUDENT_EMAIL).length === 1);
+    const resultsShown = await page.evaluate(async () => {
+      const r = await window.GOC.free.results();
+      return (r.results || []).length;
+    });
+    check(AUTH, 'the previous CBT results are readable again after logging back in', resultsShown > 0, String(resultsShown));
+    await shot(page, '99-logged-back-in');
+
+    /* The public catalogue is still open to a visitor with no session. */
+    const guestCatalogue = await page.evaluate(async () => {
+      const r = await fetch('api/free2027/catalogue', { headers: { Accept: 'application/json' } });
+      return { status: r.status, body: await r.json() };
+    });
+    check(AUTH, 'the public CBT catalogue needs no session', guestCatalogue.status === 200 && guestCatalogue.body.guest === true);
+    check(AUTH, 'the catalogue exposes no student address or password hash', JSON.stringify(guestCatalogue.body).indexOf('@') < 0 && JSON.stringify(guestCatalogue.body).indexOf('passwordHash') < 0);
+    reopenState = await context.storageState();
+  } catch (e) {
+    check(AUTH, 'the sign-out / sign-in flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e);
+    await shot(page, '99-student-auth-failure');
+  }
+
   check('harness', 'no uncaught page JavaScript errors', jsErrors.length === 0, jsErrors.join(' | '));
   fs.writeFileSync(path.join(ART, 'results.json'), JSON.stringify({ generatedAt: new Date().toISOString(), base: BASE, passed: results.filter((r) => r.pass).length, total: results.length, results, jsErrors }, null, 2));
   const failed = results.filter((r) => !r.pass);
   console.log('\nSUMMARY: ' + (results.length - failed.length) + '/' + results.length + ' checks passed');
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.flow + ': ' + f.name).join('; '));
   await browser.close();
-  process.exit(failed.length ? 1 : 0);
+
+  /* Close the browser completely, then open a new one carrying only what a
+     returning visitor's browser would still hold (localStorage). A still-valid
+     session must survive that; a per-tab token would not. */
+  if (reopenState && authStudentId) {
+    let rb = null;
+    try {
+      rb = await pw.launch({ executablePath: EXECUTABLE, args: ['--no-sandbox', '--disable-dev-shm-usage'].concat(extraArgs), headless: true });
+      const rctx = await rb.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block', storageState: reopenState });
+      const rp = await rctx.newPage();
+      const rerr = [];
+      rp.on('pageerror', (e) => rerr.push(String(e && e.message || e)));
+      await rp.goto(BASE, { waitUntil: 'networkidle' });
+      await rp.waitForTimeout(1500);
+      check('browser-reopen', 'the token is still held after the browser was closed', await rp.evaluate(() => !!localStorage.getItem('goc.free2027.token')));
+      await rp.evaluate(() => freePortalEnter());
+      await active(rp, 'free-portal');
+      await rp.waitForFunction((id) => (document.getElementById('freeWho').textContent || '').indexOf(id) > -1, authStudentId, { timeout: 20000 });
+      check('browser-reopen', 'the student is still signed in as the SAME account', await rp.evaluate((id) => document.getElementById('freeWho').textContent.indexOf(id) > -1, authStudentId));
+      const rr = await rp.evaluate(async () => { const r = await window.GOC.free.results(); return (r.results || []).length; });
+      check('browser-reopen', 'their previous results are still there', rr > 0, String(rr));
+      check('browser-reopen', 'no page JavaScript error on the reopened browser', rerr.length === 0, rerr.join(' | '));
+      await shot(rp, '99b-browser-reopened');
+    } catch (e) {
+      check('browser-reopen', 'the close-and-reopen flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e);
+    } finally { if (rb) { try { await rb.close(); } catch (e) {} } }
+  }
+
+  const allFailed = results.filter((r) => !r.pass);
+  console.log('FINAL SUMMARY: ' + (results.length - allFailed.length) + '/' + results.length + ' checks passed');
+  fs.writeFileSync(path.join(ART, 'results.json'), JSON.stringify({ generatedAt: new Date().toISOString(), base: BASE, passed: results.filter((r) => r.pass).length, total: results.length, results, jsErrors }, null, 2));
+  process.exit(allFailed.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

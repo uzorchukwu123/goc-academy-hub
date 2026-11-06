@@ -23,7 +23,7 @@ function head(t) { console.log('\n' + t); }
 
 /* ---------------------------------------------------------------- markup */
 head('Back and Home controls are present on every applicable Free Tutorial screen');
-var screens = ['free-home', 'free-register', 'free-portal', 'free-result', 'free-leaderboard'];
+var screens = ['free-home', 'free-register', 'free-login', 'free-portal', 'free-result', 'free-leaderboard'];
 screens.forEach(function (id) {
   var i = html.indexOf('id="' + id + '"');
   var j = html.indexOf('</section>', i);

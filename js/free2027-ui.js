@@ -97,7 +97,7 @@
       var del = F.config.otpDelivery || null;
       fine.textContent = del && del.available === false
         ? 'Email verification is required. Registration is temporarily unavailable until the academy configures email verification.'
-        : 'Registration is verified by a one-time code sent to your email address.';
+        : 'Register with your name, email, password and course. We verify your email with a one-time code, then you log in with your email and password.';
     }
     if (free) {
       freeHomeLoad();
@@ -130,8 +130,11 @@
     }).catch(function () { applyMode(rules.MODE_ORIGINAL, false); });
   }
 
-  /* A participant whose tab was refreshed keeps their verified session (the
-     token is in sessionStorage), so an interrupted paper is one click away. */
+  /* A student who refreshes the page, reopens the browser or comes back after a
+     server restart keeps their session: the token is in localStorage and the
+     server persisted the matching session. Only an expired or signed-out
+     session fails here, and that drops the browser's token — it never touches
+     the student's account or records. */
   function resumeParticipant() {
     if (!api.hasToken()) return;
     api.me().then(function (r) {
@@ -139,7 +142,15 @@
       paintWho();
       /* Never yank a visitor off the homepage just because a token exists; only
          the portal needs the identity, and it re-reads it on arrival. */
-    }).catch(function () { /* an expired token is simply dropped by the server */ });
+    }).catch(function (er) {
+      /* The server has already refused this session (expired or signed out).
+         Forget the dead token so the next entry shows the login page. */
+      if (er && (er.status === 401 || er.status === 403)) {
+        if (typeof api.forgetToken === 'function') api.forgetToken();
+        F.me = null;
+        paintWho();
+      }
+    });
   }
 
   /* ==================================================== 2. THE PUBLIC HOME */
@@ -154,8 +165,9 @@
     }).catch(function (err) {
       /* Without a token the portal list is closed; show what is public, which
          is the leaderboard list, and invite the visitor to register. */
-      host.innerHTML = '<p class="f27-fine">Register (it takes a minute) to see the assessments and competitions open this week.</p>' +
-        '<div class="f27-cta"><button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button>' +
+      host.innerHTML = '<p class="f27-fine">Log in to see your own assessments and competitions, or register free if you are new.</p>' +
+        '<div class="f27-cta"><button class="btn btn-red btn-block" onclick="freePortalEnter()">Student log in</button>' +
+        '<button class="btn btn-outline btn-block" onclick="freeHomeCta()">Register free</button>' +
         '<button class="btn btn-outline btn-block" onclick="freeBoardOpenList()">Competition leaderboards</button></div>';
     });
   }
@@ -179,7 +191,11 @@
     if (api.hasToken()) {
       /* A token exists but the identity was not read yet: ask once, then move. */
       api.me().then(function (r) { F.me = r.participant; paintWho(); global.go('free-portal'); F.freePortalLoad(); },
-        function () { global.go('free-register'); });
+        function () {
+          /* The stored session is no longer valid: authenticate again. */
+          if (typeof api.forgetToken === 'function') api.forgetToken();
+          global.go('free-login');
+        });
       return;
     }
     global.go('free-register');
@@ -193,6 +209,57 @@
   F.freeCbtPortal = function () {
     global.go('free-portal');
     F.freePortalLoad();
+  };
+
+  /* STUDENT entry to their own portal. Separate from the public catalogue
+     above: a student who is not signed in gets the LOGIN page first, and only a
+     valid session opens their dashboard. After signing out or after the
+     inactivity timeout the token is gone, so this shows the login again —
+     nobody is silently logged back in, and nothing about the account is lost. */
+  F.freePortalEnter = function () {
+    if (api.hasToken()) {
+      api.me().then(function (r) {
+        F.me = r.participant;
+        paintWho();
+        global.go('free-portal');
+        F.freePortalLoad();
+      }, function () {
+        /* expired or invalid session: fresh authentication required */
+        if (typeof api.forgetToken === 'function') api.forgetToken();
+        F.me = null;
+        paintWho();
+        global.go('free-login');
+      });
+      return;
+    }
+    global.go('free-login');
+  };
+
+  /* Email + password login. On success the SAME existing account is loaded —
+     its identifier, course, progress, attempts, answers and results are read
+     from the server, never recreated. */
+  F.freeLogin = function () {
+    var err = $('freeLoginErr');
+    if (err) err.textContent = '';
+    var email = (($('freeLoginEmail') || {}).value || '').trim();
+    var password = ($('freeLoginPassword') || {}).value || '';
+    var e = rules.cleanEmail(email);
+    if (e.error) { if (err) err.textContent = e.error; return; }
+    if (!password) { if (err) err.textContent = 'Enter your password.'; return; }
+    var btn = $('freeLoginBtn');
+    busy(btn, true);
+    api.login({ email: e.email, password: password }).then(function (r) {
+      busy(btn, false);
+      var field = $('freeLoginPassword'); if (field) field.value = '';
+      F.me = r.participant;
+      paintWho();
+      say('Welcome back, ' + r.participant.name + ' (' + r.participant.id + ')');
+      global.go('free-portal');
+      F.freePortalLoad();
+    }, function (er) {
+      busy(btn, false);
+      if (err) err.textContent = (er && er.message) || 'That email address or password is not right.';
+    });
   };
 
   /* Internal navigation history recovered from PR #9. Back NEVER calls
@@ -232,7 +299,7 @@
     setTimeout(function () { F.freeCbtPortal(); }, 180);
   };
 
-  /* ================================================= 3. REGISTRATION (OTP) */
+  /* ============================== 3. REGISTRATION (details + password + OTP) */
 
   F.freeRegisterStart = function () {
     var err = $('freeRegErr');
@@ -244,13 +311,19 @@
     var e = rules.cleanEmail(email); if (e.error) return showErr('freeRegErr', e.error);
     var c = rules.cleanCourse(course, F.config && F.config.courses);
     if (c.error) return showErr('freeRegErr', c.error);
+    var password = ($('freePassword') || {}).value || '';
+    var p = rules.cleanPassword(password);
+    if (p.error) return showErr('freeRegErr', p.error);
 
     var btn = $('freeRegBtn');
     busy(btn, true);
     F.pendingName = n.name;
     F.pendingEmail = e.email;
     F.pendingCourse = c.course;
-    api.registerStart({ name: n.name, email: e.email, course: c.course }).then(function (r) {
+    /* Held only until the code is verified or resent, and only ever sent to the
+       server, which stores a scrypt hash of it. */
+    F.pendingPassword = p.password;
+    api.registerStart({ name: n.name, email: e.email, course: c.course, password: p.password }).then(function (r) {
       busy(btn, false);
       var step1 = $('freeRegStep1'), step2 = $('freeRegStep2');
       if (step1) step1.hidden = true;
@@ -261,6 +334,9 @@
       if (dev) { dev.hidden = true; dev.textContent = ''; }
       var otp = $('freeOtp');
       if (otp) { otp.value = ''; otp.focus(); }
+      /* The plaintext password has done its job: the pending code carries only
+         its hash from here on. */
+      var pw = $('freePassword'); if (pw) pw.value = '';
       showErr('freeOtpErr', '');
     }, function (er) {
       busy(btn, false);
@@ -275,7 +351,7 @@
     }
     var btn = $('freeOtpResendBtn');
     busy(btn, true);
-    api.registerStart({ name: F.pendingName, email: F.pendingEmail, course: F.pendingCourse }).then(function () {
+    api.registerStart({ name: F.pendingName, email: F.pendingEmail, course: F.pendingCourse, password: F.pendingPassword }).then(function () {
       busy(btn, false);
       showErr('freeOtpErr', 'A new verification code has been emailed. Older codes are no longer valid.');
     }, function (er) {
@@ -295,6 +371,7 @@
     api.registerVerify({ email: F.pendingEmail, code: c.code }).then(function (r) {
       busy(btn, false);
       F.me = r.participant;
+      F.pendingPassword = null;
       paintWho();
       say('You are registered as ' + r.participant.id);
       global.go('free-portal');
@@ -307,6 +384,7 @@
 
   F.freeRegisterRestart = function () {
     F.pendingEmail = null;
+    F.pendingPassword = null;
     var step1 = $('freeRegStep1'), step2 = $('freeRegStep2');
     if (step1) step1.hidden = false;
     if (step2) step2.hidden = true;
@@ -423,11 +501,15 @@
       paintLists(host, mine);
     }, function (er) {
       if (er && er.status === 401) {
-        api.logout();
+        /* The session expired through inactivity (or was ended elsewhere). The
+           student is sent to the login page; their account, identifier,
+           progress, attempts and results are all still on the server and come
+           back unchanged as soon as they log in again. */
+        if (typeof api.forgetToken === 'function') api.forgetToken();
         F.me = null;
         paintWho();
-        host.innerHTML = '<div class="f27-empty"><p>Your verification has expired. Register again — your email is remembered.</p>' +
-          '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Register again</button></div>';
+        global.go('free-login');
+        showErr('freeLoginErr', 'Your session has expired. Log in again to continue — all your records are saved.');
         return;
       }
       host.innerHTML = '<p class="f27-fine">' + esc(er.message || 'Could not load the portal.') + '</p>';
@@ -492,7 +574,7 @@
     var rows = (F.activities || []).filter(function (a) { return a.kind === F.tab; });
     var notice = '<div class="f27-guest-note" role="status">' +
       '<b>You are in the CBT Portal.</b> Browse the programme below — no account needed. ' +
-      'Verifying your email is only required when you sit a paper, so your score and result are saved to your own record.' +
+      'Logging in is only required when you sit a paper, so your score and result are saved to your own record.' +
       '</div>';
     if (!rows.length) {
       host.innerHTML = notice + (F.tab === 'weekly'
@@ -513,7 +595,8 @@
         '<span>up to <b>' + a.maxAttempts + '</b> attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
         '<span>closes <b>' + esc(when(a.closesAt)) + '</b></span></div>' +
         (open
-          ? '<button class="btn btn-red btn-block" onclick="freeHomeCta()">Verify email to sit this paper</button>'
+          ? '<button class="btn btn-red btn-block" onclick="freePortalEnter()">Log in to sit this paper</button>' +
+            '<p class="f27-fine" style="margin-top:8px;text-align:center">New here? <a href="#" onclick="freeGo(\'free-register\');return false">Register free</a></p>'
           : '<button class="btn btn-outline btn-block" disabled>' +
             (a.state === 'upcoming' ? 'Opens ' + esc(when(a.opensAt)) : 'Closed') + '</button>') +
         (a.kind === rules.KIND_COMPETITION && a.leaderboardPublished
@@ -884,9 +967,13 @@
     stopClock();
     F.exam = null;
     api.logout().then(function () {
+      /* Only the session ended. F.me is this tab's view of the student, not the
+         student's record: the account, identifier, course, progress, attempts,
+         answers and results all stay on the server for the next login. */
       F.me = null;
+      F.guest = true;
       paintWho();
-      say('Signed out');
+      say('Signed out — your records are saved');
       global.go('free-home');
     });
   };
@@ -1005,7 +1092,7 @@
     'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
-    'freeCbtPortal', 'freeExamHome'];
+    'freeCbtPortal', 'freeExamHome', 'freeLogin', 'freePortalEnter'];
   names.forEach(function (n) {
     if (typeof F[n] === 'function') global[n] = F[n];
   });

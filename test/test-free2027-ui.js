@@ -93,7 +93,8 @@ function makeWorld(opts) {
   }
   /* the pieces of the page the script touches */
   ['freeHomeOpen', 'freeHomeNote', 'freeHomeMode', 'freeRegErr', 'freeRegStep1', 'freeRegStep2', 'freeName',
-   'freeEmail', 'freeCourse', 'freeCourseList', 'freeRegBtn', 'freeOtp', 'freeOtpErr', 'freeOtpTo', 'freeOtpDev',
+   'freeEmail', 'freePassword', 'freeCourse', 'freeCourseList', 'freeRegBtn', 'freeOtp', 'freeOtpErr', 'freeOtpTo', 'freeOtpDev',
+   'freeLoginEmail', 'freeLoginPassword', 'freeLoginErr', 'freeLoginBtn',
    'freeOtpBtn', 'freeOtpResendBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
    'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeExamKind', 'freeExamPrev', 'freeExamNext',
@@ -331,12 +332,22 @@ settle(load(w1)).then(function () {
     ok('no request was sent', w.calls.api.length === before);
     ok('the reason is shown beside the field', /valid email/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
     w.els.freeEmail.value = 'ada@example.com';
+    var beforePw = w.calls.api.length;
+    w.sandbox.freeRegisterStart();
+    ok('a registration with no password is refused before it is sent', w.calls.api.length === beforePw && /at least 8 characters/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
+    w.els.freePassword.value = 'abcdefgh';
+    w.sandbox.freeRegisterStart();
+    ok('a password without a number is refused with the exact reason', w.calls.api.length === beforePw && /letters and numbers/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
+    w.els.freePassword.value = 'AdaPass-2027';
     w.sandbox.freeRegisterStart();
     return settle().then(function () {
       if (process.env.F27_DEBUG) console.log('REGERR', JSON.stringify(w.els.freeRegErr.textContent), w.calls.api.length, JSON.stringify(w.calls.api));
     ok('a good form sends one request', w.calls.api.filter(function (c) { return c[0] === 'registerStart'; }).length === 1);
       ok('the address is lower-cased and trimmed before it is sent',
         w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].email === 'ada@example.com');
+      ok('the chosen password travels with the registration request',
+        w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].password === 'AdaPass-2027');
+      ok('the password field is emptied once the code is on its way', w.els.freePassword.value === '');
       ok('the first step is hidden and the code step is shown', w.els.freeRegStep1.hidden === true && w.els.freeRegStep2.hidden === false);
       ok('the address is named on the code step', w.els.freeOtpTo.textContent === 'ada@example.com');
       ok('the verification code is never displayed in the browser UI', w.els.freeOtpDev.hidden && !/123456/.test(w.els.freeOtpDev.textContent));
@@ -344,6 +355,8 @@ settle(load(w1)).then(function () {
       w.sandbox.freeRegisterResend();
       return settle().then(function () {
       ok('resend asks the server to send a new email to the same address', w.calls.api.filter(function (c) { return c[0] === 'registerStart'; }).length === 2);
+      ok('the resend still carries the password, so the account can be created',
+        w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[1][1].password === 'AdaPass-2027');
       w.els.freeOtp.value = '12';
       var n = w.calls.api.length;
       w.sandbox.freeRegisterVerify();
@@ -455,8 +468,8 @@ settle(load(w1)).then(function () {
     return settle(w).then(function () { return w.els.freeHomeNote.textContent; });
   }
   return noteFor({ available: true }).then(function (note) {
-    ok('with a working sender the page says the code is emailed',
-      /one-time code sent to your email address/.test(note), note);
+    ok('with a working sender the page explains registration honestly: details, a password and an emailed code',
+      /one-time code/.test(note) && /verify your email/i.test(note) && /password/.test(note), note);
     return noteFor({ available: false });
   }).then(function (note) {
     ok('with no sender it says registration is unavailable until mail is configured',
@@ -547,7 +560,8 @@ settle(load(w1)).then(function () {
       ok('the portal lists the available weekly assessment', /Week 1/.test(list));
       ok('the guest sees a clear, honest note that browsing needs no account', /no account needed/.test(list) && /only required when you sit a paper/.test(list));
       ok('the guest list never renders a Start button that would 401', !/freeExamOpen/.test(list));
-      ok('the guest card uses the edition\'s own pre-existing verification CTA', /freeHomeCta\(\)/.test(list) && /Verify email to sit this paper/.test(list));
+      ok('sitting a paper routes the guest through the student login, never straight into an exam', /freePortalEnter\(\)/.test(list) && /Log in to sit this paper/.test(list));
+      ok('the guest is still offered registration alongside the login', /free-register/.test(list) && /Register free/.test(list));
       gp.sandbox.freePortalTab('competition');
       return settle(gp).then(function () {
         ok('the competition tab lists the available competition', /Grand Prize/.test(gp.els.freePortalList._html), gp.els.freePortalList._html.slice(0, 160));

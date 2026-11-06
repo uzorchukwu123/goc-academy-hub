@@ -67,7 +67,7 @@
   /* The free-tutorial screens. In 2027 Free Tutorial Mode a browser may sit on
      one of these and nothing else (plus the homepage, the admin gate and the
      password-change screen a manager is forced through). */
-  var SCREENS = ['free-home', 'free-register', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard'];
+  var SCREENS = ['free-home', 'free-register', 'free-login', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard'];
   function isFreeScreen(id) { return SCREENS.indexOf(String(id)) > -1; }
 
   /* ------------------------------------------------- 2. participant records */
@@ -134,16 +134,53 @@
     return out.slice(0, 60);
   }
 
-  /* A participant ID is generated on the server from cryptographically random
-     bytes. It is deliberately non-sequential and carries no personal data or
-     registration count. The server checks persisted IDs before accepting it;
-     this helper only formats/validates its public shape. */
-  var ID_RE = /^GOC-F27-[A-F0-9]{20}$/;
-  function isParticipantId(v) { return ID_RE.test(String(v == null ? '' : v).trim().toUpperCase()); }
-  function participantId(randomHex) {
-    var value = String(randomHex == null ? '' : randomHex).toUpperCase();
-    if (!/^[A-F0-9]{20}$/.test(value)) throw new Error('A 20-character cryptographic ID value is required.');
-    return 'GOC-F27-' + value;
+  /* A student identifier is PERMANENT and sequential: the first student of the
+     programme is GOC-F-001, the next GOC-F-002, and so on. The sequence is
+     allocated on the server inside the data lock (so two simultaneous
+     registrations can never receive the same number), the issued numbers are
+     remembered forever in db.free2027.studentIds (so a deleted student's number
+     is never handed out again), and the identifier never changes for the life
+     of the programme. It carries no personal data and is never an email address
+     or an internal database ID. */
+  var ID_RE = /^GOC-F-\d{3,}$/;
+  /* Identifiers issued by the earlier random scheme stay VALID forever. Those
+     students already hold records, attempts and results under that ID, so it is
+     still accepted everywhere an identifier is read; only NEW registrations use
+     the sequential scheme. Nothing is ever renumbered. */
+  var LEGACY_ID_RE = /^GOC-F27-[A-F0-9]{20}$/;
+  function isLegacyParticipantId(v) { return LEGACY_ID_RE.test(String(v == null ? '' : v).trim().toUpperCase()); }
+  function isParticipantId(v) {
+    var s = String(v == null ? '' : v).trim().toUpperCase();
+    return ID_RE.test(s) || LEGACY_ID_RE.test(s);
+  }
+  function studentId(n) {
+    var k = Math.max(1, Math.floor(Number(n) || 1));
+    var s = String(k);
+    while (s.length < 3) s = '0' + s;
+    return 'GOC-F-' + s;
+  }
+  /* The highest sequence number already represented by an identifier. A legacy
+     random identifier carries no sequence number, so it answers 0 and simply
+     does not move the counter. */
+  function idSeqOf(id) {
+    var m = /^GOC-F-(\d+)$/.exec(String(id == null ? '' : id).trim().toUpperCase());
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  /* Kept as an alias: the old name of studentId(). */
+  function participantId(n) { return studentId(n); }
+
+  /* The registration password. It is stored only as a salted scrypt hash on
+     the server; this rule just makes sure a real password was chosen. One rule,
+     shared by the page and the server so they can never disagree. The messages
+     name the exact failure: too short, or missing a letter or a number. */
+  var PASSWORD_MIN = 8;
+  var PASSWORD_MAX = 72;
+  function cleanPassword(v) {
+    var s = String(v == null ? '' : v);
+    if (s.length < PASSWORD_MIN) return { error: 'Your password must contain at least ' + PASSWORD_MIN + ' characters.' };
+    if (s.length > PASSWORD_MAX) return { error: 'Your password cannot be longer than ' + PASSWORD_MAX + ' characters.' };
+    if (!/[a-zA-Z]/.test(s) || !/\d/.test(s)) return { error: 'Use a password containing both letters and numbers.' };
+    return { password: s };
   }
 
   /* The shape the PUBLIC side of the site may hold. No email address, no OTP,
@@ -177,6 +214,23 @@
       verified: r.verified === true, email: maskEmail(r.email),
       createdAt: String(r.createdAt || '')
     };
+  }
+
+  /* ------------------------------------------------- session policy (auth) */
+
+  /* How long a signed-in student may be INACTIVE before they must log in again.
+     This is the single source of the timeout: the server reads it from here and
+     the deployment may override it with GOC_FREE_2027_SESSION_IDLE_MIN. It is an
+     inactivity window, not a fixed session length — every authenticated request
+     moves it forward, so a student who keeps working is never interrupted,
+     while one who walks away is asked to authenticate again. */
+  var SESSION_IDLE_MIN = 480;              /* 8 hours, the programme's default */
+  var SESSION_IDLE_MIN_FLOOR = 5;          /* never configure a useless window */
+  var SESSION_IDLE_MIN_CEILING = 43200;    /* 30 days */
+  function sessionIdleMinutes(envValue) {
+    var n = Math.floor(Number(envValue));
+    if (!isFinite(n) || n <= 0) return SESSION_IDLE_MIN;
+    return Math.min(SESSION_IDLE_MIN_CEILING, Math.max(SESSION_IDLE_MIN_FLOOR, n));
   }
 
   /* -------------------------------------------------------- 3. OTP policy */
@@ -668,10 +722,19 @@
     cleanCourse: cleanCourse,
     cleanCourseList: cleanCourseList,
     isParticipantId: isParticipantId,
+    isLegacyParticipantId: isLegacyParticipantId,
+    studentId: studentId,
+    idSeqOf: idSeqOf,
     participantId: participantId,
+    PASSWORD_MIN: PASSWORD_MIN,
+    PASSWORD_MAX: PASSWORD_MAX,
+    cleanPassword: cleanPassword,
     publicParticipant: publicParticipant,
     selfParticipant: selfParticipant,
     maskEmail: maskEmail,
+    /* sessions */
+    SESSION_IDLE_MIN: SESSION_IDLE_MIN,
+    sessionIdleMinutes: sessionIdleMinutes,
     /* otp */
     OTP_LENGTH: OTP_LENGTH,
     OTP_TTL_MIN: OTP_TTL_MIN,

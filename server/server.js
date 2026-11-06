@@ -8868,12 +8868,27 @@ const ROUTES = [
       return free2027.verifyRegistration(body).then(r => okJson(res, r));
     }) },
 
+  /* Student login: the email address and the password chosen at registration.
+     Guarded by the SAME per-address password-guessing throttle every other
+     password route on this server already uses. */
+  { method: 'POST', path: /^\/api\/free2027\/login$/, need: null, handler: freeRoute((req, res, body) => {
+      const ip = getClientIp(req);
+      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+      return free2027.login(body).then(r => okJson(res, r), e => {
+        if (e && e.status === 403) noteFailure(ip);
+        throw e;
+      });
+    }) },
+
   /* The participant's own side. */
   { method: 'GET', path: /^\/api\/free2027\/me$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
       okJson(res, free2027.me(req.free2027.data));
     }) },
+  /* Signing out ends THIS session only. The token is passed so the server can
+     delete exactly the session being ended; the student's account and every
+     record attached to it are left untouched. */
   { method: 'POST', path: /^\/api\/free2027\/logout$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
-      okJson(res, free2027.logout(req.free2027.data));
+      return free2027.logout(req.free2027.data, req.free2027.token).then(r => okJson(res, r));
     }) },
   /* Public CBT Portal catalogue: a visitor enters the portal directly, with no
      registration, login or onboarding step. Public metadata only. */

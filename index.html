@@ -1417,7 +1417,7 @@
     <!-- ====================================================================
          2027 FREE TUTORIAL EDITION (temporary, switchable)
          --------------------------------------------------------------------
-         These six screens exist only while the site is in 2027 Free Tutorial
+         These seven screens exist only while the site is in 2027 Free Tutorial
          Mode. In Original Mode they are never shown — nothing about them is
          deleted, and switching back restores the whole hub exactly as it is.
          All data comes from /api/free2027/*; the markup here holds no records.
@@ -1432,18 +1432,20 @@
           <button class="lp-link" onclick="freeNavBack()">← Back</button>
           <button class="lp-link" onclick="freeNavHome()">Home</button>
           <button class="lp-link" onclick="freeHomeCta()">Register</button>
+          <button class="lp-link" onclick="freePortalEnter()">Log in</button>
           <button class="lp-link" onclick="freeGo('free-portal')">CBT Portal</button>
         </div>
       </nav>
       <div class="f27-hero">
         <span class="f27-kick">2027 UTME · Free Tutorial Edition</span>
         <h1>Free weekly assessments and competitions for the 2027 UTME</h1>
-        <p class="f27-lead">No account, no password and no fee. Verify your email once, and sit this week's assessment or the current competition on the same engine the academy's own CBT papers run on.</p>
+        <p class="f27-lead">No fee. Register once with your email and a password, then log in whenever you come back to sit this week's assessment or the current competition on the same engine the academy's own CBT papers run on. Your results stay on your own record.</p>
         <div class="f27-cta">
           <button class="btn btn-red btn-block" onclick="freeHomeCta()">Register free</button>
+          <button class="btn btn-outline btn-block" onclick="freePortalEnter()">Student log in</button>
           <button class="btn btn-outline btn-block" onclick="freeGo('free-portal')">Enter the CBT Portal</button>
         </div>
-        <p class="f27-fine" id="freeHomeNote">Registration is verified by a one-time code sent to your email address.</p>
+        <p class="f27-fine" id="freeHomeNote">Register with your name, email, password and course. We verify your email with a one-time code, then you log in with your email and password.</p>
       </div>
       <div class="f27-cards">
         <div class="f27-card"><div class="f27-ico">📝</div><h3>Weekly Assessments</h3><p>Sit the week's paper inside its window. Results are immediate and private to you.</p></div>
@@ -1471,15 +1473,23 @@
       <div class="f27-form-wrap">
         <div class="f27-form">
           <h1>Register for the free tutorial</h1>
-          <p class="f27-lead">Three details and a code. There is no password to remember.</p>
+          <p class="f27-lead">Your details, a password, and a code sent to your email.</p>
           <div id="freeRegStep1">
             <div class="field"><label for="freeName">Full name</label><input id="freeName" type="text" autocomplete="name" placeholder="e.g. Ada Obi"></div>
             <div class="field"><label for="freeEmail">Email address</label><input id="freeEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
               <p class="field-hint">Used only to verify you and to keep your record. It is never shown publicly.</p></div>
+            <div class="field"><label for="freePassword">Password</label>
+              <div class="pw-wrap">
+                <input id="freePassword" type="password" autocomplete="new-password" placeholder="At least 8 characters, letters and numbers"
+                       oninput="var e=document.getElementById('freeRegErr'); if(e) e.textContent='';">
+                <button type="button" class="pw-toggle" onclick="togglePw('freePassword',this)">Show</button>
+              </div>
+              <p class="field-hint">You will use this email and password to log in to the CBT Portal.</p></div>
             <div class="field"><label for="freeCourse">Intended course of study</label><input id="freeCourse" type="text" list="freeCourseList" autocomplete="off" placeholder="e.g. Medicine and Surgery">
               <datalist id="freeCourseList"></datalist></div>
             <p class="f27-err" id="freeRegErr" role="alert"></p>
             <button class="btn btn-red btn-block" id="freeRegBtn" onclick="freeRegisterStart()">Send my verification code</button>
+            <p class="f27-fine" style="margin-top:10px;text-align:center">Already registered? <a href="#" onclick="freeGo('free-login');return false">Log in</a></p>
           </div>
           <div id="freeRegStep2" hidden>
             <p class="f27-otp-lead">We sent a <b>6-digit code</b> to <b id="freeOtpTo">your email</b>. Enter it below to finish registering.</p>
@@ -1491,6 +1501,43 @@
             <button class="btn btn-outline btn-block" id="freeOtpResendBtn" style="margin-top:9px" onclick="freeRegisterResend()">Resend verification code</button>
             <button class="btn btn-outline btn-block" style="margin-top:9px" onclick="freeRegisterRestart()">Use a different email</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Student login for the CBT Portal: email + the password chosen at
+         registration. Shown whenever there is no valid authenticated session
+         (first visit, after signing out, or after the inactivity timeout).
+         Completely separate from the G.O.C Academy Hub's own student login. -->
+    <section class="screen f27" id="free-login">
+      <nav class="lp-nav f27-nav">
+        <div class="lp-brand">
+          <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+          <span class="bt">G.O.C Academy Hub</span>
+        </div>
+        <div class="lp-actions">
+          <button class="lp-link" onclick="freeNavBack()">← Back</button>
+          <button class="lp-link" onclick="freeNavHome()">Home</button>
+        </div>
+      </nav>
+      <div class="f27-form-wrap">
+        <div class="f27-form">
+          <h1>Log in to the CBT Portal</h1>
+          <p class="f27-lead">Use the email address and password you registered with.</p>
+          <form onsubmit="freeLogin();return false">
+            <div class="field"><label for="freeLoginEmail">Email address</label>
+              <input id="freeLoginEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div>
+            <div class="field"><label for="freeLoginPassword">Password</label>
+              <div class="pw-wrap">
+                <input id="freeLoginPassword" type="password" autocomplete="current-password" placeholder="Your password"
+                       oninput="var e=document.getElementById('freeLoginErr'); if(e) e.textContent='';">
+                <button type="button" class="pw-toggle" onclick="togglePw('freeLoginPassword',this)">Show</button>
+              </div></div>
+            <p class="f27-err" id="freeLoginErr" role="alert"></p>
+            <button class="btn btn-red btn-block" id="freeLoginBtn" type="submit">Log in</button>
+          </form>
+          <p class="f27-fine" style="margin-top:10px;text-align:center">No account yet? <a href="#" onclick="freeGo('free-register');return false">Register free</a></p>
+          <p class="f27-fine" style="margin-top:6px;text-align:center">Registered before with a code only? <a href="#" onclick="freeGo('free-register');return false">Verify your email and set a password</a> — your student ID and records stay the same.</p>
         </div>
       </div>
     </section>

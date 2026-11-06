@@ -87,7 +87,7 @@ async function founder() {
   return t;
 }
 async function registerStudent(email, name) {
-  var start = await call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Law' });
+  var start = await call('POST', '/api/free2027/register/start', { name: name, email: email, course: 'Law', password: 'AdaPass-2027' });
   if (start.status !== 200) throw new Error('register/start failed: ' + start.raw);
   var rows = fs.readFileSync(path.join(DATA, 'mail.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   var mail = rows.filter(function (x) { return x.message && x.message.to === email; }).slice(-1)[0];

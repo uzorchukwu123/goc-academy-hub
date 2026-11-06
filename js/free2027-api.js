@@ -26,15 +26,37 @@
   var TOKEN_KEY = 'goc.free2027.token';
   var participantToken = null;
   var mode = null;
-  try {
-    participantToken = global.sessionStorage ? global.sessionStorage.getItem(TOKEN_KEY) : null;
-  } catch (e) { participantToken = null; }
+  /* The token is kept in localStorage, NOT sessionStorage: closing the browser
+     must not sign a student out while their session is still valid. The server
+     holds the matching session (as a digest) and enforces the inactivity window,
+     so a stored token is only useful until it expires or the student signs out.
+     An older tab's sessionStorage token is adopted once so nobody who is
+     already signed in is interrupted by this change. */
+  function readStoredToken() {
+    var t = null;
+    try { t = global.localStorage ? global.localStorage.getItem(TOKEN_KEY) : null; } catch (e) { t = null; }
+    if (t) return t;
+    try {
+      t = global.sessionStorage ? global.sessionStorage.getItem(TOKEN_KEY) : null;
+      if (t && global.localStorage) {
+        global.localStorage.setItem(TOKEN_KEY, t);
+        global.sessionStorage.removeItem(TOKEN_KEY);
+      }
+    } catch (e) { /* private mode: whatever we managed to read is enough */ }
+    return t || null;
+  }
+  participantToken = readStoredToken();
 
   function rememberToken(t) {
     participantToken = t || null;
     try {
-      if (participantToken) global.sessionStorage.setItem(TOKEN_KEY, participantToken);
-      else global.sessionStorage.removeItem(TOKEN_KEY);
+      if (global.localStorage) {
+        if (participantToken) global.localStorage.setItem(TOKEN_KEY, participantToken);
+        else global.localStorage.removeItem(TOKEN_KEY);
+      }
+      /* Clear the old location too, so signing out cannot leave a usable token
+         behind in either store. */
+      if (global.sessionStorage) global.sessionStorage.removeItem(TOKEN_KEY);
     } catch (e) { /* private mode: memory only, which is fine */ }
   }
 
@@ -80,15 +102,40 @@
       });
     },
 
+    /* Email + password login. The token this returns IS the authenticated
+       session; it is kept in localStorage and persisted server-side, so a
+       refresh, a reopened browser and a server restart all keep the student
+       signed in until the inactivity window passes or they sign out. */
+    login: function (d) {
+      return request('POST', '/login', d || {}).then(function (r) {
+        if (r && r.token) rememberToken(r.token);
+        return r;
+      });
+    },
+
     /* ---- the participant's own side -------------------------------------- */
     hasToken: function () { return !!participantToken; },
     token: function () { return participantToken; },
     me: function () { return request('GET', '/me'); },
+    /* Sign out. The request is sent WHILE the token is still held, so the
+       server can identify and delete exactly this session; only then is the
+       browser's copy dropped. Clearing first would leave the stored session
+       alive on the server. Nothing here touches student records: this call
+       ends a session, it does not delete an account. */
     logout: function () {
       var t = participantToken;
-      rememberToken(null);
-      return t ? request('POST', '/logout', {}).catch(function () { return { ok: true }; }) : Promise.resolve({ ok: true });
+      if (!t) { rememberToken(null); return Promise.resolve({ ok: true }); }
+      return request('POST', '/logout', {}).then(function (r) {
+        rememberToken(null);
+        return r || { ok: true };
+      }, function () {
+        rememberToken(null);
+        return { ok: true };
+      });
     },
+    /* Drop the browser's copy without a server round trip — used when the
+       server has already said the session is expired or invalid. */
+    forgetToken: function () { rememberToken(null); },
     activities: function () { return request('GET', '/activities'); },
     start: function (id) { return request('POST', '/activities/' + encodeURIComponent(String(id)) + '/start', {}); },
     resume: function (attemptId) { return request('GET', '/attempts/' + encodeURIComponent(String(attemptId))); },

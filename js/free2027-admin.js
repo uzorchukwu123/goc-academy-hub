@@ -101,7 +101,7 @@
   function panel() {
     return '<div class="ad-card"><div class="ad-h">2027 Free Tutorial Management</div>' +
       '<p class="ad-p">The temporary 2027 Free Tutorial Edition runs beside the hub, on its own records ' +
-      '(<b>GOC-F27-…</b> participants), its own activities and its own sessions. Nothing here reads or changes a ' +
+      '(<b>GOC-F-001</b>, <b>GOC-F-002</b>, … students), its own activities and its own sessions. Nothing here reads or changes a ' +
       'G.O.C student, attempt or staff record. Website mode is switched from the separate ' +
       '<b>Website Mode Control</b> function.</p>' +
       '<div class="ad-seg" id="f27AdmTabs">' + tabsHtml() + '</div>' +

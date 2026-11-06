@@ -21,7 +21,7 @@ ok('switched OFF the site is in Original Mode whatever is stored', f.activeMode(
 ok('switched ON the stored mode is used', f.activeMode({ enabled: true, mode: 'free2027' }, true) === 'free2027');
 ok('a corrupt stored mode cannot leave the site without a homepage', f.activeMode({ enabled: true, mode: '???' }, true) === 'original');
 ok('when the feature is off there is no edition at all', f.activeMode({ enabled: true, mode: 'free2027' }, false) === 'original');
-ok('six free-tutorial screens are declared', f.SCREENS.length === 6 && f.isFreeScreen('free-portal') && !f.isFreeScreen('home'));
+ok('seven free-tutorial screens are declared, including the student login page', f.SCREENS.length === 7 && f.isFreeScreen('free-portal') && f.isFreeScreen('free-login') && f.isFreeScreen('free-register') && !f.isFreeScreen('home'));
 
 head('participant records and the email rule');
 ok('a name is required', f.cleanName('').error && f.cleanName('A').error, 'short name accepted');
@@ -33,8 +33,22 @@ ok('a good address is accepted and lower-cased', f.cleanEmail(' Ada.Obi@Example.
 });
 ok('a course is required', !!f.cleanCourse('').error && f.cleanCourse('Law').course === 'Law');
 ok('the console course list is de-duplicated and trimmed', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join() === 'Law,Physics', f.cleanCourseList([' Law ', 'law', 'Physics', '']).join());
-ok('participant IDs preserve a random non-sequential identifier', f.participantId('0123456789abcdefabcd') === 'GOC-F27-0123456789ABCDEFABCD');
-ok('only the 80-bit random ID shape is accepted', f.isParticipantId('GOC-F27-0123456789ABCDEFABCD') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-0001'));
+ok('student identifiers are sequential GOC-F-NNN from 001', f.studentId(1) === 'GOC-F-001' && f.studentId(2) === 'GOC-F-002' && f.studentId(12) === 'GOC-F-012' && f.studentId(1234) === 'GOC-F-1234' && f.participantId(3) === 'GOC-F-003');
+ok('the sequential GOC-F-NNN shape is accepted', f.isParticipantId('GOC-F-001') && f.isParticipantId('GOC-F-1234') && !f.isParticipantId('GOC-S-001') && !f.isParticipantId('GOC-F27-0001') && !f.isParticipantId('GOC-F-1') && !f.isParticipantId('ada@example.com'));
+ok('an identifier issued by the earlier random scheme stays valid forever', f.isParticipantId('GOC-F27-0123456789ABCDEFABCD') && f.isLegacyParticipantId('GOC-F27-0123456789ABCDEFABCD') && !f.isLegacyParticipantId('GOC-F-001'));
+ok('the sequence number is recovered from an identifier', f.idSeqOf('GOC-F-007') === 7 && f.idSeqOf('GOC-F27-0123456789ABCDEFABCD') === 0 && f.idSeqOf('') === 0);
+
+head('the registration password rule');
+ok('a password needs at least eight characters', !!f.cleanPassword('Ab1').error && f.cleanPassword('Abcd1234').password === 'Abcd1234');
+ok('a password needs both letters and numbers', !!f.cleanPassword('12345678').error && !!f.cleanPassword('abcdefgh').error);
+ok('the exact failure is named for the student', /at least 8 characters/.test(f.cleanPassword('Ab1').error) && /letters and numbers/.test(f.cleanPassword('abcdefgh').error));
+ok('an over-long password is refused rather than truncated', !!f.cleanPassword('a1' + new Array(80).join('x')).error);
+ok('the page and the server share one length policy', f.PASSWORD_MIN === 8 && f.PASSWORD_MAX === 72);
+
+head('the inactivity timeout is configured in one place');
+ok('the default inactivity window is eight hours', f.SESSION_IDLE_MIN === 480 && f.sessionIdleMinutes(undefined) === 480 && f.sessionIdleMinutes('') === 480);
+ok('a deployment may override the window', f.sessionIdleMinutes('30') === 30 && f.sessionIdleMinutes(90) === 90);
+ok('a nonsense or unsafe override falls back to a safe window', f.sessionIdleMinutes('soon') === 480 && f.sessionIdleMinutes('0') === 480 && f.sessionIdleMinutes('-5') === 480 && f.sessionIdleMinutes('1') === 5 && f.sessionIdleMinutes('999999') === 43200);
 var pub = f.publicParticipant({ id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', email: 'ada@example.com', verified: true, otp: '123456' });
 ok('a public participant carries no email address and no code', JSON.stringify(pub).indexOf('@') < 0 && !pub.otp, JSON.stringify(pub));
 ok('the address is masked even for the candidate themselves', f.maskEmail('ada.obi@example.com').indexOf('ada.obi') < 0 && /@example\.com$/.test(f.maskEmail('ada.obi@example.com')), f.maskEmail('ada.obi@example.com'));
