@@ -659,9 +659,16 @@ function go(id){
   // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
   tabbar.style.display = showTabs ? 'flex' : 'none';
-  // On desktop: public screens (landing, login, sign-up) are full-bleed, and
-  // every in-app screen shows the left sidebar. This class drives that split.
-  var publicScreens = ['landing','login-v2','signup','updates','legal','free-admin'];
+  // On desktop: screens outside the authenticated hub are full-bleed, and every
+  // in-app screen shows the left sidebar. This class drives that split.
+  // The Free UTME Tutorial is a separate application with its own .f27-nav
+  // header, so its screens belong on the full-bleed side too. Listing them here
+  // is what stops .phone:not(.is-login) matching, so the hub sidebar is not
+  // rendered at all — rather than being drawn and then hidden by a CSS override
+  // (which lost on specificity and left a 256px sidebar over the tutorial).
+  // Hub screens are untouched: they still get the sidebar and the 256px offset.
+  var publicScreens = ['landing','login-v2','signup','updates','legal','free-admin',
+    'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard'];
   document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
   // highlight tab (map sub-screens to their section)
   var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };

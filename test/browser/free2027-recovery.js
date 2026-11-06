@@ -622,6 +622,52 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
       return bs.length === 3;
     }));
     await shot(page, '12b-cbt-desktop');
+    /* A. The bar must stay on screen and usable at EVERY required width, and
+       the question body must be the only thing that scrolls. */
+    for (const [vw, vh, kind] of [[320, 568, 'mobile'], [360, 640, 'mobile'], [375, 667, 'mobile'], [390, 844, 'mobile'], [430, 932, 'mobile'], [1024, 768, 'desktop'], [1280, 800, 'desktop'], [1440, 900, 'desktop'], [1920, 1080, 'desktop']]) {
+      await page.setViewportSize({ width: vw, height: vh });
+      await page.waitForTimeout(320);
+      const g = await page.evaluate(() => {
+        const ex = document.getElementById('free-exam');
+        const bar = document.querySelector('#free-exam .f27-cbt-bar');
+        const body = document.querySelector('#free-exam .f27-cbt-body');
+        const head = document.querySelector('#free-exam .f27-cbt-header');
+        const R = (e) => e.getBoundingClientRect();
+        const br = R(bar), yr = R(body), hr = R(head);
+        const btns = Array.from(bar.querySelectorAll('button')).filter((b) => !b.hidden).map((b) => {
+          const q = R(b);
+          /* Hit-test the centre: a control that is merely on screen but painted
+             over by something else is not actually usable. */
+          const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
+          return { ok: q.top >= 0 && q.bottom <= window.innerHeight + 1 && q.left >= 0 && q.right <= window.innerWidth + 1 && q.width >= 40 && q.height >= 40 && !!hit && (hit === b || b.contains(hit)), t: b.textContent.trim().slice(0, 18) };
+        });
+        const before = br.top;
+        body.scrollTop = body.scrollHeight;
+        const moved = Math.abs(R(bar).top - before) > 1;
+        body.scrollTop = 0;
+        return {
+          tile: hr.bottom <= yr.top + 1 && yr.bottom <= br.top + 1,
+          barIn: br.top >= 0 && br.bottom <= window.innerHeight + 1,
+          btnsOk: btns.length === 3 && btns.every((b) => b.ok),
+          btnList: btns.map((b) => b.t).join(' / '),
+          bodyScrolls: getComputedStyle(body).overflowY === 'auto',
+          examStill: ex.scrollHeight <= ex.clientHeight + 1,
+          barSteady: !moved,
+          noHOverflow: document.documentElement.scrollWidth <= window.innerWidth && body.scrollWidth <= body.clientWidth + 1
+        };
+      });
+      check('exam-viewport', kind + ' ' + vw + 'px: header, body and bar tile without overlapping', g.tile);
+      check('exam-viewport', kind + ' ' + vw + 'px: the whole navigation bar is inside the viewport', g.barIn);
+      check('exam-viewport', kind + ' ' + vw + 'px: all three controls are visible, tappable and not painted over', g.btnsOk, g.btnList);
+      check('exam-viewport', kind + ' ' + vw + 'px: the question body scrolls and the bar never moves', g.bodyScrolls && g.barSteady && g.examStill);
+      check('exam-viewport', kind + ' ' + vw + 'px: no horizontal overflow', g.noHOverflow);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(200);
+    await shot(page, '12c-cbt-desktop-wide');
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.waitForTimeout(250);
+    await shot(page, '12d-cbt-320px');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(250);
     check('cbt', 'option letter badges are separate from option text', await page.evaluate(() => !!document.querySelector('#freeExamOpts .f27-cbt-letter') && !!document.querySelector('#freeExamOpts .f27-cbt-text')));
@@ -1244,6 +1290,59 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
   } catch (e) {
     check(AUTH, 'the sign-out / sign-in flow completed', false, e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e);
     await shot(page, '99-student-auth-failure');
+  }
+
+  /* B. Layout isolation, measured in both directions at every required width.
+     Runs last so navigating between the two applications cannot disturb the
+     data-preservation flows above. */
+  if (page && !page.isClosed()) {
+    for (const [vw, vh, kind] of [[1024, 768, 'desktop'], [1280, 800, 'desktop'], [1440, 900, 'desktop'], [1920, 1080, 'desktop'], [320, 568, 'mobile'], [360, 640, 'mobile'], [375, 667, 'mobile'], [390, 844, 'mobile'], [430, 932, 'mobile']]) {
+      await page.setViewportSize({ width: vw, height: vh });
+      await page.evaluate(() => go('free-home'));
+      await page.waitForTimeout(420);
+      const f = await page.evaluate(() => {
+        const tab = document.getElementById('tabbar');
+        const t = tab.getBoundingClientRect();
+        const scr = document.getElementById('free-home');
+        return {
+          sidebar: getComputedStyle(tab).display !== 'none' && t.width > 0,
+          tabW: Math.round(t.width),
+          screensLeft: Math.round(document.getElementById('screens').getBoundingClientRect().left),
+          ownHeader: !!scr.querySelector('.f27-nav'),
+          headerW: Math.round((scr.querySelector('.f27-nav') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width),
+          noHOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+          contentStartsAtZero: Math.round(scr.getBoundingClientRect().left) === 0
+        };
+      });
+      check('shell-isolation', kind + ' ' + vw + 'px: the hub sidebar is not rendered over the tutorial', !f.sidebar, 'tabbar width ' + f.tabW);
+      check('shell-isolation', kind + ' ' + vw + 'px: the tutorial content is not inset by a sidebar', f.screensLeft === 0 && f.contentStartsAtZero);
+      check('shell-isolation', kind + ' ' + vw + 'px: the tutorial keeps its own header navigation', f.ownHeader && f.headerW > 0);
+      check('shell-isolation', kind + ' ' + vw + 'px: no horizontal overflow', f.noHOverflow);
+      if (kind === 'desktop') {
+        /* Return trip: the hub must get its sidebar and 256px offset back. */
+        await page.evaluate(() => go('home'));
+        await page.waitForTimeout(420);
+        const h = await page.evaluate(() => {
+          const tab = document.getElementById('tabbar');
+          const t = tab.getBoundingClientRect();
+          return { sidebar: getComputedStyle(tab).display !== 'none' && t.width > 0, w: Math.round(t.width), left: Math.round(document.getElementById('screens').getBoundingClientRect().left) };
+        });
+        check('shell-isolation', 'desktop ' + vw + 'px: returning to the hub restores its 256px sidebar', h.sidebar && h.w === 256, JSON.stringify(h));
+        check('shell-isolation', 'desktop ' + vw + 'px: the hub content is inset past the sidebar again', h.left === 256, String(h.left));
+        await page.evaluate(() => go('free-home'));
+        await page.waitForTimeout(350);
+        check('shell-isolation', 'desktop ' + vw + 'px: a second visit to the tutorial is still unobstructed', await page.evaluate(() => {
+          const t = document.getElementById('tabbar');
+          return getComputedStyle(t).display === 'none' && Math.round(document.getElementById('screens').getBoundingClientRect().left) === 0;
+        }));
+      }
+      if (vw === 1440 || vw === 320) await shot(page, '99c-tutorial-' + vw + 'px');
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => go('home'));
+    await page.waitForTimeout(400);
+    await shot(page, '99d-hub-sidebar-intact');
+    check('shell-isolation', 'no page JavaScript error across the whole viewport matrix', jsErrors.length === 0, jsErrors.join(' | '));
   }
 
   check('harness', 'no uncaught page JavaScript errors', jsErrors.length === 0, jsErrors.join(' | '));

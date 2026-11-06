@@ -15,6 +15,7 @@ var css = read('css/free2027.css');
 var styles = read('css/styles.css');
 var sw = read('sw.js');
 var uiSrc = read('js/free2027-ui.js');
+var appSrc = read('js/app.js');
 var rules = require(path.join(APP, 'js', 'goc-free-2027.js'));
 
 var fails = 0;
@@ -307,6 +308,58 @@ settle(w1).then(function () {
     });
   });
 }).then(function () {
+  /* ---------------------------------------------- A. mobile CBT exam layout
+     The bar used to be position:sticky inside a min-height:100vh box, so it sat
+     below the visual viewport and (at 320-375px) floated over the answer
+     options. The exam is now three flex regions and only the body scrolls. */
+  head('A. The active exam keeps its navigation bar inside the viewport');
+  function rule(sel) {
+    var i = css.indexOf('\n' + sel + ' {');
+    if (i < 0) return '';
+    return css.slice(i + 1, css.indexOf('}', i) + 1);
+  }
+  var examRule = rule('.f27-exam');
+  var headRule = rule('.f27-cbt-header');
+  var bodyRule = rule('.f27-cbt-body');
+  var barRule = rule('.f27-cbt-bar');
+  ok('the exam no longer sizes itself from 100vh (the large mobile viewport)', !/min-height: *100vh/.test(examRule), examRule);
+  ok('the exam fills its screen and does not scroll as a whole', /height: *100%/.test(examRule) && /overflow: *hidden/.test(examRule), examRule);
+  ok('the exam is still a column flex container', /display: *flex/.test(examRule) && /flex-direction: *column/.test(examRule));
+  ok('the header is a non-shrinking region, not a sticky item in the scroller', /flex: *0 0 auto/.test(headRule) && !/position: *sticky/.test(headRule), headRule);
+  ok('only the question body scrolls', /overflow-y: *auto/.test(bodyRule) && /flex: *1 1 auto/.test(bodyRule), bodyRule);
+  ok('the body can shrink below its content (min-height:0), so it cannot push the bar out', /min-height: *0/.test(bodyRule), bodyRule);
+  ok('the body contains its own overscroll so the page behind it does not move', /overscroll-behavior: *contain/.test(bodyRule));
+  ok('the navigation bar is a non-shrinking region rather than sticky', /flex: *0 0 auto/.test(barRule) && !/position: *sticky/.test(barRule), barRule);
+  ok('the bar keeps its bottom safe-area inset for notched phones', /env\(safe-area-inset-bottom/.test(barRule), barRule);
+  ok('the bar still shows three controls per row on mobile', /grid-template-columns: *repeat\(3, 1fr\)/.test(barRule));
+  ok('Previous, Next, Submit and the Navigator are all still in the bar', ['freeExamPrev', 'freeExamNext', 'freeExamSubmit', 'freeExamPanel()'].every(function (t) {
+    var i = html.indexOf('class="f27-cbt-bar"');
+    var seg = html.slice(i, html.indexOf('</nav>', i));
+    return seg.indexOf(t) > -1;
+  }));
+  ok('the exam timer and clock code are untouched by the layout fix', /function startClock/.test(uiSrc) && /margin-left: *auto/.test(css));
+
+  /* ------------------------------------- B. desktop shell isolation, both ways
+     The hub draws its sidebar with .phone:not(.is-login) .tabbar at specificity
+     (0,3,0), which beat the edition's body.f27-mode .tabbar at (0,2,1) even
+     though both were !important. The tutorial is now on the shell's full-bleed
+     list, so that selector never matches in the first place. */
+  head('B. The Free Tutorial is outside the hub shell, and the hub keeps its sidebar');
+  var m = appSrc.match(/var publicScreens = \[([\s\S]*?)\];/);
+  ok('the shell still has a single full-bleed screen list', !!m);
+  var listed = m ? m[1].replace(/["'\s\n]/g, '').split(',').filter(Boolean) : [];
+  ['free-home', 'free-register', 'free-login', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard', 'free-admin'].forEach(function (id) {
+    ok('the shell treats ' + id + ' as full-bleed, so no hub sidebar is drawn over it', listed.indexOf(id) > -1, listed.join(','));
+  });
+  ['home', 'profile', 'results', 'league', 'timetable', 'study', 'classes', 'webtest', 'resources', 'cbt'].forEach(function (id) {
+    ok('the hub screen ' + id + ' is NOT full-bleed, so it keeps its sidebar', listed.indexOf(id) < 0);
+  });
+  ok('the original public screens keep their full-bleed treatment', ['landing', 'login-v2', 'signup', 'updates', 'legal'].every(function (id) { return listed.indexOf(id) > -1; }));
+  ok('the is-login toggle is still the only mechanism driving the split', /classList\.toggle\('is-login', publicScreens\.indexOf\(id\) > -1\)/.test(appSrc));
+  ok('the hub sidebar rule is unchanged (no global removal, no CSS hack)', /\.phone:not\(\.is-login\) \.tabbar\{/.test(styles) && /\.phone:not\(\.is-login\) \.screens\{left:256px\}/.test(styles));
+  ok('the edition still supplies its own header navigation', /class="lp-nav f27-nav"/.test(html));
+  ok('returning to a hub screen still restores the chrome in Free mode', /goc-original-area .phone:not\(\.is-login\) .tabbar \{ display: flex !important; \}/.test(css) && /goc-original-area/.test(uiSrc));
+
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
   process.exit(fails ? 1 : 0);
 }).catch(function (e) {

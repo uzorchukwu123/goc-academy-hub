@@ -196,8 +196,12 @@ body.f27-mode .phone { }
 .f27-mine-card p { font-size: 12px; color: #7F1D1D; margin-top: 6px; }
 
 /* the examiner — light, mobile-first CBT */
-.f27-exam { background: #F6F7F9; color: #141821; min-height: 100vh; display: flex; flex-direction: column; }
-.f27-cbt-header { position: sticky; top: 0; z-index: 20; background: #fff; border-bottom: 1px solid #E4E7EC; padding: 12px 14px 10px; }
+/* Three regions: a header and a navigation bar that never move, and a body
+   that scrolls between them. Sizing from the screen box (the phone frame is
+   already 100dvh) instead of 100vh keeps the bar inside the VISUAL viewport
+   when mobile browser chrome shows or hides. */
+.f27-exam { background: #F6F7F9; color: #141821; height: 100%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.f27-cbt-header { flex: 0 0 auto; position: relative; z-index: 20; background: #fff; border-bottom: 1px solid #E4E7EC; padding: 12px 14px 10px; }
 .f27-cbt-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .f27-cbt-back { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 12px; border: 1px solid #E4E7EC; background: #fff; color: #141821; font-size: 18px; font-weight: 800; cursor: pointer; }
 .f27-cbt-title-wrap { flex: 1; min-width: 0; }
@@ -207,7 +211,7 @@ body.f27-mode .phone { }
 .f27-cbt-timer { flex: 0 0 auto; margin-left: auto; background: #141821; color: #fff; border-radius: 12px; padding: 8px 10px; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .f27-cbt-timer.warn { background: #B91C1C; }
 .f27-cbt-progress { margin-top: 8px; font-size: 12px; font-weight: 800; color: #475467; }
-.f27-cbt-body { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 14px; }
+.f27-cbt-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; width: 100%; max-width: 860px; margin: 0 auto; padding: 14px; }
 .f27-cbt-card { background: #fff; border: 1px solid #E4E7EC; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(16,24,40,.05); min-width: 0; }
 .f27-cbt-passage { background: #F9FAFB; border: 1px solid #E4E7EC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .f27-cbt-image { margin-bottom: 14px; }
@@ -220,7 +224,7 @@ body.f27-mode .phone { }
 .f27-cbt-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 32px; border-radius: 10px; background: #F2F4F7; color: #344054; font-size: 13px; font-weight: 900; letter-spacing: .04em; }
 .f27-cbt-option.sel .f27-cbt-letter { background: #DC2626; color: #fff; }
 .f27-cbt-text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.f27-cbt-bar { position: sticky; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff; border-top: 1px solid #E4E7EC; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.f27-cbt-bar { flex: 0 0 auto; position: relative; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff; border-top: 1px solid #E4E7EC; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
 .f27-cbt-btn { min-height: 46px; border-radius: 12px; border: 1px solid #D0D5DD; background: #fff; color: #141821; font-size: 13px; font-weight: 800; padding: 10px 12px; cursor: pointer; white-space: normal; line-height: 1.3; }
 .f27-cbt-btn:disabled { opacity: .5; cursor: not-allowed; }
 .f27-cbt-btn-outline { border-color: #DC2626; color: #B91C1C; background: #fff; }
