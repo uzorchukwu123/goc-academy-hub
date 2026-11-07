@@ -475,14 +475,52 @@ function createFree2027(deps) {
       return snap;
     });
   }
-  /* Attempts taken before snapshots existed fall back to the live bank and then
-     to the deletion archive, exactly as they always did. */
-  async function attemptQuestionRecords(db, attempt, activity) {
+  /* Attempts taken before snapshots existed keep the existing bank/history
+     resolution for their other callers. Review alone asks for original-version
+     proof: a trustworthy deletion archive wins over a newer live record; an
+     unchanged live record must predate the attempt. If neither can establish
+     the submitted paper, review refuses rather than presenting a reconstruction.
+     This never rewrites the attempt or its stored result. */
+  async function attemptQuestionRecords(db, attempt, activity, forReview) {
     if (attempt && Array.isArray(attempt.questionSnapshot) && attempt.questionSnapshot.length) {
       return attempt.questionSnapshot;
     }
-    return questionRecords(db, (attempt && attempt.questionIds) || [],
-      (attempt && attempt.bank) || (activity && activity.kind));
+    var ids = (attempt && attempt.questionIds) || [];
+    var kind = (attempt && attempt.bank) || (activity && activity.kind);
+    if (!forReview) return questionRecords(db, ids, kind);
+
+    var bank = bankForKind(kind);
+    var live = {};
+    bankQuestionsSync(db, bank).forEach(function (q) { if (q && q.id) live[String(q.id)] = q; });
+    var history = (((db.free2027 || {}).questionHistory) || []).filter(function (q) { return q && q.id && q.bank === bank; });
+    var started = Number(attempt && attempt.startedAt);
+    var submitted = Number(attempt && attempt.submittedAt);
+    var unavailable = 'The original question records for this examination are no longer available, so its answer review cannot be shown reliably. Your saved result is unchanged.';
+    if (!(started > 0 && submitted >= started) || !Array.isArray(ids) || !ids.length) throw FreeError(409, unavailable);
+    function originalVersion(q, archived) {
+      if (!q) return null;
+      var fields = ['updatedAt', 'createdAt', 'importedAt'];
+      for (var i = 0; i < fields.length; i++) {
+        var value = q[fields[i]];
+        if (value == null) { if (i === 0) return null; continue; }
+        value = Number(value);
+        if (!(value > 0 && value <= started)) return null;
+      }
+      if (archived && !(Number(q.deletedAt) >= submitted)) return null;
+      return q;
+    }
+    var questions = [], used = {};
+    ids.forEach(function (id) {
+      var key = String(id);
+      if (used[key]) return;
+      used[key] = true;
+      var matches = history.filter(function (q) { return String(q.id) === key; });
+      var q = matches.length === 1 ? originalVersion(matches[0], true) : null;
+      if (!q) q = originalVersion(live[key], false);
+      if (!q) throw FreeError(409, unavailable);
+      questions.push(q);
+    });
+    return questions;
   }
 
   /* Bank membership check used by allocation, editing and publication. It never
@@ -1163,7 +1201,7 @@ function createFree2027(deps) {
       }
       var open = rules.openAttempt(mine, t);
       if (open) {
-        var openQs = await questionRecords(db, open.questionIds || [], activity.kind);
+        var openQs = await attemptQuestionRecords(db, open, activity);
         return attemptPayload(ctx.session, activity, open, openQs, p, t, true);
       }
       if (rules.attemptsLeft(activity, mine) <= 0) {
@@ -1241,8 +1279,8 @@ function createFree2027(deps) {
 
       var qid = String((body && body.questionId) || '');
       if ((attempt.questionIds || []).indexOf(qid) < 0) throw FreeError(400, 'That question is not part of this paper.');
-      var qs = await questionRecords(db, [qid], attempt.bank || (activity && activity.kind));
-      var q = qs[0];
+      var qs = await attemptQuestionRecords(db, attempt, activity);
+      var q = qs.filter(function (x) { return String(x.id) === qid; })[0];
       if (!q) throw FreeError(404, 'That question is not in this paper\'s question bank.');
       var value = body ? body.choice : null;
       if (value === null || value === undefined || value === '') {
@@ -1273,7 +1311,7 @@ function createFree2027(deps) {
     }
     var activity = findActivity(ctx.session, attempt.activityId);
     if (!activity) throw FreeError(404, 'That activity was not found.');
-    var qs = await questionRecords(db, attempt.questionIds || [], attempt.bank || activity.kind);
+    var qs = await attemptQuestionRecords(db, attempt, activity);
     if (rules.attemptExpired(attempt, t)) {
       /* Closing it out here rather than on the next start keeps the result
          available on a device that comes back after the clock ran out. */
@@ -1422,9 +1460,9 @@ function createFree2027(deps) {
 
      Ownership is checked before anything is read. Review opens only after
      submission, so an answer key can never be reached while a paper is live.
-     The questions come through questionsInBank(), which falls back to the
-     edition's questionHistory snapshot, so a question edited or deleted after
-     the paper was sat still reviews exactly as the candidate saw it. Options are
+     Saved attempt snapshots are authoritative. A legacy attempt without one
+     reviews only from a version that can be established as original; otherwise
+     attemptQuestionRecords() returns a controlled limitation. Options are
      presented in the same shuffled order the candidate was served, and both
      their choice and the correct choice are mapped into that order.
 
@@ -1443,7 +1481,7 @@ function createFree2027(deps) {
     }
     var live = findActivity(ctx.session, attempt.activityId);
     var activity = live || findActivityHistory(ctx.session, attempt.activityId);
-    var qs = await attemptQuestionRecords(db, attempt, activity);
+    var qs = await attemptQuestionRecords(db, attempt, activity, true);
     var marked = core.markAttempt(qs, attempt.responses || {});
     var verdict = {};
     (marked.answers || []).forEach(function (r) { verdict[String(r.questionId)] = r; });
