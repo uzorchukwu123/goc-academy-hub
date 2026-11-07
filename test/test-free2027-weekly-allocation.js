@@ -1,13 +1,14 @@
-/* test-free2027-weekly-allocation.js — Weekly Assessments must use their OWN
- * configured question count and subject distribution.
+/* test-free2027-weekly-allocation.js — Weekly Assessments serve ONLY the
+ * questions allocated to that exact activity, and the administrator's typed
+ * "Number of questions" covers ALL FIVE subjects.
  *
- * ROOT CAUSE THIS PINS: studentDistribution() fell back to an invented EVEN
- * SPLIT of the configured count across the candidate's four subjects whenever
- * the administrator supplied no distribution (or supplied one naming a subject
- * outside the candidate's combination). For a 50-question weekly that fabricates
- * a 13-question Use of English quota nobody configured, and the candidate is
- * refused with "Use of English needs 13 eligible questions..." even though the
- * assessment only asks for 50 questions in total.
+ * 50 typed => the activity's pool holds 10 per subject. No candidate sits all
+ * five, so a candidate taking Use of English + three others sits 4 x 10 = 40
+ * questions, every one of them drawn from that activity's own allocation.
+ *
+ * THE ORIGINAL BUG: the spread was divided by the CANDIDATE's four subjects
+ * (50/4 -> 13 English) and then enforced as a hard bank requirement, producing
+ * "Use of English needs 13 eligible questions". It must divide by five.
  *
  * node test/test-free2027-weekly-allocation.js */
 'use strict';
@@ -139,10 +140,10 @@ function allCorrect(bank, questions) {
   boot();
   await waitForBoot(40);
   var adm = await founder();
-  /* Only 12 eligible English questions: enough for any sane weekly, but FEWER
-     than the 13 the invented even split demands for a 50-question paper. */
+  /* Ample English so the assertion below proves the SHARE (10) is what gets
+     allocated — not the 13 the old divide-by-four invented, nor JAMB's 60. */
   await call('POST', '/api/free2027/admin/question-banks/weekly/import',
-    { csv: csv('Weekly', { 'Use of English': 12, Mathematics: 40, Physics: 40, Chemistry: 40, Biology: 40 }) }, adm);
+    { csv: csv('Weekly', { 'Use of English': 30, Mathematics: 40, Physics: 40, Chemistry: 40, Biology: 40 }) }, adm);
   await call('POST', '/api/free2027/admin/question-banks/competition/import',
     { csv: csv('Comp', { 'Use of English': 90, Mathematics: 70, Physics: 70, Chemistry: 70, Biology: 70 }) }, adm);
 
@@ -174,34 +175,43 @@ function allCorrect(bank, questions) {
   ok('the student can start it without an invented English quota', a50n.status === 200,
     a50n.status + ' ' + a50n.raw.slice(0, 260));
   ok('no fabricated "needs 13" English shortage is reported', !/needs 13/.test(a50n.raw), a50n.raw.slice(0, 240));
-  ok('exactly the configured 50 questions are served', qs(a50n).length === 50,
-    String(qs(a50n).length));
+  var pool50n = {}; w50n.body.activity.questionIds.forEach(function (id) { pool50n[String(id)] = true; });
+  ok('the typed 50 is allocated as ten questions per subject across all five',
+    w50n.body.activity.questionIds.length === 50, String(w50n.body.activity.questionIds.length));
+  var allocCounts = counts(w50n.body.activity.questionIds.map(function (id) {
+    return bankRows('weekly').filter(function (x) { return String(x.id) === String(id); })[0];
+  }).filter(Boolean));
+  ok('each of the five subjects holds exactly its ten-question share',
+    allocCounts[ENGLISH] === 10 && allocCounts.Mathematics === 10 && allocCounts.Physics === 10 &&
+    allocCounts.Chemistry === 10 && allocCounts.Biology === 10, JSON.stringify(allocCounts));
+  ok('the candidate sits their own four subjects at ten each = 40 questions',
+    qs(a50n).length === 40, String(qs(a50n).length));
   var c50n = counts(qs(a50n));
+  ok('compulsory Use of English is included at its share', c50n[ENGLISH] === 10, JSON.stringify(c50n));
   ok('only the student\'s registered subjects appear', !c50n.Biology, JSON.stringify(c50n));
-  ok('and the total is never inflated to a 180-question JAMB paper',
-    qs(a50n).length === 50, String(qs(a50n).length));
-  /* The crux: a thin English pool must neither block the assessment with an
-     invented quota NOR cause compulsory Use of English to be dropped. */
-  ok('compulsory Use of English is still included', c50n[ENGLISH] > 0, JSON.stringify(c50n));
-  ok('English is capped at what the bank actually holds rather than demanded',
-    c50n[ENGLISH] > 0 && c50n[ENGLISH] <= 12, JSON.stringify(c50n));
-  ok('every subject the candidate takes is still represented',
-    c50n.Mathematics > 0 && c50n.Physics > 0 && c50n.Chemistry > 0, JSON.stringify(c50n));
-  ok('the redistributed balance still totals exactly the configured 50',
-    Object.keys(c50n).reduce(function (n, k) { return n + c50n[k]; }, 0) === 50, JSON.stringify(c50n));
+  ok('every served question belongs to THIS activity\'s allocation',
+    qs(a50n).every(function (q) { return pool50n[String(q.id)] === true; }));
+  ok('nothing is borrowed from the wider weekly bank',
+    qs(a50n).filter(function (q) { return pool50n[String(q.id)] !== true; }).length === 0);
+  ok('and the paper is never inflated to a 180-question JAMB paper', qs(a50n).length !== 180);
 
-  head('TEST B — the configured count is authoritative (20, 30, 50, 100)');
+  head('TEST B — the typed count is the five-subject pool; the candidate sits four shares');
   var sizes = [20, 30, 50, 100];
   for (var i = 0; i < sizes.length; i++) {
-    var n = sizes[i];
+    var n = sizes[i], share = n / 5;
     var wa = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Weekly ' + n, n, {
       randomizeOptions: false, status: 'published'
     }), adm);
-    var st = await call('POST', '/api/free2027/activities/' + wa.body.activity.id + '/start', {}, mpc);
-    ok('the configured count of ' + n + ' is stored unchanged',
+    ok('the typed count of ' + n + ' is stored unchanged',
       wa.status === 200 && wa.body.activity.questionCount === n, wa.raw.slice(0, 180));
-    ok('a configured ' + n + '-question weekly serves exactly ' + n,
-      st.status === 200 && qs(st).length === n, st.status + ' ' + st.raw.slice(0, 200));
+    ok('and exactly ' + n + ' questions are allocated to the activity',
+      wa.status === 200 && wa.body.activity.questionIds.length === n, wa.raw.slice(0, 180));
+    var st = await call('POST', '/api/free2027/activities/' + wa.body.activity.id + '/start', {}, mpc);
+    var wp = {}; (wa.body.activity.questionIds || []).forEach(function (id) { wp[String(id)] = true; });
+    ok('a ' + n + '-question weekly serves ' + (share * 4) + ' (four subjects x ' + share + ')',
+      st.status === 200 && qs(st).length === share * 4, st.status + ' ' + st.raw.slice(0, 200));
+    ok('and every one of them is from this activity for ' + n,
+      st.status === 200 && qs(st).every(function (q) { return wp[String(q.id)] === true; }));
     ok('and never a 180-question paper for ' + n, st.status === 200 && qs(st).length !== 180);
   }
 
@@ -214,7 +224,7 @@ function allCorrect(bank, questions) {
     badSum.status + ' ' + badSum.raw.slice(0, 200));
   ok('and the message names the configured count', /50/.test(badSum.raw), badSum.raw.slice(0, 200));
   var overBank = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Weekly Over Bank', 50, {
-    subjectDistribution: { 'Use of English': 20, Mathematics: 10, Physics: 10, Chemistry: 10 },
+    subjectDistribution: { 'Use of English': 40, Mathematics: 4, Physics: 3, Chemistry: 3 },
     status: 'published'
   }), adm);
   ok('a per-subject demand above the eligible bank is refused at save time', overBank.status >= 400,
@@ -232,7 +242,8 @@ function allCorrect(bank, questions) {
   ok('the other student can also start the weekly', bMcb.status === 200, bMcb.status + ' ' + bMcb.raw.slice(0, 200));
   var cMcb = counts(bMcb.body && bMcb.body.questions);
   ok('a student without Physics never receives Physics', !cMcb.Physics, JSON.stringify(cMcb));
-  ok('and does receive their own Biology', cMcb.Biology > 0, JSON.stringify(cMcb));
+  ok('and does receive their own Biology at its share', cMcb.Biology === 10, JSON.stringify(cMcb));
+  ok('sitting exactly their four shares = 40 questions', qs(bMcb).length === 40, String(qs(bMcb).length));
   ok('the first student never receives Biology', !counts(qs(a50n)).Biology, JSON.stringify(counts(qs(a50n))));
   ok('both still receive Use of English', counts(qs(a50n))[ENGLISH] > 0 && cMcb[ENGLISH] > 0);
 
@@ -279,7 +290,7 @@ function allCorrect(bank, questions) {
   var hSub = await call('POST', '/api/free2027/attempts/' + rId + '/submit',
     { responses: allCorrect('weekly', qs(r1)) }, mpc);
   ok('the weekly submits with its own raw marking out of the configured count',
-    hSub.status === 200 && hSub.body.result.score === 20 && hSub.body.result.maxScore === 20, hSub.raw.slice(0, 220));
+    hSub.status === 200 && hSub.body.result.score === 16 && hSub.body.result.maxScore === 16, hSub.raw.slice(0, 220));
   var historical = JSON.stringify(attemptById(rId));
   var later = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Weekly Later', 30, {
     randomizeOptions: false, status: 'published'
@@ -300,15 +311,61 @@ function allCorrect(bank, questions) {
   var engIds = bankRows('weekly').filter(function (q) { return q.subject === ENGLISH; }).map(function (q) { return q.id; });
   await call('POST', '/api/free2027/admin/question-banks/weekly/questions/delete',
     { ids: engIds.slice(0, engIds.length - 3), confirm: true }, adm);
-  ok('the bank now holds only 3 eligible English questions',
-    bankRows('weekly').filter(function (q) { return q.subject === ENGLISH; }).length === 3,
-    String(bankRows('weekly').filter(function (q) { return q.subject === ENGLISH; }).length));
+  /* What matters is how many of THIS ACTIVITY's allocated English questions
+     survive, not how many the wider bank still holds. */
+  var liveEng = {};
+  bankRows('weekly').forEach(function (q) { if (q.subject === ENGLISH) liveEng[String(q.id)] = true; });
+  var poolEngAlive = shortAct.body.activity.questionIds.filter(function (id) { return liveEng[String(id)]; }).length;
+  ok('the activity\'s allocation now holds fewer eligible English questions than its share',
+    poolEngAlive < 10, String(poolEngAlive));
   var short = await call('POST', '/api/free2027/activities/' + shortAct.body.activity.id + '/start', {}, mpc);
   ok('the shortage is refused with a clear message', short.status === 409, short.status + ' ' + short.raw.slice(0, 240));
-  ok('naming the ACTUAL configured requirement of 10 and the 3 available',
-    /\b10\b/.test(short.raw) && /\b3\b/.test(short.raw) && /Use of English/.test(short.raw), short.raw.slice(0, 260));
+  ok('naming the ACTUAL requirement of 10 and the ' + poolEngAlive + ' still eligible in its allocation',
+    /needs 10 eligible questions/.test(short.raw) &&
+    short.raw.indexOf('only ' + poolEngAlive + ' ') > -1 && /Use of English/.test(short.raw), short.raw.slice(0, 260));
+  ok('and the shortage is attributed to the activity allocation, not the wider bank',
+    /allocated to this Weekly Assessment/.test(short.raw), short.raw.slice(0, 260));
   ok('and not an invented 13-question quota', !/needs 13/.test(short.raw), short.raw.slice(0, 240));
   ok('and not the Competition 60-question English rule', !/\b60\b/.test(short.raw), short.raw.slice(0, 240));
+
+  /* TEST D deliberately depleted English; restock so the isolation fixtures
+     below can allocate their full five-subject pools. */
+  await call('POST', '/api/free2027/admin/question-banks/weekly/import',
+    { csv: csv('Restock', { 'Use of English': 40 }) }, adm);
+
+  head('TEST I — no question is ever borrowed from ANOTHER activity');
+  var actA = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Weekly Alpha', 50, {
+    randomizeOptions: false, status: 'published' }), adm);
+  var actB = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Weekly Beta', 50, {
+    randomizeOptions: false, status: 'published' }), adm);
+  var idsA = actA.body.activity.questionIds.map(String), idsB = actB.body.activity.questionIds.map(String);
+  var onlyA = idsA.filter(function (id) { return idsB.indexOf(id) < 0; });
+  var startB = await call('POST', '/api/free2027/activities/' + actB.body.activity.id + '/start', {}, mpc);
+  var servedB = qs(startB).map(function (q) { return String(q.id); });
+  ok('two weekly assessments allocate their own pools', idsA.length === 50 && idsB.length === 50);
+  ok('sitting Beta serves only Beta\'s allocated questions',
+    startB.status === 200 && servedB.every(function (id) { return idsB.indexOf(id) > -1; }));
+  ok('not one question unique to Alpha leaks into Beta',
+    servedB.filter(function (id) { return onlyA.indexOf(id) > -1; }).length === 0,
+    String(servedB.filter(function (id) { return onlyA.indexOf(id) > -1; }).length));
+
+  head('TEST J — a new attempt re-draws validly from the same activity pool');
+  var randAct = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Weekly Randomised', 50, {
+    randomizeQuestions: true, randomizeOptions: false, status: 'published' }), adm);
+  var randPool = randAct.body.activity.questionIds.map(String);
+  var ra1 = await call('POST', '/api/free2027/activities/' + randAct.body.activity.id + '/start', {}, mpc);
+  var seq1 = qs(ra1).map(function (q) { return String(q.id); });
+  await call('POST', '/api/free2027/attempts/' + ra1.body.attempt.id + '/submit',
+    { responses: allCorrect('weekly', qs(ra1)) }, mpc);
+  var ra2 = await call('POST', '/api/free2027/activities/' + randAct.body.activity.id + '/start', {}, mpc);
+  var seq2 = qs(ra2).map(function (q) { return String(q.id); });
+  ok('the second attempt is a fresh attempt', ra2.status === 200 && ra2.body.attempt.id !== ra1.body.attempt.id);
+  ok('it still serves exactly the four shares', seq2.length === 40, String(seq2.length));
+  ok('and still draws exclusively from the same activity pool',
+    seq2.every(function (id) { return randPool.indexOf(id) > -1; }));
+  ok('the first attempt keeps its original snapshot after the second was served',
+    JSON.stringify(attemptById(ra1.body.attempt.id).questionSnapshot.map(function (q) { return q.id; })) ===
+    JSON.stringify(seq1));
 
   head('TEST F — Competition Examinations keep the exact 180-question JAMB structure');
   var comp = await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'UTME Cup', 220, {
@@ -332,6 +389,20 @@ function allCorrect(bank, questions) {
     { responses: allCorrect('competition', qs(cs)) }, mpc);
   ok('competition scoring is still out of 400', csub.status === 200 && csub.body.result.score === 400 &&
     csub.body.result.maxScore === 400, csub.raw.slice(0, 200));
+  var compHistorical = JSON.stringify(attemptById(cs.body.attempt.id));
+  var compSnap = qs(cs).map(function (q) { return String(q.id); }).join(',');
+  var cs2 = await call('POST', '/api/free2027/activities/' + comp.body.activity.id + '/start', {}, mpc);
+  ok('a second competition attempt also draws only from the activity pool',
+    cs2.status === 200 && qs(cs2).every(function (q) { return compIds[String(q.id)] === true; }));
+  ok('and is still exactly 180 questions', qs(cs2).length === 180, String(qs(cs2).length));
+  ok('the earlier competition attempt is byte-identical afterwards',
+    JSON.stringify(attemptById(cs.body.attempt.id)) === compHistorical);
+  ok('its original snapshot order is untouched',
+    attemptById(cs.body.attempt.id).questionSnapshot.map(function (q) { return String(q.id); }).join(',') === compSnap);
+  var compReview = await call('GET', '/api/free2027/attempts/' + cs.body.attempt.id + '/review', undefined, mpc);
+  ok('and its result is unchanged and still readable',
+    compReview.status === 200 && compReview.body.review.score === 400 &&
+    compReview.body.review.maxScore === 400, compReview.raw.slice(0, 200));
 
   head('TEST G — the regular hub still answers');
   ok('the regular hub health endpoint is unchanged', (await call('GET', '/api/health')).status === 200);

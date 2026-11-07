@@ -384,7 +384,9 @@ waitForBoot(60).then(async function (h) {
   ok('the weekly bank imports', impW.status === 200 && impW.body.imported === 8, impW.raw.slice(0, 160));
   var mkW = await call('POST', '/api/free2027/admin/activities', {
     kind: 'weekly', title: 'Week One Check', opensAt: Date.now() - 60000, closesAt: Date.now() + 7200000,
-    durationMin: 30, maxAttempts: 3, questionCount: 8, randomizeQuestions: false, randomizeOptions: false, status: 'draft'
+    durationMin: 30, maxAttempts: 3, questionCount: 8, randomizeQuestions: false, randomizeOptions: false, status: 'draft',
+    /* This fixture bank stocks four subjects, so the pool is shaped explicitly. */
+    subjectDistribution: { 'Use of English': 2, Mathematics: 2, Physics: 2, Chemistry: 2 }
   }, adm);
   weeklyId = mkW.body.activity.id;
   await call('POST', '/api/free2027/admin/activities/' + weeklyId + '/publish', {}, adm);

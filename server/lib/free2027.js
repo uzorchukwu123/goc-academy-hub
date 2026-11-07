@@ -667,6 +667,11 @@ function createFree2027(deps) {
     }
     var chosen = [];
     var dist = rec.subjectDistribution || null;
+    /* A Weekly Assessment's typed count belongs to ALL FIVE subjects, so its
+       allocated pool is shared out evenly across them. That is what lets the
+       pool serve every candidate's own combination without ever borrowing from
+       the wider bank. Competitions keep their existing allocation. */
+    if (!dist && bank === 'weekly') dist = weeklySubjectShares(want);
     if (dist) {
       Object.keys(dist).forEach(function (subject) {
         var need = Number(dist[subject]) || 0;
@@ -709,33 +714,21 @@ function createFree2027(deps) {
     return any ? out : null;
   }
 
-  /* Turn the weekly spread TARGET into counts the bank can actually serve.
-     A thin subject is capped at what exists and the balance is redistributed
-     across the candidate's OTHER registered subjects, so the configured count
-     is still served exactly and no invented per-subject quota can block the
-     assessment. Subjects the candidate does not take are never touched. */
-  function weeklyServableSpread(activity, subjects, bySubject) {
-    var list = rules.sortSubjects(subjects);
-    var total = Math.max(0, Number(activity.questionCount) || 0);
-    var out = {}, room = {};
-    if (!list.length) return out;
-    var base = Math.floor(total / list.length), extra = total % list.length;
+  /* A Weekly Assessment's typed "Number of questions" covers ALL FIVE subjects:
+     50 means ten per subject. The activity's pool is allocated that way so that
+     every candidate can sit their own registered subjects from THIS activity's
+     own allocation. No candidate sits all five, so a candidate taking four
+     subjects sits 4 x 10 = 40 of the 50 allocated questions. Any remainder is
+     handed out in canonical subject order. */
+  function weeklySubjectShares(total) {
+    var list = rules.sortSubjects(rules.SUBJECTS);
+    var n = Math.max(0, Number(total) || 0);
+    var base = Math.floor(n / list.length), extra = n % list.length;
+    var out = {};
     list.forEach(function (subject, i) {
-      var want = base + (i < extra ? 1 : 0);
-      var have = Math.max(0, Number(bySubject[subject]) || 0);
-      out[subject] = Math.min(want, have);
-      room[subject] = have - out[subject];
+      var share = base + (i < extra ? 1 : 0);
+      if (share > 0) out[subject] = share;
     });
-    var short = total - list.reduce(function (n, subject) { return n + out[subject]; }, 0);
-    while (short > 0) {
-      var moved = false;
-      for (var i = 0; i < list.length && short > 0; i++) {
-        var subject = list[i];
-        if (room[subject] > 0) { out[subject]++; room[subject]--; short--; moved = true; }
-      }
-      if (!moved) break;
-    }
-    list.forEach(function (subject) { if (!out[subject]) delete out[subject]; });
     return out;
   }
 
@@ -751,10 +744,16 @@ function createFree2027(deps) {
     if (activity && activity.kind === rules.KIND_WEEKLY) {
       var configured = weeklyConfiguredDistribution(activity);
       if (configured) return configured;
-      /* No distribution configured: the documented even spread over the
-         candidate's own subjects below is a TARGET, never a bank requirement.
-         combinationReadiness() caps it to what the bank actually holds and
-         tops the balance up from the candidate's other subjects. */
+      /* No distribution configured: the typed count is shared across ALL FIVE
+         subjects, and the candidate sits only the shares belonging to their own
+         registered combination. Dividing by the candidate's subject count here
+         is what once fabricated a 13-English quota out of a 50-question paper. */
+      var shares = weeklySubjectShares(activity.questionCount);
+      var mineOnly = {};
+      rules.sortSubjects(subjects).forEach(function (subject) {
+        if (shares[subject]) mineOnly[subject] = shares[subject];
+      });
+      return mineOnly;
     }
     var list = rules.sortSubjects(subjects);
     var total = Math.max(0, Number(activity.questionCount) || 0);
@@ -799,12 +798,14 @@ function createFree2027(deps) {
     return out;
   }
 
-  /* A COMPETITION draws exclusively from the activity's own allocated pool.
-     Weekly Assessments are outside this change and keep exactly the source and
-     behaviour they already had, so nothing about them is altered here. */
+  /* EVERY activity — Weekly Assessment and Competition alike — draws
+     exclusively from the questions allocated to THAT activity. A question that
+     was never allocated here can never reach a candidate, even if it is
+     eligible in the wider bank, and it can never be borrowed from another
+     activity. An allocated question that has since been deactivated, archived
+     or deleted is no longer eligible and cannot make up a paper. */
   function candidatePool(db, activity) {
-    if (activity && activity.kind === rules.KIND_COMPETITION) return activityPoolQuestions(db, activity);
-    return eligibleBankQuestions(db, bankForKind(activity.kind));
+    return activityPoolQuestions(db, activity);
   }
 
   /* Readiness is checked against the pool this candidate will actually draw
@@ -820,21 +821,6 @@ function createFree2027(deps) {
       bySubject[q.subject] = (bySubject[q.subject] || 0) + 1;
     });
     var weeklyConfigured = weekly ? weeklyConfiguredDistribution(activity) : null;
-    if (weekly && !weeklyConfigured) {
-      /* No configured distribution: the only requirement is the configured
-         question COUNT, drawn from the candidate's registered subjects. No
-         individual subject carries a quota, so a short English pool cannot
-         block an assessment that never asked for a particular English count. */
-      var wantTotal = Math.max(0, Number(activity.questionCount) || 0);
-      var haveTotal = mine.reduce(function (n, subject) { return n + (bySubject[subject] || 0); }, 0);
-      if (wantTotal > haveTotal) {
-        return { ok: false, error: 'This Weekly Assessment needs ' + wantTotal +
-          ' eligible question' + (wantTotal === 1 ? '' : 's') + ' from your registered subjects (' +
-          mine.join(', ') + '), but only ' + haveTotal + ' ' + (haveTotal === 1 ? 'is' : 'are') +
-          ' available in the Weekly Assessment Question Bank. Contact the academy.' };
-      }
-      return { ok: true, distribution: weeklyServableSpread(activity, mine, bySubject) };
-    }
     if (weekly && weeklyConfigured) {
       /* A configured subject the candidate does not take can neither be served
          nor silently swapped for another subject, so say exactly that instead
@@ -859,9 +845,9 @@ function createFree2027(deps) {
             ' allocated to it. Contact the academy.' };
         }
         return { ok: false, error: 'Your subject combination cannot be served yet. ' + subject +
-          ' needs ' + want + ' eligible question' + (want === 1 ? '' : 's') + ' in the ' +
-          'Weekly Assessment Question Bank but only ' + have + ' ' + (have === 1 ? 'is' : 'are') +
-          ' available. Contact the academy.' };
+          ' needs ' + want + ' eligible question' + (want === 1 ? '' : 's') +
+          ' allocated to this Weekly Assessment but only ' + have + ' ' + (have === 1 ? 'is' : 'are') +
+          ' available in its allocation. Contact the academy.' };
       }
     }
     return { ok: true, distribution: dist };
@@ -1472,9 +1458,7 @@ function createFree2027(deps) {
       if (combination) {
         /* This candidate's own combination fills the activity's paper. The
            activity's duration, kind, attempt limit and length are unchanged. */
-        paperDist = activity.kind === rules.KIND_WEEKLY
-          ? combinationReadiness(db, activity, combination).distribution
-          : studentDistribution(activity, combination);
+        paperDist = studentDistribution(activity, combination);
         paperQs = allocateStudentQuestions(db, activity, combination);
         if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
       } else {

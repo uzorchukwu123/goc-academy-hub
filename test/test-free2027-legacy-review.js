@@ -175,6 +175,10 @@ function reviewRow(r, id) { return r.body.review.questions.filter(function (q) {
       var t = Date.now();
       var made = await call('POST', '/api/free2027/admin/activities', {
         kind: bank, title: 'Legacy ' + bank + ' paper', questionCount: 6,
+        /* The weekly fixture bank stocks four subjects, so its pool is shaped
+           explicitly. A weekly's typed count otherwise covers all five subjects. */
+        subjectDistribution: bank === 'weekly'
+          ? { 'Use of English': 2, Mathematics: 2, Physics: 1, Chemistry: 1 } : null,
         opensAt: t - 60000, closesAt: t + 3600000, durationMin: 30, maxAttempts: 2,
         randomizeQuestions: false, randomizeOptions: bank === 'competition', status: 'published'
       }, adm);

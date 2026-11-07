@@ -395,14 +395,20 @@ function allCorrect(bank, questions) {
     reStart.body.attempt.responses[pickQ.id] === 1, JSON.stringify(reStart.body.attempt.responses));
 
   head('Weekly Assessments enforce the same combination');
-  var wk = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Week 1', 8, {
+  var wk = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Week 1', 10, {
     randomizeOptions: false, status: 'published'
   }), adm);
-  ok('the weekly assessment publishes with its configured length', wk.status === 200 &&
-    wk.body.activity.questionCount === 8, wk.raw.slice(0, 200));
+  ok('the weekly assessment publishes with its configured pool of ten across five subjects', wk.status === 200 &&
+    wk.body.activity.questionCount === 10 && wk.body.activity.questionIds.length === 10, wk.raw.slice(0, 200));
   var w1 = await call('POST', '/api/free2027/activities/' + wk.body.activity.id + '/start', {}, stu);
   var wc1 = subjectCounts(w1.body.questions);
-  ok('the weekly paper keeps its configured length', w1.status === 200 && w1.body.questions.length === 8, w1.raw.slice(0, 200));
+  ok('the candidate sits their own four shares: 10 across 5 subjects = 2 each, so 8 served',
+    w1.status === 200 && w1.body.questions.length === 8, w1.raw.slice(0, 200));
+  var wkPool = {}; wk.body.activity.questionIds.forEach(function (id) { wkPool[String(id)] = true; });
+  ok('every weekly question comes from this activity\'s own allocation',
+    w1.body.questions.every(function (q) { return wkPool[String(q.id)] === true; }));
+  ok('and each of the candidate\'s subjects carries exactly its two-question share',
+    wc1[ENGLISH] === 2 && wc1.Mathematics === 2 && wc1.Physics === 2 && wc1.Chemistry === 2, JSON.stringify(wc1));
   ok('Use of English is always included', wc1[ENGLISH] > 0, JSON.stringify(wc1));
   ok('only the candidate\'s own subjects appear', !wc1.Biology && wc1.Mathematics > 0 &&
     wc1.Physics > 0 && wc1.Chemistry > 0, JSON.stringify(wc1));
