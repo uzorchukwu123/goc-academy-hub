@@ -100,14 +100,43 @@ ok('a small competition keeps its old distribution freedom',
 ok('a weekly assessment is never forced into the UTME distribution',
   !f.validateActivity(Object.assign({}, base, { kind: 'weekly', questionCount: 20 })).error);
 
-head('the question cap admits a standard paper without loosening weekly assessments');
-ok('a competition may hold 180 questions', f.maxQuestionsFor('competition') === 180);
+head('the activity POOL cap is the eligible bank, not one paper');
+/* The 180 pool ceiling has been removed: a competition pool is bounded by the
+   eligible questions available, while each candidate still sits 180. */
+ok('180 is no longer the competition pool ceiling', f.maxQuestionsFor('competition') > 180);
+ok('the cap is the available eligible count when it is known', f.maxQuestionsFor('competition', 220) === 220);
+ok('a larger bank raises the cap accordingly', f.maxQuestionsFor('competition', 640) === 640);
+ok('an unknown availability falls back to the structural ceiling',
+  f.maxQuestionsFor('competition') === f.MAX_COMPETITION_POOL);
+ok('a nonsense availability never becomes the cap',
+  f.maxQuestionsFor('competition', 0) === f.MAX_COMPETITION_POOL &&
+  f.maxQuestionsFor('competition', -5) === f.MAX_COMPETITION_POOL &&
+  f.maxQuestionsFor('competition', 'abc') === f.MAX_COMPETITION_POOL);
 ok('a weekly assessment keeps its original cap of 100', f.maxQuestionsFor('weekly') === 100);
+ok('and weekly ignores competition availability entirely', f.maxQuestionsFor('weekly', 640) === 100);
 ok('the general cap constant is unchanged', f.MAX_QUESTIONS === 100);
-ok('a 181-question competition is still refused',
-  !!f.validateActivity(Object.assign({}, base, { kind: 'competition', questionCount: 181 })).error);
+ok('a 181-question competition pool is now accepted',
+  !f.validateActivity(Object.assign({}, base, { kind: 'competition', questionCount: 181 })).error);
+var pool220 = { 'Use of English': 60, Mathematics: 40, Physics: 40, Chemistry: 40, Biology: 40 };
+ok('a 220-question pool across all five subjects is accepted',
+  !f.validateActivity(Object.assign({}, base, { kind: 'competition', questionCount: 220, subjectDistribution: pool220 })).error);
+ok('a pool distribution must still add up to the pool size',
+  !!f.validateActivity(Object.assign({}, base, { kind: 'competition', questionCount: 220,
+    subjectDistribution: { 'Use of English': 60, Mathematics: 40, Physics: 40, Chemistry: 40 } })).error);
+ok('zero and negative pool sizes are still refused',
+  !!f.validateActivity(Object.assign({}, base, { kind: 'competition', questionCount: 0 })).error &&
+  !!f.validateActivity(Object.assign({}, base, { kind: 'competition', questionCount: -20 })).error);
 ok('a 101-question weekly assessment is still refused',
   !!f.validateActivity(Object.assign({}, base, { kind: 'weekly', questionCount: 101 })).error);
+
+head('a larger pool still serves standard 180-question papers');
+ok('a 220 pool serves standard papers', f.servesJambPaper({ kind: 'competition', questionCount: 220 }));
+ok('a 180 pool serves standard papers', f.servesJambPaper({ kind: 'competition', questionCount: 180 }));
+ok('a smaller competition does not', !f.servesJambPaper({ kind: 'competition', questionCount: 40 }));
+ok('a weekly assessment never does', !f.servesJambPaper({ kind: 'weekly', questionCount: 220 }));
+ok('the candidate\'s distribution is still 60 + 40 + 40 + 40',
+  f.combinationDistribution(['Use of English', 'Mathematics', 'Chemistry', 'Biology'])['Use of English'] === 60 &&
+  f.JAMB_QUESTION_COUNT === 180 && f.JAMB_TOTAL_MAX === 400);
 
 /* ───────────────────────────── marking ─────────────────────────────── */
 head('perfect, zero and partial papers');

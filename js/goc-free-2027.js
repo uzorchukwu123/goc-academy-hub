@@ -290,12 +290,23 @@
   var MIN_ATTEMPTS = 1;
   var MAX_ATTEMPTS = 10;
   var MAX_QUESTIONS = 100;
-  /* A competition may now hold a full standard UTME paper of 180 questions.
-     Weekly assessments keep the limit they always had: only the competition
-     cap rises, and only far enough to admit the standard paper. */
-  var MAX_COMPETITION_QUESTIONS = 180;
-  function maxQuestionsFor(kind) {
-    return cleanKind(kind) === KIND_COMPETITION ? MAX_COMPETITION_QUESTIONS : MAX_QUESTIONS;
+  /* The ACTIVITY POOL and the STUDENT PAPER are two different things.
+
+     A competition activity owns a pool of allocated questions. Its size is
+     limited by the eligible questions actually available in the Competition
+     Question Bank, NOT by the length of one examination: a pool of 220 can
+     serve every possible subject combination, while each candidate still sits
+     exactly 180 questions. MAX_COMPETITION_POOL is only a sanity ceiling for
+     absurd input; the real limit is the available eligible count, which both
+     the activity form and the server enforce.
+
+     Weekly assessments keep the limit they always had. */
+  var MAX_COMPETITION_POOL = 100000;
+  function maxQuestionsFor(kind, available) {
+    if (cleanKind(kind) !== KIND_COMPETITION) return MAX_QUESTIONS;
+    var n = Number(available);
+    if (isFinite(n) && n > 0) return Math.min(MAX_COMPETITION_POOL, Math.floor(n));
+    return MAX_COMPETITION_POOL;
   }
 
   /* The edition's banks support exactly these five subjects. They are metadata
@@ -471,6 +482,9 @@
     ids = ids.map(function (x) { return String(x); }).filter(Boolean);
     var seen = {};
     ids = ids.filter(function (x) { if (seen[x]) return false; seen[x] = true; return true; });
+    /* Competition pools are bounded by the eligible bank, which the server
+       checks against the real allocation; this is only the structural ceiling.
+       Weekly assessments keep their original cap. */
     var cap = maxQuestionsFor(kind);
     if (ids.length > cap) return { error: 'An activity can hold at most ' + cap + ' questions.' };
 
@@ -480,9 +494,11 @@
     }
     var dist = cleanSubjectDistribution(pick('subjectDistribution', null), questionCount);
     if (dist.error) return { error: dist.error };
-    /* A competition configured as a standard 180-question UTME paper must carry
-       the standard distribution. Other competitions and every weekly assessment
-       keep the distribution rules they already had. */
+    /* A competition whose POOL is exactly one standard paper must carry the
+       standard distribution. A larger pool may spread its questions over all
+       five subjects (the counts must still add up to the pool size, checked
+       above). Smaller competitions and every weekly assessment keep the
+       distribution rules they already had. */
     if (kind === KIND_COMPETITION && questionCount === JAMB_QUESTION_COUNT) {
       var jambProblem = jambDistributionProblem(dist.distribution);
       if (jambProblem) return { error: jambProblem };
@@ -569,9 +585,21 @@
   var JAMB_TOTAL_MAX = 400;
   var JAMB_OTHER_SUBJECTS = 3;
 
+  /* True when the activity's POOL is itself exactly one standard paper. Kept
+     with its original meaning so historical activities and the marking of
+     legacy attempts are decided exactly as before. */
   function isJambCompetition(rec) {
     return !!rec && rec.kind === KIND_COMPETITION &&
       Number(rec.questionCount) === JAMB_QUESTION_COUNT;
+  }
+
+  /* True when a competition activity SERVES standard 180-question papers,
+     whether its pool is exactly 180 or a larger pool holding surplus questions
+     for every subject combination. The pool size must never decide how many
+     questions a candidate sits. */
+  function servesJambPaper(rec) {
+    return !!rec && rec.kind === KIND_COMPETITION &&
+      Number(rec.questionCount) >= JAMB_QUESTION_COUNT;
   }
 
   /* Null when the distribution is the standard one, otherwise a sentence
@@ -957,7 +985,7 @@
     MIN_ATTEMPTS: MIN_ATTEMPTS,
     MAX_ATTEMPTS: MAX_ATTEMPTS,
     MAX_QUESTIONS: MAX_QUESTIONS,
-    MAX_COMPETITION_QUESTIONS: MAX_COMPETITION_QUESTIONS,
+    MAX_COMPETITION_POOL: MAX_COMPETITION_POOL,
     maxQuestionsFor: maxQuestionsFor,
     SUBJECTS: SUBJECTS.slice(),
     JAMB_OPTIONAL_SUBJECTS: JAMB_OPTIONAL_SUBJECTS.slice(),
@@ -992,6 +1020,7 @@
     JAMB_TOTAL_MAX: JAMB_TOTAL_MAX,
     JAMB_OTHER_SUBJECTS: JAMB_OTHER_SUBJECTS,
     isJambCompetition: isJambCompetition,
+    servesJambPaper: servesJambPaper,
     jambDistributionProblem: jambDistributionProblem,
     jambSubjectOrder: jambSubjectOrder,
     jambSubjectScores: jambSubjectScores,

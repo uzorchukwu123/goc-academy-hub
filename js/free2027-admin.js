@@ -585,8 +585,10 @@
       '<p class="ad-note">Questions are retrieved automatically from the <b>' + bankLabel + '</b>. There is no individual question picker.</p>' +
       '<div id="f27Availability" class="f27-availability"><div class="ad-loading">Checking available eligible questions…</div></div>' +
       '<div class="ad-field"><label for="f27Count">Number of questions</label>' +
-        '<input id="f27Count" type="number" min="1" max="' + rules.maxQuestionsFor(a.kind) + '" step="1" value="' + Number(a.questionCount || 0) + '" onchange="f27AdmEditorRead()">' +
-        '<p class="ad-note">Cannot exceed the available eligible questions in this category’s bank.</p></div>' +
+        '<input id="f27Count" type="number" min="1" max="' + rules.maxQuestionsFor(a.kind, A.availability && A.availability.total) + '" step="1" value="' + Number(a.questionCount || 0) + '" onchange="f27AdmEditorRead()">' +
+        '<p class="ad-note" id="f27CountNote">Cannot exceed the available eligible questions in this category’s bank.' +
+        (a.kind === rules.KIND_COMPETITION ? ' A competition pool may be larger than one paper: each candidate still sits the standard 180-question paper from their own subject combination.' : '') +
+        '</p></div>' +
       '<div class="ad-field"><label>Optional subject distribution</label>' +
         '<p class="ad-note">Leave every box blank to draw from all eligible questions. If used, the counts must add up to the number of questions.</p>' +
         distributionInputsHtml(a) + '</div>' +
@@ -629,8 +631,16 @@
          is silently discarded when this response lands mid-edit. */
       global.f27AdmEditorRead();
       var count = $('f27Count');
-      var cap = rules.maxQuestionsFor(A.editing && A.editing.kind);
-      if (count) count.max = String(Math.min(cap, A.availability.total || cap));
+      var cap = rules.maxQuestionsFor(A.editing && A.editing.kind, A.availability.total);
+      if (count) { count.max = String(cap); count.setAttribute('max', String(cap)); }
+      var note = $('f27CountNote');
+      if (note) {
+        note.textContent = 'Available eligible questions in this category’s bank: ' + A.availability.total +
+          '. You may allocate up to ' + cap + '.' +
+          ((A.editing && A.editing.kind === rules.KIND_COMPETITION)
+            ? ' A competition pool may be larger than one paper: each candidate still sits the standard 180-question paper from their own subject combination.'
+            : '');
+      }
       host.innerHTML = '<div class="ad-metric"><span>Available eligible questions</span><b>' + A.availability.total + '</b></div>' +
         '<p class="ad-note">' + BANK_SUBJECTS.map(function (s) { return esc(s) + ': ' + Number(A.availability.bySubject[s] || 0); }).join(' · ') + '</p>';
       var grid = document.querySelector('.f27-distribution-grid');
@@ -683,7 +693,7 @@
     var a = A.editing;
     if (!a) return;
     var count = Number(a.questionCount);
-    var cap = rules.maxQuestionsFor(a.kind);
+    var cap = rules.maxQuestionsFor(a.kind, A.availability && A.availability.total);
     if (!isFinite(count) || count < 1 || count > cap) {
       say('Set how many questions to include, between 1 and ' + cap + '.');
       return;

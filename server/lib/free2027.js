@@ -695,7 +695,10 @@ function createFree2027(deps) {
      A record that predates combinations keeps the activity's own allocation
      until the student chooses once, so no historical paper or result changes. */
   function studentDistribution(activity, subjects) {
-    if (rules.isJambCompetition(activity)) return rules.combinationDistribution(subjects);
+    /* A competition that serves standard papers always serves exactly 180 to
+       this candidate, whether the activity's pool is 180 or a larger pool with
+       surplus questions. The pool size never becomes the paper length. */
+    if (rules.servesJambPaper(activity)) return rules.combinationDistribution(subjects);
     var list = rules.sortSubjects(subjects);
     var total = Math.max(0, Number(activity.questionCount) || 0);
     var dist = activity.subjectDistribution || null;
@@ -718,24 +721,59 @@ function createFree2027(deps) {
     return out;
   }
 
-  /* Readiness is checked against the BANK for this candidate's own subjects,
-     not against the activity's stored paper, because each candidate now draws
-     their own paper. */
+  /* The activity's OWN allocated pool. This is the exclusive source for every
+     paper the activity serves: a question that was never allocated to this
+     activity can never reach a candidate, even if it is eligible in the wider
+     bank. An allocated question that has since been deactivated, archived or
+     deleted is no longer eligible and cannot make up a paper. */
+  function activityPoolQuestions(db, activity) {
+    var live = {};
+    bankQuestionsSync(db, bankForKind(activity.kind)).forEach(function (q) {
+      if (q && q.id) live[String(q.id)] = q;
+    });
+    var out = [], seen = {};
+    (Array.isArray(activity.questionIds) ? activity.questionIds : []).forEach(function (id) {
+      var key = String(id);
+      if (seen[key]) return;
+      seen[key] = true;
+      var q = live[key];
+      if (isEligibleQuestion(q)) out.push(q);
+    });
+    return out;
+  }
+
+  /* A COMPETITION draws exclusively from the activity's own allocated pool.
+     Weekly Assessments are outside this change and keep exactly the source and
+     behaviour they already had, so nothing about them is altered here. */
+  function candidatePool(db, activity) {
+    if (activity && activity.kind === rules.KIND_COMPETITION) return activityPoolQuestions(db, activity);
+    return eligibleBankQuestions(db, bankForKind(activity.kind));
+  }
+
+  /* Readiness is checked against the pool this candidate will actually draw
+     from, for their own subjects, so a combination that cannot be covered is
+     reported precisely instead of being padded from elsewhere. */
   function combinationReadiness(db, activity, subjects) {
-    var bank = bankForKind(activity.kind);
     var dist = studentDistribution(activity, subjects);
+    var competition = activity && activity.kind === rules.KIND_COMPETITION;
     var bySubject = {};
-    eligibleBankQuestions(db, bank).forEach(function (q) {
+    candidatePool(db, activity).forEach(function (q) {
       bySubject[q.subject] = (bySubject[q.subject] || 0) + 1;
     });
     var order = rules.sortSubjects(Object.keys(dist));
     for (var i = 0; i < order.length; i++) {
       var subject = order[i], want = Number(dist[subject]) || 0, have = bySubject[subject] || 0;
       if (want > have) {
+        if (competition) {
+          return { ok: false, error: 'Your subject combination cannot be served from this activity. ' + subject +
+            ' requires ' + want + ' question' + (want === 1 ? '' : 's') + ' but only ' + have +
+            ' eligible ' + subject + ' question' + (have === 1 ? ' is' : 's are') +
+            ' allocated to it. Contact the academy.' };
+        }
         return { ok: false, error: 'Your subject combination cannot be served yet. ' + subject +
           ' needs ' + want + ' eligible question' + (want === 1 ? '' : 's') + ' in the ' +
-          (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank but only ' +
-          have + ' ' + (have === 1 ? 'is' : 'are') + ' available. Contact the academy.' };
+          'Weekly Assessment Question Bank but only ' + have + ' ' + (have === 1 ? 'is' : 'are') +
+          ' available. Contact the academy.' };
       }
     }
     return { ok: true, distribution: dist };
@@ -745,9 +783,13 @@ function createFree2027(deps) {
     if (!st.ok) throw FreeError(409, st.error);
     return st;
   }
+  /* A fresh selection for EVERY new attempt. Nothing here reads a previous
+     attempt: the pool is re-shuffled with the server's secure RNG each time, so
+     where a subject holds surplus questions a later attempt draws a different
+     set, and where it holds exactly enough only the order can differ. */
   function allocateStudentQuestions(db, activity, subjects) {
     var dist = requireCombinationReady(db, activity, subjects).distribution;
-    var pool = eligibleBankQuestions(db, bankForKind(activity.kind));
+    var pool = candidatePool(db, activity);
     var chosen = [];
     rules.sortSubjects(Object.keys(dist)).forEach(function (subject) {
       var need = Number(dist[subject]) || 0;
@@ -1346,6 +1388,17 @@ function createFree2027(deps) {
         paperQs = allocateStudentQuestions(db, activity, combination);
         if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
       } else {
+        /* Only an OVERSIZED pool is a problem here: serving it whole would hand
+           the candidate more than 180 questions. A pool that is exactly one
+           standard paper still serves exactly 180, so it keeps the fallback it
+           always had, as do smaller competitions and weekly assessments. The
+           portal asks for the combination once before offering the paper; this
+           is that same rule enforced on the server. */
+        if (rules.servesJambPaper(activity) &&
+            Number(activity.questionCount) > rules.JAMB_QUESTION_COUNT) {
+          throw FreeError(409, 'Choose your JAMB subject combination before starting this examination. ' +
+            'It decides which subjects your ' + rules.JAMB_QUESTION_COUNT + '-question paper contains.');
+        }
         /* A record from before combinations existed keeps the activity's own
            allocation until the student chooses once at sign-in. */
         paperQs = await questionRecords(db, activity.questionIds || [], activity.kind);
@@ -1504,8 +1557,19 @@ function createFree2027(deps) {
     attempt.unanswered = marked.unanswered;
     attempt.markedAt = t;
     var act = activity || null;
-    if (act && rules.isJambCompetition(act) && marked.status === 'marked') {
-      var jamb = rules.jambSubjectScores(marked.answers, attempt.subjectDistribution || act.subjectDistribution || {});
+    /* A standard UTME paper is recognised from the paper the candidate actually
+       sat, not from the size of the activity's pool: an activity may now own a
+       larger pool while every candidate still sits exactly 180 questions. An
+       attempt saved before per-attempt distributions existed keeps the
+       activity-based decision it was originally marked under, so no historical
+       result changes. */
+    var satDist = attempt.subjectDistribution || null;
+    var standardPaper = satDist
+      ? (attempt.questionIds || []).length === rules.JAMB_QUESTION_COUNT &&
+        rules.jambDistributionProblem(satDist) === null
+      : !!(act && rules.isJambCompetition(act));
+    if (standardPaper && marked.status === 'marked') {
+      var jamb = rules.jambSubjectScores(marked.answers, satDist || (act && act.subjectDistribution) || {});
       attempt.scoring = 'jamb';
       attempt.subjectScores = jamb.subjects;
       attempt.score = jamb.score;

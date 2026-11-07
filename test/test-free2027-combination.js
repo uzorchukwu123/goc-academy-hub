@@ -148,7 +148,7 @@ function allCorrect(bank, questions) {
   var adm = await founder();
   /* A competition bank able to serve ANY of the four possible combinations. */
   await call('POST', '/api/free2027/admin/question-banks/competition/import',
-    { csv: csv('Comp', { 'Use of English': 65, Mathematics: 45, Physics: 45, Chemistry: 45, Biology: 45 }) }, adm);
+    { csv: csv('Comp', { 'Use of English': 90, Mathematics: 70, Physics: 70, Chemistry: 70, Biology: 70 }) }, adm);
   await call('POST', '/api/free2027/admin/question-banks/weekly/import',
     { csv: csv('Weekly', { 'Use of English': 20, Mathematics: 20, Physics: 20, Chemistry: 20, Biology: 20 }) }, adm);
 
@@ -194,14 +194,36 @@ function allCorrect(bank, questions) {
   var pcb = explicitEnglish.token;
 
   head('Competition: each candidate sits their OWN combination from the same activity');
-  /* The activity itself is configured as English + Mathematics/Physics/Chemistry,
-     so its stored 180-paper cannot contain Biology at all. */
-  var comp = await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'UTME Cup', 180, {
-    subjectDistribution: { 'Use of English': 60, Mathematics: 40, Physics: 40, Chemistry: 40 },
+  /* TEST A: the activity owns a POOL of 220 questions spread over all five
+     subjects. Every candidate still sits exactly 180 of them. */
+  var pool220 = { 'Use of English': 60, Mathematics: 40, Physics: 40, Chemistry: 40, Biology: 40 };
+  var comp = await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'UTME Cup', 220, {
+    subjectDistribution: pool220,
     randomizeQuestions: true, randomizeOptions: false, status: 'published'
   }), adm);
-  ok('the standard 180-question competition publishes', comp.status === 200 &&
-    comp.body.activity.questionIds.length === 180, comp.raw.slice(0, 220));
+  ok('a 220-question competition pool saves and publishes', comp.status === 200 &&
+    comp.body.activity.questionCount === 220, comp.raw.slice(0, 240));
+  ok('all 220 question IDs are allocated to the activity',
+    comp.body.activity.questionIds.length === 220, String(comp.body.activity.questionIds.length));
+  var savedDist = comp.body.activity.subjectDistribution || {};
+  ok('the saved distribution totals 220',
+    Object.keys(savedDist).reduce(function (n, k) { return n + Number(savedDist[k]); }, 0) === 220,
+    JSON.stringify(savedDist));
+  var poolRows = (function () {
+    var rows = bankRows('competition');
+    return comp.body.activity.questionIds.map(function (id) {
+      return rows.filter(function (x) { return String(x.id) === String(id); })[0];
+    }).filter(Boolean);
+  })();
+  var poolCounts = subjectCounts(poolRows);
+  ok('every allocated ID resolves in the competition bank', poolRows.length === 220, String(poolRows.length));
+  ok('the allocated IDs match the saved distribution subject for subject',
+    CANON.every(function (subj) { return (poolCounts[subj] || 0) === pool220[subj]; }) &&
+    Object.keys(poolCounts).length === 5, JSON.stringify(poolCounts));
+  ok('a pool larger than the eligible bank is still refused',
+    (await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'Too Big', 400, {
+      subjectDistribution: { 'Use of English': 120, Mathematics: 70, Physics: 70, Chemistry: 70, Biology: 70 }
+    }), adm)).status === 400);
   var compId = comp.body.activity.id;
 
   var s1 = await call('POST', '/api/free2027/activities/' + compId + '/start', {}, stu);
@@ -216,7 +238,7 @@ function allCorrect(bank, questions) {
   ok('a candidate with Physics/Chemistry/Biology starts the SAME activity',
     s2.status === 200 && s2.body.questions.length === 180, s2.status + ' ' + s2.raw.slice(0, 200));
   var c2 = subjectCounts(s2.body.questions);
-  ok('they receive Biology even though the activity paper has none',
+  ok('they receive Biology from the activity\'s own allocated pool',
     c2[ENGLISH] === 60 && c2.Physics === 40 && c2.Chemistry === 40 && c2.Biology === 40, JSON.stringify(c2));
   ok('and Mathematics is absent from their paper', !c2.Mathematics, JSON.stringify(c2));
   ok('the two candidates were served different papers',
@@ -265,6 +287,113 @@ function allCorrect(bank, questions) {
   ok('the review shows the paper they actually sat', review2.status === 200 &&
     !subjectCounts(review2.body.questions).Mathematics, review2.status + ' ' + review2.raw.slice(0, 160));
 
+  head('TEST E: the activity pool is the exclusive source of questions');
+  var compIds = {};
+  comp.body.activity.questionIds.forEach(function (id) { compIds[String(id)] = true; });
+  ok('every question served to candidate A belongs to the activity pool',
+    s1.body.questions.every(function (q) { return compIds[String(q.id)] === true; }));
+  ok('every question served to candidate B belongs to the activity pool',
+    s2.body.questions.every(function (q) { return compIds[String(q.id)] === true; }));
+  var outside = bankRows('competition').filter(function (q) { return !compIds[String(q.id)]; });
+  ok('the bank does hold eligible questions outside this pool', outside.length > 0, String(outside.length));
+  var servedIds = {};
+  s1.body.questions.concat(s2.body.questions).forEach(function (q) { servedIds[String(q.id)] = true; });
+  ok('none of those outside questions is ever served',
+    outside.every(function (q) { return servedIds[String(q.id)] !== true; }));
+  /* A pool that cannot cover a combination says so precisely, instead of
+     quietly borrowing the missing subject from the wider bank. */
+  var narrow = await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'Narrow Cup', 180, {
+    subjectDistribution: { 'Use of English': 60, Mathematics: 40, Physics: 40, Chemistry: 40 },
+    randomizeOptions: false, status: 'published'
+  }), adm);
+  ok('a 180 pool covering only four subjects still publishes', narrow.status === 200, narrow.raw.slice(0, 200));
+  var cannot = await call('POST', '/api/free2027/activities/' + narrow.body.activity.id + '/start', {}, pcb);
+  ok('a combination the pool cannot cover is refused with subject and counts',
+    cannot.status === 409 && /Biology/.test(cannot.raw) && /requires 40/.test(cannot.raw) && /only 0/.test(cannot.raw),
+    cannot.status + ' ' + cannot.raw.slice(0, 240));
+  ok('even though the wider bank has plenty of Biology',
+    bankRows('competition').filter(function (q) { return q.subject === 'Biology'; }).length >= 40);
+
+  head('TEST D: every new attempt is an independent selection from the same pool');
+  /* Surplus in every subject, so a later attempt can draw a different set. */
+  var surplus = await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'Surplus Cup', 320, {
+    subjectDistribution: { 'Use of English': 80, Mathematics: 60, Physics: 60, Chemistry: 60, Biology: 60 },
+    randomizeQuestions: true, randomizeOptions: false, status: 'published'
+  }), adm);
+  ok('a 320-question pool with surplus saves', surplus.status === 200 &&
+    surplus.body.activity.questionIds.length === 320, surplus.raw.slice(0, 220));
+  var surplusIds = {};
+  surplus.body.activity.questionIds.forEach(function (id) { surplusIds[String(id)] = true; });
+  var d1 = await call('POST', '/api/free2027/activities/' + surplus.body.activity.id + '/start', {}, stu);
+  ok('the first attempt is still exactly 180 from a 320 pool',
+    d1.status === 200 && d1.body.questions.length === 180, d1.status + ' ' + d1.raw.slice(0, 180));
+  var dc1 = subjectCounts(d1.body.questions);
+  ok('with the standard 60/40/40/40 distribution',
+    dc1[ENGLISH] === 60 && dc1.Mathematics === 40 && dc1.Physics === 40 && dc1.Chemistry === 40, JSON.stringify(dc1));
+  ok('and only from this activity\'s pool',
+    d1.body.questions.every(function (q) { return surplusIds[String(q.id)] === true; }));
+  var d1Id = d1.body.attempt.id;
+  var d1Before = JSON.stringify(session().attempts.filter(function (a) { return a.id === d1Id; })[0]);
+  var d1Sub = await call('POST', '/api/free2027/attempts/' + d1Id + '/submit',
+    { responses: allCorrect('competition', d1.body.questions) }, stu);
+  ok('the first attempt submits at 400', d1Sub.status === 200 && d1Sub.body.result.score === 400, d1Sub.raw.slice(0, 180));
+  var d1Result = JSON.stringify(session().attempts.filter(function (a) { return a.id === d1Id; })[0]);
+
+  var d2 = await call('POST', '/api/free2027/activities/' + surplus.body.activity.id + '/start', {}, stu);
+  ok('a second attempt is served', d2.status === 200 && d2.body.questions.length === 180, d2.status + ' ' + d2.raw.slice(0, 180));
+  ok('it is a different attempt record', d2.body.attempt.id !== d1Id);
+  function idSet(payload) { return payload.body.questions.map(function (q) { return String(q.id); }).sort().join(','); }
+  function idSeq(payload) { return payload.body.questions.map(function (q) { return String(q.id); }).join(','); }
+  ok('with surplus available, the SELECTED QUESTIONS differ', idSet(d1) !== idSet(d2));
+  ok('the question ORDER is randomised too', idSeq(d1) !== idSeq(d2));
+  ok('the second selection is still entirely inside the activity pool',
+    d2.body.questions.every(function (q) { return surplusIds[String(q.id)] === true; }));
+  var dc2 = subjectCounts(d2.body.questions);
+  ok('and still 60/40/40/40 with Biology excluded',
+    dc2[ENGLISH] === 60 && dc2.Mathematics === 40 && dc2.Physics === 40 && dc2.Chemistry === 40 && !dc2.Biology, JSON.stringify(dc2));
+  ok('the first attempt snapshot and result are untouched by the second attempt',
+    JSON.stringify(session().attempts.filter(function (a) { return a.id === d1Id; })[0]) === d1Result);
+  ok('and nothing about it changed since before it was submitted either',
+    JSON.parse(d1Before).questionSnapshot.length === 180 &&
+    JSON.stringify(JSON.parse(d1Result).questionSnapshot) === JSON.stringify(JSON.parse(d1Before).questionSnapshot));
+
+  head('With no surplus, only the order can change — and that is all that is promised');
+  var n1 = await call('POST', '/api/free2027/activities/' + compId + '/start', {}, stu);
+  ok('a further attempt on the exact-size pool is served', n1.status === 200 && n1.body.questions.length === 180,
+    n1.status + ' ' + n1.raw.slice(0, 180));
+  ok('the selected set matches the pool exactly (no surplus to vary)', idSet(n1) === idSet(s1));
+  ok('but the order is independently randomised', idSeq(n1) !== idSeq(s1));
+
+  head('TEST F: resuming restores the original paper and answers');
+  var r1 = await call('POST', '/api/free2027/activities/' + surplus.body.activity.id + '/start', {}, pcb);
+  ok('a fresh attempt opens for the other candidate', r1.status === 200, r1.status + ' ' + r1.raw.slice(0, 160));
+  var rId = r1.body.attempt.id;
+  var pickQ = r1.body.questions[0];
+  var saved = await call('PUT', '/api/free2027/attempts/' + rId + '/answer', { questionId: pickQ.id, choice: 1 }, pcb);
+  ok('an answer is saved against it', saved.status === 200, saved.raw.slice(0, 160));
+  var resumed = await call('GET', '/api/free2027/attempts/' + rId, undefined, pcb);
+  ok('resuming returns the same attempt', resumed.status === 200 && resumed.body.attempt.id === rId);
+  ok('with the identical questions in the identical order',
+    resumed.body.questions.map(function (q) { return String(q.id); }).join(',') ===
+    r1.body.questions.map(function (q) { return String(q.id); }).join(','));
+  ok('and the saved answer intact', resumed.body.attempt.responses[pickQ.id] === 1,
+    JSON.stringify(resumed.body.attempt.responses));
+  var rPid = session().attempts.filter(function (a) { return a.id === rId; })[0].participantId;
+  function attemptsHere() {
+    return session().attempts.filter(function (a) {
+      return a.activityId === surplus.body.activity.id && a.participantId === rPid;
+    }).length;
+  }
+  var countBefore = attemptsHere();
+  var reStart = await call('POST', '/api/free2027/activities/' + surplus.body.activity.id + '/start', {}, pcb);
+  ok('starting again resumes rather than replacing the open paper',
+    reStart.status === 200 && reStart.body.attempt.id === rId && reStart.body.resumed === true,
+    reStart.status + ' ' + reStart.raw.slice(0, 180));
+  ok('and no extra attempt record was created', attemptsHere() === countBefore,
+    countBefore + ' -> ' + attemptsHere());
+  ok('the resumed paper still holds the saved answer',
+    reStart.body.attempt.responses[pickQ.id] === 1, JSON.stringify(reStart.body.attempt.responses));
+
   head('Weekly Assessments enforce the same combination');
   var wk = await call('POST', '/api/free2027/admin/activities', activityBody('weekly', 'Week 1', 8, {
     randomizeOptions: false, status: 'published'
@@ -296,15 +425,24 @@ function allCorrect(bank, questions) {
   ok('and is flagged as needing the one-time choice', legacy.participant.needsSubjects === true &&
     Array.isArray(legacy.participant.subjects) && legacy.participant.subjects.length === 0,
     JSON.stringify(legacy.participant));
-  var lstart = await call('POST', '/api/free2027/activities/' + compId + '/start', {}, legacy.token);
-  ok('before choosing, the activity\'s own allocation is served exactly as before',
-    lstart.status === 200 && lstart.body.questions.length === 180 &&
-    !subjectCounts(lstart.body.questions).Biology, lstart.status + ' ' + JSON.stringify(subjectCounts(lstart.body.questions || [])));
+  var refused = await call('POST', '/api/free2027/activities/' + compId + '/start', {}, legacy.token);
+  ok('a candidate with no combination is never handed the whole 220-question pool',
+    refused.status === 409 && /choose your jamb subject combination/i.test(refused.raw),
+    refused.status + ' ' + refused.raw.slice(0, 200));
+  /* A smaller competition keeps the pre-existing fallback, so an attempt made
+     before the choice exists can be used to prove history is never rewritten. */
+  var smallComp = await call('POST', '/api/free2027/admin/activities', activityBody('competition', 'Small Cup', 4, {
+    randomizeOptions: false, status: 'published'
+  }), adm);
+  var lstart = await call('POST', '/api/free2027/activities/' + smallComp.body.activity.id + '/start', {}, legacy.token);
+  ok('a smaller competition still serves its own allocation as before',
+    lstart.status === 200 && lstart.body.questions.length === 4,
+    lstart.status + ' ' + JSON.stringify(subjectCounts(lstart.body.questions || [])));
   var legacyAttempt = lstart.body.attempt.id;
   var lsub = await call('POST', '/api/free2027/attempts/' + legacyAttempt + '/submit',
     { responses: allCorrect('competition', lstart.body.questions) }, legacy.token);
-  ok('that paper submits and is marked on the activity distribution',
-    lsub.status === 200 && lsub.body.result.score === 400, lsub.raw.slice(0, 200));
+  ok('that paper submits and keeps its original raw marking',
+    lsub.status === 200 && lsub.body.result.score === 4, lsub.raw.slice(0, 200));
   var beforeChoice = JSON.stringify(session().attempts.filter(function (a) { return a.id === legacyAttempt; })[0]);
 
   var badChoice = await call('PUT', '/api/free2027/subjects', { subjects: ['Mathematics', 'Biology'] }, legacy.token);
