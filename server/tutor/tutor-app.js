@@ -1,7 +1,8 @@
-/* Tutor screens (Phase 3C slice 4). This file is NOT part of the public app bundle: it lives in
-   server/tutor/, which the static server never serves, and goes out only through the
-   single-use door route. It is plain ES5 like the rest of the app and draws its own overlay and
-   its own styles, so nothing here touches the student screens.
+/* Tutor screens (Phase 3C). This file is NOT part of the public app bundle: it lives in
+   server/tutor/, which the static server never serves. The old hidden door route that used
+   to deliver it has been removed; tutor account authentication and the tutor API remain on
+   the server. It is plain ES5 like the rest of the app and draws its own overlay and its own
+   styles, so nothing here touches the student screens.
    The session token is held in memory only: a reload ends the session on purpose. */
 (function () {
   'use strict';

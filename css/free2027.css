@@ -1,0 +1,555 @@
+/* ============================================================================
+   free2027.css — 2027 Free Tutorial Edition (temporary, switchable)
+   ----------------------------------------------------------------------------
+   ONE mechanism does the hiding: `body.f27-mode`. While that class is present
+   the original hub's screens and chrome are not shown, and the edition's six
+   screens are. Remove the class — which is all "Original Mode" does — and every
+   original screen, the tab bar, the sidebar and the admin entrance are exactly
+   as they were. Nothing is deleted, renamed or commented out, so the original
+   hub remains fully recoverable from the console's mode switch.
+
+   Deleting this file restores the original hub completely (the screens simply
+   stay hidden behind the same class rule below, which is also in styles.css? no —
+   it is here only, so removing the stylesheet shows the original hub).
+   ========================================================================== */
+
+/* ---- what 2027 Free Tutorial Mode hides ---------------------------------- */
+body.f27-mode .tabbar,
+body.f27-mode #pvBar,
+body.f27-mode .screen.pad,
+body.f27-mode #landing .lp-features-note,
+body.f27-mode #adminEntry { display: none !important; }
+
+/* The original in-app screens (dashboard, study, CBT, league, profile …) are
+   all of the form #screen.pad or the exam screens. Rather than name thirty
+   selectors that would go stale, the rule above hides every `.screen` that is
+   NOT one of the edition's, the homepage, or the administrator's own screens. */
+body.f27-mode .screen { display: none !important; }
+body.f27-mode .screen.active.f27,
+body.f27-mode #landing.active,
+body.f27-mode #admin-gate.active,
+body.f27-mode #admin.active,
+body.f27-mode #free-admin.active,
+body.f27-mode #staff-change-password.active { display: flex !important; }
+
+/* The ORIGINAL student account experience stays fully reachable in Free
+   Tutorial Mode. Registration, login, the pending-verification step and the
+   signed-in student's own screens are the original hub's, unchanged — the
+   edition runs alongside them and never replaces them. Without this the
+   homepage account buttons would resolve to a screen the rule above hides. */
+body.f27-mode #login-v2.active,
+body.f27-mode #signup.active,
+body.f27-mode #signup-pending.active,
+body.f27-mode #change-password.active,
+body.f27-mode #home.active,
+body.f27-mode #profile.active,
+body.f27-mode #results.active,
+body.f27-mode #league.active,
+body.f27-mode #timetable.active,
+body.f27-mode #study.active,
+body.f27-mode #studySet.active,
+body.f27-mode #reading.active,
+body.f27-mode #bookmarks.active,
+body.f27-mode #mistakes.active,
+body.f27-mode #review.active,
+body.f27-mode #studyRes.active,
+body.f27-mode #lesson.active,
+body.f27-mode #practice.active,
+body.f27-mode #cbt.active,
+body.f27-mode #webtest.active,
+body.f27-mode #wtRun.active,
+body.f27-mode #wtResult.active,
+body.f27-mode #resources.active,
+body.f27-mode #classes.active { display: flex !important; }
+
+/* While an ORIGINAL student screen is open the hub's own navigation chrome
+   comes back, so a signed-in student can actually use their account. The class
+   is set by the navigation wrapper and only applies to those screens. */
+body.f27-mode.goc-original-area .tabbar,
+body.f27-mode.goc-original-area #pvBar { display: flex !important; }
+@media (min-width: 900px) {
+  body.f27-mode.goc-original-area .phone:not(.is-login) .tabbar { display: flex !important; }
+  body.f27-mode.goc-original-area .phone:not(.is-login) .screens { left: 256px !important; }
+}
+
+/* On a wide screen the hub draws a sidebar for everything except its public
+   screens; the edition's screens are public, so they get the full width. */
+body.f27-mode .phone { }
+@media (min-width: 900px) {
+  body.f27-mode .tabbar,
+  body.f27-mode .side { display: none !important; }
+  body.f27-mode .screens { left: 0 !important; }
+}
+
+/* The original public homepage remains intact and visible in either mode.
+   Only unrelated in-app student screens are disabled while the testing edition
+   is active; the homepage, admin sign-in and admin console remain reachable. */
+
+/* ---- the edition's own screens ------------------------------------------ */
+.f27 { background: var(--bg, #F6F7F9); color: #141821; }
+.f27 .f27-nav {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; background: #fff; border-bottom: 1px solid #E4E7EC;
+}
+.f27 .f27-nav .lp-actions { display: flex; align-items: center; gap: 12px; }
+.f27 .f27-who { font-size: 11.5px; font-weight: 700; color: #667085; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.f27-hero {
+  padding: 40px 20px 32px; text-align: center;
+  background: linear-gradient(150deg, #141821 0%, #7F1D1D 55%, #DC2626 100%);
+  color: #fff;
+}
+.f27-kick { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #FECACA; }
+.f27-hero h1 { font-size: 28px; line-height: 1.15; font-weight: 900; letter-spacing: -.02em; max-width: 22ch; margin: 12px auto 0; }
+.f27-lead { font-size: 14.5px; line-height: 1.55; color: #FFE1E1; max-width: 52ch; margin: 14px auto 0; }
+.f27-cta { display: flex; flex-direction: column; gap: 10px; max-width: 360px; margin: 22px auto 0; }
+.f27-cta .btn { width: 100%; }
+.f27-fine { font-size: 12px; line-height: 1.5; color: #667085; margin-top: 12px; text-align: center; }
+.f27-hero .f27-fine { color: #FECACA; }
+.f27-foot { font-size: 11.5px; color: #98A2B3; text-align: center; padding: 24px 16px 40px; }
+
+.f27-cards { display: grid; gap: 12px; padding: 22px 16px 4px; max-width: 980px; margin: 0 auto; }
+@media (min-width: 760px) { .f27-cards { grid-template-columns: repeat(3, 1fr); } }
+.f27-card { background: #fff; border: 1px solid #E4E7EC; border-radius: 16px; padding: 18px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+.f27-ico { font-size: 22px; margin-bottom: 8px; }
+.f27-card h3 { font-size: 15.5px; font-weight: 800; margin-bottom: 6px; }
+.f27-card p { font-size: 13px; line-height: 1.55; color: #475467; }
+
+.f27-sec { padding: 22px 16px 40px; max-width: 980px; margin: 0 auto; width: 100%; }
+.f27-sec h2, .f27-h2 { font-size: 18px; font-weight: 900; letter-spacing: -.01em; margin-bottom: 12px; }
+.f27-h1 { font-size: 22px; font-weight: 900; letter-spacing: -.02em; margin-bottom: 6px; }
+.f27-open { display: grid; gap: 12px; }
+.f27-open-card { background: #fff; border: 1px solid #E4E7EC; border-radius: 14px; padding: 16px; }
+.f27-open-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.f27-open-card h3 { font-size: 15px; font-weight: 800; }
+.f27-open-card p { font-size: 12.5px; color: #667085; margin-top: 4px; }
+.f27-until { font-size: 11px; font-weight: 700; color: #98A2B3; }
+
+/* registration */
+.f27-form-wrap { padding: 26px 16px 48px; display: flex; justify-content: center; }
+.f27-form { background: #fff; border: 1px solid #E4E7EC; border-radius: 18px; padding: 22px; width: 100%; max-width: 440px; box-shadow: 0 8px 30px rgba(16,24,40,.06); }
+.f27-form h1 { font-size: 21px; font-weight: 900; letter-spacing: -.02em; }
+.f27-form .f27-lead { color: #667085; margin: 8px 0 4px; text-align: left; font-size: 13.5px; }
+.f27-form .field { margin-top: 14px; }
+/* The registration and login password fields carry the edition's existing
+   Show/Hide toggle. Scoped to these two forms only: it keeps the toggle from
+   covering the last characters a student types, and changes nothing anywhere
+   else on the site. */
+.f27-form .pw-wrap input { padding-right: 62px; }
+.f27-form .pw-toggle { color: #667085; }
+.f27-err { color: #B91C1C; font-size: 12.5px; font-weight: 600; margin-top: 10px; min-height: 1em; }
+.f27-dev-note { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; margin-top: 10px; }
+.f27-otp-lead { font-size: 13.5px; line-height: 1.55; color: #475467; margin-top: 10px; }
+.f27-otp-input { letter-spacing: .5em; font-size: 22px; font-weight: 800; text-align: center; }
+
+/* portal */
+.f27-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.f27-tab {
+  border: 1px solid #E4E7EC; background: #fff; color: #475467;
+  font-size: 12.5px; font-weight: 700; padding: 9px 14px; border-radius: 999px; cursor: pointer;
+}
+.f27-tab.on { background: #141821; border-color: #141821; color: #fff; }
+.f27-list { display: grid; gap: 12px; }
+.f27-item { background: #fff; border: 1px solid #E4E7EC; border-radius: 16px; padding: 16px; }
+.f27-item h3 { font-size: 16px; font-weight: 800; margin: 8px 0 4px; }
+.f27-instr { font-size: 12.5px; color: #475467; line-height: 1.5; }
+.f27-item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.f27-tag { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #B91C1C; background: #FEF2F2; border-radius: 999px; padding: 4px 9px; }
+.f27-state { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 999px; }
+.f27-state.open { background: #ECFDF3; color: #027A48; }
+.f27-state.soon { background: #FFFAEB; color: #B54708; }
+.f27-state.shut { background: #F2F4F7; color: #667085; }
+.f27-facts { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: #667085; margin: 10px 0 14px; }
+.f27-facts b { color: #141821; }
+.f27-item .btn, .f27-open-card .btn { width: 100%; }
+.f27-empty { background: #fff; border: 1px dashed #D0D5DD; border-radius: 16px; padding: 22px; text-align: center; color: #475467; font-size: 13.5px; }
+.f27-mine { margin-top: 26px; }
+.f27-res-row { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid #E4E7EC; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.f27-res-row > div:first-child { flex: 1; min-width: 0; }
+.f27-res-row b { display: block; font-size: 13.5px; }
+.f27-res-row span { font-size: 11.5px; color: #667085; }
+.f27-res-score { font-size: 15px; font-weight: 900; color: var(--red, #DC2626); }
+.f27-res-row .btn { width: auto; }
+
+/* result */
+.f27-result { background: #fff; border: 1px solid #E4E7EC; border-radius: 18px; padding: 22px; max-width: 560px; margin: 0 auto; text-align: center; }
+.f27-result h1 { font-size: 20px; font-weight: 900; margin: 10px 0 14px; }
+.f27-score { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.f27-score b { font-size: 46px; font-weight: 900; letter-spacing: -.03em; color: var(--red, #DC2626); line-height: 1; }
+.f27-score span { font-size: 14px; color: #667085; font-weight: 700; }
+.f27-bars { height: 10px; border-radius: 999px; background: #F2F4F7; overflow: hidden; margin: 16px 0; }
+.f27-bars i { display: block; height: 100%; background: linear-gradient(90deg, #DC2626, #F59E0B); }
+.f27-result .f27-facts { justify-content: center; }
+.f27-result .f27-fine { text-align: center; }
+
+/* leaderboard */
+.f27-table-wrap { overflow-x: auto; background: #fff; border: 1px solid #E4E7EC; border-radius: 14px; }
+.f27-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.f27-table th, .f27-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #F2F4F7; white-space: nowrap; }
+.f27-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #667085; background: #F9FAFB; }
+.f27-table tr.me td { background: #FEF2F2; font-weight: 700; }
+.f27-table tr:last-child td { border-bottom: none; }
+.f27-mine-card { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 14px; padding: 16px; margin-top: 14px; text-align: center; }
+.f27-mine-card b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #B91C1C; }
+.f27-mine-card span { font-size: 28px; font-weight: 900; color: #141821; }
+.f27-mine-card p { font-size: 12px; color: #7F1D1D; margin-top: 6px; }
+
+/* the examiner — light, mobile-first CBT */
+/* Three regions: a header and a navigation bar that never move, and a body
+   that scrolls between them. Sizing from the screen box (the phone frame is
+   already 100dvh) instead of 100vh keeps the bar inside the VISUAL viewport
+   when mobile browser chrome shows or hides. */
+.f27-exam { background: #F6F7F9; color: #141821; height: 100%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.f27-cbt-header { flex: 0 0 auto; position: relative; z-index: 20; background: #fff; border-bottom: 1px solid #E4E7EC; padding: 12px 14px 10px; }
+.f27-cbt-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.f27-cbt-back { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 12px; border: 1px solid #E4E7EC; background: #fff; color: #141821; font-size: 18px; font-weight: 800; cursor: pointer; }
+.f27-cbt-title-wrap { flex: 1; min-width: 0; }
+.f27-cbt-title-wrap h1 { font-size: 15px; line-height: 1.25; font-weight: 900; margin: 0; overflow-wrap: anywhere; }
+.f27-cbt-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; font-size: 11.5px; color: #667085; }
+.f27-cbt-kind { display: inline-block; background: #FEF2F2; color: #B91C1C; border-radius: 999px; padding: 2px 8px; font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.f27-cbt-timer { flex: 0 0 auto; margin-left: auto; background: #141821; color: #fff; border-radius: 12px; padding: 8px 10px; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.f27-cbt-timer.warn { background: #B91C1C; }
+.f27-cbt-progress { margin-top: 8px; font-size: 12px; font-weight: 800; color: #475467; }
+.f27-cbt-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; width: 100%; max-width: 860px; margin: 0 auto; padding: 14px; }
+/* ---- Competition subject navigation (Free 2027 UTME competitions ONLY) ----
+   Every selector is scoped to body.f27-mode #free-exam, so the original hub
+   cannot render or be affected by this bar. The element lives inside the
+   scrolling .f27-cbt-body, so it adds no flex region: the header/timer and the
+   bottom question-navigator bar keep exactly their current positions. It is
+   sticky so subjects stay reachable, and scrolls horizontally on narrow
+   screens instead of wrapping to a taller block. */
+body.f27-mode #free-exam .f27-cbt-subjects { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; overflow-x: auto; overflow-y: hidden; margin: 0 0 12px; padding: 2px 0 8px; background: #F6F7F9; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+body.f27-mode #free-exam .f27-cbt-subjects[hidden] { display: none; }
+body.f27-mode #free-exam .f27-cbt-subject { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 8px 14px; border: 1.5px solid #D0D5DD; border-radius: 999px; background: #fff; color: #475467; font: inherit; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+body.f27-mode #free-exam .f27-cbt-subject.on { border-color: #DC2626; background: #FEF2F2; color: #B91C1C; }
+body.f27-mode #free-exam .f27-cbt-subject-count { font-weight: 900; }
+
+.f27-cbt-card { background: #fff; border: 1px solid #E4E7EC; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(16,24,40,.05); min-width: 0; }
+.f27-cbt-passage { background: #F9FAFB; border: 1px solid #E4E7EC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.f27-cbt-image { margin-bottom: 14px; }
+.f27-cbt-image img { max-width: 100%; height: auto; border-radius: 12px; display: block; }
+.f27-cbt-question { font-size: 16px; line-height: 1.65; font-weight: 700; color: #141821; white-space: pre-wrap; overflow-wrap: anywhere; }
+.f27-cbt-options { display: grid; gap: 10px; margin-top: 18px; }
+.f27-cbt-option { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-width: 0; text-align: left; background: #fff; border: 1.5px solid #D0D5DD; border-radius: 14px; padding: 14px; cursor: pointer; font: inherit; color: #141821; min-height: 52px; }
+.f27-cbt-option:hover { border-color: #98A2B3; }
+.f27-cbt-option.sel { border-color: #DC2626; background: #FEF2F2; box-shadow: 0 0 0 1px #DC2626 inset; }
+.f27-cbt-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 32px; border-radius: 10px; background: #F2F4F7; color: #344054; font-size: 13px; font-weight: 900; letter-spacing: .04em; }
+.f27-cbt-option.sel .f27-cbt-letter { background: #DC2626; color: #fff; }
+.f27-cbt-text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* ---- Competition question display: fit the content area (Free 2027 UTME) ----
+   Competition only; a Weekly Assessment keeps the exact layout it already had.
+   The exam keeps its three existing regions, so the top-right timer and the
+   bottom question-navigator bar do not move and are not pushed down. Inside the
+   scrolling body the card now fills the height actually available, and the
+   options sit in two columns from 640px up, so a normal question and every one
+   of its options are visible together without scrolling.
+
+   Type is reduced only to a readable floor (14px question, 13px option) and
+   never below it. The card has no overflow rule, so it can never show an
+   internal scrollbar. The body keeps its own overflow-y as a safety net: an
+   unusually long question or passage stays fully reachable rather than being
+   clipped, hidden or truncated. */
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-subjects { flex: 0 0 auto; margin-bottom: 0; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-passage { flex: 0 0 auto; margin-bottom: 8px; padding: 10px; font-size: 13px; line-height: 1.5; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-image { flex: 0 0 auto; margin-bottom: 8px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-image img { max-height: 30vh; width: auto; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-question { flex: 0 0 auto; font-size: clamp(14px, 1.1vh + 9px, 17px); line-height: 1.45; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-options { flex: 1 1 auto; min-height: 0; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; align-content: start; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-option { padding: 8px 10px; gap: 8px; min-height: 40px; border-radius: 10px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-letter { min-width: 36px; height: 26px; font-size: 12px; border-radius: 8px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-text { font-size: clamp(13px, 0.9vh + 8px, 15px); line-height: 1.4; }
+@media (min-width: 640px) {
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.f27-cbt-bar { flex: 0 0 auto; position: relative; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff; border-top: 1px solid #E4E7EC; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.f27-cbt-btn { min-height: 46px; border-radius: 12px; border: 1px solid #D0D5DD; background: #fff; color: #141821; font-size: 13px; font-weight: 800; padding: 10px 12px; cursor: pointer; white-space: normal; line-height: 1.3; }
+.f27-cbt-btn:disabled { opacity: .5; cursor: not-allowed; }
+.f27-cbt-btn-outline { border-color: #DC2626; color: #B91C1C; background: #fff; }
+.f27-cbt-btn-red { background: #DC2626; border-color: #DC2626; color: #fff; }
+.f27-cbt-modal-back { position: fixed; inset: 0; background: rgba(16,24,40,.55); z-index: 60; }
+.f27-cbt-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 61; width: min(92vw, 520px); max-height: 86vh; overflow: auto; background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 20px 60px rgba(16,24,40,.25); }
+.f27-cbt-modal-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.f27-cbt-modal-top h2 { font-size: 16px; font-weight: 900; margin: 0; }
+.f27-cbt-close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid #E4E7EC; background: #fff; font-size: 20px; cursor: pointer; }
+.f27-cbt-legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; font-size: 12px; color: #475467; }
+.f27-cbt-dot { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 5px; vertical-align: -1px; border: 1px solid #D0D5DD; background: #fff; }
+.f27-cbt-dot.answered { background: #12B76A; border-color: #12B76A; }
+.f27-cbt-dot.unanswered { background: #fff; border-color: #D0D5DD; }
+.f27-cbt-dot.current { background: #DC2626; border-color: #DC2626; }
+.f27-cbt-navgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }
+.f27-cbt-navq { min-height: 44px; border-radius: 10px; border: 1.5px solid #D0D5DD; background: #fff; color: #344054; font-weight: 800; cursor: pointer; }
+.f27-cbt-navq.answered { background: #ECFDF3; border-color: #12B76A; color: #027A48; }
+.f27-cbt-navq.unanswered { background: #fff; border-color: #D0D5DD; color: #667085; }
+.f27-cbt-navq.current { background: #DC2626; border-color: #DC2626; color: #fff; }
+.f27-cbt-confirm-lead { font-size: 13px; line-height: 1.6; color: #475467; margin: 10px 0 14px; }
+.f27-cbt-confirm-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.f27-cbt-confirm-counts div { background: #F9FAFB; border: 1px solid #E4E7EC; border-radius: 12px; padding: 12px 8px; text-align: center; }
+.f27-cbt-confirm-counts b { display: block; font-size: 22px; font-weight: 900; color: #141821; }
+.f27-cbt-confirm-counts span { font-size: 11px; color: #667085; font-weight: 700; }
+.f27-cbt-confirm-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 640px) {
+  .f27-cbt-bar { grid-template-columns: repeat(3, auto); justify-content: center; }
+  .f27-cbt-confirm-actions { grid-template-columns: 1fr 1fr; }
+  .f27-cbt-question { font-size: 17px; }
+}
+.f27-empty-state { display: grid; gap: 8px; justify-items: center; padding: 30px 18px; }
+.f27-empty-icon { width: 44px; height: 44px; border-radius: 999px; background: #FEF2F2; color: #B91C1C; display: grid; place-items: center; font-size: 20px; font-weight: 900; }
+.f27-empty-state h3 { font-size: 15px; font-weight: 900; color: #141821; margin: 0; }
+.f27-empty-state p { font-size: 13px; line-height: 1.6; color: #667085; margin: 0; max-width: 46ch; }
+.f27-activity-category-grid { display: grid; gap: 10px; margin-top: 12px; }
+.f27-activity-category { text-align: left; cursor: pointer; border: 1.5px solid #E4E7EC; background: #fff; }
+.f27-activity-category b { display: block; font-size: 14px; color: #B91C1C; letter-spacing: .04em; }
+.f27-activity-category span { display: block; margin-top: 6px; font-size: 12.5px; color: #475467; line-height: 1.5; }
+.f27-availability { margin: 12px 0; padding: 12px; border: 1px solid #E4E7EC; border-radius: 12px; background: #F9FAFB; }
+.f27-activity-editor, .f27-activity-chooser, .f27-distribution-grid { min-width: 0; max-width: 100%; }
+@media (min-width: 640px) { .f27-activity-category-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 599px) {
+  .f27-cbt-body { padding: 10px; }
+  .f27-cbt-card { padding: 14px; }
+  .f27-cbt-bar { padding-left: 10px; padding-right: 10px; }
+  .f27-cbt-btn { font-size: 12.5px; padding: 10px 8px; }
+  .f27-activity-editor .ad-grid2.two { grid-template-columns: 1fr; }
+}
+
+/* the console's own 2027 panel */
+.f27-mode-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; padding: 5px 10px; border-radius: 999px; background: #ECFDF3; color: #027A48; }
+.f27-mode-pill.orig { background: #F2F4F7; color: #475467; }
+.f27-admin-note { font-size: 12px; line-height: 1.55; color: #475467; }
+.f27-admin-grid { display: grid; gap: 10px; }
+@media (min-width: 620px) { .f27-admin-grid.two { grid-template-columns: 1fr 1fr; } }
+/* Bank question selector. Inherits the console's existing .ad-field control
+   styling; only the spacing around the new picker is set here. */
+.f27-bank-picker { margin: 10px 0 4px; }
+.f27-admin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid #F2F4F7; }
+.f27-admin-row:last-child { border-bottom: none; }
+.f27-admin-row > div:first-child { flex: 1; min-width: 160px; }
+.f27-admin-row b { display: block; font-size: 13px; }
+.f27-admin-row span { font-size: 11.5px; color: #667085; }
+.f27-chip { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: #F2F4F7; color: #475467; }
+.f27-chip.ok { background: #ECFDF3; color: #027A48; }
+.f27-chip.warn { background: #FFFAEB; color: #B54708; }
+.f27-chip.no { background: #FEF2F2; color: #B91C1C; }
+
+/* ---- the candidate's programme card (lessons, progress, access) ---------- */
+/* ---- JAMB subject combination (Free 2027 UTME only) ----
+   Shared by registration and the one-time choice in the portal. Every selector
+   is mode-scoped, so the original hub cannot render or be affected by it. */
+body.f27-mode .f27-comb-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 8px; border: 1.5px solid #D0D5DD; border-radius: 12px; background: #fff; color: #141821; font-size: 14px; font-weight: 600; cursor: pointer; }
+body.f27-mode .f27-comb-item input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: #DC2626; cursor: pointer; }
+body.f27-mode .f27-comb-item.compulsory { border-color: #DC2626; background: #FEF2F2; color: #B91C1C; cursor: default; }
+body.f27-mode .f27-comb-item.compulsory input { cursor: not-allowed; }
+body.f27-mode .f27-comb-tag { margin-left: auto; padding: 3px 8px; border-radius: 999px; background: #DC2626; color: #fff; font-size: 10px; font-weight: 900; letter-spacing: .06em; }
+body.f27-mode .f27-comb-summary { margin-top: 10px; font-size: 12.5px; font-weight: 700; color: #475467; }
+body.f27-mode .f27-subjects-prompt { background: #fff; border: 1.5px solid #DC2626; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+body.f27-mode .f27-subjects-prompt[hidden] { display: none; }
+body.f27-mode .f27-subjects-prompt h2 { margin: 0 0 8px; font-size: 16px; font-weight: 900; color: #141821; }
+/* .f27-lead is pale pink for the dark hero panels; inside this white card it
+   needs the normal body colour to stay readable. */
+body.f27-mode .f27-subjects-prompt .f27-lead { margin: 0 0 10px; max-width: none; font-size: 13.5px; color: #475467; }
+
+.f27-programme { background: #fff; border: 1px solid #E4E7EC; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+.f27-prog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.f27-prog-head b { display: block; font-size: 15px; font-weight: 800; }
+.f27-prog-head span { font-size: 12px; color: #667085; }
+.f27-bar { height: 8px; border-radius: 999px; background: #F2F4F7; overflow: hidden; margin: 12px 0 8px; }
+.f27-bar i { display: block; height: 100%; background: linear-gradient(90deg, #DC2626, #F59E0B); border-radius: 999px; }
+.f27-programme .f27-fine { margin-bottom: 8px; }
+.f27-lesson { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid #F2F4F7; }
+.f27-lesson-main { flex: 1; min-width: 0; }
+.f27-lesson-main b { display: block; font-size: 13.5px; font-weight: 700; }
+.f27-lesson-main span { display: block; font-size: 11.5px; color: #667085; }
+.f27-lesson.done .f27-lesson-main b { color: #047857; }
+.f27-tick { font-size: 11.5px; font-weight: 800; color: #047857; white-space: nowrap; }
+.f27-small { font-size: 12px; padding: 6px 10px; }
+
+/* ---- 2027 question-bank entry: contained by the Admin Console sheet -------
+   Keep the console's visual language, but give exam entry room to breathe.
+   Everything is intrinsically sized: a long option, URL or CSV header cannot
+   widen the bottom sheet. The sheet itself remains the vertical scroller. */
+#f27AdmBody, .f27-bank-panel, .f27-question-editor, .f27-question-form,
+.f27-question-field, .f27-csv-guide, .f27-csv-result { min-width: 0; max-width: 100%; }
+.f27-bank-panel { overflow: hidden; }
+.f27-question-editor { margin-top: 16px; border-color: #FCA5A5; scroll-margin-top: 12px; }
+.f27-question-form { width: 100%; }
+.f27-question-field { margin-top: 18px; }
+.f27-question-field > label { margin-bottom: 8px; font-size: 13px; color: #344054; }
+.f27-question-field input, .f27-question-field select, .f27-question-field textarea {
+  display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 48px;
+  padding: 12px; font-size: 16px; line-height: 1.5; border-color: #D0D5DD;
+}
+.f27-question-field textarea { resize: vertical; min-height: 144px; }
+.f27-question-field textarea#f27NQ-weekly-explanation,
+.f27-question-field textarea#f27NQ-competition-explanation { min-height: 96px; }
+.f27-question-field input:focus, .f27-question-field select:focus, .f27-question-field textarea:focus {
+  outline: 2px solid #DC2626; outline-offset: 2px; border-color: #DC2626;
+}
+.f27-question-field [aria-invalid="true"] { border-color: #B91C1C; }
+.f27-question-options { border: 0; padding: 0; margin: 22px 0 0; min-width: 0; }
+.f27-question-options legend { font-size: 15px; font-weight: 800; color: #141821; }
+.f27-question-options .ad-note { margin-top: 5px; }
+.f27-optional { font-weight: 500; color: #667085; }
+.f27-question-active { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-size: 13px; line-height: 1.5; min-height: 44px; }
+.f27-question-active input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #DC2626; }
+.f27-question-preview { margin-top: 22px; padding: 18px; border: 1px solid #E4E7EC; border-radius: 10px; background: #F9FAFB; overflow-wrap: anywhere; }
+.f27-question-preview-label { color: #667085; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.f27-question-preview h4 { margin: 10px 0; font-size: 16px; color: #141821; }
+.f27-question-preview-text { font-size: 15px; line-height: 1.65; white-space: pre-wrap; }
+.f27-question-preview-options { list-style: none; padding: 0; margin: 16px 0; }
+.f27-question-preview-options li { display: flex; gap: 10px; margin: 10px 0; font-size: 14px; line-height: 1.6; }
+.f27-question-preview-options li b { flex: 0 0 20px; }
+.f27-question-preview-options li span { min-width: 0; white-space: pre-wrap; }
+.f27-question-preview-answer { color: #166534; font-size: 14px; line-height: 1.6; }
+.f27-question-preview-explanation { margin-top: 10px; color: #475467; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.f27-question-message[hidden] { display: none; }
+.f27-question-actions { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.f27-question-actions .ad-btn { min-height: 48px; white-space: normal; }
+.f27-csv-guide { margin: 20px 0; padding: 16px; border: 1px solid #D0D5DD; border-radius: 10px; background: #F9FAFB; }
+.f27-csv-guide h3 { font-size: 13px; line-height: 1.5; font-weight: 900; color: #141821; overflow-wrap: anywhere; }
+.f27-csv-guide p, .f27-csv-guide dd, .f27-csv-rules { font-size: 12px; line-height: 1.65; color: #475467; }
+.f27-csv-guide p { margin-top: 8px; }
+.f27-csv-guide .ad-cols { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; font-family: ui-monospace, monospace; }
+.f27-csv-columns { margin: 14px 0; }
+.f27-csv-columns > div { padding: 8px 0; border-bottom: 1px solid #E4E7EC; }
+.f27-csv-columns dt { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 800; color: #344054; }
+.f27-csv-columns dd { margin-top: 3px; }
+.f27-csv-guide h4 { margin-top: 14px; font-size: 12px; color: #344054; }
+.f27-csv-rules { padding-left: 18px; margin-top: 14px; }
+.f27-csv-rules li { margin-top: 7px; }
+.f27-csv-download { margin-top: 16px; min-height: 48px; max-width: 100%; white-space: normal; line-height: 1.5; }
+.f27-csv-result .ad-card { overflow-wrap: anywhere; }
+.f27-csv-result .ad-btn { min-height: 48px; white-space: normal; }
+@media (min-width: 600px) {
+  .f27-csv-columns > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+  .f27-csv-columns dd { margin-top: 0; }
+}
+@media (max-width: 599px) {
+  .adm-sheet-body { padding-left: 10px; padding-right: 10px; overscroll-behavior-y: contain; }
+  .f27-bank-panel, .f27-question-editor { padding: 12px; }
+  .f27-csv-guide, .f27-question-preview { padding: 12px; }
+  .f27-question-actions { flex-direction: column; }
+  .f27-question-actions .ad-btn, .f27-csv-download { width: 100%; flex: 0 0 auto; }
+  .f27-bank-panel > .ad-actions .ad-btn { flex: 1 1 auto; white-space: normal; min-height: 44px; }
+}
+
+/* ============================================================================
+   Recovered PR #9 Termux/Android-Chrome navigation corrections
+   ----------------------------------------------------------------------------
+   1. Back/Home visibility. The hub's base stylesheet hides every
+      `.lp-nav .lp-actions .lp-link` below 900px (the drawer carries those
+      links on mobile there). The edition's screens have no drawer, so their
+      own nav controls (← Back, Home, Register, CBT Portal) must stay visible
+      on phones. These rules are edition-scoped and do not touch Original Mode.
+   2. Mode-specific navigation actions. In Free Tutorial Mode the landing
+      inline actions and the mobile drawer show one CBT Portal entry instead of
+      the original account actions; in Original Mode everything below is inert
+      and the original markup shows exactly as it always did.
+   ========================================================================== */
+
+/* 1a. The edition's nav links stay visible at EVERY width. */
+body.f27-mode .f27 .f27-nav .lp-actions .lp-link,
+body.f27-mode .f27 .f27-nav .lp-actions .lp-link:hover,
+body.f27-mode .f27 .f27-nav .lp-actions .lp-link:focus { display: inline-block; }
+
+/* 1b. Keep the edition's nav bar from overflowing on narrow phones. */
+.f27 .f27-nav { flex-wrap: wrap; row-gap: 6px; }
+.f27 .f27-nav .lp-brand .bt { white-space: nowrap; }
+@media (max-width: 480px) {
+  .f27 .f27-nav { padding: 10px 10px; gap: 8px; }
+  .f27 .f27-nav .lp-actions { gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+  .f27 .f27-nav .lp-actions .lp-link { padding: 8px 7px; font-size: 12.5px; }
+  .f27 .f27-nav .f27-who { max-width: 38vw; }
+}
+
+/* 2. Mode-specific navigation actions. Default (Original Mode): the CBT
+   Portal entries are hidden, the original account buttons show untouched. */
+.dw-cbt, .dw-cbt-hint, #landing .dw-cbt-link { display: none; }
+
+/* Free Tutorial Mode ADDS the CBT Portal entry to the drawer and inline nav.
+   The hub's own account shortcuts stand down in this mode only — see the two
+   mode-scoped rules below (Log in, and every homepage sign-up entry point).
+   Nothing is deleted: Original Mode shows all of them exactly as before. */
+body.f27-mode .dw-btns .dw-cbt { display: block; }
+/* In Free Tutorial Mode the CBT Portal entry leads to the edition's own landing
+   page, which offers Register free and Student log in. The hub's separate Log in
+   shortcut (desktop nav + mobile drawer) would take a free-tutorial student to an
+   account they never created, so it stands down in this mode only. It is NOT
+   deleted: Original Mode shows it exactly as before, and the hub's login screen
+   and account system keep working independently. */
+body.f27-mode .dw-hub-login { display: none !important; }
+/* Account CREATION on the homepage belongs to the original G.O.C Academy Hub
+   experience, not the Free UTME Tutorial. In Free Tutorial Mode every hub
+   sign-up entry point on the homepage stands down: the header/desktop-nav
+   "Get started", the hero "Get started", the pricing-card "Create account", the
+   "Create your free account" band, the footer's "Sign up free", and the mobile
+   drawer's "Create free account". Free UTME students register through the
+   edition landing page's own "Register free" instead.
+
+   This is VISIBILITY ONLY, scoped to the mode class and to the homepage/drawer.
+   The buttons, their text, styling, position and go('signup')/dwGo('signup')
+   handlers all stay in index.html untouched, so removing the mode class
+   (switching back to Original Mode) restores every one of them exactly as it
+   was. The hub's registration screen, its authentication, and any sign-up
+   entry point outside the homepage are not affected. */
+body.f27-mode #landing button[onclick="go('signup')"],
+body.f27-mode #lpDrawer button[onclick="dwGo('signup')"] { display: none !important; }
+body.f27-mode .dw-btns .dw-cbt-hint {
+  display: block; font-size: 12.5px; color: var(--slate, #667085);
+  margin: 8px 0 0; text-align: center;
+}
+/* Keep a little breathing room between the added CBT entry and the original
+   account buttons that follow it. */
+body.f27-mode .dw-btns .dw-cbt-hint + .dw-original { margin-top: 12px; }
+/* Desktop only: the inline CBT Portal entry. Below 900px the mobile CBT
+   Portal entry lives in the drawer, so the two are never duplicated. */
+@media (min-width: 900px) {
+  body.f27-mode #landing .lp-actions .dw-cbt-link { display: inline-block; }
+}
+
+/* ============================================================================
+   Homepage CTA corrections
+   ----------------------------------------------------------------------------
+   The obsolete bootcamp sign-up button is deleted from index.html — it is not
+   hidden here. The CBT Portal entry is ADDED beside the original account
+   actions. "I already have an account" is shown in both modes and routes by
+   mode (heroAccount). The hero's original "Get started" belongs to the hub
+   experience, so it is displayed in Original Mode only — see the rule below.
+   ========================================================================== */
+.hero-cbt { display: none; }
+body.f27-mode #landing .hero-btns .hero-cbt { display: block; }
+/* The hero's original "Get started" is the G.O.C Academy Hub sign-up, not part
+   of the Free UTME Tutorial experience: in Free Tutorial Mode students register
+   through the edition landing page's "Register free". It is NOT deleted — the
+   button and its go('signup') handler stay in index.html, and removing the mode
+   class (switching back to Original Mode) restores it exactly as it was. No
+   other registration action is affected: the nav/drawer hub sign-up and the
+   edition's "Register free" are untouched. */
+body.f27-mode #landing .hero-btns .hero-original-cta { display: none !important; }
+
+/* A guest browsing the CBT Portal is told plainly that no account is needed to
+   look around, and that verifying an email is only for sitting a paper. */
+.f27-guest-note {
+  background: #fff; border: 1px solid var(--line, #e4e7ec); border-left: 4px solid var(--red, #dc2626);
+  border-radius: 12px; padding: 12px 14px; margin: 0 0 14px;
+  font-size: 13.5px; line-height: 1.55; color: var(--slate, #475467);
+}
+.f27-guest-note b { color: var(--ink, #101828); }
+
+/* An ongoing examination must not offer a way out. Back and Home are hidden on
+   the ACTIVE exam screen only — the buttons and their freeExamLeave() /
+   freeExamHome() handlers stay in index.html, and every other page keeps its own
+   Back / Back to Home navigation exactly as before. */
+body.f27-mode #free-exam .f27-cbt-header .f27-cbt-back { display: none !important; }
+/* Next and Submit swap places on the final question. paintExam() sets [hidden];
+   this makes that authoritative over the button's own display. */
+body.f27-mode #free-exam .f27-cbt-bar .f27-cbt-btn[hidden] { display: none !important; }
+/* With the two exits gone the timer owns the far right of the header row on
+   every width (margin-left:auto above), clear of the title and question card. */
+@media (max-width: 480px) {
+  .f27-cbt-header .f27-cbt-title-row { flex-wrap: wrap; row-gap: 6px; }
+  .f27-cbt-header .f27-cbt-title-wrap { flex: 1 1 100%; order: 3; }
+  .f27-cbt-header .f27-cbt-timer { order: 2; }
+}

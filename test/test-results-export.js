@@ -130,7 +130,11 @@ ok('both drivers and the public API carry getResultsExport and getResultsPdf', (
 ok('the server driver fetches the PDF with the console session and returns the file', /format=pdf/.test(apiSrc) && /Accept': 'application\/pdf'/.test(apiSrc) && /return r\.blob\(\)/.test(apiSrc));
 ok('the server driver sends term, year, dates, cohort, subject and session', /\['term', 'year', 'from', 'to', 'cohort', 'subject', 'section'\]/.test(apiSrc) && /\/results\/export/.test(apiSrc));
 ok('the offline demo says it needs the server', /Results export needs a server connection/.test(apiSrc));
-ok('the cache was bumped for the app.js, api.js and goc-core.js change', /goc-v(14[5-9]|1[5-9]\d)/.test(fs.readFileSync(path.join(APP, 'sw.js'), 'utf8')));
+/* Same intent ("bumped past v144"), expressed as the lower bound the other
+   suites already use. The previous alternation stopped at 199, so it would fail
+   every release from v200 onward. This accepts 145 and above — a superset of the
+   old 145-199 range, not a weaker check. */
+ok('the cache was bumped for the app.js, api.js and goc-core.js change', /CACHE = 'goc-v(\d+)'/.test(fs.readFileSync(path.join(APP, 'sw.js'), 'utf8')) && Number(RegExp.$1) >= 145);
 
 head('the screen');
 var panel = app.slice(app.indexOf('results: function(){'), app.indexOf('theorymark: function(){'));

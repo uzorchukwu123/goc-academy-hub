@@ -158,7 +158,7 @@ These block a real launch and only you can do them:
 2. **Author real Web Test and JAMB questions** — seed has only thin samples (~6 objective, 2 theory, 1 JAMB per subject). Import via *Console → Import* and check *Console → Question bank* for empty papers.
 3. **Phone walkthrough** — sign up, read a note, sit a practice run, sit a Web Test, check results.
 4. **Switch on study reminders** (Phase 2) — set `GOC_PUBLIC_URL` and SMTP variables (see `DEPLOYMENT.md`), test with `GOC_REMINDER_DRY_RUN=1`.
-5. **Set `GOC_TUTOR_DOOR`** (6+ characters) before giving tutors access.
+5. **Set `GOC_FOUNDER_EMAIL` and `GOC_FOUNDER_GATE_WORD`** if the Founder contact-form entrance should be enabled. The old tutor secret-word door has been removed.
 6. **Confirm `GOC-A-002` access level** — full Founder-equivalent (current behaviour) or capped to Academic Director role? (See B#1 remaining item above.)
 7. **Bump `CACHE` in `sw.js`** after any further file change.
 8. **Re-import or correct every objective question file imported before 9 Oct 2026** — the import-answer fix (3E.C) repairs the logic but does not touch already-stored questions. Use *Console → Import* with "Replace matching questions" ticked.

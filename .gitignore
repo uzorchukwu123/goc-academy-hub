@@ -20,6 +20,12 @@ server/question-images/
 *.log
 reminders-outbox.jsonl
 
+# Local development data (see LOCAL-DEVELOPMENT.md) — never commit a test roster,
+# a test data file or its archives.
+local-test-data/
+*.local-data/
+free2027-archives/
+
 # Editor and OS clutter
 .DS_Store
 Thumbs.db

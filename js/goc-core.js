@@ -5720,11 +5720,10 @@
     if (!k || !Object.prototype.hasOwnProperty.call(ROLE_CAPS, cap)) return false;
     return k === ROLE_FOUNDER || ROLE_CAPS[cap].indexOf(k) > -1;
   }
-  /* Roles slice (b), step 2: may this management account use a console route?
-     The two seeded accounts (GOC-A-001 Founder, GOC-A-002 Academic Director) keep full access,
-     as the owner decided; only managers issued later (GOC-A-003 up) are held to the capability map.
-     A route with no capability, a mistyped one, or a missing role is refused for them, never allowed. */
-  var FULL_ACCESS_IDS = ['GOC-A-001', 'GOC-A-002'];
+  /* Founder is the only account with unconditional console access. The seeded
+     Academic Director uses their academic/reporting capability set; this keeps
+     Founder-only account, passcode, and system controls out of that dashboard. */
+  var FULL_ACCESS_IDS = ['GOC-A-001'];
   function adminMayUse(id, role, cap) {
     if (FULL_ACCESS_IDS.indexOf(id) > -1) return true;
     if (typeof cap !== 'string' || !cap) return false;
@@ -5736,7 +5735,7 @@
      whoever may mark theory, a class notice to whoever manages notices, a student's question flag
      to whoever manages the question bank, an assignment to whoever oversees assignments, and a
      contact message to whoever handles contact. A kind with no entry here is Founder-only (fail
-     closed). The two seeded accounts keep full access, as everywhere else. */
+     closed). The Founder has unconditional access; the seeded Academic Director follows their role capabilities. */
   var ALERT_CAPS = {
     'tutor-mark': 'theory.mark',
     'class-notice': 'notices.manage',
@@ -5764,7 +5763,7 @@
      Each figure now needs a capability the role already holds, read from the same map, so no new
      owner decision is hidden in here: the student count needs roster.view, "active today" needs
      activeness.view, the average mock score needs results.view, and lessons published needs
-     resources.publish. The Founder and the two seeded accounts see all four; a missing or mistyped
+     resources.publish. The Founder sees all four; other accounts are scoped by capability; a missing or mistyped
      role sees none (fail closed). A figure a role may not see is left OUT of the reply, not zeroed,
      so the page shows a dash rather than a false number. Counts only: no name, ID or score row. */
   var OVERVIEW_FIGURE_CAPS = {
@@ -5791,7 +5790,7 @@
      capabilities that open it; the account sees the section when it holds ANY of them. The list is
      read from the same capability map the server guard uses, so the menu can never offer something
      the server would refuse for every route in it. This only tidies the menu: the server guard is
-     still the real gate. The two seeded accounts see everything; a section nobody listed, a
+     still the real gate. The Founder sees everything; a section nobody listed, a
      mistyped one, or a missing role is hidden (fail closed). */
   var CONSOLE_SECTIONS = {
     overview: ['overview.own'],
@@ -5916,9 +5915,9 @@
     var out = (Array.isArray(list) ? list : []).concat([entry]);
     return out.length > MANAGER_LOG_KEEP ? out.slice(out.length - MANAGER_LOG_KEEP) : out;
   }
-  /* What one reader may see, newest first. The Founder and the two seeded accounts read every entry;
+  /* What one reader may see, newest first. The Founder reads every entry;
      any other manager reads only the entries they made themselves, and cannot widen that with a filter.
-     opts: by (Founder/seeded only), action, from, to (ISO times), limit (default 200, at most 1000). */
+     opts: by (Founder only), action, from, to (ISO times), limit (default 200, at most 1000). */
   function managerLogFor(list, id, role, opts) {
     var o = opts || {}, k = adminRoleKey(role);
     var all = FULL_ACCESS_IDS.indexOf(id) > -1 || k === ROLE_FOUNDER;

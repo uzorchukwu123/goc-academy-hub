@@ -1,6 +1,6 @@
-/* test-tutors-shell.js — Phase 3C slice 4: the login-screen hook in the public app and the
-   tutor screens themselves (sign-in sheet, forced password change, dashboard with subject
-   switcher), run against a stand-in page and a stand-in server.
+/* test-tutors-shell.js — the public login screen after the hidden tutor door was removed,
+   plus the retained tutor screens themselves (sign-in sheet, forced password change,
+   dashboard with subject switcher), run against a stand-in page and a stand-in server.
    node test/test-tutors-shell.js */
 'use strict';
 var fs = require('fs');
@@ -27,59 +27,39 @@ function grab(name) {
 function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); }
 
 (async function () {
-  /* ====================================================== the hook in login() */
+  /* ====================================== the ordinary login screen only */
   console.log('\nthe log-in screen');
-  var knocks = [], loggedIn = [], scripts = [], toasts = [];
+  var loggedIn = [], toasts = [];
   var fields = { loginId: { value: '' }, loginPw: { value: '' }, loginBtn: { disabled: false, textContent: 'Log in', dataset: {} } };
-  var knockAnswer = null;
-  var head = { appended: [], appendChild: function (s) { s.parentNode = head; head.appended.push(s); scripts.push(s.src); } };
-  head.removeChild = function () {};
   var sandbox = {
     GOC: { api: {
       ready: Promise.resolve(),
-      knockDoor: function (w) { knocks.push(w); return Promise.resolve(knockAnswer); },
       login: function (id, pw) { loggedIn.push([id, pw]); return Promise.reject(new Error('That ID and password do not match.')); }
     } },
-    document: { getElementById: function (id) { return fields[id] || null; }, createElement: function () { return { }; }, head: head },
+    document: { getElementById: function (id) { return fields[id] || null; }, createElement: function () { return {}; }, head: { appendChild: function () {} } },
     toast: function (m) { toasts.push(m); },
     busy: function () {},
     encodeURIComponent: encodeURIComponent, Promise: Promise, RegExp: RegExp
   };
   var ctx = vm.createContext(sandbox);
-  vm.runInContext(['login', 'doorLoad', 'loginNow'].map(grab).join('\n'), ctx);
-  ok('login, doorLoad and loginNow all exist', ['login', 'doorLoad', 'loginNow'].every(function (n) { return !!grab(n); }));
+  vm.runInContext(['login', 'loginNow'].map(grab).join('\n'), ctx);
+  ok('login and loginNow exist, and the removed door loader does not', !!grab('login') && !!grab('loginNow') && !grab('doorLoad'));
+  ok('the public login code no longer contains the tutor door hook', !/knockDoor|doorLoad|api\/door/i.test(grab('login') + grab('loginNow')));
   function setField(id, pw) { fields.loginId.value = id; fields.loginPw.value = pw || ''; }
 
-  setField('GOC-S-001', 'pw'); knocks = []; loggedIn = [];
+  setField('GOC-S-001', 'pw'); loggedIn = [];
   await vm.runInContext('login()', ctx); await tick();
-  ok('a real Scholar ID goes straight to sign-in, no knock', knocks.length === 0 && loggedIn.length === 1);
-  setField('goc-a-001', 'pw'); knocks = []; loggedIn = [];
+  ok('a real Scholar ID goes straight to ordinary sign-in', loggedIn.length === 1 && loggedIn[0][0] === 'GOC-S-001');
+  setField('goc-a-001', 'pw'); loggedIn = [];
   await vm.runInContext('login()', ctx); await tick();
-  ok('a staff ID, in any case, is never knocked', knocks.length === 0 && loggedIn.length === 1);
-  setField('', ''); knocks = []; loggedIn = []; toasts = [];
+  ok('a staff ID, in any case, goes to ordinary sign-in', loggedIn.length === 1 && loggedIn[0][0] === 'goc-a-001');
+  setField('', ''); loggedIn = []; toasts = [];
   vm.runInContext('login()', ctx);
-  ok('an empty box asks for the ID and sends nothing', knocks.length === 0 && loggedIn.length === 0 && toasts.length === 1);
-  setField('abc', 'pw'); knocks = []; loggedIn = [];
+  ok('an empty box asks for the ID and sends nothing', loggedIn.length === 0 && toasts.length === 1);
+  setField('some other word', 'x'); loggedIn = [];
   await vm.runInContext('login()', ctx); await tick();
-  ok('a very short entry is not worth a knock', knocks.length === 0 && loggedIn.length === 1);
-
-  setField('some other word', 'x'); knocks = []; loggedIn = []; scripts = []; knockAnswer = null;
-  await vm.runInContext('login()', ctx); await tick();
-  ok('another word is knocked once', knocks.length === 1 && knocks[0] === 'some other word');
-  ok('when the server says no, it is an ordinary sign-in attempt', loggedIn.length === 1 && loggedIn[0][0] === 'some other word' && scripts.length === 0);
-
-  setField('open sesame two', 'whatever'); knocks = []; loggedIn = []; scripts = []; knockAnswer = 'a'.repeat(48);
-  await vm.runInContext('login()', ctx); await tick();
-  ok('when the server takes the word, nothing is signed in', loggedIn.length === 0);
-  ok('the extra screens are fetched with the token', scripts.length === 1 && scripts[0] === 'api/door/' + 'a'.repeat(48) + '.js', scripts[0]);
-  ok('the word is wiped from the box', fields.loginId.value === '' && fields.loginPw.value === '');
-
-  sandbox.GOC.api.knockDoor = function () { return Promise.reject(new Error('offline')); };
-  setField('another thing', 'x'); loggedIn = []; scripts = [];
-  await vm.runInContext('login()', ctx); await tick();
-  ok('if the knock itself fails, sign-in carries on as normal', loggedIn.length === 1 && scripts.length === 0);
-
-  ok('the public app never says tutor in the log-in code', !/tutor/i.test(grab('login') + grab('doorLoad') + grab('loginNow')));
+  ok('a non-ID word is only an ordinary failed sign-in attempt', loggedIn.length === 1 && loggedIn[0][0] === 'some other word');
+  ok('the public app never says tutor in the log-in code', !/tutor/i.test(grab('login') + grab('loginNow')));
 
   /* ===================================================== the tutor screens */
   console.log('\nthe tutor screens');
@@ -267,7 +247,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('sign out tells the server', calls.slice(before).some(function (c) { return c.url === 'api/auth/logout' && c.auth === 'Bearer tok-2'; }));
   ok('sign out removes everything from the page', doc.body.children.length === 0);
   win.__zxOpen();
-  ok('a new knock starts again at the sign-in sheet', !!q('#zxId') && !q('#zxCur') && !/GOC-T-002/.test(text()));
+  ok('reopening the retained tutor overlay starts again at the sign-in sheet', !!q('#zxId') && !q('#zxCur') && !/GOC-T-002/.test(text()));
   click(btn('close'));
   ok('Cancel closes the sheet', doc.body.children.length === 0);
   win.__zxOpen(); key(q('#zxId'), 'Escape');

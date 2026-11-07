@@ -53,7 +53,7 @@ function waitForBoot(n) {
   ok('every kind points at a real capability', ['tutor-mark', 'class-notice', 'question-flag', 'assignment', 'contact-message'].every(function (k) { return core.allCapabilities().indexOf(core.alertCapability(k)) > -1; }));
   ok('an unknown kind has no owner', core.alertCapability('mystery') === null && core.alertCapability(undefined) === null && core.alertCapability('toString') === null);
   ok('the Founder sees every kind, including an unknown one', ['tutor-mark', 'class-notice', 'question-flag', 'assignment', 'contact-message', 'mystery'].every(function (k) { return seen(k, 'GOC-A-005', 'founder'); }));
-  ok('the seeded accounts keep full access', seen('mystery', 'GOC-A-001', null) && seen('mystery', 'GOC-A-002', AD) && seen('tutor-mark', 'GOC-A-002', 'academic-director'));
+  ok('only the Founder is unrestricted; seeded Academic Director sees academic alerts only', seen('mystery', 'GOC-A-001', null) && !seen('mystery', 'GOC-A-002', AD) && seen('tutor-mark', 'GOC-A-002', AD));
   ok('a marked script goes to the Academic Director only', seen('tutor-mark', 'GOC-A-003', AD) && [FIN, PUB, SA].every(function (r) { return !seen('tutor-mark', 'GOC-A-003', r); }));
   ok('a class notice goes to the Academic Director and Publicity', seen('class-notice', 'GOC-A-003', AD) && seen('class-notice', 'GOC-A-003', PUB) && !seen('class-notice', 'GOC-A-003', FIN) && !seen('class-notice', 'GOC-A-003', SA));
   ok('a contact message goes to Publicity and Student Affairs', seen('contact-message', 'GOC-A-003', PUB) && seen('contact-message', 'GOC-A-003', SA) && !seen('contact-message', 'GOC-A-003', AD) && !seen('contact-message', 'GOC-A-003', FIN));
@@ -93,7 +93,7 @@ function waitForBoot(n) {
   ok('the Founder sees all five', fa.status === 200 && fa.body.count === 5 && ids(fa) === 'al-1,al-2,al-3,al-4,al-5', fa.raw);
   var ad = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, ad.body.token);
-  ok('the seeded Academic Director sees all five', ids(await call('GET', '/api/alerts', undefined, ad.body.token)) === 'al-1,al-2,al-3,al-4,al-5');
+  ok('the seeded Academic Director sees only their three relevant academic alerts', ids(await call('GET', '/api/alerts', undefined, ad.body.token)) === 'al-1,al-2,al-4');
   var r1 = await call('GET', '/api/alerts', undefined, tok[AD]);
   ok('an issued Academic Director sees script, notice and flag', r1.status === 200 && r1.body.count === 3 && ids(r1) === 'al-1,al-2,al-4', r1.raw);
   var r2 = await call('GET', '/api/alerts', undefined, tok[PUB]);

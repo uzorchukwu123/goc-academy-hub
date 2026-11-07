@@ -50,7 +50,7 @@ function waitForBoot(n) {
   var F = { studentsTotal: 12, activeToday: 4, avgScorePercent: 61, lessonsPublished: 9 };
   function keys(id, role) { return Object.keys(core.overviewFor(id, role, F)).sort().join(','); }
   ok('the Founder sees all four figures', keys('GOC-A-009', 'founder') === 'activeToday,avgScorePercent,lessonsPublished,studentsTotal', keys('GOC-A-009', 'founder'));
-  ok('the two seeded accounts keep all four, whatever role they carry', keys('GOC-A-001', null) === keys('GOC-A-009', 'founder') && keys('GOC-A-002', 'finance') === keys('GOC-A-009', 'founder'));
+  ok('Founder keeps all four while the seeded Academic Director has only their role-scoped figures', keys('GOC-A-001', null) === keys('GOC-A-009', 'founder') && keys('GOC-A-002', 'academic-director') === keys('GOC-A-006', 'academic-director'));
   ok('Finance sees the student count only', keys('GOC-A-003', 'finance') === 'studentsTotal', keys('GOC-A-003', 'finance'));
   ok('Publicity sees the student count only', keys('GOC-A-003', 'publicity') === 'studentsTotal', keys('GOC-A-003', 'publicity'));
   ok('Student Affairs sees students, active today and the average mock score', keys('GOC-A-003', 'student-affairs') === 'activeToday,avgScorePercent,studentsTotal', keys('GOC-A-003', 'student-affairs'));
@@ -104,7 +104,7 @@ function waitForBoot(n) {
   var seeded = await call('POST', '/api/auth/login', { id: 'GOC-A-002', password: 'acaddir2027' });
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, seeded.body.token);
   var sd = await call('GET', '/api/admin/overview', undefined, seeded.body.token);
-  ok('the seeded Academic Director account still gets all four', sd.status === 200 && Object.keys(sd.body).length === 4, sd.raw);
+  ok('the seeded Academic Director receives only academic/reporting overview figures', sd.status === 200 && Object.keys(sd.body).sort().join() === 'avgScorePercent,lessonsPublished,studentsTotal', sd.raw);
   ok('no sign-in at all is refused (401)', (await call('GET', '/api/admin/overview')).status === 401);
   var stu = await call('POST', '/api/students', { name: 'Open Person', password: 'pass-word-1', subjects: ['Use of English', 'Mathematics', 'Physics', 'Chemistry'], goal: 'JAMB / UTME 2027', privacyConsent: { accepted: true } });
   var slogin = stu.body && stu.body.id ? await call('POST', '/api/auth/login', { id: stu.body.id, password: 'pass-word-1' }) : { body: {} };
