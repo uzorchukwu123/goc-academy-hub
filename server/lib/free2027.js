@@ -694,11 +694,68 @@ function createFree2027(deps) {
 
      A record that predates combinations keeps the activity's own allocation
      until the student chooses once, so no historical paper or result changes. */
+  /* The administrator's configured Weekly Assessment distribution, exactly as
+     saved. Null means the administrator configured no distribution, so no
+     per-subject quota was ever requested and the configured count is spread
+     over the candidate's own subjects on a best-effort basis instead. */
+  function weeklyConfiguredDistribution(activity) {
+    var dist = (activity && activity.subjectDistribution) || null;
+    if (!dist) return null;
+    var out = {}, any = false;
+    Object.keys(dist).forEach(function (k) {
+      var n = Number(dist[k]) || 0;
+      if (n > 0) { out[k] = n; any = true; }
+    });
+    return any ? out : null;
+  }
+
+  /* Turn the weekly spread TARGET into counts the bank can actually serve.
+     A thin subject is capped at what exists and the balance is redistributed
+     across the candidate's OTHER registered subjects, so the configured count
+     is still served exactly and no invented per-subject quota can block the
+     assessment. Subjects the candidate does not take are never touched. */
+  function weeklyServableSpread(activity, subjects, bySubject) {
+    var list = rules.sortSubjects(subjects);
+    var total = Math.max(0, Number(activity.questionCount) || 0);
+    var out = {}, room = {};
+    if (!list.length) return out;
+    var base = Math.floor(total / list.length), extra = total % list.length;
+    list.forEach(function (subject, i) {
+      var want = base + (i < extra ? 1 : 0);
+      var have = Math.max(0, Number(bySubject[subject]) || 0);
+      out[subject] = Math.min(want, have);
+      room[subject] = have - out[subject];
+    });
+    var short = total - list.reduce(function (n, subject) { return n + out[subject]; }, 0);
+    while (short > 0) {
+      var moved = false;
+      for (var i = 0; i < list.length && short > 0; i++) {
+        var subject = list[i];
+        if (room[subject] > 0) { out[subject]++; room[subject]--; short--; moved = true; }
+      }
+      if (!moved) break;
+    }
+    list.forEach(function (subject) { if (!out[subject]) delete out[subject]; });
+    return out;
+  }
+
   function studentDistribution(activity, subjects) {
     /* A competition that serves standard papers always serves exactly 180 to
        this candidate, whether the activity's pool is 180 or a larger pool with
        surplus questions. The pool size never becomes the paper length. */
     if (rules.servesJambPaper(activity)) return rules.combinationDistribution(subjects);
+    /* A Weekly Assessment is NOT a Competition examination. Its configured
+       count and configured distribution are authoritative: it must never
+       inherit the Competition 60-English/40-per-subject structure, and no
+       per-subject quota may be invented on the administrator's behalf. */
+    if (activity && activity.kind === rules.KIND_WEEKLY) {
+      var configured = weeklyConfiguredDistribution(activity);
+      if (configured) return configured;
+      /* No distribution configured: the documented even spread over the
+         candidate's own subjects below is a TARGET, never a bank requirement.
+         combinationReadiness() caps it to what the bank actually holds and
+         tops the balance up from the candidate's other subjects. */
+    }
     var list = rules.sortSubjects(subjects);
     var total = Math.max(0, Number(activity.questionCount) || 0);
     var dist = activity.subjectDistribution || null;
@@ -756,11 +813,42 @@ function createFree2027(deps) {
   function combinationReadiness(db, activity, subjects) {
     var dist = studentDistribution(activity, subjects);
     var competition = activity && activity.kind === rules.KIND_COMPETITION;
+    var weekly = activity && activity.kind === rules.KIND_WEEKLY;
+    var mine = rules.sortSubjects(subjects);
     var bySubject = {};
     candidatePool(db, activity).forEach(function (q) {
       bySubject[q.subject] = (bySubject[q.subject] || 0) + 1;
     });
-    var order = rules.sortSubjects(Object.keys(dist));
+    var weeklyConfigured = weekly ? weeklyConfiguredDistribution(activity) : null;
+    if (weekly && !weeklyConfigured) {
+      /* No configured distribution: the only requirement is the configured
+         question COUNT, drawn from the candidate's registered subjects. No
+         individual subject carries a quota, so a short English pool cannot
+         block an assessment that never asked for a particular English count. */
+      var wantTotal = Math.max(0, Number(activity.questionCount) || 0);
+      var haveTotal = mine.reduce(function (n, subject) { return n + (bySubject[subject] || 0); }, 0);
+      if (wantTotal > haveTotal) {
+        return { ok: false, error: 'This Weekly Assessment needs ' + wantTotal +
+          ' eligible question' + (wantTotal === 1 ? '' : 's') + ' from your registered subjects (' +
+          mine.join(', ') + '), but only ' + haveTotal + ' ' + (haveTotal === 1 ? 'is' : 'are') +
+          ' available in the Weekly Assessment Question Bank. Contact the academy.' };
+      }
+      return { ok: true, distribution: weeklyServableSpread(activity, mine, bySubject) };
+    }
+    if (weekly && weeklyConfigured) {
+      /* A configured subject the candidate does not take can neither be served
+         nor silently swapped for another subject, so say exactly that instead
+         of replacing the administrator's distribution with an invented one. */
+      var outside = rules.sortSubjects(Object.keys(weeklyConfigured).filter(function (k) { return mine.indexOf(k) < 0; }));
+      if (outside.length) {
+        var short = Number(weeklyConfigured[outside[0]]) || 0;
+        return { ok: false, error: 'This Weekly Assessment is configured to include ' + short + ' ' +
+          outside[0] + ' question' + (short === 1 ? '' : 's') +
+          ', which is not part of your registered subject combination (' + mine.join(', ') +
+          '). Those questions cannot be served to you or replaced with another subject. Contact the academy.' };
+      }
+    }
+    var order = rules.sortSubjects(Object.keys(dist || {}));
     for (var i = 0; i < order.length; i++) {
       var subject = order[i], want = Number(dist[subject]) || 0, have = bySubject[subject] || 0;
       if (want > have) {
@@ -1384,7 +1472,9 @@ function createFree2027(deps) {
       if (combination) {
         /* This candidate's own combination fills the activity's paper. The
            activity's duration, kind, attempt limit and length are unchanged. */
-        paperDist = studentDistribution(activity, combination);
+        paperDist = activity.kind === rules.KIND_WEEKLY
+          ? combinationReadiness(db, activity, combination).distribution
+          : studentDistribution(activity, combination);
         paperQs = allocateStudentQuestions(db, activity, combination);
         if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
       } else {
