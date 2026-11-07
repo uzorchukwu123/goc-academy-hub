@@ -743,7 +743,76 @@
           '<span class="f27-cbt-text">' + esc(o) + '</span></button>';
       }).join('');
     }
+    paintSubjectNav();
   }
+
+  /* ------------------------------------------- Competition subject navigation
+     Free 2027 UTME competitions only. The bar is hidden for every other paper,
+     so a Weekly Assessment paints exactly as it did before, and its styles are
+     scoped to body.f27-mode #free-exam so the original hub can never show it.
+
+     Subjects and counts are read from the paper the SERVER actually served, so
+     they always match the candidate's real allocation. Switching only moves the
+     question index and repaints: the clock, the saved answers, the attempt and
+     the bottom question navigator are never touched. */
+  function examSubjectList() {
+    var order = [], counts = {};
+    ((F.exam && F.exam.questions) || []).forEach(function (q) {
+      var subject = String((q && q.subject) || '');
+      if (!subject) return;
+      if (!Object.prototype.hasOwnProperty.call(counts, subject)) { counts[subject] = 0; order.push(subject); }
+      counts[subject]++;
+    });
+    return { order: order, counts: counts };
+  }
+
+  function paintSubjectNav() {
+    var host = $('freeExamSubjects');
+    if (!host) return;
+    var competition = !!F.exam && F.exam.kind === rules.KIND_COMPETITION;
+    var info = competition ? examSubjectList() : { order: [], counts: {} };
+    if (!competition || !info.order.length) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return;
+    }
+    var current = F.exam.questions[F.exam.index];
+    var active = String((current && current.subject) || '');
+    /* Remember where the candidate had reached in each subject, so switching
+       away and back returns them to their own place in that subject. */
+    if (current && active) {
+      if (!F.exam.subjectPos) F.exam.subjectPos = Object.create(null);
+      F.exam.subjectPos[active] = F.exam.index;
+    }
+    host.hidden = false;
+    host.innerHTML = info.order.map(function (subject, i) {
+      var on = subject === active;
+      return '<button type="button" class="f27-cbt-subject' + (on ? ' on' : '') + '" ' +
+        'aria-current="' + (on ? 'true' : 'false') + '" ' +
+        'aria-label="' + esc(subject) + ', ' + info.counts[subject] + ' questions" ' +
+        'onclick="freeExamSubject(' + i + ')">' +
+        '<span class="f27-cbt-subject-name">' + esc(subject) + '</span>' +
+        '<span class="f27-cbt-subject-count">(' + info.counts[subject] + ')</span></button>';
+    }).join('');
+  }
+
+  F.freeExamSubject = function (i) {
+    if (!F.exam || F.exam.kind !== rules.KIND_COMPETITION) return;
+    var subject = examSubjectList().order[Number(i)];
+    if (!subject) return;
+    var target = -1;
+    var remembered = F.exam.subjectPos && F.exam.subjectPos[subject];
+    if (remembered != null && F.exam.questions[remembered] &&
+        String(F.exam.questions[remembered].subject || '') === subject) target = remembered;
+    if (target < 0) {
+      for (var k = 0; k < F.exam.questions.length; k++) {
+        if (String(F.exam.questions[k].subject || '') === subject) { target = k; break; }
+      }
+    }
+    if (target < 0) return;
+    F.exam.index = target;
+    paintExam();
+  };
 
   F.freeExamPick = function (i) {
     if (!F.exam) return;
@@ -1199,7 +1268,7 @@
   /* Expose the handful of names the markup calls. */
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
-    'freeExamPanelClose', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeReviewShow', 'freeReviewBack', 'freeBoardOpen',
+    'freeExamPanelClose', 'freeExamSubject', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeReviewShow', 'freeReviewBack', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
     'freeCbtPortal', 'freeExamHome', 'freeLogin', 'freePortalEnter', 'heroAccount'];

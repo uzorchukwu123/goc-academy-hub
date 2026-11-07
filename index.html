@@ -1595,6 +1595,12 @@
         <div class="f27-cbt-progress"><span id="freeExamNum">Question 1 of 1</span></div>
       </header>
       <main class="f27-cbt-body">
+        <!-- Competition-only subject navigation (Free 2027 UTME). Hidden in the
+             markup and revealed by paintExam() only for a competition paper, so
+             Weekly Assessments and the original hub never show it. It sits
+             inside the scrolling question area, leaving the header/timer and
+             the bottom question-navigator bar in their existing positions. -->
+        <div id="freeExamSubjects" class="f27-cbt-subjects" role="group" aria-label="Examination subjects" hidden></div>
         <article class="f27-cbt-card">
           <div class="f27-cbt-passage" id="freeExamPassage" hidden></div>
           <div class="f27-cbt-image" id="freeExamImage" hidden></div>

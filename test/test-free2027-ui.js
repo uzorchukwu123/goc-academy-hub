@@ -98,7 +98,7 @@ function makeWorld(opts) {
    'freeOtpBtn', 'freeOtpResendBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
    'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeExamKind', 'freeExamPrev', 'freeExamNext',
-   'freeExamConfirmBack', 'freeExamConfirm', 'freeExamConfirmAnswered', 'freeExamConfirmUnanswered', 'freeExamConfirmTotal', 'freeExamConfirmCancel', 'freeResultBody', 'freeBoardBody',
+   'freeExamConfirmBack', 'freeExamConfirm', 'freeExamConfirmAnswered', 'freeExamConfirmUnanswered', 'freeExamConfirmTotal', 'freeExamConfirmCancel', 'freeExamSubjects', 'freeResultBody', 'freeBoardBody',
    'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing', 'freeProgramme',
    'free-admin', 'free-home', 'free-portal', 'free-result', 'free-exam', 'free-leaderboard', 'admin-gate', 'admin'
   ].forEach(el);
@@ -892,6 +892,113 @@ settle(load(w1)).then(function () {
         rw.calls.go.indexOf('free-review') < 0);
     });
   });
+}).then(function () {
+  console.log('\nCompetition-only subject navigation (Free 2027 UTME)');
+  /* Interleaved subjects, exactly as a real competition arrives when the
+     server shuffles the allocation. */
+  var paper = [
+    { id: 'a', subject: 'Use of English', kind: 'objective', text: 'English one', options: ['e1', 'e2'] },
+    { id: 'b', subject: 'Mathematics', kind: 'objective', text: 'Maths one', options: ['m1', 'm2'] },
+    { id: 'c', subject: 'Use of English', kind: 'objective', text: 'English two', options: ['e3', 'e4'] },
+    { id: 'd', subject: 'Physics', kind: 'objective', text: 'Physics one', options: ['p1', 'p2'] },
+    { id: 'e', subject: 'Mathematics', kind: 'objective', text: 'Maths two', options: ['m3', 'm4'] },
+    { id: 'f', subject: 'Chemistry', kind: 'objective', text: 'Chemistry one', options: ['c1', 'c2'] },
+    { id: 'g', subject: 'Use of English', kind: 'objective', text: 'English three', options: ['e5', 'e6'] }
+  ];
+  function chips(html) {
+    var out = [], m;
+    var re = /aria-current="(true|false)"[^>]*onclick="freeExamSubject\((\d+)\)"><span class="f27-cbt-subject-name">([^<]*)<\/span><span class="f27-cbt-subject-count">\((\d+)\)<\/span>/g;
+    while ((m = re.exec(html))) out.push({ active: m[1] === 'true', i: Number(m[2]), subject: m[3], count: Number(m[4]) });
+    return out;
+  }
+  var w = makeWorld({ token: 'PT', startAttempt: {
+    attempt: { id: 'F27-C1', title: 'UTME Cup', kind: 'competition', remainingSec: 7200, responses: {} },
+    questions: paper, resumed: false } });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freeExamOpen('F27-C9');
+    return settle(w);
+  }).then(function () {
+    var bar = w.els.freeExamSubjects;
+    var list = chips(bar.innerHTML);
+    ok('a competition paper shows the subject bar', bar.hidden === false, String(bar.hidden));
+    ok('every configured subject appears, in paper order',
+      list.map(function (c) { return c.subject; }).join('|') === 'Use of English|Mathematics|Physics|Chemistry',
+      JSON.stringify(list));
+    ok('each subject shows its ACTUAL allocated question count',
+      list.map(function (c) { return c.count; }).join(',') === '3,2,1,1', JSON.stringify(list));
+    ok('the counts add up to the served paper', list.reduce(function (a, c) { return a + c.count; }, 0) === paper.length);
+    ok('the active subject is indicated', list.filter(function (c) { return c.active; }).map(function (c) { return c.subject; }).join() === 'Use of English');
+
+    /* Answer in English, switch away, and come back. */
+    w.sandbox.freeExamPick(1);
+    return settle(w);
+  }).then(function () {
+    var startsBefore = w.calls.api.filter(function (c) { return c[0] === 'start'; }).length;
+    var answersBefore = w.calls.api.filter(function (c) { return c[0] === 'answer'; }).length;
+    var timeBefore = w.els.freeExamTime.textContent;
+    w.sandbox.freeExamSubject(1);
+    var list = chips(w.els.freeExamSubjects.innerHTML);
+    ok('clicking a subject displays that subject\'s question', /Maths one/.test(w.els.freeExamQ.textContent), w.els.freeExamQ.textContent);
+    ok('the active indicator follows the selection',
+      list.filter(function (c) { return c.active; }).map(function (c) { return c.subject; }).join() === 'Mathematics');
+    ok('switching does not restart the paper', w.calls.api.filter(function (c) { return c[0] === 'start'; }).length === startsBefore);
+    ok('switching does not re-save or alter answers', w.calls.api.filter(function (c) { return c[0] === 'answer'; }).length === answersBefore);
+    ok('switching leaves the countdown untouched', w.els.freeExamTime.textContent === timeBefore, w.els.freeExamTime.textContent);
+
+    /* Deep into Mathematics, then away and back: progress is remembered. */
+    w.sandbox.freeExamJump(4);
+    ok('the question navigator still jumps to any question', /Maths two/.test(w.els.freeExamQ.textContent), w.els.freeExamQ.textContent);
+    w.sandbox.freeExamSubject(0);
+    ok('returning to English preserves the chosen answer', /sel/.test(w.els.freeExamOpts.innerHTML) && /English one/.test(w.els.freeExamQ.textContent));
+    w.sandbox.freeExamSubject(1);
+    ok('returning to a subject resumes where the candidate left it', /Maths two/.test(w.els.freeExamQ.textContent), w.els.freeExamQ.textContent);
+
+    /* The existing navigator must still reach every question, and the bar
+       must follow it rather than fight it. */
+    w.sandbox.freeExamPanel();
+    ok('the existing question navigator still lists the whole paper',
+      (w.els.freeExamPanelGrid.innerHTML.match(/freeExamJump\(/g) || []).length === paper.length);
+    w.sandbox.freeExamJump(5);
+    ok('jumping with the navigator updates the active subject',
+      chips(w.els.freeExamSubjects.innerHTML).filter(function (c) { return c.active; }).map(function (c) { return c.subject; }).join() === 'Chemistry');
+    ok('the submit control is still governed by the last question only', w.els.freeExamSubmit.hidden === true);
+    w.sandbox.freeExamJump(6);
+    ok('reaching the final question still reveals Submit', w.els.freeExamSubmit.hidden === false);
+
+    /* A weekly assessment must be untouched. */
+    var ww = makeWorld({ token: 'PT', startAttempt: {
+      attempt: { id: 'F27-W1', title: 'Week 1', kind: 'weekly', remainingSec: 615, responses: {} },
+      questions: paper, resumed: false } });
+    load(ww);
+    return settle(ww).then(function () {
+      ww.sandbox.freeExamOpen('F27-Q9');
+      return settle(ww);
+    }).then(function () {
+      ok('a Weekly Assessment never shows the subject bar', ww.els.freeExamSubjects.hidden === true);
+      ok('and nothing is rendered into it', ww.els.freeExamSubjects.innerHTML === '', ww.els.freeExamSubjects.innerHTML);
+      ok('the weekly paper still paints normally', /English one/.test(ww.els.freeExamQ.textContent) && /Question 1 of 7/.test(ww.els.freeExamNum.textContent));
+      ok('the weekly clock is unchanged', ww.els.freeExamTime.textContent === '10:15', ww.els.freeExamTime.textContent);
+      ww.sandbox.freeExamSubject(1);
+      ok('the subject handler is inert outside a competition', /English one/.test(ww.els.freeExamQ.textContent));
+    });
+  });
+}).then(function () {
+  console.log('\nSubject navigation cannot reach the regular hub');
+  var subjectRules = css.split('}').filter(function (b) { return b.indexOf('f27-cbt-subject') > -1; });
+  ok('the stylesheet actually defines the bar', subjectRules.length > 0);
+  ok('every subject rule is scoped to the mode AND the edition exam screen',
+    subjectRules.every(function (b) { return b.indexOf('body.f27-mode #free-exam') > -1; }),
+    subjectRules.filter(function (b) { return b.indexOf('body.f27-mode #free-exam') < 0; }).join('}'));
+  ok('the bar is hidden in the markup until a competition opens it',
+    /id="freeExamSubjects"[^>]*hidden/.test(html), (html.match(/id="freeExamSubjects"[^>]*/) || [''])[0]);
+  ok('it lives inside the edition exam screen, not the regular app',
+    html.indexOf('id="free-exam"') < html.indexOf('id="freeExamSubjects"') &&
+    html.indexOf('id="freeExamSubjects"') < html.indexOf('class="f27-cbt-bar"'));
+  ok('the regular CBT screen is untouched', /id="cbt"/.test(html));
+  ok('the countdown timer markup is unchanged', /class="f27-cbt-timer" id="freeExamTimer"/.test(html));
+  ok('the bottom question navigator markup is unchanged',
+    /onclick="freeExamPanel\(\)"><span id="freeExamPanelLabel"/.test(html));
 }).then(function () {
   return null;
 }).catch(function (e) {

@@ -212,6 +212,19 @@ body.f27-mode .phone { }
 .f27-cbt-timer.warn { background: #B91C1C; }
 .f27-cbt-progress { margin-top: 8px; font-size: 12px; font-weight: 800; color: #475467; }
 .f27-cbt-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; width: 100%; max-width: 860px; margin: 0 auto; padding: 14px; }
+/* ---- Competition subject navigation (Free 2027 UTME competitions ONLY) ----
+   Every selector is scoped to body.f27-mode #free-exam, so the original hub
+   cannot render or be affected by this bar. The element lives inside the
+   scrolling .f27-cbt-body, so it adds no flex region: the header/timer and the
+   bottom question-navigator bar keep exactly their current positions. It is
+   sticky so subjects stay reachable, and scrolls horizontally on narrow
+   screens instead of wrapping to a taller block. */
+body.f27-mode #free-exam .f27-cbt-subjects { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; overflow-x: auto; overflow-y: hidden; margin: 0 0 12px; padding: 2px 0 8px; background: #F6F7F9; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+body.f27-mode #free-exam .f27-cbt-subjects[hidden] { display: none; }
+body.f27-mode #free-exam .f27-cbt-subject { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 8px 14px; border: 1.5px solid #D0D5DD; border-radius: 999px; background: #fff; color: #475467; font: inherit; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+body.f27-mode #free-exam .f27-cbt-subject.on { border-color: #DC2626; background: #FEF2F2; color: #B91C1C; }
+body.f27-mode #free-exam .f27-cbt-subject-count { font-weight: 900; }
+
 .f27-cbt-card { background: #fff; border: 1px solid #E4E7EC; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(16,24,40,.05); min-width: 0; }
 .f27-cbt-passage { background: #F9FAFB; border: 1px solid #E4E7EC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .f27-cbt-image { margin-bottom: 14px; }
