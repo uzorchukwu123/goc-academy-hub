@@ -685,6 +685,96 @@ function createFree2027(deps) {
     if (rec.randomizeQuestions && dist) chosen = secureShuffle(chosen);
     return chosen.map(function (q) { return String(q.id); });
   }
+  /* ------------------------------------------- Per-student subject combination
+     A candidate sits Use of English plus exactly three of the four remaining
+     subjects, chosen once at registration. The activity still owns the paper's
+     LENGTH, DURATION and KIND; the student's combination owns WHICH SUBJECTS
+     fill it. A standard 180-question competition therefore serves English 60
+     and the candidate's own three subjects at 40 each, still out of 400.
+
+     A record that predates combinations keeps the activity's own allocation
+     until the student chooses once, so no historical paper or result changes. */
+  function studentDistribution(activity, subjects) {
+    if (rules.isJambCompetition(activity)) return rules.combinationDistribution(subjects);
+    var list = rules.sortSubjects(subjects);
+    var total = Math.max(0, Number(activity.questionCount) || 0);
+    var dist = activity.subjectDistribution || null;
+    if (dist) {
+      var keys = Object.keys(dist).filter(function (k) { return Number(dist[k]) > 0; });
+      /* An activity distribution that only names subjects the candidate takes
+         is honoured exactly as configured. */
+      if (keys.length && keys.every(function (k) { return list.indexOf(k) > -1; })) {
+        var kept = {};
+        keys.forEach(function (k) { kept[k] = Number(dist[k]); });
+        return kept;
+      }
+    }
+    /* Otherwise the paper keeps its configured length, spread evenly over the
+       candidate's own subjects in canonical order. */
+    var out = {};
+    if (!list.length) return out;
+    var base = Math.floor(total / list.length), extra = total % list.length;
+    list.forEach(function (subject, i) { out[subject] = base + (i < extra ? 1 : 0); });
+    return out;
+  }
+
+  /* Readiness is checked against the BANK for this candidate's own subjects,
+     not against the activity's stored paper, because each candidate now draws
+     their own paper. */
+  function combinationReadiness(db, activity, subjects) {
+    var bank = bankForKind(activity.kind);
+    var dist = studentDistribution(activity, subjects);
+    var bySubject = {};
+    eligibleBankQuestions(db, bank).forEach(function (q) {
+      bySubject[q.subject] = (bySubject[q.subject] || 0) + 1;
+    });
+    var order = rules.sortSubjects(Object.keys(dist));
+    for (var i = 0; i < order.length; i++) {
+      var subject = order[i], want = Number(dist[subject]) || 0, have = bySubject[subject] || 0;
+      if (want > have) {
+        return { ok: false, error: 'Your subject combination cannot be served yet. ' + subject +
+          ' needs ' + want + ' eligible question' + (want === 1 ? '' : 's') + ' in the ' +
+          (bank === 'weekly' ? 'Weekly Assessment' : 'Competition') + ' Question Bank but only ' +
+          have + ' ' + (have === 1 ? 'is' : 'are') + ' available. Contact the academy.' };
+      }
+    }
+    return { ok: true, distribution: dist };
+  }
+  function requireCombinationReady(db, activity, subjects) {
+    var st = combinationReadiness(db, activity, subjects);
+    if (!st.ok) throw FreeError(409, st.error);
+    return st;
+  }
+  function allocateStudentQuestions(db, activity, subjects) {
+    var dist = requireCombinationReady(db, activity, subjects).distribution;
+    var pool = eligibleBankQuestions(db, bankForKind(activity.kind));
+    var chosen = [];
+    rules.sortSubjects(Object.keys(dist)).forEach(function (subject) {
+      var need = Number(dist[subject]) || 0;
+      if (!need) return;
+      var sub = pool.filter(function (q) { return q.subject === subject; });
+      chosen = chosen.concat((activity.randomizeQuestions !== false ? secureShuffle(sub) : sub).slice(0, need));
+    });
+    return chosen;
+  }
+
+  /* Canonical subject blocks: Use of English, Mathematics, Physics, Chemistry,
+     Biology. Order WITHIN a subject is whatever the allocation produced, so
+     randomisation is preserved exactly where it already applied. Grouping the
+     served paper is what makes its final question belong to its final subject.
+     Only NEW attempts are grouped; an attempt already under way keeps the
+     snapshot order it was served with. */
+  function groupedBySubject(questions) {
+    var rank = {};
+    rules.SUBJECTS.forEach(function (s, i) { rank[s] = i; });
+    return (questions || []).map(function (q, i) { return { q: q, i: i }; }).sort(function (a, b) {
+      var ra = rank[a.q.subject], rb = rank[b.q.subject];
+      ra = ra == null ? rules.SUBJECTS.length : ra;
+      rb = rb == null ? rules.SUBJECTS.length : rb;
+      return ra !== rb ? ra - rb : a.i - b.i;
+    }).map(function (x) { return x.q; });
+  }
+
   function sameDistribution(a, b) {
     a = a || {}; b = b || {};
     var ka = Object.keys(a), kb = Object.keys(b);
@@ -893,6 +983,16 @@ function createFree2027(deps) {
          it is what the student will log in with after the email is verified. */
       var password = rules.cleanPassword(body.password);
       if (password.error) throw FreeError(400, password.error);
+      /* The JAMB combination travels with the pending code. A supplied value is
+         validated here so a hand-made request cannot store an invalid one. A
+         request that omits it leaves the record needing the one-time choice,
+         which is the same safe state as a record from before this feature. */
+      var combination = null;
+      if (body.subjects !== undefined && body.subjects !== null && body.subjects !== '') {
+        var comb = rules.cleanCombination(body.subjects);
+        if (comb.error) throw FreeError(400, comb.error);
+        combination = comb.subjects;
+      }
 
       var session = currentSession(ed);
       var existing = findParticipantByEmail(session, email.email);
@@ -928,7 +1028,7 @@ function createFree2027(deps) {
       var salt = crypto.randomBytes(12).toString('hex');
       ed.otps.push({
         email: email.email, salt: salt, hash: codeHash(salt, code),
-        name: name.name, course: course.course,
+        name: name.name, course: course.course, subjects: combination,
         /* The chosen password travels with the pending code as a hash, so the
            account can only be created once the address is proved AND the
            password is already safely hashed. */
@@ -1017,6 +1117,7 @@ function createFree2027(deps) {
           name: otp.name || rules.cleanName(body.name).name || 'Candidate',
           email: email.email,
           course: otp.course || rules.cleanCourse(body.course, ed.courses).course || 'Other',
+          subjects: Array.isArray(otp.subjects) ? otp.subjects.slice() : [],
           /* Never plaintext: only the scrypt hash of the chosen password. */
           passwordHash: otp.pwHash || null,
           verified: true,
@@ -1039,6 +1140,11 @@ function createFree2027(deps) {
         p.lastSeenAt = t;
         p.verifiedAt = p.verifiedAt || t;
         if (!p.course && otp.course) p.course = otp.course;
+        /* Only ever fills a combination that is not already saved. An existing
+           student's saved subjects are never replaced by a later sign-in. */
+        if (!rules.hasCombination(p) && Array.isArray(otp.subjects) && otp.subjects.length) {
+          p.subjects = otp.subjects.slice();
+        }
         /* A record from before passwords existed acquires the hash of the
            password that was just proved with the code. Everything else on the
            account — identifier, course, enrolment, progress, attempts, answers
@@ -1108,6 +1214,30 @@ function createFree2027(deps) {
     if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
     return { participant: rules.selfParticipant(p), session: { id: ctx.session.id, label: ctx.session.label }, mode: rules.activeMode(ctx.ed, ctx.ed.enabled) };
   }
+  /* One-time subject choice for a record that predates combinations. It writes
+     ONLY the subjects field and refuses to replace a combination that is
+     already saved, so a second call can never move a student off the subjects
+     they were registered with. No attempt, answer, score or result is read or
+     changed here. */
+  function setCombination(data, body) {
+    return locked(async function () {
+      var db = readData();
+      var ctx = sessionForCallerWithDb(db, data);
+      var p = findParticipant(ctx.session, data.id);
+      if (!p) throw FreeError(401, 'Your registration was not found. Please verify your email again.');
+      if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
+      if (rules.hasCombination(p)) {
+        throw FreeError(409, 'Your subject combination is already saved. Contact the academy if it needs to change.');
+      }
+      var comb = rules.cleanCombination((body || {}).subjects);
+      if (comb.error) throw FreeError(400, comb.error);
+      p.subjects = comb.subjects;
+      pushRecord(ctx.session, { participantId: p.id, kind: 'subjects' });
+      writeData(db);
+      return { participant: rules.selfParticipant(p) };
+    });
+  }
+
   function sessionForCallerWithDb(db, data) {
     var ed = requireOn(edition(db));
     var session = currentSession(ed);
@@ -1207,16 +1337,29 @@ function createFree2027(deps) {
       if (rules.attemptsLeft(activity, mine) <= 0) {
         throw FreeError(403, 'You have used all ' + activity.maxAttempts + ' attempt(s) for this activity.');
       }
-      var paperQs = await questionRecords(db, activity.questionIds || [], activity.kind);
-      /* Every chosen ID must resolve in THIS activity's bank: an ID from the
-         other bank (or a forged one) is rejected, not silently dropped. */
-      if (paperQs.length !== (activity.questionIds || []).length) {
-        throw FreeError(400, 'Some questions of this activity are not in its own question bank.');
+      var combination = rules.combinationOf(p);
+      var paperQs, paperDist = null;
+      if (combination) {
+        /* This candidate's own combination fills the activity's paper. The
+           activity's duration, kind, attempt limit and length are unchanged. */
+        paperDist = studentDistribution(activity, combination);
+        paperQs = allocateStudentQuestions(db, activity, combination);
+        if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
+      } else {
+        /* A record from before combinations existed keeps the activity's own
+           allocation until the student chooses once at sign-in. */
+        paperQs = await questionRecords(db, activity.questionIds || [], activity.kind);
+        /* Every chosen ID must resolve in THIS activity's bank: an ID from the
+           other bank (or a forged one) is rejected, not silently dropped. */
+        if (paperQs.length !== (activity.questionIds || []).length) {
+          throw FreeError(400, 'Some questions of this activity are not in its own question bank.');
+        }
+        if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
+        /* Revalidated here as well as at launch: a question deactivated after
+           publication must not let a new standard-UTME paper start short. */
+        requireLaunchReady(db, activity);
       }
-      if (!paperQs.length) throw FreeError(409, 'This activity has no servable questions yet.');
-      /* Revalidated here as well as at launch: a question deactivated after
-         publication must not let a new standard-UTME paper start short. */
-      requireLaunchReady(db, activity);
+      paperQs = groupedBySubject(paperQs);
       ctx.session.attemptSeq = (ctx.session.attemptSeq || 0) + 1;
       var attempt = {
         id: 'F27-A' + ctx.session.attemptSeq + '-' + crypto.randomBytes(3).toString('hex'),
@@ -1224,6 +1367,10 @@ function createFree2027(deps) {
         participantId: p.id,
         bank: bankForKind(activity.kind),
         questionIds: paperQs.map(function (q) { return String(q.id); }),
+        /* The distribution this paper was actually built from. Marking reads
+           it from the ATTEMPT so a candidate is always scored against their own
+           subjects; a legacy attempt has none and falls back to the activity. */
+        subjectDistribution: paperDist,
         questionSnapshot: snapshotQuestions(paperQs),
         optionOrders: activity.randomizeOptions ? makeOptionOrders(paperQs) : null,
         responses: {},
@@ -1358,7 +1505,7 @@ function createFree2027(deps) {
     attempt.markedAt = t;
     var act = activity || null;
     if (act && rules.isJambCompetition(act) && marked.status === 'marked') {
-      var jamb = rules.jambSubjectScores(marked.answers, act.subjectDistribution || {});
+      var jamb = rules.jambSubjectScores(marked.answers, attempt.subjectDistribution || act.subjectDistribution || {});
       attempt.scoring = 'jamb';
       attempt.subjectScores = jamb.subjects;
       attempt.score = jamb.score;
@@ -2705,6 +2852,7 @@ function createFree2027(deps) {
     /* participant */
     sessionFromReq: sessionFromReq,
     me: me,
+    setCombination: setCombination,
     logout: logout,
     listActivities: listActivities,
     startActivity: startActivity,

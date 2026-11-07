@@ -117,6 +117,7 @@
     hasToken: function () { return !!participantToken; },
     token: function () { return participantToken; },
     me: function () { return request('GET', '/me'); },
+    setSubjects: function (subjects) { return request('PUT', '/subjects', { subjects: subjects }); },
     /* Sign out. The request is sent WHILE the token is still held, so the
        server can identify and delete exactly this session; only then is the
        browser's copy dropped. Clearing first would leave the stored session

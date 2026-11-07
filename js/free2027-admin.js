@@ -760,24 +760,53 @@
 
   /* =========================================================== 4. RESULTS */
 
+  /* The complete results listing, and the destination of "← All results".
+     It used to auto-open the first activity whenever any paper had been
+     submitted, so "All results" bounced the administrator straight back into
+     that one competition and the listing could never be reached. The listing is
+     now always rendered, and both categories are reachable from it. */
+  A.resultsKind = 'all';
+
+  function resultsKindLabel(kind) {
+    return kind === rules.KIND_COMPETITION ? 'competition' : 'weekly assessment';
+  }
+
+  function renderResultsList() {
+    var all = (A.activities || []).filter(function (a) { return a.attempts > 0; });
+    var shown = A.resultsKind === 'all' ? all : all.filter(function (a) { return a.kind === A.resultsKind; });
+    var seg = [['all', 'All results'], [rules.KIND_COMPETITION, 'Competitions'], [rules.KIND_WEEKLY, 'Weekly assessments']]
+      .map(function (t) {
+        var on = A.resultsKind === t[0];
+        return '<button type="button" class="ad-btn' + (on ? ' pri' : '') + '" aria-pressed="' + (on ? 'true' : 'false') +
+          '" onclick="f27AdmResultsKind(\'' + t[0] + '\')">' + t[1] + '</button>';
+      }).join('');
+    body('<div class="ad-actions" style="margin-bottom:10px">' + seg + '</div>' +
+      '<p class="ad-note">Results appear here once papers have been submitted. Weekly assessment results are private: ' +
+      'they are shown to the candidate who sat them and to you, and never on a public page.</p>' +
+      (shown.length
+        ? shown.map(function (a) {
+            return '<div class="f27-admin-row"><div><b>' + esc(a.title) + '</b><span>' + esc(rules.kindLabel(a.kind)) +
+              ' · ' + a.attempts + ' submitted</span></div>' +
+              '<button class="ad-btn pri" onclick="f27AdmResults(\'' + esc(a.id) + '\')">Open results</button></div>';
+          }).join('')
+        : '<div class="ad-empty">' + (all.length
+            ? 'No ' + resultsKindLabel(A.resultsKind) + ' paper has been submitted in this session yet.'
+            : 'No paper has been submitted in this session yet.') + '</div>'));
+  }
+
+  /* Switching category re-reads the listing already in hand; it never opens an
+     activity and never touches a submitted record. */
+  global.f27AdmResultsKind = function (kind) {
+    A.resultsKind = (kind === rules.KIND_COMPETITION || kind === rules.KIND_WEEKLY) ? kind : 'all';
+    renderResultsList();
+  };
+
   function loadResults() {
-    var published = A.activities.filter(function (a) { return a.attempts > 0; });
-    if (!published.length) {
-      return api.adminActivities().then(function (r) {
-        A.activities = r.activities || [];
-        var withAttempts = A.activities.filter(function (a) { return a.attempts > 0; });
-        body('<p class="ad-note">Results appear here once papers have been submitted. Weekly assessment results are private: ' +
-          'they are shown to the candidate who sat them and to you, and never on a public page.</p>' +
-          (withAttempts.length
-            ? withAttempts.map(function (a) {
-                return '<div class="f27-admin-row"><div><b>' + esc(a.title) + '</b><span>' + esc(rules.kindLabel(a.kind)) +
-                  ' · ' + a.attempts + ' submitted</span></div>' +
-                  '<button class="ad-btn pri" onclick="f27AdmResults(\'' + esc(a.id) + '\')">Open results</button></div>';
-              }).join('')
-            : '<div class="ad-empty">No paper has been submitted in this session yet.</div>'));
-      }, function (er) { body(failText(er)); });
-    }
-    global.f27AdmResults(published[0].id);
+    loading('Reading the results…');
+    return api.adminActivities().then(function (r) {
+      A.activities = r.activities || [];
+      renderResultsList();
+    }, function (er) { body(failText(er)); });
   }
 
   global.f27AdmResults = function (id) {

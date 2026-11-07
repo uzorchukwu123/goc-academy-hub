@@ -1494,6 +1494,21 @@
               <p class="field-hint">You will use this email and password to log in to the CBT Portal.</p></div>
             <div class="field"><label for="freeCourse">Intended course of study</label><input id="freeCourse" type="text" list="freeCourseList" autocomplete="off" placeholder="e.g. Medicine and Surgery">
               <datalist id="freeCourseList"></datalist></div>
+            <!-- JAMB subject combination. Use of English is compulsory, preselected
+                 and not deselectable; exactly three of the remaining four are chosen.
+                 The same rules are enforced again on the server. -->
+            <div class="field f27-comb">
+              <label>JAMB subject combination</label>
+              <p class="field-hint">Use of English is compulsory. Choose exactly three additional subjects.</p>
+              <label class="f27-comb-item compulsory">
+                <input type="checkbox" checked disabled aria-label="Use of English, compulsory"><span>Use of English</span><b class="f27-comb-tag">COMPULSORY</b>
+              </label>
+              <label class="f27-comb-item"><input type="checkbox" id="freeCombMathematics" onclick="freeCombPick('freeComb','Mathematics')"><span>Mathematics</span></label>
+              <label class="f27-comb-item"><input type="checkbox" id="freeCombPhysics" onclick="freeCombPick('freeComb','Physics')"><span>Physics</span></label>
+              <label class="f27-comb-item"><input type="checkbox" id="freeCombChemistry" onclick="freeCombPick('freeComb','Chemistry')"><span>Chemistry</span></label>
+              <label class="f27-comb-item"><input type="checkbox" id="freeCombBiology" onclick="freeCombPick('freeComb','Biology')"><span>Biology</span></label>
+              <p class="f27-comb-summary" id="freeCombSummary" aria-live="polite"></p>
+            </div>
             <p class="f27-err" id="freeRegErr" role="alert"></p>
             <button class="btn btn-red btn-block" id="freeRegBtn" onclick="freeRegisterStart()">Send my verification code</button>
             <p class="f27-fine" style="margin-top:10px;text-align:center">Already registered? <a href="#" onclick="freeGo('free-login');return false">Log in</a></p>
@@ -1571,6 +1586,25 @@
         <!-- The candidate's own programme record: profile, course enrolment,
              access and lesson completion. Drawn by js/free2027-ui.js from
              /api/free2027/programme; nothing here is public. -->
+        <!-- One-time subject choice for a student whose record predates subject
+             combinations. Hidden as soon as a combination is saved; it never
+             appears again and it never changes an existing attempt or result. -->
+        <div id="freeSubjectsPrompt" class="f27-subjects-prompt" hidden>
+          <h2>Choose your JAMB subject combination</h2>
+          <p class="f27-lead">Your record has no subject combination yet. Choose it once — it decides the subjects in your Weekly Assessments and Competition Examinations from now on. Your previous papers and results are not changed.</p>
+          <div class="field f27-comb">
+            <label class="f27-comb-item compulsory">
+              <input type="checkbox" checked disabled aria-label="Use of English, compulsory"><span>Use of English</span><b class="f27-comb-tag">COMPULSORY</b>
+            </label>
+              <label class="f27-comb-item"><input type="checkbox" id="freePickMathematics" onclick="freeCombPick('freePick','Mathematics')"><span>Mathematics</span></label>
+              <label class="f27-comb-item"><input type="checkbox" id="freePickPhysics" onclick="freeCombPick('freePick','Physics')"><span>Physics</span></label>
+              <label class="f27-comb-item"><input type="checkbox" id="freePickChemistry" onclick="freeCombPick('freePick','Chemistry')"><span>Chemistry</span></label>
+              <label class="f27-comb-item"><input type="checkbox" id="freePickBiology" onclick="freeCombPick('freePick','Biology')"><span>Biology</span></label>
+            <p class="f27-comb-summary" id="freePickSummary" aria-live="polite"></p>
+          </div>
+          <p class="f27-err" id="freePickErr" role="alert"></p>
+          <button type="button" class="btn btn-red" id="freePickBtn" onclick="freeSubjectsSave()">Save my combination</button>
+        </div>
         <div id="freeProgramme" class="f27-programme" hidden></div>
         <div id="freePortalList" class="f27-list"><div class="ad-loading">Loading this session's programme…</div></div>
         <div id="freePortalResults" class="f27-mine"></div>

@@ -73,9 +73,19 @@ ok('each other subject must carry exactly 40', /Mathematics must carry exactly 4
 ok('an unknown subject is rejected', /Unknown subject/.test(
   f.jambDistributionProblem({ 'Use of English': 60, 'Astrology': 40, 'Physics': 40, 'Chemistry': 40 })));
 ok('English is always listed first', f.jambSubjectOrder(DIST)[0] === 'Use of English');
+/* Still proves the names come from the distribution and are not hard-coded:
+   Biology is present and Physics is absent. The ORDER is now the edition's
+   canonical order (English, Mathematics, Physics, Chemistry, Biology) rather
+   than the order the keys happened to be written in. */
 ok('the configured subject names are used, not hard-coded ones',
   f.jambSubjectOrder({ 'Use of English': 60, 'Biology': 40, 'Mathematics': 40, 'Chemistry': 40 })
-    .join('|') === 'Use of English|Biology|Mathematics|Chemistry');
+    .join('|') === 'Use of English|Mathematics|Chemistry|Biology');
+ok('the order never depends on the order the keys were written in',
+  f.jambSubjectOrder({ 'Biology': 40, 'Chemistry': 40, 'Use of English': 60, 'Mathematics': 40 })
+    .join('|') === f.jambSubjectOrder({ 'Use of English': 60, 'Mathematics': 40, 'Chemistry': 40, 'Biology': 40 }).join('|'));
+ok('the full canonical order is English, Mathematics, Physics, Chemistry, Biology',
+  f.sortSubjects(['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Use of English'])
+    .join('|') === 'Use of English|Mathematics|Physics|Chemistry|Biology');
 
 head('validateActivity enforces the distribution only on a standard competition');
 var base = { title: 'Term Cup', opensAt: Date.now(), closesAt: Date.now() + 3600000, durationMin: 120, maxAttempts: 1 };

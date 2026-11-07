@@ -192,7 +192,8 @@
       id: String(r.id || ''),
       name: String(r.name || ''),
       course: String(r.course || ''),
-      verified: r.verified === true
+      verified: r.verified === true,
+      subjects: combinationOf(r) || []
     };
   }
 
@@ -212,7 +213,9 @@
     return {
       id: String(r.id || ''), name: String(r.name || ''), course: String(r.course || ''),
       verified: r.verified === true, email: maskEmail(r.email),
-      createdAt: String(r.createdAt || '')
+      createdAt: String(r.createdAt || ''),
+      subjects: combinationOf(r) || [],
+      needsSubjects: !hasCombination(r)
     };
   }
 
@@ -299,6 +302,76 @@
      on a question, never a destination: the selected bank panel / activity
      category alone decides where a question lives and serves. */
   var SUBJECTS = ['Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
+
+  /* --------------------------------------------------- JAMB subject combination
+     Every Free 2027 UTME candidate sits Use of English plus exactly three of
+     the four remaining subjects. The combination belongs to the STUDENT, is
+     chosen once at registration, and is the single source of truth for which
+     subjects any paper, subject bar or count may show them.
+
+     SUBJECTS above is already in the required display order, so it is reused
+     as the canonical order everywhere instead of introducing a second list. */
+  var JAMB_OPTIONAL_SUBJECTS = SUBJECTS.slice(1);
+
+  /* Canonical order, de-duplicated, unknown names dropped. Never trust the
+     order questions happen to arrive in. */
+  function sortSubjects(list) {
+    var seen = Object.create(null), out = [];
+    (Array.isArray(list) ? list : []).forEach(function (v) {
+      var subject = String(v == null ? '' : v).trim();
+      if (SUBJECTS.indexOf(subject) < 0 || seen[subject]) return;
+      seen[subject] = true;
+      out.push(subject);
+    });
+    out.sort(function (a, b) { return SUBJECTS.indexOf(a) - SUBJECTS.indexOf(b); });
+    return out;
+  }
+
+  /* Validates a chosen combination. Use of English is compulsory and is added
+     by the server/UI rather than asked for, so an input that omits it is still
+     accepted; an input that tries to drop it can never remove it. Exactly three
+     of the four optional subjects are required — no fewer, no more. */
+  function cleanCombination(v) {
+    var list = Array.isArray(v) ? v : (typeof v === 'string' ? v.split(',') : null);
+    if (!list) return { error: 'Choose your three additional subjects alongside Use of English.' };
+    var raw = [], seen = Object.create(null);
+    list.forEach(function (x) {
+      var subject = String(x == null ? '' : x).trim();
+      if (!subject || seen[subject]) return;
+      seen[subject] = true;
+      raw.push(subject);
+    });
+    for (var i = 0; i < raw.length; i++) {
+      if (SUBJECTS.indexOf(raw[i]) < 0) return { error: 'Unknown subject: ' + raw[i] + '.' };
+    }
+    var others = raw.filter(function (x) { return x !== JAMB_ENGLISH; });
+    if (others.length !== JAMB_OTHER_SUBJECTS) {
+      return { error: 'Select exactly ' + JAMB_OTHER_SUBJECTS + ' additional subjects from ' +
+        JAMB_OPTIONAL_SUBJECTS.join(', ') + '. ' + JAMB_ENGLISH + ' is compulsory. You selected ' +
+        others.length + '.' };
+    }
+    return { subjects: sortSubjects([JAMB_ENGLISH].concat(others)) };
+  }
+
+  /* The saved combination on a student record, or null when the record predates
+     this feature. A malformed stored value reads as "not chosen" rather than as
+     a silently invented combination. */
+  function combinationOf(p) {
+    var saved = p && p.subjects;
+    if (!Array.isArray(saved) || !saved.length) return null;
+    var clean = cleanCombination(saved);
+    return clean.error ? null : clean.subjects;
+  }
+  function hasCombination(p) { return combinationOf(p) !== null; }
+
+  /* The standard UTME distribution for one student's own combination. */
+  function combinationDistribution(subjects) {
+    var list = sortSubjects(subjects), dist = {};
+    list.forEach(function (subject) {
+      dist[subject] = subject === JAMB_ENGLISH ? JAMB_ENGLISH_QUESTIONS : JAMB_OTHER_QUESTIONS;
+    });
+    return dist;
+  }
 
   /* The Free Tutorial CSV contract. It deliberately has no section, expected
      or maxMark column: every row is a multiple-choice question for the bank
@@ -527,12 +600,13 @@
     return null;
   }
 
-  /* English first, then the other three in the configured order. */
+  /* English first, then the other subjects in the edition's canonical order
+     (Mathematics, Physics, Chemistry, Biology) — never the order the keys of a
+     distribution happen to be stored in. */
   function jambSubjectOrder(dist) {
-    var others = Object.keys(dist || {}).filter(function (k) {
-      return k !== JAMB_ENGLISH && Number(dist[k]) > 0;
-    });
-    return [JAMB_ENGLISH].concat(others);
+    var present = Object.keys(dist || {}).filter(function (k) { return Number(dist[k]) > 0; });
+    if (present.indexOf(JAMB_ENGLISH) < 0) present.push(JAMB_ENGLISH);
+    return sortSubjects(present);
   }
 
   function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
@@ -886,6 +960,12 @@
     MAX_COMPETITION_QUESTIONS: MAX_COMPETITION_QUESTIONS,
     maxQuestionsFor: maxQuestionsFor,
     SUBJECTS: SUBJECTS.slice(),
+    JAMB_OPTIONAL_SUBJECTS: JAMB_OPTIONAL_SUBJECTS.slice(),
+    sortSubjects: sortSubjects,
+    cleanCombination: cleanCombination,
+    combinationOf: combinationOf,
+    hasCombination: hasCombination,
+    combinationDistribution: combinationDistribution,
     CSV_HEADER: CSV_HEADER,
     CSV_COLUMNS: CSV_COLUMNS.slice(),
     cleanSubjectDistribution: cleanSubjectDistribution,

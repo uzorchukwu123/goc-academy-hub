@@ -237,6 +237,34 @@ body.f27-mode #free-exam .f27-cbt-subject-count { font-weight: 900; }
 .f27-cbt-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 32px; border-radius: 10px; background: #F2F4F7; color: #344054; font-size: 13px; font-weight: 900; letter-spacing: .04em; }
 .f27-cbt-option.sel .f27-cbt-letter { background: #DC2626; color: #fff; }
 .f27-cbt-text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* ---- Competition question display: fit the content area (Free 2027 UTME) ----
+   Competition only; a Weekly Assessment keeps the exact layout it already had.
+   The exam keeps its three existing regions, so the top-right timer and the
+   bottom question-navigator bar do not move and are not pushed down. Inside the
+   scrolling body the card now fills the height actually available, and the
+   options sit in two columns from 640px up, so a normal question and every one
+   of its options are visible together without scrolling.
+
+   Type is reduced only to a readable floor (14px question, 13px option) and
+   never below it. The card has no overflow rule, so it can never show an
+   internal scrollbar. The body keeps its own overflow-y as a safety net: an
+   unusually long question or passage stays fully reachable rather than being
+   clipped, hidden or truncated. */
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-subjects { flex: 0 0 auto; margin-bottom: 0; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-passage { flex: 0 0 auto; margin-bottom: 8px; padding: 10px; font-size: 13px; line-height: 1.5; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-image { flex: 0 0 auto; margin-bottom: 8px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-image img { max-height: 30vh; width: auto; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-question { flex: 0 0 auto; font-size: clamp(14px, 1.1vh + 9px, 17px); line-height: 1.45; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-options { flex: 1 1 auto; min-height: 0; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; align-content: start; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-option { padding: 8px 10px; gap: 8px; min-height: 40px; border-radius: 10px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-letter { min-width: 36px; height: 26px; font-size: 12px; border-radius: 8px; }
+body.f27-mode #free-exam.f27-exam-competition .f27-cbt-text { font-size: clamp(13px, 0.9vh + 8px, 15px); line-height: 1.4; }
+@media (min-width: 640px) {
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .f27-cbt-bar { flex: 0 0 auto; position: relative; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff; border-top: 1px solid #E4E7EC; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
 .f27-cbt-btn { min-height: 46px; border-radius: 12px; border: 1px solid #D0D5DD; background: #fff; color: #141821; font-size: 13px; font-weight: 800; padding: 10px 12px; cursor: pointer; white-space: normal; line-height: 1.3; }
 .f27-cbt-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -307,6 +335,22 @@ body.f27-mode #free-exam .f27-cbt-subject-count { font-weight: 900; }
 .f27-chip.no { background: #FEF2F2; color: #B91C1C; }
 
 /* ---- the candidate's programme card (lessons, progress, access) ---------- */
+/* ---- JAMB subject combination (Free 2027 UTME only) ----
+   Shared by registration and the one-time choice in the portal. Every selector
+   is mode-scoped, so the original hub cannot render or be affected by it. */
+body.f27-mode .f27-comb-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 8px; border: 1.5px solid #D0D5DD; border-radius: 12px; background: #fff; color: #141821; font-size: 14px; font-weight: 600; cursor: pointer; }
+body.f27-mode .f27-comb-item input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: #DC2626; cursor: pointer; }
+body.f27-mode .f27-comb-item.compulsory { border-color: #DC2626; background: #FEF2F2; color: #B91C1C; cursor: default; }
+body.f27-mode .f27-comb-item.compulsory input { cursor: not-allowed; }
+body.f27-mode .f27-comb-tag { margin-left: auto; padding: 3px 8px; border-radius: 999px; background: #DC2626; color: #fff; font-size: 10px; font-weight: 900; letter-spacing: .06em; }
+body.f27-mode .f27-comb-summary { margin-top: 10px; font-size: 12.5px; font-weight: 700; color: #475467; }
+body.f27-mode .f27-subjects-prompt { background: #fff; border: 1.5px solid #DC2626; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+body.f27-mode .f27-subjects-prompt[hidden] { display: none; }
+body.f27-mode .f27-subjects-prompt h2 { margin: 0 0 8px; font-size: 16px; font-weight: 900; color: #141821; }
+/* .f27-lead is pale pink for the dark hero panels; inside this white card it
+   needs the normal body colour to stay readable. */
+body.f27-mode .f27-subjects-prompt .f27-lead { margin: 0 0 10px; max-width: none; font-size: 13.5px; color: #475467; }
+
 .f27-programme { background: #fff; border: 1px solid #E4E7EC; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
 .f27-prog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .f27-prog-head b { display: block; font-size: 15px; font-weight: 800; }

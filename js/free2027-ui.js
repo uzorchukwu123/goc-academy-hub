@@ -305,6 +305,77 @@
 
   /* ============================== 3. REGISTRATION (details + password + OTP) */
 
+  /* ---------------------------------------------- JAMB subject combination
+     One widget, two hosts: registration (freeComb…) and the one-time choice
+     shown to a record that predates combinations (freePick…). Use of English is
+     rendered checked and disabled, so it is never offered as a choice and can
+     never be deselected; the server adds it regardless. */
+  function combinationFrom(prefix) {
+    var picked = [rules.JAMB_ENGLISH];
+    rules.JAMB_OPTIONAL_SUBJECTS.forEach(function (subject) {
+      var box = $(prefix + subject.replace(/\s+/g, ''));
+      if (box && box.checked) picked.push(subject);
+    });
+    return picked;
+  }
+
+  F.freeCombUpdate = function (prefix) {
+    var picked = combinationFrom(prefix);
+    var clean = rules.cleanCombination(picked);
+    var summary = $(prefix + 'Summary');
+    if (summary) {
+      summary.textContent = clean.error
+        ? rules.JAMB_ENGLISH + ' (compulsory) + ' + (picked.length - 1) + ' of ' +
+          rules.JAMB_OTHER_SUBJECTS + ' additional subjects selected.'
+        : 'Your combination: ' + clean.subjects.join(', ') + '.';
+    }
+    return clean;
+  };
+
+  /* A fourth additional subject can never be held: the box just ticked is
+     released again and the student is told why. */
+  F.freeCombPick = function (prefix, subject) {
+    var box = $(prefix + String(subject).replace(/\s+/g, ''));
+    var errId = prefix === 'freeComb' ? 'freeRegErr' : 'freePickErr';
+    if (box && box.checked && combinationFrom(prefix).length - 1 > rules.JAMB_OTHER_SUBJECTS) {
+      box.checked = false;
+      showErr(errId, 'You can choose only ' + rules.JAMB_OTHER_SUBJECTS +
+        ' additional subjects alongside ' + rules.JAMB_ENGLISH + '. Deselect one first.');
+    } else {
+      showErr(errId, '');
+    }
+    F.freeCombUpdate(prefix);
+  };
+
+  /* Offered only while the server says this record has no combination. Once
+     saved it disappears for good, and no attempt or result is touched. */
+  function paintSubjectsPrompt() {
+    var host = $('freeSubjectsPrompt');
+    if (!host) return;
+    var needed = !!(F.me && F.me.needsSubjects) && api.hasToken();
+    host.hidden = !needed;
+    if (needed) F.freeCombUpdate('freePick');
+  }
+
+  F.freeSubjectsSave = function () {
+    var clean = F.freeCombUpdate('freePick');
+    if (clean.error) return showErr('freePickErr', clean.error);
+    var btn = $('freePickBtn');
+    busy(btn, true);
+    api.setSubjects(clean.subjects).then(function (r) {
+      busy(btn, false);
+      F.me = r.participant || F.me;
+      showErr('freePickErr', '');
+      paintSubjectsPrompt();
+      paintWho();
+      say('Your subject combination has been saved.');
+      F.freePortalLoad();
+    }, function (er) {
+      busy(btn, false);
+      showErr('freePickErr', er.message || 'Could not save your combination.');
+    });
+  };
+
   F.freeRegisterStart = function () {
     var err = $('freeRegErr');
     if (err) err.textContent = '';
@@ -318,6 +389,9 @@
     var password = ($('freePassword') || {}).value || '';
     var p = rules.cleanPassword(password);
     if (p.error) return showErr('freeRegErr', p.error);
+    /* Exactly Use of English + three others, checked before the code is sent. */
+    var comb = F.freeCombUpdate('freeComb');
+    if (comb.error) return showErr('freeRegErr', comb.error);
 
     var btn = $('freeRegBtn');
     busy(btn, true);
@@ -327,7 +401,8 @@
     /* Held only until the code is verified or resent, and only ever sent to the
        server, which stores a scrypt hash of it. */
     F.pendingPassword = p.password;
-    api.registerStart({ name: n.name, email: e.email, course: c.course, password: p.password }).then(function (r) {
+    F.pendingSubjects = comb.subjects;
+    api.registerStart({ name: n.name, email: e.email, course: c.course, password: p.password, subjects: comb.subjects }).then(function (r) {
       busy(btn, false);
       var step1 = $('freeRegStep1'), step2 = $('freeRegStep2');
       if (step1) step1.hidden = true;
@@ -355,7 +430,7 @@
     }
     var btn = $('freeOtpResendBtn');
     busy(btn, true);
-    api.registerStart({ name: F.pendingName, email: F.pendingEmail, course: F.pendingCourse, password: F.pendingPassword }).then(function () {
+    api.registerStart({ name: F.pendingName, email: F.pendingEmail, course: F.pendingCourse, password: F.pendingPassword, subjects: F.pendingSubjects }).then(function () {
       busy(btn, false);
       showErr('freeOtpErr', 'A new verification code has been emailed. Older codes are no longer valid.');
     }, function (er) {
@@ -479,6 +554,7 @@
     var mine = $('freePortalResults');
     if (!host) return;
     F.freeProgrammeLoad();
+    paintSubjectsPrompt();
     if (!api.hasToken()) {
       /* Direct entry: the portal is fully browsable before sign-in. Nothing
          here pushes the visitor into registration — the catalogue, the
@@ -501,6 +577,7 @@
       F.activities = r.activities || [];
       F.me = r.participant || F.me;
       paintWho();
+      paintSubjectsPrompt();
       if (F.tab === 'leaderboard') return paintBoards(host, mine);
       paintLists(host, mine);
     }, function (er) {
@@ -651,6 +728,14 @@
      load, save and resume; the local interval only draws it. When it reaches
      zero the paper is submitted, not discarded. */
   F.freeExamOpen = function (activityId) {
+    /* A record with no combination is asked once, before any new paper is
+       started, so nobody sits subjects they never chose. */
+    if (F.me && F.me.needsSubjects) {
+      paintSubjectsPrompt();
+      say('Choose your JAMB subject combination first — it decides the subjects in your paper.');
+      global.go('free-portal');
+      return;
+    }
     api.start(activityId).then(function (r) {
       if (r && r.submitted) return freeResultGo(r.result);
       F.exam = {
@@ -707,6 +792,12 @@
     if (meta) meta.textContent = n + ' question' + (n === 1 ? '' : 's') + ' in this paper';
     var kind = $('freeExamKind');
     if (kind) kind.textContent = rules.kindLabel(F.exam.kind);
+    /* The fit-to-viewport question layout is competition-only; a Weekly
+       Assessment keeps the exact layout it already had. */
+    var screen = $('free-exam');
+    if (screen && screen.classList) {
+      screen.classList.toggle('f27-exam-competition', F.exam.kind === rules.KIND_COMPETITION);
+    }
     var num = $('freeExamNum');
     if (num) num.textContent = 'Question ' + (F.exam.index + 1) + ' of ' + n;
     var prev = $('freeExamPrev'), next = $('freeExamNext'), sub = $('freeExamSubmit');
@@ -763,7 +854,9 @@
       if (!Object.prototype.hasOwnProperty.call(counts, subject)) { counts[subject] = 0; order.push(subject); }
       counts[subject]++;
     });
-    return { order: order, counts: counts };
+    /* Canonical display order — Use of English, Mathematics, Physics,
+       Chemistry, Biology — never the order questions arrive in. */
+    return { order: rules.sortSubjects(order), counts: counts };
   }
 
   function paintSubjectNav() {
@@ -1268,7 +1361,7 @@
   /* Expose the handful of names the markup calls. */
   var names = ['freeHomeCta', 'freeRegisterStart', 'freeRegisterVerify', 'freeRegisterRestart',
     'freePortalTab', 'freeExamOpen', 'freeExamPick', 'freeExamMove', 'freeExamPanel', 'freeExamJump',
-    'freeExamPanelClose', 'freeExamSubject', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeReviewShow', 'freeReviewBack', 'freeBoardOpen',
+    'freeExamPanelClose', 'freeExamSubject', 'freeCombPick', 'freeCombUpdate', 'freeSubjectsSave', 'freeExamLeave', 'freeExamSubmit', 'freeExamConfirmCancel', 'freeExamConfirmSubmit', 'freeResultShow', 'freeReviewShow', 'freeReviewBack', 'freeBoardOpen',
     'freeBoardOpenList', 'freeSignOut', 'freeAdminLogin', 'freeRegisterResend', 'freePortalLoad', 'applyMode',
     'freeProgrammeLoad', 'freeLessonDone', 'freeNavBack', 'freeNavHome', 'dwFreePortal',
     'freeCbtPortal', 'freeExamHome', 'freeLogin', 'freePortalEnter', 'heroAccount'];

@@ -9081,6 +9081,12 @@ const ROUTES = [
   { method: 'GET', path: /^\/api\/free2027\/me$/, need: 'free', handler: freeRoute((req, res, body, sess) => {
       okJson(res, free2027.me(req.free2027.data));
     }) },
+  /* One-time JAMB subject choice for a student whose record predates subject
+     combinations. Writes only the subjects field; a saved combination is never
+     replaced, and no attempt or result is touched. */
+  { method: 'PUT', path: /^\/api\/free2027\/subjects$/, need: 'free', handler: freeRoute((req, res, body) => {
+      return free2027.setCombination(req.free2027.data, body).then(r => okJson(res, r));
+    }) },
   /* Signing out ends THIS session only. The token is passed so the server can
      delete exactly the session being ended; the student's account and every
      record attached to it are left untouched. */

@@ -98,7 +98,10 @@ function makeWorld(opts) {
    'freeOtpBtn', 'freeOtpResendBtn', 'freeWho', 'freePortalList', 'freePortalResults', 'freeExamTitle', 'freeExamMeta', 'freeExamNum',
    'freeExamPanelLabel', 'freeExamPassage', 'freeExamImage', 'freeExamQ', 'freeExamOpts', 'freeExamTime',
    'freeExamSubmit', 'freeExamPanelGrid', 'freeExamPanelBack', 'freeExamPanel', 'freeExamKind', 'freeExamPrev', 'freeExamNext',
-   'freeExamConfirmBack', 'freeExamConfirm', 'freeExamConfirmAnswered', 'freeExamConfirmUnanswered', 'freeExamConfirmTotal', 'freeExamConfirmCancel', 'freeExamSubjects', 'freeResultBody', 'freeBoardBody',
+   'freeExamConfirmBack', 'freeExamConfirm', 'freeExamConfirmAnswered', 'freeExamConfirmUnanswered', 'freeExamConfirmTotal', 'freeExamConfirmCancel', 'freeExamSubjects', 'free-exam',
+   'freeCombMathematics', 'freeCombPhysics', 'freeCombChemistry', 'freeCombBiology', 'freeCombSummary',
+   'freeSubjectsPrompt', 'freePickMathematics', 'freePickPhysics', 'freePickChemistry', 'freePickBiology',
+   'freePickSummary', 'freePickErr', 'freePickBtn', 'freeResultBody', 'freeBoardBody',
    'freeAdminNote', 'freeAdminErr', 'freeAdminId', 'freeAdminPw', 'freeAdminBtn', 'lpStat4', 'landing', 'freeProgramme',
    'free-admin', 'free-home', 'free-portal', 'free-result', 'free-exam', 'free-leaderboard', 'admin-gate', 'admin'
   ].forEach(el);
@@ -127,6 +130,14 @@ function makeWorld(opts) {
     registerStart: function (d) { calls.api.push(['registerStart', d]); return Promise.resolve(o.startReply || { sent: true, delivered: true, expiresInMin: 15, resendInSec: 60 }); },
     registerVerify: function (d) { calls.api.push(['registerVerify', d]); return Promise.resolve(o.verifyReply || { token: 'T1', participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', email: 'ad••@example.com' } }); },
     me: function () { return Promise.resolve({ participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law' } }); },
+    /* Mirrors the server: setCombination writes the record, so the next
+       /activities read returns the SAVED participant, not the stale one. */
+    setSubjects: function (s) {
+      calls.api.push(['setSubjects', s]);
+      var saved = { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', course: 'Law', subjects: s, needsSubjects: false };
+      if (o.listReply && o.listReply.participant) o.listReply.participant = saved;
+      return Promise.resolve(o.setSubjectsReply || { participant: saved });
+    },
     logout: function () { return Promise.resolve({ ok: true }); },
     activities: function () { calls.api.push(['activities']); return Promise.resolve(o.listReply || { activities: [], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada' } }); },
     /* Public catalogue used by the direct, registration-free CBT Portal entry. */
@@ -340,6 +351,26 @@ settle(load(w1)).then(function () {
     w.sandbox.freeRegisterStart();
     ok('a password without a number is refused with the exact reason', w.calls.api.length === beforePw && /letters and numbers/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
     w.els.freePassword.value = 'AdaPass-2027';
+    /* The JAMB combination is now part of registration: Use of English is
+       compulsory and exactly three of the remaining four must be chosen. */
+    var beforeComb = w.calls.api.length;
+    w.sandbox.freeRegisterStart();
+    ok('a registration with no combination is refused before it is sent',
+      w.calls.api.length === beforeComb && /exactly 3 additional subjects/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
+    w.els.freeCombMathematics.checked = true;
+    w.els.freeCombPhysics.checked = true;
+    var beforeTwo = w.calls.api.length;
+    w.sandbox.freeRegisterStart();
+    ok('two additional subjects are still refused',
+      w.calls.api.length === beforeTwo && /exactly 3 additional subjects/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
+    w.els.freeCombChemistry.checked = true;
+    w.sandbox.freeCombPick('freeComb', 'Chemistry');
+    ok('the chosen combination is displayed before registration is submitted',
+      /Use of English, Mathematics, Physics, Chemistry/.test(w.els.freeCombSummary.textContent), w.els.freeCombSummary.textContent);
+    w.els.freeCombBiology.checked = true;
+    w.sandbox.freeCombPick('freeComb', 'Biology');
+    ok('a fourth additional subject cannot be held', w.els.freeCombBiology.checked === false);
+    ok('and the student is told why', /only 3 additional subjects/i.test(w.els.freeRegErr.textContent), w.els.freeRegErr.textContent);
     w.sandbox.freeRegisterStart();
     return settle().then(function () {
       if (process.env.F27_DEBUG) console.log('REGERR', JSON.stringify(w.els.freeRegErr.textContent), w.calls.api.length, JSON.stringify(w.calls.api));
@@ -348,6 +379,9 @@ settle(load(w1)).then(function () {
         w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].email === 'ada@example.com');
       ok('the chosen password travels with the registration request',
         w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].password === 'AdaPass-2027');
+      ok('the chosen combination travels with the registration request',
+        w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[0][1].subjects.join('|') ===
+        'Use of English|Mathematics|Physics|Chemistry');
       ok('the password field is emptied once the code is on its way', w.els.freePassword.value === '');
       ok('the first step is hidden and the code step is shown', w.els.freeRegStep1.hidden === true && w.els.freeRegStep2.hidden === false);
       ok('the address is named on the code step', w.els.freeOtpTo.textContent === 'ada@example.com');
@@ -358,6 +392,9 @@ settle(load(w1)).then(function () {
       ok('resend asks the server to send a new email to the same address', w.calls.api.filter(function (c) { return c[0] === 'registerStart'; }).length === 2);
       ok('the resend still carries the password, so the account can be created',
         w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[1][1].password === 'AdaPass-2027');
+      ok('the resend still carries the chosen combination',
+        w.calls.api.filter(function (c) { return c[0] === 'registerStart'; })[1][1].subjects.join('|') ===
+        'Use of English|Mathematics|Physics|Chemistry');
       w.els.freeOtp.value = '12';
       var n = w.calls.api.length;
       w.sandbox.freeRegisterVerify();
@@ -999,6 +1036,132 @@ settle(load(w1)).then(function () {
   ok('the countdown timer markup is unchanged', /class="f27-cbt-timer" id="freeExamTimer"/.test(html));
   ok('the bottom question navigator markup is unchanged',
     /onclick="freeExamPanel\(\)"><span id="freeExamPanelLabel"/.test(html));
+}).then(function () {
+  console.log('\nCanonical subject order, competition layout and the Submit button');
+  function bars(h) {
+    var out = [], m;
+    var re = /aria-current="(true|false)"[^>]*onclick="freeExamSubject\((\d+)\)"><span class="f27-cbt-subject-name">([^<]*)<\/span><span class="f27-cbt-subject-count">\((\d+)\)<\/span>/g;
+    while ((m = re.exec(h))) out.push({ active: m[1] === 'true', i: Number(m[2]), subject: m[3], count: Number(m[4]) });
+    return out;
+  }
+  /* Deliberately NOT in canonical order, to prove the bar sorts by the
+     edition's order and not by the order questions happen to arrive in. */
+  var paper = [
+    { id: 'b1', subject: 'Biology', kind: 'objective', text: 'Biology one', options: ['x', 'y'] },
+    { id: 'b2', subject: 'Biology', kind: 'objective', text: 'Biology two', options: ['x', 'y'] },
+    { id: 'm1', subject: 'Mathematics', kind: 'objective', text: 'Maths one', options: ['x', 'y'] },
+    { id: 'e1', subject: 'Use of English', kind: 'objective', text: 'English one', options: ['x', 'y'] },
+    { id: 'e2', subject: 'Use of English', kind: 'objective', text: 'English two', options: ['x', 'y'] },
+    { id: 'e3', subject: 'Use of English', kind: 'objective', text: 'English three', options: ['x', 'y'] },
+    { id: 'p1', subject: 'Physics', kind: 'objective', text: 'Physics one', options: ['x', 'y'] }
+  ];
+  var w = makeWorld({ token: 'PT', startAttempt: {
+    attempt: { id: 'F27-C1', title: 'UTME Cup', kind: 'competition', remainingSec: 7200, responses: {} },
+    questions: paper, resumed: false } });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freeExamOpen('F27-Q9');
+    return settle(w);
+  }).then(function () {
+    var list = bars(w.els.freeExamSubjects.innerHTML);
+    ok('the bar order is canonical regardless of question order',
+      list.map(function (c) { return c.subject; }).join('|') === 'Use of English|Mathematics|Physics|Biology',
+      JSON.stringify(list));
+    ok('the counts are still the real allocation',
+      list.map(function (c) { return c.count; }).join(',') === '3,1,1,2', JSON.stringify(list));
+    ok('only the candidate\'s subjects appear', list.length === 4);
+    ok('the competition screen gets the fit-to-viewport layout class',
+      w.els['free-exam'].classList.contains('f27-exam-competition'));
+    ok('Submit is hidden on the first question', w.els.freeExamSubmit.hidden === true);
+    ok('Next is available on the first question', w.els.freeExamNext.hidden === false);
+    w.sandbox.freeExamSubject(3);
+    ok('switching to an earlier subject does not reveal Submit', w.els.freeExamSubmit.hidden === true);
+    w.sandbox.freeExamJump(5);
+    ok('Submit is still hidden before the final question', w.els.freeExamSubmit.hidden === true);
+    w.sandbox.freeExamJump(6);
+    ok('Submit appears on the final question', w.els.freeExamSubmit.hidden === false);
+    ok('and Next gives way to it', w.els.freeExamNext.hidden === true);
+    ok('Previous still works at the end', w.els.freeExamPrev.disabled === false);
+    w.sandbox.freeExamMove(-1);
+    ok('moving back hides Submit again', w.els.freeExamSubmit.hidden === true);
+    ok('the timer text was never touched by any of this', w.els.freeExamTime.textContent === '2:00:00', w.els.freeExamTime.textContent);
+    ok('no extra attempt was started', w.calls.api.filter(function (c) { return c[0] === 'start'; }).length === 1);
+
+    /* A Weekly Assessment must not acquire the competition layout. */
+    var ww = makeWorld({ token: 'PT', startAttempt: {
+      attempt: { id: 'F27-W1', title: 'Week 1', kind: 'weekly', remainingSec: 615, responses: {} },
+      questions: paper, resumed: false } });
+    load(ww);
+    return settle(ww).then(function () {
+      ww.sandbox.freeExamOpen('F27-Q1');
+      return settle(ww);
+    }).then(function () {
+      ok('a weekly assessment does not get the competition layout class',
+        !ww.els['free-exam'].classList.contains('f27-exam-competition'));
+      ok('and still shows no subject bar', ww.els.freeExamSubjects.hidden === true);
+    });
+  });
+}).then(function () {
+  console.log('\nThe one-time subject choice for an older record');
+  var needing = { id: 'GOC-F-001', name: 'Ada', course: 'Law', subjects: [], needsSubjects: true };
+  var w = makeWorld({ token: 'PT', listReply: { activities: [], participant: needing } });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freePortalLoad();
+    return settle(w);
+  }).then(function () {
+    ok('the portal asks for the combination once', w.els.freeSubjectsPrompt.hidden === false);
+    var before = w.calls.api.filter(function (c) { return c[0] === 'start'; }).length;
+    w.sandbox.freeExamOpen('F27-Q9');
+    return settle(w).then(function () {
+      ok('no paper is started until the combination is chosen',
+        w.calls.api.filter(function (c) { return c[0] === 'start'; }).length === before);
+      w.els.freePickMathematics.checked = true;
+      w.els.freePickPhysics.checked = true;
+      var saves = w.calls.api.filter(function (c) { return c[0] === 'setSubjects'; }).length;
+      w.sandbox.freeSubjectsSave();
+      ok('an incomplete choice is refused in the page',
+        w.calls.api.filter(function (c) { return c[0] === 'setSubjects'; }).length === saves &&
+        /exactly 3 additional subjects/i.test(w.els.freePickErr.textContent), w.els.freePickErr.textContent);
+      w.els.freePickBiology.checked = true;
+      w.sandbox.freeCombPick('freePick', 'Biology');
+      ok('the choice is shown before it is saved',
+        /Use of English, Mathematics, Physics, Biology/.test(w.els.freePickSummary.textContent), w.els.freePickSummary.textContent);
+      w.sandbox.freeSubjectsSave();
+      return settle(w);
+    });
+  }).then(function () {
+    var sent = w.calls.api.filter(function (c) { return c[0] === 'setSubjects'; });
+    ok('the valid choice is sent once', sent.length === 1, JSON.stringify(sent));
+    ok('and carries Use of English plus exactly three others',
+      sent[0][1].join('|') === 'Use of English|Mathematics|Physics|Biology', JSON.stringify(sent[0]));
+    ok('the prompt disappears once saved', w.els.freeSubjectsPrompt.hidden === true);
+  });
+}).then(function () {
+  console.log('\nThe new styles and markup stay inside the edition');
+  var layout = css.split('}').filter(function (b) { return b.indexOf('f27-exam-competition') > -1; });
+  ok('the fit-to-viewport rules exist', layout.length > 0);
+  ok('every one is scoped to the mode AND the competition exam screen',
+    layout.every(function (b) { return b.indexOf('body.f27-mode #free-exam.f27-exam-competition') > -1; }),
+    layout.filter(function (b) { return b.indexOf('body.f27-mode #free-exam.f27-exam-competition') < 0; }).join('}'));
+  ok('the question card is never given an internal scrollbar',
+    layout.filter(function (b) { return /\.f27-cbt-card\s*\{/.test(b); })
+      .every(function (b) { return !/overflow(-y)?\s*:\s*(auto|scroll)/.test(b); }));
+  ok('readable type floors are kept, not shrunk away',
+    /clamp\(14px/.test(css) && /clamp\(13px/.test(css));
+  ok('options become two columns on wider screens',
+    /min-width: 640px[\s\S]{0,200}f27-exam-competition[\s\S]{0,120}repeat\(2/.test(css));
+  var comb = css.split('}').filter(function (b) { return /f27-comb|f27-subjects-prompt/.test(b); });
+  ok('the combination widget rules are mode-scoped too',
+    comb.length > 0 && comb.every(function (b) { return b.indexOf('body.f27-mode') > -1; }));
+  ok('Use of English is preselected and cannot be deselected in either host',
+    (html.match(/<input type="checkbox" checked disabled aria-label="Use of English, compulsory">/g) || []).length === 2);
+  ok('it is labelled COMPULSORY', (html.match(/f27-comb-tag">COMPULSORY</g) || []).length === 2);
+  ok('the four optional subjects are offered in both hosts',
+    ['Mathematics', 'Physics', 'Chemistry', 'Biology'].every(function (s) {
+      return html.indexOf('id="freeComb' + s + '"') > -1 && html.indexOf('id="freePick' + s + '"') > -1;
+    }));
+  ok('the one-time prompt starts hidden', /id="freeSubjectsPrompt"[^>]*hidden/.test(html));
 }).then(function () {
   return null;
 }).catch(function (e) {
