@@ -32,6 +32,7 @@ doc.body.appendChild(sheet);
 sheet.appendChild(panel);
 
 var saves = [], messages = [];
+var activityRows = [];
 var api = {
   adminBanks: function () {
     return Promise.resolve({
@@ -42,7 +43,7 @@ var api = {
       }
     });
   },
-  adminActivities: function () { return Promise.resolve({ activities: [] }); },
+  adminActivities: function () { return Promise.resolve({ activities: activityRows }); },
   adminLessons: function () { return Promise.resolve({ lessons: [] }); },
   saveActivity: function (payload, id) {
     saves.push([JSON.parse(JSON.stringify(payload)), id || null]);
@@ -169,6 +170,81 @@ function lastMessage() { return messages.length ? messages[messages.length - 1] 
   ok('and the weekly note does not mention a competition pool',
     !/180/.test(el('f27CountNote') ? el('f27CountNote').textContent : ''),
     el('f27CountNote') ? el('f27CountNote').textContent : '(missing)');
+
+  head('Weekly wording distinguishes the five-subject activity pool from a student paper');
+  sandbox.f27AdmStartActivity('weekly');
+  await tick();
+  setCount(50);
+  sandbox.f27AdmEditorRead();
+  var weeklyHelp = 'Enter the total number of questions to allocate across all five subjects. Each student receives only questions from their registered subject combination.';
+  ok('the weekly field is labelled Activity Question Pool Size',
+    !!doc.querySelector('label[for="f27Count"]') &&
+    doc.querySelector('label[for="f27Count"]').textContent === 'Activity Question Pool Size',
+    doc.querySelector('label[for="f27Count"]') ? doc.querySelector('label[for="f27Count"]').textContent : '(missing)');
+  ok('entering 50 keeps the required five-subject explanation after availability loads',
+    el('f27Count').value === '50' && el('f27CountNote').textContent.indexOf(weeklyHelp) === 0,
+    el('f27CountNote').textContent);
+  ok('the blank-distribution note explains the even five-subject allocation',
+    /blank to allocate the activity pool evenly across all five subjects/i.test(el('f27DistNote') ? el('f27DistNote').textContent : ''),
+    el('f27DistNote') ? el('f27DistNote').textContent : '(missing)');
+  el('f27Title').value = 'Weekly Assessment 001';
+  setDist(null);
+  var weeklyBefore = saves.length;
+  sandbox.f27AdmSaveActivity(null);
+  await tick();
+  ok('the clarified wording leaves the saved pool count and allocation payload unchanged',
+    saves.length === weeklyBefore + 1 && saves[saves.length - 1][0].questionCount === 50 &&
+    saves[saves.length - 1][0].subjectDistribution === null,
+    JSON.stringify(saves[saves.length - 1] || []));
+
+  head('Weekly validation uses the pool-size wording without changing its limits');
+  sandbox.f27AdmStartActivity('weekly');
+  await tick();
+  setCount(0);
+  var invalidWeeklyBefore = saves.length;
+  sandbox.f27AdmSaveActivity(null);
+  await tick();
+  ok('an invalid weekly pool is still refused', saves.length === invalidWeeklyBefore);
+  ok('and the message names the activity question pool size',
+    /activity question pool size/i.test(lastMessage()), lastMessage());
+  setCount(50);
+  setDist({ 'Use of English': 10, Mathematics: 10, Physics: 10, Chemistry: 10 });
+  var mismatchWeeklyBefore = saves.length;
+  sandbox.f27AdmSaveActivity(null);
+  await tick();
+  ok('a mismatched weekly distribution is still refused', saves.length === mismatchWeeklyBefore);
+  ok('and its message refers to the activity question pool size',
+    /add up to the activity question pool size \(50\)/i.test(lastMessage()), lastMessage());
+
+  head('Switching the editor back to Competition preserves every Competition wording');
+  sandbox.f27AdmStartActivity('weekly');
+  await tick();
+  el('f27Kind').value = 'competition';
+  sandbox.f27AdmEditorRead();
+  sandbox.f27AdmLoadAvailability();
+  await tick();
+  ok('the Competition label is still Number of questions',
+    doc.querySelector('label[for="f27Count"]').textContent === 'Number of questions',
+    doc.querySelector('label[for="f27Count"]').textContent);
+  ok('the Competition availability and 180-question paper note is unchanged',
+    el('f27CountNote').textContent === 'Available eligible questions in this category’s bank: 220. You may allocate up to 220. A competition pool may be larger than one paper: each candidate still sits the standard 180-question paper from their own subject combination.',
+    el('f27CountNote').textContent);
+  ok('the Competition distribution note is unchanged',
+    el('f27DistNote').textContent === 'Leave every box blank to draw from all eligible questions. If used, the counts must add up to the number of questions.',
+    el('f27DistNote').textContent);
+
+  head('The activity list labels only Weekly counts as activity pools');
+  activityRows = [
+    { id: 'W-WORDS', kind: 'weekly', title: 'Weekly wording', questionCount: 50, durationMin: 120, maxAttempts: 1, state: 'open', status: 'published', published: true, attempts: 0, opensAt: 1, closesAt: 9999999999999, leaderboard: {} },
+    { id: 'C-WORDS', kind: 'competition', title: 'Competition wording', questionCount: 220, durationMin: 120, maxAttempts: 1, state: 'open', status: 'published', published: true, attempts: 0, opensAt: 1, closesAt: 9999999999999, leaderboard: { approved: false, published: false } }
+  ];
+  sandbox.f27AdmCancelEdit();
+  sandbox.f27AdmTab('activities');
+  await tick();
+  ok('the Weekly row says 50-question activity pool',
+    /Weekly Assessment · 50-question activity pool · 120 min/.test(panel.innerHTML), panel.innerHTML.slice(0, 500));
+  ok('the Competition row still says 220 questions',
+    /Competition · 220 questions · 120 min/.test(panel.innerHTML), panel.innerHTML.slice(0, 500));
 
   head('Only activity saves were attempted — nothing else was written');
   ok('every recorded call is an activity save', saves.every(function (s) { return s[0] && s[0].kind; }));

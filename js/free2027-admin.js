@@ -37,6 +37,10 @@
   var api = GOC.free;
   if (!rules || !api) return;
 
+  var WEEKLY_POOL_HELP = 'Enter the total number of questions to allocate across all five subjects. Each student receives only questions from their registered subject combination.';
+  var WEEKLY_DISTRIBUTION_HELP = 'Leave every box blank to allocate the activity pool evenly across all five subjects. If used, the counts must add up to the activity question pool size.';
+  var COMPETITION_DISTRIBUTION_HELP = 'Leave every box blank to draw from all eligible questions. If used, the counts must add up to the number of questions.';
+
   var A = {};                 // panel state
   A.tab = 'mode';
   A.overview = null;
@@ -475,6 +479,9 @@
         ? '<span class="f27-chip ' + (a.leaderboard.published ? 'ok' : a.leaderboard.approved ? 'warn' : '') + '">' +
             (a.leaderboard.published ? 'board published' : a.leaderboard.approved ? 'board approved' : 'board private') + '</span>'
         : '<span class="f27-chip">private results</span>';
+      var countLabel = a.kind === rules.KIND_WEEKLY
+        ? a.questionCount + '-question activity pool'
+        : a.questionCount + ' questions';
       var actions = '';
       if (a.published && a.status === rules.STATUS_PUBLISHED) {
         actions += '<button class="ad-btn" onclick="f27AdmActivityState(\'' + esc(a.id) + '\',\'close\')">Close</button>';
@@ -488,7 +495,7 @@
       return '<div class="ad-card" style="margin-bottom:10px">' +
         '<div class="f27-admin-row" style="border-bottom:none">' +
           '<div><b>' + esc(a.title) + ' <span class="f27-chip ' + (a.state === 'open' ? 'ok' : a.state === 'upcoming' ? 'warn' : '') + '">' + esc(rules.stateLabel(a.state)) + '</span> ' + lb + '</b>' +
-          '<span>' + esc(rules.kindLabel(a.kind)) + ' · ' + a.questionCount + ' questions · ' + a.durationMin + ' min · up to ' + a.maxAttempts + ' attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
+          '<span>' + esc(rules.kindLabel(a.kind)) + ' · ' + countLabel + ' · ' + a.durationMin + ' min · up to ' + a.maxAttempts + ' attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
           '<span>opens ' + esc(when(a.opensAt)) + ' · closes ' + esc(when(a.closesAt)) + (a.reopenClosesAt ? ' (reopened to ' + esc(when(a.reopenClosesAt)) + ')' : '') + '</span>' +
           '<span>' + a.attempts + ' submitted · ' + (a.status === rules.STATUS_DRAFT ? 'not published yet' : a.status) + '</span>' +
           /* A standard 180-question UTME competition shows its readiness here so
@@ -574,6 +581,7 @@
     if (!host) return;
     var bank = a.kind === rules.KIND_COMPETITION ? 'competition' : 'weekly';
     var bankLabel = bank === 'competition' ? 'Competition Question Bank' : 'Weekly Assessment Question Bank';
+    var weekly = a.kind === rules.KIND_WEEKLY;
     host.innerHTML = '<div class="ad-card f27-activity-editor"><div class="ad-h">' + (a.id ? 'Edit activity' : 'Create Activity') + '</div>' +
       '<div class="ad-grid2 two">' +
         '<div class="ad-field"><label for="f27Kind">Category</label><select id="f27Kind" onchange="f27AdmEditorRead(); f27AdmLoadAvailability()">' +
@@ -584,13 +592,14 @@
       '</div>' +
       '<p class="ad-note">Questions are retrieved automatically from the <b>' + bankLabel + '</b>. There is no individual question picker.</p>' +
       '<div id="f27Availability" class="f27-availability"><div class="ad-loading">Checking available eligible questions…</div></div>' +
-      '<div class="ad-field"><label for="f27Count">Number of questions</label>' +
+      '<div class="ad-field"><label id="f27CountLabel" for="f27Count">' + (weekly ? 'Activity Question Pool Size' : 'Number of questions') + '</label>' +
         '<input id="f27Count" type="number" min="1" max="' + rules.maxQuestionsFor(a.kind, A.availability && A.availability.total) + '" step="1" value="' + Number(a.questionCount || 0) + '" onchange="f27AdmEditorRead()">' +
-        '<p class="ad-note" id="f27CountNote">Cannot exceed the available eligible questions in this category’s bank.' +
-        (a.kind === rules.KIND_COMPETITION ? ' A competition pool may be larger than one paper: each candidate still sits the standard 180-question paper from their own subject combination.' : '') +
+        '<p class="ad-note" id="f27CountNote">' +
+        (weekly ? WEEKLY_POOL_HELP : 'Cannot exceed the available eligible questions in this category’s bank.' +
+          (a.kind === rules.KIND_COMPETITION ? ' A competition pool may be larger than one paper: each candidate still sits the standard 180-question paper from their own subject combination.' : '')) +
         '</p></div>' +
       '<div class="ad-field"><label>Optional subject distribution</label>' +
-        '<p class="ad-note">Leave every box blank to draw from all eligible questions. If used, the counts must add up to the number of questions.</p>' +
+        '<p class="ad-note" id="f27DistNote">' + (weekly ? WEEKLY_DISTRIBUTION_HELP : COMPETITION_DISTRIBUTION_HELP) + '</p>' +
         distributionInputsHtml(a) + '</div>' +
       '<div class="ad-grid2 two">' +
         '<label class="f27-question-active"><input id="f27RandQ" type="checkbox"' + (a.randomizeQuestions !== false ? ' checked' : '') + ' onchange="f27AdmEditorRead()"> Randomise question order</label>' +
@@ -632,10 +641,12 @@
       global.f27AdmEditorRead();
       var count = $('f27Count');
       var cap = rules.maxQuestionsFor(A.editing && A.editing.kind, A.availability.total);
+      var weekly = A.editing && A.editing.kind === rules.KIND_WEEKLY;
       if (count) { count.max = String(cap); count.setAttribute('max', String(cap)); }
       var note = $('f27CountNote');
       if (note) {
-        note.textContent = 'Available eligible questions in this category’s bank: ' + A.availability.total +
+        note.textContent = (weekly ? WEEKLY_POOL_HELP + ' ' : '') +
+          'Available eligible questions in this category’s bank: ' + A.availability.total +
           '. You may allocate up to ' + cap + '.' +
           ((A.editing && A.editing.kind === rules.KIND_COMPETITION)
             ? ' A competition pool may be larger than one paper: each candidate still sits the standard 180-question paper from their own subject combination.'
@@ -660,6 +671,13 @@
     var a = A.editing;
     if (!a) return;
     a.kind = rules.cleanKind(($('f27Kind') || {}).value) || a.kind;
+    /* Keep the count wording in step with the selected category immediately,
+       even when the availability request is slow or unavailable. */
+    var weekly = a.kind === rules.KIND_WEEKLY;
+    var countLabel = $('f27CountLabel');
+    if (countLabel) countLabel.textContent = weekly ? 'Activity Question Pool Size' : 'Number of questions';
+    var distNote = $('f27DistNote');
+    if (distNote) distNote.textContent = weekly ? WEEKLY_DISTRIBUTION_HELP : COMPETITION_DISTRIBUTION_HELP;
     a.title = ($('f27Title') || {}).value || '';
     a.instructions = ($('f27Instr') || {}).value || '';
     a.opensAt = fromLocalInput(($('f27Opens') || {}).value) || a.opensAt;
@@ -695,7 +713,9 @@
     var count = Number(a.questionCount);
     var cap = rules.maxQuestionsFor(a.kind, A.availability && A.availability.total);
     if (!isFinite(count) || count < 1 || count > cap) {
-      say('Set how many questions to include, between 1 and ' + cap + '.');
+      say(a.kind === rules.KIND_WEEKLY
+        ? 'Set the activity question pool size, between 1 and ' + cap + '.'
+        : 'Set how many questions to include, between 1 and ' + cap + '.');
       return;
     }
     if (A.availability && count > A.availability.total) {
@@ -705,7 +725,12 @@
     if (a.subjectDistribution) {
       var sum = 0;
       Object.keys(a.subjectDistribution).forEach(function (k) { sum += Number(a.subjectDistribution[k]) || 0; });
-      if (sum !== count) { say('Subject distribution must add up to the requested number of questions (' + count + ').'); return; }
+      if (sum !== count) {
+        say(a.kind === rules.KIND_WEEKLY
+          ? 'Subject distribution must add up to the activity question pool size (' + count + ').'
+          : 'Subject distribution must add up to the requested number of questions (' + count + ').');
+        return;
+      }
       if (A.availability) {
         var bad = Object.keys(a.subjectDistribution).filter(function (k) { return Number(a.subjectDistribution[k]) > Number(A.availability.bySubject[k] || 0); });
         if (bad.length) { say('Not enough eligible ' + bad[0] + ' questions in this category’s bank.'); return; }

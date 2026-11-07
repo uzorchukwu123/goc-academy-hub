@@ -30,6 +30,7 @@ var uiSrc = read('js/free2027-ui.js');
 var apiSrc = read('js/free2027-api.js');
 var html = read('index.html');
 var css = read('css/free2027.css');
+var sw = read('sw.js');
 
 /* ------------------------------------------------------------ a tiny DOM */
 function El(tag) {
@@ -1136,6 +1137,133 @@ settle(load(w1)).then(function () {
     ok('and carries Use of English plus exactly three others',
       sent[0][1].join('|') === 'Use of English|Mathematics|Physics|Biology', JSON.stringify(sent[0]));
     ok('the prompt disappears once saved', w.els.freeSubjectsPrompt.hidden === true);
+  });
+}).then(function () {
+  head('Weekly wording: a 50-question activity pool is a 40-question student paper');
+  function wordingActivity(id, kind, count) {
+    return { id: id, kind: kind, title: kind === 'weekly' ? 'Weekly Assessment 001' : 'UTME Cup',
+      instructions: 'Read each question carefully.', opensAt: 1, closesAt: 9999999999999,
+      durationMin: 120, maxAttempts: 1, questionCount: count, state: 'open',
+      attemptsUsed: 0, attemptsLeft: 1, openAttemptId: null, remainingSec: 0, bestScore: -1,
+      leaderboard: kind === 'competition' ? { approved: false, published: false } : null,
+      leaderboardPublished: false };
+  }
+  function wordingPaper(subjects) {
+    var questions = [];
+    subjects.forEach(function (subject) {
+      for (var i = 0; i < 10; i++) questions.push({ id: subject + '-' + i, subject: subject,
+        text: subject + ' question ' + (i + 1), options: ['A', 'B', 'C', 'D'] });
+    });
+    return questions;
+  }
+  var b, sizes, guest, compView;
+  var mpc = ['Use of English', 'Mathematics', 'Physics', 'Chemistry'];
+  var mcb = ['Use of English', 'Mathematics', 'Chemistry', 'Biology'];
+  var weekly = wordingActivity('W-50', 'weekly', 50);
+  var competition = wordingActivity('C-220', 'competition', 220);
+  var served = wordingPaper(mpc);
+  var w = makeWorld({ token: 'PT',
+    listReply: { activities: [weekly, competition], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', subjects: mpc, needsSubjects: false } },
+    startAttempt: { attempt: { id: 'A-40', activityId: 'W-50', title: 'Weekly Assessment 001', kind: 'weekly', remainingSec: 7200, responses: {} }, questions: served, resumed: false }
+  });
+  load(w);
+  return settle(w).then(function () {
+    w.sandbox.freePortalLoad();
+    return settle(w);
+  }).then(function () {
+    var html = w.els.freePortalList.innerHTML;
+    ok('the student card labels 50 as the activity pool', /Activity pool: <b>50<\/b> questions/.test(html), html.slice(0, 700));
+    ok('and separately shows the actual 40-question paper', /Your paper: <b>40<\/b> questions/.test(html), html.slice(0, 700));
+    ok('the card instructions explain the pool and the four registered subjects',
+      /This activity has a 50-question pool\. Your paper contains 40 questions from your four registered subjects, including compulsory Use of English\./.test(html), html.slice(0, 900));
+    ok('the administrator instructions are preserved', /Read each question carefully\./.test(html));
+    ok('the pool is no longer presented as the student examination length',
+      !/<span><b>50<\/b> questions<\/span>/.test(html), html.slice(0, 700));
+    w.sandbox.freeGo('free-home');
+    return settle(w);
+  }).then(function () {
+    ok('the public home card also distinguishes pool 50 from paper 40',
+      /50-question activity pool · your paper: 40 questions/.test(w.els.freeHomeOpen.innerHTML), w.els.freeHomeOpen.innerHTML);
+    ok('the Competition home card wording is unchanged', /Competition · ranked on score, then on time · 220 questions · 120 min/.test(w.els.freeHomeOpen.innerHTML));
+    w.sandbox.freeExamOpen('W-50');
+    return settle(w);
+  }).then(function () {
+    ok('the exam header uses the 40 questions actually served and labels the 50-question pool separately',
+      w.els.freeExamMeta.textContent === 'Your paper: 40 questions · Activity pool: 50 questions', w.els.freeExamMeta.textContent);
+    ok('progress counts to 40, not the pool size', w.els.freeExamNum.textContent === 'Question 1 of 40', w.els.freeExamNum.textContent);
+    ok('the navigator total is 40', w.els.freeExamPanelLabel.textContent === 'Q 1 / 40', w.els.freeExamPanelLabel.textContent);
+    ok('the timer still comes from the server unchanged', w.els.freeExamTime.textContent === '2:00:00', w.els.freeExamTime.textContent);
+    w.sandbox.freeExamJump(39);
+    ok('Submit appears on the fortieth served question', w.els.freeExamSubmit.hidden === false && w.els.freeExamNext.hidden === true);
+    w.sandbox.freeExamSubmit();
+    ok('the submission confirmation total is the served 40',
+      w.els.freeExamConfirmTotal.textContent === '40' && w.els.freeExamConfirmUnanswered.textContent === '40',
+      w.els.freeExamConfirmTotal.textContent + '/' + w.els.freeExamConfirmUnanswered.textContent);
+    w.sandbox.freeExamConfirmCancel();
+    w.sandbox.freeExamPick(0);
+    w.sandbox.freeExamSubmit();
+    w.sandbox.freeExamConfirmSubmit();
+    return settle(w);
+  }).then(function () {
+    var submission = w.calls.api.filter(function (c) { return c[0] === 'submit'; }).pop();
+    ok('submission contains only answers from the served paper, never 50 pool slots',
+      !!submission && Object.keys(submission[2]).length === 1 &&
+      Object.keys(submission[2]).every(function (id) { return served.some(function (q) { return String(q.id) === id; }); }),
+      JSON.stringify(submission || []));
+
+    b = makeWorld({ token: 'PT', listReply: { activities: [weekly], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ben', subjects: mcb, needsSubjects: false } } });
+    load(b);
+    return settle(b).then(function () { b.sandbox.freePortalLoad(); return settle(b); });
+  }).then(function () {
+    ok('an English/Mathematics/Chemistry/Biology student also sees a 40-question paper from the 50-question pool',
+      /Activity pool: <b>50<\/b> questions/.test(b.els.freePortalList.innerHTML) &&
+      /Your paper: <b>40<\/b> questions/.test(b.els.freePortalList.innerHTML), b.els.freePortalList.innerHTML);
+
+    sizes = makeWorld({ token: 'PT', listReply: { activities: [wordingActivity('W-20', 'weekly', 20), wordingActivity('W-30', 'weekly', 30), wordingActivity('W-100', 'weekly', 100)], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', subjects: mpc, needsSubjects: false } } });
+    load(sizes);
+    return settle(sizes).then(function () { sizes.sandbox.freePortalLoad(); return settle(sizes); });
+  }).then(function () {
+    var html = sizes.els.freePortalList.innerHTML;
+    ok('other evenly allocated pool sizes show their own four-subject paper counts',
+      /Your paper: <b>16<\/b> questions/.test(html) && /Your paper: <b>24<\/b> questions/.test(html) && /Your paper: <b>80<\/b> questions/.test(html), html);
+
+    guest = makeWorld({ token: null, catalogueReply: { guest: true, activities: [weekly, competition] } });
+    load(guest);
+    return settle(guest).then(function () { guest.sandbox.freePortalLoad(); return settle(guest); });
+  }).then(function () {
+    var html = guest.els.freePortalList.innerHTML;
+    ok('a guest sees the activity pool without being told they must sit all five subjects',
+      /Activity pool: <b>50<\/b> questions/.test(html) && /registered subject combination/.test(html) &&
+      !/Your paper: <b>40<\/b> questions/.test(html), html);
+    ok('the service-worker cache is bumped to goc-v206', /const CACHE = 'goc-v206';/.test(sw), (sw.match(/const CACHE = '[^']+'/) || [''])[0]);
+    ok('the old cache name is gone', sw.indexOf('goc-v205') < 0);
+    ok('the install, activation and cache-first strategy remain present',
+      /caches\.open\(CACHE\)\.then\(c => c\.addAll\(ASSETS\)\)\.then\(\(\) => self\.skipWaiting\(\)\)/.test(sw) &&
+      /keys\.filter\(k => k !== CACHE\)\.map\(k => caches\.delete\(k\)\)/.test(sw) &&
+      /caches\.match\(e\.request\)\.then\(r => r \|\| fetch\(e\.request\)\)/.test(sw));
+    var compQuestions = [];
+    [['Use of English', 60], ['Mathematics', 40], ['Physics', 40], ['Chemistry', 40]].forEach(function (pair) {
+      for (var i = 0; i < pair[1]; i++) compQuestions.push({ id: pair[0] + '-' + i, subject: pair[0], text: pair[0] + ' ' + i, options: ['A', 'B', 'C', 'D'] });
+    });
+    compView = makeWorld({ token: 'PT',
+      listReply: { activities: [competition], participant: { id: 'GOC-F27-0123456789ABCDEFABCD', name: 'Ada', subjects: mpc, needsSubjects: false } },
+      startAttempt: { attempt: { id: 'A-180', activityId: 'C-220', title: 'UTME Cup', kind: 'competition', remainingSec: 7200, responses: {} }, questions: compQuestions, resumed: false }
+    });
+    load(compView);
+    return settle(compView).then(function () { compView.sandbox.freePortalTab('competition'); return settle(compView); });
+  }).then(function () {
+    ok('the Competition student card still says 220 questions with no weekly pool wording',
+      /<span><b>220<\/b> questions<\/span>/.test(compView.els.freePortalList.innerHTML) &&
+      !/Activity pool:|Your paper:/.test(compView.els.freePortalList.innerHTML), compView.els.freePortalList.innerHTML);
+    compView.sandbox.freeExamOpen('C-220');
+    return settle(compView);
+  }).then(function () {
+    ok('the Competition exam header keeps its original 180-question wording',
+      compView.els.freeExamMeta.textContent === '180 questions in this paper', compView.els.freeExamMeta.textContent);
+    ok('Competition progress and navigator still count the served 180',
+      compView.els.freeExamNum.textContent === 'Question 1 of 180' && compView.els.freeExamPanelLabel.textContent === 'Q 1 / 180');
+    ok('the Competition-only exam class is still applied',
+      compView.els['free-exam'].classList.contains('f27-exam-competition'));
   });
 }).then(function () {
   console.log('\nThe new styles and markup stay inside the edition');

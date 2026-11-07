@@ -178,11 +178,17 @@
       return;
     }
     host.innerHTML = live.map(function (a) {
+      var countText = a.questionCount + ' question' + (a.questionCount === 1 ? '' : 's');
+      if (a.kind === rules.KIND_WEEKLY) {
+        var paper = weeklyPaperCount(a);
+        countText = a.questionCount + '-question activity pool' +
+          (paper === null ? ' · registered subjects only' : ' · your paper: ' + paper + ' questions');
+      }
       return '<div class="f27-open-card"><div class="f27-open-top"><span class="f27-tag">' + esc(rules.kindLabel(a.kind)) + '</span>' +
         '<span class="f27-until">closes ' + esc(when(a.closesAt)) + '</span></div>' +
         '<h3>' + esc(a.title) + '</h3>' +
         '<p>' + (a.kind === rules.KIND_WEEKLY ? 'Weekly assessment · results are private to you' : 'Competition · ranked on score, then on time') +
-        ' · ' + a.questionCount + ' question' + (a.questionCount === 1 ? '' : 's') + ' · ' + a.durationMin + ' min</p></div>';
+        ' · ' + countText + ' · ' + a.durationMin + ' min</p></div>';
     }).join('');
   }
 
@@ -598,6 +604,35 @@
   };
 
   function stateClass(a) { return 'f27-state ' + (a.state === 'open' ? 'open' : a.state === 'upcoming' ? 'soon' : 'shut'); }
+
+  /* Weekly wording only. The typed activity pool covers all five subjects;
+     a registered candidate sits the shares for their own four subjects. This
+     mirrors the documented even allocation for the card preview; once the
+     paper is opened, the server-served questions.length is authoritative. */
+  function weeklyPaperCount(a) {
+    if (!a || a.kind !== rules.KIND_WEEKLY) return null;
+    var combination = rules.combinationOf(F.me);
+    if (!combination) return null;
+    var pool = Math.max(0, Math.floor(Number(a.questionCount) || 0));
+    var subjects = rules.sortSubjects(rules.SUBJECTS);
+    var base = Math.floor(pool / subjects.length), extra = pool % subjects.length;
+    return subjects.reduce(function (total, subject, i) {
+      return total + (combination.indexOf(subject) > -1 ? base + (i < extra ? 1 : 0) : 0);
+    }, 0);
+  }
+  function activityQuestionFactsHtml(a) {
+    if (a.kind !== rules.KIND_WEEKLY) return '<span><b>' + a.questionCount + '</b> questions</span>';
+    var paper = weeklyPaperCount(a);
+    return '<span>Activity pool: <b>' + a.questionCount + '</b> questions</span>' +
+      '<span>Your paper: ' + (paper === null ? 'registered subjects only' : '<b>' + paper + '</b> questions') + '</span>';
+  }
+  function weeklyInstructionHtml(a) {
+    if (a.kind !== rules.KIND_WEEKLY) return '';
+    var paper = weeklyPaperCount(a);
+    return '<p class="f27-instr">' + (paper === null
+      ? 'This activity has a ' + a.questionCount + '-question pool. Your paper contains only questions from your registered subject combination, including compulsory Use of English.'
+      : 'This activity has a ' + a.questionCount + '-question pool. Your paper contains ' + paper + ' questions from your four registered subjects, including compulsory Use of English.') + '</p>';
+  }
   function emptyState(title, body, actionHtml) {
     return '<div class="f27-empty f27-empty-state" role="status">' +
       '<div class="f27-empty-icon" aria-hidden="true">◎</div>' +
@@ -636,12 +671,12 @@
         '<h3>' + esc(a.title) + '</h3>' +
         (a.instructions ? '<p class="f27-instr">' + esc(a.instructions) + '</p>' : '') +
         '<div class="f27-facts">' +
-        '<span><b>' + a.questionCount + '</b> questions</span>' +
+        activityQuestionFactsHtml(a) +
         '<span><b>' + a.durationMin + '</b> min</span>' +
         '<span><b>' + a.attemptsLeft + '</b> of ' + a.maxAttempts + ' attempt' + (a.maxAttempts === 1 ? '' : 's') + ' left</span>' +
         '<span>closes <b>' + esc(when(a.closesAt)) + '</b></span>' +
         (a.bestScore > -1 ? '<span>best <b>' + a.bestScore + '</b></span>' : '') +
-        '</div>' + action + lb + '</div>';
+        '</div>' + weeklyInstructionHtml(a) + action + lb + '</div>';
     }).join('');
     if (mine) mine.innerHTML = '';
     paintMyResults();
@@ -671,10 +706,11 @@
         '<h3>' + esc(a.title) + '</h3>' +
         (a.instructions ? '<p class="f27-instr">' + esc(a.instructions) + '</p>' : '') +
         '<div class="f27-facts">' +
-        '<span><b>' + a.questionCount + '</b> questions</span>' +
+        activityQuestionFactsHtml(a) +
         '<span><b>' + a.durationMin + '</b> min</span>' +
         '<span>up to <b>' + a.maxAttempts + '</b> attempt' + (a.maxAttempts === 1 ? '' : 's') + '</span>' +
         '<span>closes <b>' + esc(when(a.closesAt)) + '</b></span></div>' +
+        weeklyInstructionHtml(a) +
         (open
           ? '<button class="btn btn-red btn-block" onclick="freePortalEnter()">Log in to sit this paper</button>' +
             '<p class="f27-fine" style="margin-top:8px;text-align:center">New here? <a href="#" onclick="freeGo(\'free-register\');return false">Register free</a></p>'
@@ -738,10 +774,12 @@
     }
     api.start(activityId).then(function (r) {
       if (r && r.submitted) return freeResultGo(r.result);
+      var activity = (F.activities || []).filter(function (a) { return String(a.id) === String(activityId); })[0] || null;
       F.exam = {
         attemptId: r.attempt.id,
         title: r.attempt.title,
         kind: r.attempt.kind,
+        poolCount: activity ? Number(activity.questionCount) || 0 : null,
         questions: r.questions || [],
         answers: Object.assign({}, r.attempt.responses || {}),
         remaining: r.attempt.remainingSec,
@@ -789,7 +827,12 @@
     var title = $('freeExamTitle');
     if (title) title.textContent = F.exam.title;
     var meta = $('freeExamMeta');
-    if (meta) meta.textContent = n + ' question' + (n === 1 ? '' : 's') + ' in this paper';
+    if (meta) {
+      var count = n + ' question' + (n === 1 ? '' : 's');
+      meta.textContent = F.exam.kind === rules.KIND_WEEKLY
+        ? 'Your paper: ' + count + (F.exam.poolCount ? ' · Activity pool: ' + F.exam.poolCount + ' questions' : '')
+        : count + ' in this paper';
+    }
     var kind = $('freeExamKind');
     if (kind) kind.textContent = rules.kindLabel(F.exam.kind);
     /* The fit-to-viewport question layout is competition-only; a Weekly
