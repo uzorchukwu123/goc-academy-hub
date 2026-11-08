@@ -1,0 +1,3644 @@
+{
+  "generatedBy": "functions/goc-api/tools/extract-routes.js",
+  "source": "server/server.js",
+  "note": "Generated from the OneBit route table. Do not hand-edit; re-run the extractor.",
+  "total": 253,
+  "counts": {
+    "byAuthTier": {
+      "public": 21,
+      "student": 37,
+      "staff-or-student": 4,
+      "staff": 3,
+      "console": 145,
+      "tutor-setup": 2,
+      "tutor": 27,
+      "founder": 2,
+      "free": 12
+    },
+    "byMethod": {
+      "GET": 113,
+      "POST": 77,
+      "PUT": 41,
+      "DELETE": 22
+    },
+    "byFamily": {
+      "api/health": 1,
+      "api/auth": 7,
+      "api/me": 32,
+      "api/students": 8,
+      "api/admin": 22,
+      "api/staff": 3,
+      "api/updates": 3,
+      "api/affirmations": 2,
+      "api/contact": 1,
+      "api/unsubscribe": 1,
+      "api/settings": 6,
+      "api/objective": 1,
+      "api/jamb": 1,
+      "api/rounds": 3,
+      "api/challenges": 3,
+      "api/tutor": 30,
+      "api/audit": 2,
+      "api/notices": 2,
+      "api/flags": 2,
+      "api/broadcasts": 4,
+      "api/alerts": 2,
+      "api/approvals": 3,
+      "api/tutors": 6,
+      "api/managers": 5,
+      "api/passages": 5,
+      "api/notes": 8,
+      "api/league": 1,
+      "api/topics": 2,
+      "api/questions": 12,
+      "api/import": 1,
+      "api/results": 4,
+      "api/resources": 2,
+      "api/question-images": 1,
+      "api/videos": 2,
+      "api/classes": 1,
+      "api/scholarship": 8,
+      "api/free2027": 54,
+      "api/analytics": 2
+    }
+  },
+  "capabilities": [
+    "analytics.site",
+    "approvals.review",
+    "broadcast.send",
+    "challenges.manage",
+    "classes.schedule",
+    "cohort.create",
+    "cohort.manage",
+    "homepage.edit",
+    "leaderboard.manage",
+    "managers.accounts",
+    "notices.manage",
+    "overview.own",
+    "questions.manage",
+    "resources.publish",
+    "results.export",
+    "results.view",
+    "roster.view",
+    "scholarship.approve",
+    "scholarship.decide",
+    "scholarship.delete",
+    "scholarship.export",
+    "scholarship.view",
+    "signup.limits",
+    "sittings.configure",
+    "students.add",
+    "students.approve",
+    "students.deactivate",
+    "students.passwords",
+    "students.tier",
+    "system.migrate",
+    "theory.mark",
+    "tutors.accounts",
+    "tutors.audit"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/health$",
+      "regex": {
+        "source": "^\\/api\\/health$",
+        "flags": ""
+      },
+      "displayPath": "/api/health",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/health",
+      "serverLine": 3237
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/login$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/login",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/auth",
+      "serverLine": 3261
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/logout$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/logout",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/auth",
+      "serverLine": 3381
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/password$",
+      "regex": {
+        "source": "^\\/api\\/me\\/password$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/password",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 3386
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/session$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/session",
+      "caseInsensitive": false,
+      "authTier": "staff-or-student",
+      "capability": null,
+      "family": "api/auth",
+      "serverLine": 3429
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session-info$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/session-info$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/session-info",
+      "caseInsensitive": false,
+      "authTier": "staff-or-student",
+      "capability": null,
+      "family": "api/auth",
+      "serverLine": 3441
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/unlock$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/unlock$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/unlock",
+      "caseInsensitive": false,
+      "authTier": "staff",
+      "capability": null,
+      "family": "api/auth",
+      "serverLine": 3462
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/password$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/password",
+      "caseInsensitive": false,
+      "authTier": "staff",
+      "capability": null,
+      "family": "api/auth",
+      "serverLine": 3486
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/lock$",
+      "regex": {
+        "source": "^\\/api\\/auth\\/lock$",
+        "flags": ""
+      },
+      "displayPath": "/api/auth/lock",
+      "caseInsensitive": false,
+      "authTier": "staff",
+      "capability": "roster.view",
+      "family": "api/auth",
+      "serverLine": 3532
+    },
+    {
+      "method": "GET",
+      "path": "/api/students$",
+      "regex": {
+        "source": "^\\/api\\/students$",
+        "flags": ""
+      },
+      "displayPath": "/api/students",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "roster.view",
+      "family": "api/students",
+      "serverLine": 3537
+    },
+    {
+      "method": "POST",
+      "path": "/api/students$",
+      "regex": {
+        "source": "^\\/api\\/students$",
+        "flags": ""
+      },
+      "displayPath": "/api/students",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/students",
+      "serverLine": 3550
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/active$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/active",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.deactivate",
+      "family": "api/students",
+      "serverLine": 3644
+    },
+    {
+      "method": "POST",
+      "path": "/api/students/([A-Za-z0-9-]+)/approve$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/approve$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/approve",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/students",
+      "serverLine": 3693
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/students/([A-Za-z0-9-]+)/approve$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/approve$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/approve",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/students",
+      "serverLine": 3723
+    },
+    {
+      "method": "POST",
+      "path": "/api/students/([A-Za-z0-9-]+)/reset$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/reset$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/reset",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.passwords",
+      "family": "api/students",
+      "serverLine": 3746
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/students$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/students$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/students",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.add",
+      "family": "api/admin",
+      "serverLine": 3797
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/overview$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/overview$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/overview",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "overview.own",
+      "family": "api/admin",
+      "serverLine": 3862
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/migrate-appwrite$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/migrate-appwrite$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/migrate-appwrite",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "system.migrate",
+      "family": "api/admin",
+      "serverLine": 3913
+    },
+    {
+      "method": "GET",
+      "path": "/api/staff$",
+      "regex": {
+        "source": "^\\/api\\/staff$",
+        "flags": ""
+      },
+      "displayPath": "/api/staff",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/staff",
+      "serverLine": 3977
+    },
+    {
+      "method": "GET",
+      "path": "/api/updates$",
+      "regex": {
+        "source": "^\\/api\\/updates$",
+        "flags": ""
+      },
+      "displayPath": "/api/updates",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": "homepage.edit",
+      "family": "api/updates",
+      "serverLine": 3982
+    },
+    {
+      "method": "POST",
+      "path": "/api/updates$",
+      "regex": {
+        "source": "^\\/api\\/updates$",
+        "flags": ""
+      },
+      "displayPath": "/api/updates",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "family": "api/updates",
+      "serverLine": 3986
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/updates/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/updates\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/updates/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "family": "api/updates",
+      "serverLine": 4004
+    },
+    {
+      "method": "GET",
+      "path": "/api/affirmations$",
+      "regex": {
+        "source": "^\\/api\\/affirmations$",
+        "flags": ""
+      },
+      "displayPath": "/api/affirmations",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/affirmations",
+      "serverLine": 4017
+    },
+    {
+      "method": "PUT",
+      "path": "/api/affirmations$",
+      "regex": {
+        "source": "^\\/api\\/affirmations$",
+        "flags": ""
+      },
+      "displayPath": "/api/affirmations",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "family": "api/affirmations",
+      "serverLine": 4028
+    },
+    {
+      "method": "POST",
+      "path": "/api/contact$",
+      "regex": {
+        "source": "^\\/api\\/contact$",
+        "flags": ""
+      },
+      "displayPath": "/api/contact",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/contact",
+      "serverLine": 4048
+    },
+    {
+      "method": "GET",
+      "path": "/api/unsubscribe$",
+      "regex": {
+        "source": "^\\/api\\/unsubscribe$",
+        "flags": ""
+      },
+      "displayPath": "/api/unsubscribe",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/unsubscribe",
+      "serverLine": 4108
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings$",
+      "regex": {
+        "source": "^\\/api\\/settings$",
+        "flags": ""
+      },
+      "displayPath": "/api/settings",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/settings",
+      "serverLine": 4148
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings$",
+      "regex": {
+        "source": "^\\/api\\/settings$",
+        "flags": ""
+      },
+      "displayPath": "/api/settings",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/settings",
+      "serverLine": 4168
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/objective-count$",
+      "regex": {
+        "source": "^\\/api\\/settings\\/objective-count$",
+        "flags": ""
+      },
+      "displayPath": "/api/settings/objective-count",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/settings",
+      "serverLine": 4222
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/jamb-count$",
+      "regex": {
+        "source": "^\\/api\\/settings\\/jamb-count$",
+        "flags": ""
+      },
+      "displayPath": "/api/settings/jamb-count",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/settings",
+      "serverLine": 4238
+    },
+    {
+      "method": "GET",
+      "path": "/api/objective/blueprint$",
+      "regex": {
+        "source": "^\\/api\\/objective\\/blueprint$",
+        "flags": ""
+      },
+      "displayPath": "/api/objective/blueprint",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/objective",
+      "serverLine": 4254
+    },
+    {
+      "method": "GET",
+      "path": "/api/jamb/blueprint$",
+      "regex": {
+        "source": "^\\/api\\/jamb\\/blueprint$",
+        "flags": ""
+      },
+      "displayPath": "/api/jamb/blueprint",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/jamb",
+      "serverLine": 4268
+    },
+    {
+      "method": "GET",
+      "path": "/api/staff/access$",
+      "regex": {
+        "source": "^\\/api\\/staff\\/access$",
+        "flags": ""
+      },
+      "displayPath": "/api/staff/access",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/staff",
+      "serverLine": 4289
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/signup-limits$",
+      "regex": {
+        "source": "^\\/api\\/settings\\/signup-limits$",
+        "flags": ""
+      },
+      "displayPath": "/api/settings/signup-limits",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "signup.limits",
+      "family": "api/settings",
+      "serverLine": 4306
+    },
+    {
+      "method": "GET",
+      "path": "/api/rounds$",
+      "regex": {
+        "source": "^\\/api\\/rounds$",
+        "flags": ""
+      },
+      "displayPath": "/api/rounds",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/rounds",
+      "serverLine": 4332
+    },
+    {
+      "method": "POST",
+      "path": "/api/rounds/open$",
+      "regex": {
+        "source": "^\\/api\\/rounds\\/open$",
+        "flags": ""
+      },
+      "displayPath": "/api/rounds/open",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/rounds",
+      "serverLine": 4343
+    },
+    {
+      "method": "POST",
+      "path": "/api/rounds/close$",
+      "regex": {
+        "source": "^\\/api\\/rounds\\/close$",
+        "flags": ""
+      },
+      "displayPath": "/api/rounds/close",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "family": "api/rounds",
+      "serverLine": 4368
+    },
+    {
+      "method": "POST",
+      "path": "/api/challenges$",
+      "regex": {
+        "source": "^\\/api\\/challenges$",
+        "flags": ""
+      },
+      "displayPath": "/api/challenges",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "challenges.manage",
+      "family": "api/challenges",
+      "serverLine": 4389
+    },
+    {
+      "method": "GET",
+      "path": "/api/challenges$",
+      "regex": {
+        "source": "^\\/api\\/challenges$",
+        "flags": ""
+      },
+      "displayPath": "/api/challenges",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "challenges.manage",
+      "family": "api/challenges",
+      "serverLine": 4404
+    },
+    {
+      "method": "PUT",
+      "path": "/api/challenges/([A-Za-z0-9-]+)/active$",
+      "regex": {
+        "source": "^\\/api\\/challenges\\/([A-Za-z0-9-]+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/challenges/([A-Za-z0-9-]+)/active",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "challenges.manage",
+      "family": "api/challenges",
+      "serverLine": 4410
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/login$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/login$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/login",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4424
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/me$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/me$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/me",
+      "caseInsensitive": false,
+      "authTier": "tutor-setup",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4478
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/password$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/password$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/password",
+      "caseInsensitive": false,
+      "authTier": "tutor-setup",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4483
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/subject$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/subject$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/subject",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4519
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/analytics$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/analytics$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/analytics",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4548
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/tutors/analytics$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/tutors\\/analytics$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/tutors/analytics",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/admin",
+      "serverLine": 4575
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/atrisk$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/atrisk$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/atrisk",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4638
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/top$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/top$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/top",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4665
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/student$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/student$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/student",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4687
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/student/contact$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/student\\/contact$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/student/contact",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4715
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/audit$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/audit$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/audit",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4739
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/manager-actions$",
+      "regex": {
+        "source": "^\\/api\\/audit\\/manager-actions$",
+        "flags": ""
+      },
+      "displayPath": "/api/audit/manager-actions",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "overview.own",
+      "family": "api/audit",
+      "serverLine": 4748
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/tutor-views$",
+      "regex": {
+        "source": "^\\/api\\/audit\\/tutor-views$",
+        "flags": ""
+      },
+      "displayPath": "/api/audit/tutor-views",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "tutors.audit",
+      "family": "api/audit",
+      "serverLine": 4755
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/questions$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/questions",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4769
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/questions$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/questions",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4779
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/questions/import$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/questions\\/import$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/questions/import",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4801
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/questions/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/questions\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/questions/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4843
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/questions/(\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/questions\\/(\\d+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/questions/(\\d+)/active",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4863
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tutor/questions/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/questions\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/questions/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4876
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/notes$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notes$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notes",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4889
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/notes$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notes$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notes",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4899
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/notes/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notes\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notes/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4914
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/notes/(\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notes\\/(\\d+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notes/(\\d+)/active",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4928
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tutor/notes/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notes\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notes/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4940
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/notices$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notices$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notices",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4953
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/notices$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notices$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notices",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4961
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/notices/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notices\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notices/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4982
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tutor/notices/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/notices\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/notices/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 4998
+    },
+    {
+      "method": "GET",
+      "path": "/api/notices$",
+      "regex": {
+        "source": "^\\/api\\/notices$",
+        "flags": ""
+      },
+      "displayPath": "/api/notices",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "notices.manage",
+      "family": "api/notices",
+      "serverLine": 5012
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notices/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/notices\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/notices/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "notices.manage",
+      "family": "api/notices",
+      "serverLine": 5019
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/flags$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/flags$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/flags",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 5033
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/flags/([A-Za-z0-9-]+)/(reply|close)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/flags\\/([A-Za-z0-9-]+)\\/(reply|close)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/flags/([A-Za-z0-9-]+)/(reply|close)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 5042
+    },
+    {
+      "method": "GET",
+      "path": "/api/flags$",
+      "regex": {
+        "source": "^\\/api\\/flags$",
+        "flags": ""
+      },
+      "displayPath": "/api/flags",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "approvals.review",
+      "family": "api/flags",
+      "serverLine": 5059
+    },
+    {
+      "method": "POST",
+      "path": "/api/flags/([A-Za-z0-9-]+)/(reply|close)$",
+      "regex": {
+        "source": "^\\/api\\/flags\\/([A-Za-z0-9-]+)\\/(reply|close)$",
+        "flags": ""
+      },
+      "displayPath": "/api/flags/([A-Za-z0-9-]+)/(reply|close)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "approvals.review",
+      "family": "api/flags",
+      "serverLine": 5067
+    },
+    {
+      "method": "POST",
+      "path": "/api/broadcasts$",
+      "regex": {
+        "source": "^\\/api\\/broadcasts$",
+        "flags": ""
+      },
+      "displayPath": "/api/broadcasts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "family": "api/broadcasts",
+      "serverLine": 5087
+    },
+    {
+      "method": "GET",
+      "path": "/api/broadcasts/audience$",
+      "regex": {
+        "source": "^\\/api\\/broadcasts\\/audience$",
+        "flags": ""
+      },
+      "displayPath": "/api/broadcasts/audience",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "family": "api/broadcasts",
+      "serverLine": 5106
+    },
+    {
+      "method": "GET",
+      "path": "/api/broadcasts$",
+      "regex": {
+        "source": "^\\/api\\/broadcasts$",
+        "flags": ""
+      },
+      "displayPath": "/api/broadcasts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "family": "api/broadcasts",
+      "serverLine": 5114
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/broadcasts/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/broadcasts\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/broadcasts/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "family": "api/broadcasts",
+      "serverLine": 5122
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/scripts$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/scripts$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/scripts",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 5137
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/scripts/([A-Za-z0-9-]+)$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/scripts\\/([A-Za-z0-9-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/scripts/([A-Za-z0-9-]+)",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 5151
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/scripts/([A-Za-z0-9-]+)/mark$",
+      "regex": {
+        "source": "^\\/api\\/tutor\\/scripts\\/([A-Za-z0-9-]+)\\/mark$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutor/scripts/([A-Za-z0-9-]+)/mark",
+      "caseInsensitive": false,
+      "authTier": "tutor",
+      "capability": null,
+      "family": "api/tutor",
+      "serverLine": 5169
+    },
+    {
+      "method": "GET",
+      "path": "/api/alerts$",
+      "regex": {
+        "source": "^\\/api\\/alerts$",
+        "flags": ""
+      },
+      "displayPath": "/api/alerts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "overview.own",
+      "family": "api/alerts",
+      "serverLine": 5184
+    },
+    {
+      "method": "POST",
+      "path": "/api/alerts/([A-Za-z0-9-]+)/seen$",
+      "regex": {
+        "source": "^\\/api\\/alerts\\/([A-Za-z0-9-]+)\\/seen$",
+        "flags": ""
+      },
+      "displayPath": "/api/alerts/([A-Za-z0-9-]+)/seen",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "overview.own",
+      "family": "api/alerts",
+      "serverLine": 5189
+    },
+    {
+      "method": "GET",
+      "path": "/api/approvals$",
+      "regex": {
+        "source": "^\\/api\\/approvals$",
+        "flags": ""
+      },
+      "displayPath": "/api/approvals",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "approvals.review",
+      "family": "api/approvals",
+      "serverLine": 5203
+    },
+    {
+      "method": "POST",
+      "path": "/api/approvals/batch/approve$",
+      "regex": {
+        "source": "^\\/api\\/approvals\\/batch\\/approve$",
+        "flags": ""
+      },
+      "displayPath": "/api/approvals/batch/approve",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "approvals.review",
+      "family": "api/approvals",
+      "serverLine": 5210
+    },
+    {
+      "method": "POST",
+      "path": "/api/approvals/(\\d+)/(approve|return)$",
+      "regex": {
+        "source": "^\\/api\\/approvals\\/(\\d+)\\/(approve|return)$",
+        "flags": ""
+      },
+      "displayPath": "/api/approvals/(\\d+)/(approve|return)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "approvals.review",
+      "family": "api/approvals",
+      "serverLine": 5219
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutors$",
+      "regex": {
+        "source": "^\\/api\\/tutors$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutors",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/tutors",
+      "serverLine": 5244
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutors$",
+      "regex": {
+        "source": "^\\/api\\/tutors$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutors",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/tutors",
+      "serverLine": 5256
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutors/(GOC-T-\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/tutors\\/(GOC-T-\\d+)$",
+        "flags": "i"
+      },
+      "displayPath": "/api/tutors/(GOC-T-\\d+)",
+      "caseInsensitive": true,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/tutors",
+      "serverLine": 5298
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutors/(GOC-T-\\d+)/password$",
+      "regex": {
+        "source": "^\\/api\\/tutors\\/(GOC-T-\\d+)\\/password$",
+        "flags": "i"
+      },
+      "displayPath": "/api/tutors/(GOC-T-\\d+)/password",
+      "caseInsensitive": true,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/tutors",
+      "serverLine": 5322
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutors/(GOC-T-\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/tutors\\/(GOC-T-\\d+)\\/active$",
+        "flags": "i"
+      },
+      "displayPath": "/api/tutors/(GOC-T-\\d+)/active",
+      "caseInsensitive": true,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/tutors",
+      "serverLine": 5349
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutors/overview$",
+      "regex": {
+        "source": "^\\/api\\/tutors\\/overview$",
+        "flags": ""
+      },
+      "displayPath": "/api/tutors/overview",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "family": "api/tutors",
+      "serverLine": 5373
+    },
+    {
+      "method": "GET",
+      "path": "/api/managers$",
+      "regex": {
+        "source": "^\\/api\\/managers$",
+        "flags": ""
+      },
+      "displayPath": "/api/managers",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/managers",
+      "serverLine": 5391
+    },
+    {
+      "method": "POST",
+      "path": "/api/managers$",
+      "regex": {
+        "source": "^\\/api\\/managers$",
+        "flags": ""
+      },
+      "displayPath": "/api/managers",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/managers",
+      "serverLine": 5398
+    },
+    {
+      "method": "PUT",
+      "path": "/api/managers/(GOC-A-\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/managers\\/(GOC-A-\\d+)\\/active$",
+        "flags": "i"
+      },
+      "displayPath": "/api/managers/(GOC-A-\\d+)/active",
+      "caseInsensitive": true,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/managers",
+      "serverLine": 5448
+    },
+    {
+      "method": "PUT",
+      "path": "/api/managers/(GOC-A-\\d+)/password$",
+      "regex": {
+        "source": "^\\/api\\/managers\\/(GOC-A-\\d+)\\/password$",
+        "flags": "i"
+      },
+      "displayPath": "/api/managers/(GOC-A-\\d+)/password",
+      "caseInsensitive": true,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/managers",
+      "serverLine": 5475
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/managers/(GOC-A-\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/managers\\/(GOC-A-\\d+)$",
+        "flags": "i"
+      },
+      "displayPath": "/api/managers/(GOC-A-\\d+)",
+      "caseInsensitive": true,
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "family": "api/managers",
+      "serverLine": 5512
+    },
+    {
+      "method": "PUT",
+      "path": "/api/staff/([A-Za-z0-9-]+)/password$",
+      "regex": {
+        "source": "^\\/api\\/staff\\/([A-Za-z0-9-]+)\\/password$",
+        "flags": ""
+      },
+      "displayPath": "/api/staff/([A-Za-z0-9-]+)/password",
+      "caseInsensitive": false,
+      "authTier": "founder",
+      "capability": null,
+      "family": "api/staff",
+      "serverLine": 5536
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/passcode$",
+      "regex": {
+        "source": "^\\/api\\/settings\\/passcode$",
+        "flags": ""
+      },
+      "displayPath": "/api/settings/passcode",
+      "caseInsensitive": false,
+      "authTier": "founder",
+      "capability": null,
+      "family": "api/settings",
+      "serverLine": 5571
+    },
+    {
+      "method": "GET",
+      "path": "/api/me$",
+      "regex": {
+        "source": "^\\/api\\/me$",
+        "flags": ""
+      },
+      "displayPath": "/api/me",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5589
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/streak-freeze$",
+      "regex": {
+        "source": "^\\/api\\/me\\/streak-freeze$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/streak-freeze",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5639
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/reminders$",
+      "regex": {
+        "source": "^\\/api\\/me\\/reminders$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/reminders",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5685
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/reminders$",
+      "regex": {
+        "source": "^\\/api\\/me\\/reminders$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/reminders",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5694
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/practice$",
+      "regex": {
+        "source": "^\\/api\\/me\\/practice$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/practice",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5729
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/mistakes$",
+      "regex": {
+        "source": "^\\/api\\/me\\/mistakes$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/mistakes",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5736
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/review$",
+      "regex": {
+        "source": "^\\/api\\/me\\/review$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/review",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5752
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/review$",
+      "regex": {
+        "source": "^\\/api\\/me\\/review$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/review",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5764
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/quest$",
+      "regex": {
+        "source": "^\\/api\\/me\\/quest$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/quest",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5813
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/weekly-quest$",
+      "regex": {
+        "source": "^\\/api\\/me\\/weekly-quest$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/weekly-quest",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5824
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/practice$",
+      "regex": {
+        "source": "^\\/api\\/me\\/practice$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/practice",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5833
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/bookmarks$",
+      "regex": {
+        "source": "^\\/api\\/me\\/bookmarks$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/bookmarks",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5851
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/bookmarks$",
+      "regex": {
+        "source": "^\\/api\\/me\\/bookmarks$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/bookmarks",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5861
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/me/bookmarks/([A-Za-z0-9]+)$",
+      "regex": {
+        "source": "^\\/api\\/me\\/bookmarks\\/([A-Za-z0-9]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/bookmarks/([A-Za-z0-9]+)",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5882
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/tests$",
+      "regex": {
+        "source": "^\\/api\\/me\\/tests$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/tests",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5897
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/tests/start$",
+      "regex": {
+        "source": "^\\/api\\/me\\/tests\\/start$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/tests/start",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 5940
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/tests/submit$",
+      "regex": {
+        "source": "^\\/api\\/me\\/tests\\/submit$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/tests/submit",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6056
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/results$",
+      "regex": {
+        "source": "^\\/api\\/me\\/results$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/results",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6140
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/results/([A-Za-z0-9-]+)$",
+      "regex": {
+        "source": "^\\/api\\/me\\/results\\/([A-Za-z0-9-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/results/([A-Za-z0-9-]+)",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6147
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/study$",
+      "regex": {
+        "source": "^\\/api\\/me\\/study$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/study",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6167
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study-time/ping$",
+      "regex": {
+        "source": "^\\/api\\/me\\/study-time\\/ping$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/study-time/ping",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6212
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study-time/extend$",
+      "regex": {
+        "source": "^\\/api\\/me\\/study-time\\/extend$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/study-time/extend",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6244
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/notes$",
+      "regex": {
+        "source": "^\\/api\\/me\\/notes$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/notes",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6299
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/notices$",
+      "regex": {
+        "source": "^\\/api\\/me\\/notices$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/notices",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6330
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/broadcasts$",
+      "regex": {
+        "source": "^\\/api\\/me\\/broadcasts$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/broadcasts",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6342
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/flags$",
+      "regex": {
+        "source": "^\\/api\\/me\\/flags$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/flags",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6354
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/flags$",
+      "regex": {
+        "source": "^\\/api\\/me\\/flags$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/flags",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6364
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/challenge$",
+      "regex": {
+        "source": "^\\/api\\/me\\/challenge$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/challenge",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6393
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study/start$",
+      "regex": {
+        "source": "^\\/api\\/me\\/study\\/start$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/study/start",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6405
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study/submit$",
+      "regex": {
+        "source": "^\\/api\\/me\\/study\\/submit$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/study/submit",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 6523
+    },
+    {
+      "method": "GET",
+      "path": "/api/passages$",
+      "regex": {
+        "source": "^\\/api\\/passages$",
+        "flags": ""
+      },
+      "displayPath": "/api/passages",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/passages",
+      "serverLine": 6782
+    },
+    {
+      "method": "POST",
+      "path": "/api/passages$",
+      "regex": {
+        "source": "^\\/api\\/passages$",
+        "flags": ""
+      },
+      "displayPath": "/api/passages",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/passages",
+      "serverLine": 6798
+    },
+    {
+      "method": "PUT",
+      "path": "/api/passages/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/passages\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/passages/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/passages",
+      "serverLine": 6809
+    },
+    {
+      "method": "PUT",
+      "path": "/api/passages/(\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/passages\\/(\\d+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/passages/(\\d+)/active",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/passages",
+      "serverLine": 6827
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/passages/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/passages\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/passages/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/passages",
+      "serverLine": 6838
+    },
+    {
+      "method": "GET",
+      "path": "/api/notes$",
+      "regex": {
+        "source": "^\\/api\\/notes$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6853
+    },
+    {
+      "method": "POST",
+      "path": "/api/notes$",
+      "regex": {
+        "source": "^\\/api\\/notes$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6868
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notes/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/notes\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6879
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notes/(\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/notes\\/(\\d+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes/(\\d+)/active",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6892
+    },
+    {
+      "method": "GET",
+      "path": "/api/notes/counts$",
+      "regex": {
+        "source": "^\\/api\\/notes\\/counts$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes/counts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6901
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notes/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/notes\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6914
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notes/bulk$",
+      "regex": {
+        "source": "^\\/api\\/notes\\/bulk$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes/bulk",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6925
+    },
+    {
+      "method": "POST",
+      "path": "/api/notes/import$",
+      "regex": {
+        "source": "^\\/api\\/notes\\/import$",
+        "flags": ""
+      },
+      "displayPath": "/api/notes/import",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/notes",
+      "serverLine": 6949
+    },
+    {
+      "method": "GET",
+      "path": "/api/league$",
+      "regex": {
+        "source": "^\\/api\\/league$",
+        "flags": ""
+      },
+      "displayPath": "/api/league",
+      "caseInsensitive": false,
+      "authTier": "staff-or-student",
+      "capability": null,
+      "family": "api/league",
+      "serverLine": 6986
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics$",
+      "regex": {
+        "source": "^\\/api\\/topics$",
+        "flags": ""
+      },
+      "displayPath": "/api/topics",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/topics",
+      "serverLine": 7045
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics/rename$",
+      "regex": {
+        "source": "^\\/api\\/topics\\/rename$",
+        "flags": ""
+      },
+      "displayPath": "/api/topics/rename",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/topics",
+      "serverLine": 7113
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/counts$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/counts$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/counts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7246
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions$",
+      "regex": {
+        "source": "^\\/api\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7275
+    },
+    {
+      "method": "POST",
+      "path": "/api/questions$",
+      "regex": {
+        "source": "^\\/api\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7297
+    },
+    {
+      "method": "POST",
+      "path": "/api/questions/import$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/import$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/import",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7343
+    },
+    {
+      "method": "GET",
+      "path": "/api/import/history$",
+      "regex": {
+        "source": "^\\/api\\/import\\/history$",
+        "flags": ""
+      },
+      "displayPath": "/api/import/history",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/import",
+      "serverLine": 7441
+    },
+    {
+      "method": "PUT",
+      "path": "/api/questions/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7447
+    },
+    {
+      "method": "PUT",
+      "path": "/api/questions/(\\d+)/active$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/(\\d+)\\/active$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/(\\d+)/active",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7463
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/questions/(\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/(\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/(\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7476
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/questions/bulk$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/bulk$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/bulk",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7498
+    },
+    {
+      "method": "POST",
+      "path": "/api/questions/restore$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/restore$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/restore",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7579
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/deletion-log$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/deletion-log$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/deletion-log",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7618
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/diagnostics$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/diagnostics$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/diagnostics",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7638
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/jamb-integrity$",
+      "regex": {
+        "source": "^\\/api\\/questions\\/jamb-integrity$",
+        "flags": ""
+      },
+      "displayPath": "/api/questions/jamb-integrity",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/questions",
+      "serverLine": 7731
+    },
+    {
+      "method": "GET",
+      "path": "/api/results$",
+      "regex": {
+        "source": "^\\/api\\/results$",
+        "flags": ""
+      },
+      "displayPath": "/api/results",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/results",
+      "serverLine": 7771
+    },
+    {
+      "method": "GET",
+      "path": "/api/results/export$",
+      "regex": {
+        "source": "^\\/api\\/results\\/export$",
+        "flags": ""
+      },
+      "displayPath": "/api/results/export",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.export",
+      "family": "api/results",
+      "serverLine": 7794
+    },
+    {
+      "method": "GET",
+      "path": "/api/results/([A-Za-z0-9-]+)$",
+      "regex": {
+        "source": "^\\/api\\/results\\/([A-Za-z0-9-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/results/([A-Za-z0-9-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/results",
+      "serverLine": 7838
+    },
+    {
+      "method": "POST",
+      "path": "/api/results/([A-Za-z0-9-]+)/mark$",
+      "regex": {
+        "source": "^\\/api\\/results\\/([A-Za-z0-9-]+)\\/mark$",
+        "flags": ""
+      },
+      "displayPath": "/api/results/([A-Za-z0-9-]+)/mark",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "theory.mark",
+      "family": "api/results",
+      "serverLine": 7860
+    },
+    {
+      "method": "GET",
+      "path": "/api/resources$",
+      "regex": {
+        "source": "^\\/api\\/resources$",
+        "flags": ""
+      },
+      "displayPath": "/api/resources",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/resources",
+      "serverLine": 7866
+    },
+    {
+      "method": "GET",
+      "path": "/api/resources/([A-Za-z0-9._-]+)/file$",
+      "regex": {
+        "source": "^\\/api\\/resources\\/([A-Za-z0-9._-]+)\\/file$",
+        "flags": ""
+      },
+      "displayPath": "/api/resources/([A-Za-z0-9._-]+)/file",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/resources",
+      "serverLine": 7910
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/resources$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/resources$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/resources",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 7979
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/resources/([A-Za-z0-9._-]+)/published$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/resources\\/([A-Za-z0-9._-]+)\\/published$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/resources/([A-Za-z0-9._-]+)/published",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8013
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/resources/upload$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/resources\\/upload$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/resources/upload",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8055
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/question-images$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/question-images$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/question-images",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/admin",
+      "serverLine": 8061
+    },
+    {
+      "method": "GET",
+      "path": "/api/question-images/(QIMG-[A-Za-z0-9]{8,40})$",
+      "regex": {
+        "source": "^\\/api\\/question-images\\/(QIMG-[A-Za-z0-9]{8,40})$",
+        "flags": ""
+      },
+      "displayPath": "/api/question-images/(QIMG-[A-Za-z0-9]{8,40})",
+      "caseInsensitive": false,
+      "authTier": "staff-or-student",
+      "capability": null,
+      "family": "api/question-images",
+      "serverLine": 8065
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/resources/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/resources\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/resources/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8088
+    },
+    {
+      "method": "GET",
+      "path": "/api/videos$",
+      "regex": {
+        "source": "^\\/api\\/videos$",
+        "flags": ""
+      },
+      "displayPath": "/api/videos",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/videos",
+      "serverLine": 8143
+    },
+    {
+      "method": "GET",
+      "path": "/api/videos/([A-Za-z0-9._-]+)/file$",
+      "regex": {
+        "source": "^\\/api\\/videos\\/([A-Za-z0-9._-]+)\\/file$",
+        "flags": ""
+      },
+      "displayPath": "/api/videos/([A-Za-z0-9._-]+)/file",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/videos",
+      "serverLine": 8190
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/videos$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/videos$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/videos",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8227
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/videos/([A-Za-z0-9._-]+)/published$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/videos\\/([A-Za-z0-9._-]+)\\/published$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/videos/([A-Za-z0-9._-]+)/published",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8262
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/videos/upload$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/videos\\/upload$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/videos/upload",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8305
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/videos/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/videos\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/videos/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "resources.publish",
+      "family": "api/admin",
+      "serverLine": 8313
+    },
+    {
+      "method": "GET",
+      "path": "/api/classes$",
+      "regex": {
+        "source": "^\\/api\\/classes$",
+        "flags": ""
+      },
+      "displayPath": "/api/classes",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/classes",
+      "serverLine": 8369
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/classes$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/classes$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/classes",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "family": "api/admin",
+      "serverLine": 8400
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/classes/upload$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/classes\\/upload$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/classes/upload",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "family": "api/admin",
+      "serverLine": 8424
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/classes/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/classes\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/classes/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "family": "api/admin",
+      "serverLine": 8478
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/classes/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/classes\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/classes/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "family": "api/admin",
+      "serverLine": 8549
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/cohorts$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/cohorts$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/cohorts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "cohort.manage",
+      "family": "api/admin",
+      "serverLine": 8598
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/cohorts$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/cohorts$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/cohorts",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "cohort.create",
+      "family": "api/admin",
+      "serverLine": 8614
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/cohorts\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/cohorts/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "cohort.manage",
+      "family": "api/admin",
+      "serverLine": 8646
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/cohorts\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/cohorts/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "cohort.create",
+      "family": "api/admin",
+      "serverLine": 8686
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/cohorts\\/([A-Za-z0-9._-]+)\\/tier$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.tier",
+      "family": "api/admin",
+      "serverLine": 8712
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/cohort$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/cohort$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/cohort",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "cohort.manage",
+      "family": "api/students",
+      "serverLine": 8751
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/tier$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/tier$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/tier",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.tier",
+      "family": "api/students",
+      "serverLine": 8785
+    },
+    {
+      "method": "GET",
+      "path": "/api/scholarship/status$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/status$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/status",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/scholarship",
+      "serverLine": 8846
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/apply$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/apply$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/apply",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/scholarship",
+      "serverLine": 8851
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/waitlist$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/waitlist$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/waitlist",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/scholarship",
+      "serverLine": 8872
+    },
+    {
+      "method": "GET",
+      "path": "/api/scholarship/applications$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/applications$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/applications",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "scholarship.view",
+      "family": "api/scholarship",
+      "serverLine": 8893
+    },
+    {
+      "method": "GET",
+      "path": "/api/scholarship/applications/export$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/applications\\/export$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/applications/export",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "scholarship.export",
+      "family": "api/scholarship",
+      "serverLine": 8902
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/applications/(SCH-\\d+)/decide$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/applications\\/(SCH-\\d+)\\/decide$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/applications/(SCH-\\d+)/decide",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "scholarship.decide",
+      "family": "api/scholarship",
+      "serverLine": 8915
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/applications/(SCH-\\d+)/approve$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/applications\\/(SCH-\\d+)\\/approve$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/applications/(SCH-\\d+)/approve",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "scholarship.approve",
+      "family": "api/scholarship",
+      "serverLine": 8938
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/scholarship/applications/(SCH-\\d+)$",
+      "regex": {
+        "source": "^\\/api\\/scholarship\\/applications\\/(SCH-\\d+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/scholarship/applications/(SCH-\\d+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "scholarship.delete",
+      "family": "api/scholarship",
+      "serverLine": 8990
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/settings$",
+      "regex": {
+        "source": "^\\/api\\/me\\/settings$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/settings",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 9015
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/config$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/config$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/config",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9049
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/register/start$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/register\\/start$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/register/start",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9061
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/register/verify$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/register\\/verify$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/register/verify",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9064
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/login$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/login$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/login",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9071
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/me$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/me$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/me",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9081
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/subjects$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/subjects$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/subjects",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9087
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/logout$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/logout$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/logout",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9093
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/catalogue$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/catalogue$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/catalogue",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9098
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/activities$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/activities$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/activities",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9101
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/activities/([^/]+)/start$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/activities\\/([^/]+)\\/start$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/activities/([^/]+)/start",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9104
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/attempts/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/attempts\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/attempts/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9107
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/attempts/([^/]+)/review$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/attempts\\/([^/]+)\\/review$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/attempts/([^/]+)/review",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9114
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/attempts/([^/]+)/answer$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/attempts\\/([^/]+)\\/answer$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/attempts/([^/]+)/answer",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9117
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/attempts/([^/]+)/submit$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/attempts\\/([^/]+)\\/submit$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/attempts/([^/]+)/submit",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9120
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/results$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/results$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/results",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9123
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/programme$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/programme$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/programme",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9130
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/lessons/([^/]+)/complete$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/lessons\\/([^/]+)\\/complete$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/lessons/([^/]+)/complete",
+      "caseInsensitive": false,
+      "authTier": "free",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9133
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/leaderboards$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/leaderboards$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/leaderboards",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9139
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/leaderboards/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/leaderboards\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/leaderboards/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/free2027",
+      "serverLine": 9143
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/overview$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/overview$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/overview",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "overview.own",
+      "family": "api/free2027",
+      "serverLine": 9152
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/email-status$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/email-status$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/email-status",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "family": "api/free2027",
+      "serverLine": 9162
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/mode$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/mode$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/mode",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "family": "api/free2027",
+      "serverLine": 9169
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/edition$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/edition$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/edition",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "family": "api/free2027",
+      "serverLine": 9172
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/courses$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/courses$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/courses",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9175
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/participants$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/participants$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/participants",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "roster.view",
+      "family": "api/free2027",
+      "serverLine": 9180
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/participants\\.csv$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/participants\\.csv$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/participants\\.csv",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "roster.view",
+      "family": "api/free2027",
+      "serverLine": 9184
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/participants/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/participants\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/participants/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.deactivate",
+      "family": "api/free2027",
+      "serverLine": 9197
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/free2027/admin/participants/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/participants\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/participants/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.deactivate",
+      "family": "api/free2027",
+      "serverLine": 9200
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/activities$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9205
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/activities$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9208
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/activities/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9211
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/free2027/admin/activities/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9214
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/activities/([^/]+)/(publish|close|reopen)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities\\/([^/]+)\\/(publish|close|reopen)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities/([^/]+)/(publish|close|reopen)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9221
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/activities/([^/]+)/results$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities\\/([^/]+)\\/results$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities/([^/]+)/results",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/free2027",
+      "serverLine": 9224
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/activities/([^/]+)/leaderboard/(approve|publish|unpublish|revoke)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/activities\\/([^/]+)\\/leaderboard\\/(approve|publish|unpublish|revoke)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/activities/([^/]+)/leaderboard/(approve|publish|unpublish|revoke)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "leaderboard.manage",
+      "family": "api/free2027",
+      "serverLine": 9228
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/attempts/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/attempts\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/attempts/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/free2027",
+      "serverLine": 9232
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/records$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/records$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/records",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/free2027",
+      "serverLine": 9235
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/question-banks$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9245
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks\\/([a-z]+)\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks/([a-z]+)/questions",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9248
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks\\/([a-z]+)\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks/([a-z]+)/questions",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9253
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks\\/([a-z]+)\\/questions\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks/([a-z]+)/questions/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9256
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions/delete$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks\\/([a-z]+)\\/questions\\/delete$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks/([a-z]+)/questions/delete",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9259
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/delete-all$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks\\/([a-z]+)\\/delete-all$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks/([a-z]+)/delete-all",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9262
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/import$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/question-banks\\/([a-z]+)\\/import$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/question-banks/([a-z]+)/import",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9265
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/questions$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/questions",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9270
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/lessons$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/lessons$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/lessons",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9287
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/lessons$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/lessons$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/lessons",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9290
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/lessons/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/lessons\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/lessons/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9293
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/free2027/admin/lessons/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/lessons\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/lessons/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "questions.manage",
+      "family": "api/free2027",
+      "serverLine": 9296
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/progress$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/progress$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/progress",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/free2027",
+      "serverLine": 9301
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/audit$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/audit$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/audit",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "results.view",
+      "family": "api/free2027",
+      "serverLine": 9304
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/sessions/new$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/sessions\\/new$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/sessions/new",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "system.migrate",
+      "family": "api/free2027",
+      "serverLine": 9309
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/archives$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/archives$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/archives",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "system.migrate",
+      "family": "api/free2027",
+      "serverLine": 9312
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/archives/([^/]+)$",
+      "regex": {
+        "source": "^\\/api\\/free2027\\/admin\\/archives\\/([^/]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/free2027/admin/archives/([^/]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "system.migrate",
+      "family": "api/free2027",
+      "serverLine": 9315
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/visit$",
+      "regex": {
+        "source": "^\\/api\\/analytics\\/visit$",
+        "flags": ""
+      },
+      "displayPath": "/api/analytics/visit",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/analytics",
+      "serverLine": 9319
+    },
+    {
+      "method": "GET",
+      "path": "/api/analytics/site$",
+      "regex": {
+        "source": "^\\/api\\/analytics\\/site$",
+        "flags": ""
+      },
+      "displayPath": "/api/analytics/site",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "analytics.site",
+      "family": "api/analytics",
+      "serverLine": 9350
+    }
+  ]
+}

@@ -24,6 +24,18 @@
 
   var GOC = global.GOC = global.GOC || {};
 
+  /* Appwrite migration: the ONE place the API base is decided.
+     OneBit keeps the existing relative 'api' default, so its build and every
+     existing request path are unchanged. An Appwrite Sites build injects
+     __GOC_API_BASE__ at build time (see build/build.js, GOC_API_BASE env var),
+     pointing at the goc-api Function's base, e.g.
+       https://<function>.appwrite.global/api
+     No feature module hardcodes a host. Loaded before js/free2027-api.js and
+     js/free2027-ui.js (see index.html), so both can read GOC.apiBase. */
+  GOC.apiBase = (typeof __GOC_API_BASE__ !== 'undefined' && __GOC_API_BASE__)
+    ? String(__GOC_API_BASE__).replace(/\/+$/, '')
+    : 'api';
+
   /* Shared domain rules and the seed question bank. js/goc-core.js is loaded
      before this file and by server/server.js too, so marking, performance and
      league ranking are computed by identical code in both drivers. */
@@ -2542,7 +2554,7 @@
   }
 
   var http = (function () {
-    var base = 'api';
+    var base = GOC.apiBase;
     var token = null;
     var passLen = 4;
 
@@ -3342,7 +3354,7 @@ listPublishedVideos: function () {
   GOC.api.ready = (function () {
     var servable = global.location && String(global.location.protocol).indexOf('http') === 0;
     if (!servable || typeof fetch !== 'function' || typeof Promise !== 'function') return ok(mock.name);
-    return fetch('api/health', { headers: { 'Accept': 'application/json' } })
+    return fetch(GOC.apiBase + '/health', { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (d && d.service === 'goc-academy-hub') {

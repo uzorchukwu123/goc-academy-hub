@@ -1,0 +1,2187 @@
+{
+  "generatedBy": "functions/goc-api/tools/coverage-report.js",
+  "total": 253,
+  "implemented": 1,
+  "notStarted": 252,
+  "percent": 0.4,
+  "byFamily": {
+    "api/health": {
+      "total": 1,
+      "implemented": 1
+    },
+    "api/auth": {
+      "total": 7,
+      "implemented": 0
+    },
+    "api/me": {
+      "total": 32,
+      "implemented": 0
+    },
+    "api/students": {
+      "total": 8,
+      "implemented": 0
+    },
+    "api/admin": {
+      "total": 22,
+      "implemented": 0
+    },
+    "api/staff": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/updates": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/affirmations": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/contact": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/unsubscribe": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/settings": {
+      "total": 6,
+      "implemented": 0
+    },
+    "api/objective": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/jamb": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/rounds": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/challenges": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/tutor": {
+      "total": 30,
+      "implemented": 0
+    },
+    "api/audit": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/notices": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/flags": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/broadcasts": {
+      "total": 4,
+      "implemented": 0
+    },
+    "api/alerts": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/approvals": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/tutors": {
+      "total": 6,
+      "implemented": 0
+    },
+    "api/managers": {
+      "total": 5,
+      "implemented": 0
+    },
+    "api/passages": {
+      "total": 5,
+      "implemented": 0
+    },
+    "api/notes": {
+      "total": 8,
+      "implemented": 0
+    },
+    "api/league": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/topics": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/questions": {
+      "total": 12,
+      "implemented": 0
+    },
+    "api/import": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/results": {
+      "total": 4,
+      "implemented": 0
+    },
+    "api/resources": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/question-images": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/videos": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/classes": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/scholarship": {
+      "total": 8,
+      "implemented": 0
+    },
+    "api/free2027": {
+      "total": 54,
+      "implemented": 0
+    },
+    "api/analytics": {
+      "total": 2,
+      "implemented": 0
+    }
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "family": "api/health",
+      "authTier": "public",
+      "capability": null,
+      "status": "implemented"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "family": "api/auth",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "family": "api/auth",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/password",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "family": "api/auth",
+      "authTier": "staff-or-student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session-info",
+      "family": "api/auth",
+      "authTier": "staff-or-student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/unlock",
+      "family": "api/auth",
+      "authTier": "staff",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password",
+      "family": "api/auth",
+      "authTier": "staff",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/lock",
+      "family": "api/auth",
+      "authTier": "staff",
+      "capability": "roster.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/students",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "roster.view",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/students",
+      "family": "api/students",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/active",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "students.deactivate",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/students/([A-Za-z0-9-]+)/approve",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "students.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/students/([A-Za-z0-9-]+)/approve",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "students.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/students/([A-Za-z0-9-]+)/reset",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "students.passwords",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/students",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "students.add",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/overview",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "overview.own",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/migrate-appwrite",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "system.migrate",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/staff",
+      "family": "api/staff",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/updates",
+      "family": "api/updates",
+      "authTier": "public",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/updates",
+      "family": "api/updates",
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/updates/(\\d+)",
+      "family": "api/updates",
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/affirmations",
+      "family": "api/affirmations",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/affirmations",
+      "family": "api/affirmations",
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/contact",
+      "family": "api/contact",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/unsubscribe",
+      "family": "api/unsubscribe",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings",
+      "family": "api/settings",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings",
+      "family": "api/settings",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/objective-count",
+      "family": "api/settings",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/jamb-count",
+      "family": "api/settings",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/objective/blueprint",
+      "family": "api/objective",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jamb/blueprint",
+      "family": "api/jamb",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/staff/access",
+      "family": "api/staff",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/signup-limits",
+      "family": "api/settings",
+      "authTier": "console",
+      "capability": "signup.limits",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/rounds",
+      "family": "api/rounds",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/rounds/open",
+      "family": "api/rounds",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/rounds/close",
+      "family": "api/rounds",
+      "authTier": "console",
+      "capability": "sittings.configure",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/challenges",
+      "family": "api/challenges",
+      "authTier": "console",
+      "capability": "challenges.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/challenges",
+      "family": "api/challenges",
+      "authTier": "console",
+      "capability": "challenges.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/challenges/([A-Za-z0-9-]+)/active",
+      "family": "api/challenges",
+      "authTier": "console",
+      "capability": "challenges.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/login",
+      "family": "api/tutor",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/me",
+      "family": "api/tutor",
+      "authTier": "tutor-setup",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/password",
+      "family": "api/tutor",
+      "authTier": "tutor-setup",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/subject",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/analytics",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/tutors/analytics",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/atrisk",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/top",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/student",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/student/contact",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/audit",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/manager-actions",
+      "family": "api/audit",
+      "authTier": "console",
+      "capability": "overview.own",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/tutor-views",
+      "family": "api/audit",
+      "authTier": "console",
+      "capability": "tutors.audit",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/questions",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/questions",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/questions/import",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/questions/(\\d+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/questions/(\\d+)/active",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tutor/questions/(\\d+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/notes",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/notes",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/notes/(\\d+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/notes/(\\d+)/active",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tutor/notes/(\\d+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/notices",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/notices",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutor/notices/(\\d+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tutor/notices/(\\d+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notices",
+      "family": "api/notices",
+      "authTier": "console",
+      "capability": "notices.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notices/(\\d+)",
+      "family": "api/notices",
+      "authTier": "console",
+      "capability": "notices.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/flags",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/flags/([A-Za-z0-9-]+)/(reply|close)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/flags",
+      "family": "api/flags",
+      "authTier": "console",
+      "capability": "approvals.review",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/flags/([A-Za-z0-9-]+)/(reply|close)",
+      "family": "api/flags",
+      "authTier": "console",
+      "capability": "approvals.review",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/broadcasts",
+      "family": "api/broadcasts",
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/broadcasts/audience",
+      "family": "api/broadcasts",
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/broadcasts",
+      "family": "api/broadcasts",
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/broadcasts/(\\d+)",
+      "family": "api/broadcasts",
+      "authTier": "console",
+      "capability": "broadcast.send",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/scripts",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutor/scripts/([A-Za-z0-9-]+)",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutor/scripts/([A-Za-z0-9-]+)/mark",
+      "family": "api/tutor",
+      "authTier": "tutor",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/alerts",
+      "family": "api/alerts",
+      "authTier": "console",
+      "capability": "overview.own",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/alerts/([A-Za-z0-9-]+)/seen",
+      "family": "api/alerts",
+      "authTier": "console",
+      "capability": "overview.own",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/approvals",
+      "family": "api/approvals",
+      "authTier": "console",
+      "capability": "approvals.review",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/approvals/batch/approve",
+      "family": "api/approvals",
+      "authTier": "console",
+      "capability": "approvals.review",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/approvals/(\\d+)/(approve|return)",
+      "family": "api/approvals",
+      "authTier": "console",
+      "capability": "approvals.review",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutors",
+      "family": "api/tutors",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tutors",
+      "family": "api/tutors",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutors/(GOC-T-\\d+)",
+      "family": "api/tutors",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutors/(GOC-T-\\d+)/password",
+      "family": "api/tutors",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tutors/(GOC-T-\\d+)/active",
+      "family": "api/tutors",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tutors/overview",
+      "family": "api/tutors",
+      "authTier": "console",
+      "capability": "tutors.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/managers",
+      "family": "api/managers",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/managers",
+      "family": "api/managers",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/managers/(GOC-A-\\d+)/active",
+      "family": "api/managers",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/managers/(GOC-A-\\d+)/password",
+      "family": "api/managers",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/managers/(GOC-A-\\d+)",
+      "family": "api/managers",
+      "authTier": "console",
+      "capability": "managers.accounts",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/staff/([A-Za-z0-9-]+)/password",
+      "family": "api/staff",
+      "authTier": "founder",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/passcode",
+      "family": "api/settings",
+      "authTier": "founder",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/streak-freeze",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/reminders",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/reminders",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/practice",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/mistakes",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/review",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/review",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/quest",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/weekly-quest",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/practice",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/bookmarks",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/bookmarks",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/me/bookmarks/([A-Za-z0-9]+)",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/tests",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/tests/start",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/tests/submit",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/results",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/results/([A-Za-z0-9-]+)",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/study",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study-time/ping",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study-time/extend",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/notes",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/notices",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/broadcasts",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/flags",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/flags",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/challenge",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study/start",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/study/submit",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/passages",
+      "family": "api/passages",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/passages",
+      "family": "api/passages",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/passages/(\\d+)",
+      "family": "api/passages",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/passages/(\\d+)/active",
+      "family": "api/passages",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/passages/(\\d+)",
+      "family": "api/passages",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notes",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notes",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notes/(\\d+)",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notes/(\\d+)/active",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notes/counts",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notes/(\\d+)",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notes/bulk",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notes/import",
+      "family": "api/notes",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/league",
+      "family": "api/league",
+      "authTier": "staff-or-student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics",
+      "family": "api/topics",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics/rename",
+      "family": "api/topics",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/counts",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/questions",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/questions/import",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/import/history",
+      "family": "api/import",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/questions/(\\d+)",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/questions/(\\d+)/active",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/questions/(\\d+)",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/questions/bulk",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/questions/restore",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/deletion-log",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/diagnostics",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/jamb-integrity",
+      "family": "api/questions",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/results",
+      "family": "api/results",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/results/export",
+      "family": "api/results",
+      "authTier": "console",
+      "capability": "results.export",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/results/([A-Za-z0-9-]+)",
+      "family": "api/results",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/results/([A-Za-z0-9-]+)/mark",
+      "family": "api/results",
+      "authTier": "console",
+      "capability": "theory.mark",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/resources",
+      "family": "api/resources",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/resources/([A-Za-z0-9._-]+)/file",
+      "family": "api/resources",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/resources",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/resources/([A-Za-z0-9._-]+)/published",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/resources/upload",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/question-images",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/question-images/(QIMG-[A-Za-z0-9]{8,40})",
+      "family": "api/question-images",
+      "authTier": "staff-or-student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/resources/([A-Za-z0-9._-]+)",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/videos",
+      "family": "api/videos",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/videos/([A-Za-z0-9._-]+)/file",
+      "family": "api/videos",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/videos",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/videos/([A-Za-z0-9._-]+)/published",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/videos/upload",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/videos/([A-Za-z0-9._-]+)",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "resources.publish",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/classes",
+      "family": "api/classes",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/classes",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/classes/upload",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/classes/([A-Za-z0-9._-]+)",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/classes/([A-Za-z0-9._-]+)",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "classes.schedule",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/cohorts",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "cohort.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/cohorts",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "cohort.create",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "cohort.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "cohort.create",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "students.tier",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/cohort",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "cohort.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/tier",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "students.tier",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scholarship/status",
+      "family": "api/scholarship",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/apply",
+      "family": "api/scholarship",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/waitlist",
+      "family": "api/scholarship",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scholarship/applications",
+      "family": "api/scholarship",
+      "authTier": "console",
+      "capability": "scholarship.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scholarship/applications/export",
+      "family": "api/scholarship",
+      "authTier": "console",
+      "capability": "scholarship.export",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/applications/(SCH-\\d+)/decide",
+      "family": "api/scholarship",
+      "authTier": "console",
+      "capability": "scholarship.decide",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/scholarship/applications/(SCH-\\d+)/approve",
+      "family": "api/scholarship",
+      "authTier": "console",
+      "capability": "scholarship.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/scholarship/applications/(SCH-\\d+)",
+      "family": "api/scholarship",
+      "authTier": "console",
+      "capability": "scholarship.delete",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/settings",
+      "family": "api/me",
+      "authTier": "student",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/config",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/register/start",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/register/verify",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/login",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/me",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/subjects",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/logout",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/catalogue",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/activities",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/activities/([^/]+)/start",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/attempts/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/attempts/([^/]+)/review",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/attempts/([^/]+)/answer",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/attempts/([^/]+)/submit",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/results",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/programme",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/lessons/([^/]+)/complete",
+      "family": "api/free2027",
+      "authTier": "free",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/leaderboards",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/leaderboards/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/overview",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "overview.own",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/email-status",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/mode",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/edition",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "homepage.edit",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/courses",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/participants",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "roster.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/participants\\.csv",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "roster.view",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/participants/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "students.deactivate",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/free2027/admin/participants/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "students.deactivate",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/activities",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/activities",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/activities/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/free2027/admin/activities/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/activities/([^/]+)/(publish|close|reopen)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/activities/([^/]+)/results",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/activities/([^/]+)/leaderboard/(approve|publish|unpublish|revoke)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "leaderboard.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/attempts/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/records",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/question-banks",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/questions/delete",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/delete-all",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/question-banks/([a-z]+)/import",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/questions",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/lessons",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/lessons",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/free2027/admin/lessons/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/free2027/admin/lessons/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "questions.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/progress",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/audit",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "results.view",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/free2027/admin/sessions/new",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "system.migrate",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/archives",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "system.migrate",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/free2027/admin/archives/([^/]+)",
+      "family": "api/free2027",
+      "authTier": "console",
+      "capability": "system.migrate",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/analytics/visit",
+      "family": "api/analytics",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/analytics/site",
+      "family": "api/analytics",
+      "authTier": "console",
+      "capability": "analytics.site",
+      "status": "not-started"
+    }
+  ]
+}

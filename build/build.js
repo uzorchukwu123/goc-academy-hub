@@ -48,10 +48,24 @@ function stripHooks(src, rel) {
   return src;
 }
 
+/* Appwrite migration: an Appwrite Sites build sets GOC_API_BASE to the goc-api
+   Function's API base, including the /api suffix and no trailing slash, e.g.
+     GOC_API_BASE=https://<function>.appwrite.global/api npm run build
+   OneBit builds leave it unset, so js/api.js keeps its relative 'api' default
+   and the existing deployment is byte-for-byte equivalent in behaviour.
+   Nothing secret is ever injected here: this value is public by design. */
+var API_BASE = String(process.env.GOC_API_BASE || '').trim().replace(/\/+$/, '');
+if (API_BASE && !/^https?:\/\/[^\s]+$/i.test(API_BASE)) {
+  console.error('GOC_API_BASE must be an absolute http(s) URL ending in /api (no trailing slash). Got: ' + API_BASE);
+  process.exit(1);
+}
+var JS_DEFINE = API_BASE ? { __GOC_API_BASE__: JSON.stringify(API_BASE) } : {};
+
 function minJs(rel) {
   var src = stripHooks(read(rel), rel);
   var r = esbuild.transformSync(src, {
-    loader: 'js', minify: true, legalComments: 'none', charset: 'ascii', sourcemap: false
+    loader: 'js', minify: true, legalComments: 'none', charset: 'ascii', sourcemap: false,
+    define: JS_DEFINE
   });
   write(rel, r.code);
 }

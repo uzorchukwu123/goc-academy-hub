@@ -70,7 +70,7 @@
     if (token) headers['Authorization'] = 'Bearer ' + token;
     var init = { method: method, headers: headers };
     if (body !== undefined) init.body = JSON.stringify(body === null ? {} : body);
-    return fetch('api/free2027' + path, init).then(function (r) {
+    return fetch(((GOC && GOC.apiBase) || 'api') + '/free2027' + path, init).then(function (r) {
       return r.text().then(function (txt) {
         var data = null;
         try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }

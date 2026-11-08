@@ -1,0 +1,17 @@
+{
+  "name": "goc-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "G.O.C Academy Hub — Appwrite Functions API gateway. Mirrors the existing OneBit /api contract.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "node-appwrite": "^29.4.0"
+  },
+  "scripts": {
+    "inventory": "node tools/extract-routes.js"
+  }
+}

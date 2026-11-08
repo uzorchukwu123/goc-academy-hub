@@ -1,0 +1,23 @@
+{
+  "projectId": "REPLACE_WITH_EXISTING_PROJECT_ID",
+  "projectName": "G.O.C Academy Hub",
+  "functions": [
+    {
+      "$id": "goc-api",
+      "name": "goc-api",
+      "runtime": "node-22",
+      "specification": "s-1vcpu-512mb",
+      "entrypoint": "src/index.js",
+      "commands": "npm install --omit=dev",
+      "path": "functions/goc-api",
+      "execute": ["any"],
+      "events": [],
+      "scopes": ["documents.read", "documents.write", "files.read", "files.write", "users.read"],
+      "schedule": "",
+      "timeout": 30,
+      "enabled": true,
+      "logging": true,
+      "ignore": ["node_modules", ".npm", "tools"]
+    }
+  ]
+}
