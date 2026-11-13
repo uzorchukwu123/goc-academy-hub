@@ -3301,3 +3301,119 @@ a.cv:hover{color:var(--red)}
   .lp-news-intro-icon{width:44px;height:44px;border-radius:12px}
   .lp-news-intro-body h2{font-size:19px}
 }
+
+/* ================================================================
+   JAMB EXAM MODE — dedicated UTME examination environment.
+   Every rule is scoped to #cbt.jamb-mode (plus the JAMB-only resume
+   banner and calculator/submit components), so the shared CBT screen
+   used by Practice/study runs and the Web Test runner are untouched.
+   ================================================================ */
+.cbt-main { display: contents; }
+#cbt.jamb-mode .cbt-main { display: flex; flex: 1 1 0; min-height: 0; }
+#cbt.jamb-mode .cbt-main .exam-body { flex: 1 1 0; min-width: 0; }
+
+/* Candidate bar */
+#cbt.jamb-mode .cbt-candidate {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 18px; background: #141821; color: #fff;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+#cbt.jamb-mode .cc-who { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+#cbt.jamb-mode .cc-name { font-weight: 800; font-size: 14.5px; white-space: nowrap; }
+#cbt.jamb-mode .cc-id { font-size: 12px; color: #CBD2DC; white-space: nowrap; }
+#cbt.jamb-mode .cc-paper { font-size: 12px; color: #9AA3AF; flex: 1 1 auto; }
+#cbt.jamb-mode .cc-calc {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #DC2626; color: #fff; border: none; cursor: pointer;
+  font: 700 13px var(--font); padding: 9px 14px; border-radius: 999px;
+  box-shadow: 0 6px 14px rgba(220,38,38,.35);
+  min-height: 40px;
+}
+#cbt.jamb-mode .cc-calc .icon { width: 17px; height: 17px; }
+@media (hover: hover) { #cbt.jamb-mode .cc-calc:hover { filter: brightness(1.07); } }
+
+/* Desktop side palette (persistent); smaller screens keep the slide-up panel */
+#cbt.jamb-mode .cbt-side {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 296px; flex: 0 0 296px; min-height: 0;
+  border-left: 1px solid var(--line); background: #FBFBFC;
+  padding: 14px 14px 12px;
+}
+#cbt.jamb-mode .cbt-side-head { font-weight: 800; font-size: 13px; color: var(--ink); }
+#cbt.jamb-mode .cbt-side-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px;
+  overflow-y: auto; align-content: start; padding: 2px;
+}
+#cbt.jamb-mode .cbt-side-grid .qn { width: 100%; height: 38px; }
+#cbt.jamb-mode .cbt-side-legend {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--slate);
+}
+#cbt.jamb-mode .cbt-side-legend .lg {
+  width: 14px; height: 14px; border-radius: 5px; display: inline-block;
+  border: 1.5px solid var(--line); background: #fff; margin-left: 8px;
+}
+#cbt.jamb-mode .cbt-side-legend .lg:first-child { margin-left: 0; }
+#cbt.jamb-mode .cbt-side-legend .lg.cur { border-color: var(--red); }
+#cbt.jamb-mode .cbt-side-legend .lg.ans { background: var(--green); border-color: var(--green); }
+#cbt.jamb-mode .cbt-side-count { font-size: 12px; font-weight: 700; color: var(--slate); }
+@media (max-width: 1023px) {
+  #cbt.jamb-mode .cbt-main { display: contents; }
+  #cbt.jamb-mode .cbt-side { display: none; }
+}
+
+/* Touch comfort inside the exam on small screens */
+@media (max-width: 560px) {
+  #cbt.jamb-mode .cbt-candidate { padding: 8px 12px; gap: 8px; }
+  #cbt.jamb-mode .cc-paper { display: none; }
+  #cbt.jamb-mode .exam-opts .opt { padding: 13px 14px; font-size: 15px; }
+  #cbt.jamb-mode .exam-nav-btn { height: 46px; }
+}
+
+/* Examination calculator (JAMB mode only) */
+.jamb-calc {
+  position: fixed; z-index: 320; right: 16px; top: 84px;
+  width: min(300px, calc(100vw - 24px));
+  background: #141821; color: #fff; border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(10, 12, 20, .45), 0 4px 14px rgba(10, 12, 20, .3);
+  padding: 14px; touch-action: manipulation;
+}
+.jamb-calc .jc-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-weight: 800; font-size: 13px; letter-spacing: .02em; margin-bottom: 10px;
+}
+.jamb-calc .jc-close {
+  background: rgba(255,255,255,.1); border: none; color: #fff; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 9px; font-size: 17px; line-height: 1;
+}
+.jamb-calc .jc-display {
+  background: #0B0E14; border: 1px solid rgba(255,255,255,.09); border-radius: 12px;
+  min-height: 52px; padding: 12px; text-align: right;
+  font-size: 22px; font-weight: 800; letter-spacing: .01em;
+  overflow-x: auto; white-space: nowrap; margin-bottom: 12px;
+}
+.jamb-calc .jc-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.jamb-calc .jc-keys button {
+  height: 46px; border: none; border-radius: 12px; cursor: pointer;
+  background: #232936; color: #fff; font: 700 16px var(--font);
+}
+.jamb-calc .jc-keys button:active { filter: brightness(1.35); }
+.jamb-calc .jc-keys .jc-op { background: #374151; }
+.jamb-calc .jc-keys .jc-fn { background: #1F2937; color: #F3C969; font-size: 14px; }
+.jamb-calc .jc-keys .jc-eq { background: #DC2626; grid-column: span 2; }
+.jamb-calc .jc-note { font-size: 11px; color: #9AA3AF; margin: 10px 2px 0; line-height: 1.45; }
+@media (max-width: 560px) {
+  .jamb-calc { right: 12px; left: 12px; width: auto; top: 70px; }
+  .jamb-calc .jc-keys button { height: 50px; }
+}
+
+/* Resume banner on the Web Test screen */
+.jt-resume {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  background: #FFF7ED; border: 1px solid #FDBA74; border-radius: 16px;
+  padding: 14px 16px; margin-bottom: 14px;
+}
+.jt-resume-t { display: flex; flex-direction: column; gap: 2px; min-width: 220px; flex: 1 1 auto; }
+.jt-resume-t b { font-size: 14.5px; color: #9A3412; }
+.jt-resume-t span { font-size: 12.5px; color: #7C2D12; }
+.jt-resume-b { display: flex; gap: 8px; flex-wrap: wrap; }

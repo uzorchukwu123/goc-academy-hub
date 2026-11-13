@@ -99,6 +99,9 @@ tick().then(function () {
     wtPeriodLabel: function () { return 'Test'; }, wtSectionLabel: function (s) { return s; },
     wtNoTheorySubjects: function () { return []; },
     wtRowEl: function (t) { var e = fakeEl('div'); e.className = 'row-' + t.section; return e; },
+    /* renderWebTest paints the JAMB resume banner first; there is no saved
+       sitting in this sandbox, so the stub simply stands in for it. */
+    jambPaintResume: function () {},
     toast: function () {}
   };
   var c2 = vm.createContext(sb2);

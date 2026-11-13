@@ -2247,7 +2247,9 @@ function wtInstructions(t){
             : 'There is no clock on this paper \u2014 work at your own pace.',
       'Once you submit, your answers are final and sent for marking.',
       t.repeatable ? 'This is a rehearsal \u2014 you may sit it again, and every attempt is kept on your record.' : null,
-      'Stay on this screen until you submit \u2014 closing or refreshing the tab can end your attempt.',
+      t.section === 'jamb'
+        ? 'This sitting runs in the UTME examination room: A, B, C or D answers a question, N and P move between questions, S starts submission, and a calculator is on screen. If the page refreshes, return here and resume \u2014 your answers and the clock are kept, never restarted.'
+        : 'Stay on this screen until you submit \u2014 closing or refreshing the tab can end your attempt.',
       'This counts toward today\u2019s study window.'
     ].filter(Boolean)
   };
@@ -9253,6 +9255,7 @@ function wtLoad(){
 /* The hub only ever lists papers in the student's own combination, because the
    catalogue itself is built from the account's stored subjects (Priority 6). */
 function renderWebTest(){
+  jambPaintResume();
   var host = document.getElementById('wtSections');
   if(!host) return;
   var lead = document.getElementById('wtLead');
@@ -10263,6 +10266,7 @@ var cbtGroups = null;
 /* A student-configured run: their subject, their topics, their clock. Marked at
    submit like an exam, but filed nowhere — see the study section above. */
 function cbtOpenStudy(p){
+  jambModeOff();   // study runs are practice, never the examination room
   cbtPaper = null;
   cbtStudy = p;
   cbtCur = 0; cbtAns = {};
@@ -10281,6 +10285,7 @@ function cbtOpenPaper(p){
   cbtSecs = Number(p.durationSec) || 1800;
   cbtBuildGroups();
   go('cbt'); paintCBTHead(); cbtPaintSubjects(); buildCBTNav(); renderCBTQ(); startTimer();
+  jambModeOn(p);
 }
 /* Built from the papers array the backend already serves alongside a
    full-combination sitting (the same one the objective/theory runner reads —
@@ -10402,6 +10407,7 @@ function buildCBTNav(){
   if(lbl) lbl.textContent = 'Q '+(cbtCur+1)+' / '+cbtN;
   /* If the panel is open, refresh its grid too */
   if(qPanelCurrentMode === 'cbt') qPanelRefreshGrid();
+  jambPaintSide();
 }
 function renderCBTQ(){
   var d = cbtQuestionAt(cbtCur) || { text:'', options:[] };
@@ -10420,12 +10426,14 @@ function renderCBTQ(){
     b.onclick=function(){ cbtAns[cbtCur]=i; renderCBTQ(); buildCBTNav(); cbtPaintSubjects(); };
     host.appendChild(b);
   });
+  jambSaveSession();
 }
 function cbtMove(d){
   cbtCur=Math.max(0,Math.min(cbtN-1,cbtCur+d));
   renderCBTQ(); buildCBTNav(); cbtPaintSubjects();
 }
 function confirmExit(){
+  if(jambMode){ jambClearSession(); jambModeOff(); }
   if(cbtTimerId){ clearInterval(cbtTimerId); cbtTimerId = null; }
   if(cbtPaper){ cbtPaper = null; cbtAns = {}; cbtGroups = null; go('webtest'); toast('Paper closed — nothing was submitted'); return; }
   /* Leaving a study run submits nothing: it was never an attempt, so there is
@@ -10452,6 +10460,10 @@ function submitCBT(auto){
     return;
   }
   if(!cbtPaper) return;
+  /* JAMB mode: pressing Submit (or the S key) only opens the submission
+     prompt — nothing is sent until the candidate confirms there. A timer
+     expiry submits directly, as the real hall does. */
+  if(jambMode && !auto && !jambSubmitArmed){ jambSubmitOpen(); return; }
   /* A real sitting: the responses go to the backend, which marks them and
      stores the result against this student's Scholar ID. */
   var responses = {}, i;
@@ -10463,9 +10475,352 @@ function submitCBT(auto){
   cbtPaper = null;
   toast(auto ? 'Time up — submitting your paper' : 'Submitting your paper…');
   GOC.api.submitTest({ attemptId: paper.attemptId, responses: responses, timeUsedSec: used })
-    .then(function(res){ wtShowResult(res); wtLoadHistory(); refreshMe(); renderLeague(); },
-      function(err){ cbtPaper = paper; toast(err.message || 'Could not submit your paper'); });
+    .then(function(res){ jambClearSession(); jambModeOff(); wtShowResult(res); wtLoadHistory(); refreshMe(); renderLeague(); },
+      function(err){ cbtPaper = paper; jambSubmitArmed = false; toast(err.message || 'Could not submit your paper'); });
 }
+
+/* ================= JAMB EXAM MODE =================
+   A dedicated JAMB UTME examination environment layered on the shared CBT
+   screen. It is active ONLY while a real JAMB paper (cbtPaper) is open —
+   entered from cbtOpenPaper, left on submit/exit. Practice/study CBT, the
+   Web Test runner and Free 2027 never enter it, and nothing here changes
+   marking, submission payloads or attempt records: it is presentation,
+   controls and in-browser recovery around the existing runner.
+
+   Controls follow the published JAMB CBT candidate guides (the 8-key
+   device): A B C D select an answer, N next, P previous, S initiate
+   submission, Y confirm submission, R return from the submission prompt.
+   Arrow keys and a keyboard-operable calculator are G.O.C practice
+   enhancements beyond that reference, and are labelled as such. */
+var jambMode = false;
+var jambSubmitArmed = false;   // true only after the candidate confirms submission
+var jambDeadline = 0;          // wall-clock end of the current sitting (ms)
+var JAMB_SESSION_KEY = 'gocJambSessionV1';
+
+function jambModeOn(p){
+  jambMode = true;
+  jambSubmitArmed = false;
+  jambDeadline = Date.now() + (Number(p && p.durationSec) || 1800) * 1000;
+  var scr = document.getElementById('cbt');
+  if(scr) scr.classList.add('jamb-mode');
+  var bar = document.getElementById('cbtCandidate');
+  if(bar){
+    bar.hidden = false;
+    var nm = document.getElementById('cbtCandName');
+    var idEl = document.getElementById('cbtCandId');
+    var pp = document.getElementById('cbtCandPaper');
+    var full = (document.getElementById('profName') || {}).textContent
+      || (document.getElementById('idName') || {}).textContent || studentFirst || 'Candidate';
+    if(nm) nm.textContent = full;
+    if(idEl) idEl.textContent = studentId ? ('Scholar ID · ' + studentId) : '';
+    if(pp) pp.textContent = 'JAMB Test · UTME practice examination';
+  }
+  var side = document.getElementById('cbtSide');
+  if(side) side.hidden = false;
+  jambPaintSide();
+  jambSaveSession();
+}
+function jambModeOff(){
+  jambMode = false;
+  jambSubmitArmed = false;
+  jambDeadline = 0;
+  var scr = document.getElementById('cbt');
+  if(scr) scr.classList.remove('jamb-mode');
+  ['cbtCandidate', 'cbtSide', 'jambCalc'].forEach(function(id){
+    var e = document.getElementById(id); if(e) e.hidden = true;
+  });
+  jambSubmitReturn();
+}
+
+/* ---- desktop side palette (the mobile slide-up panel is unchanged) ---- */
+function jambPaintSide(){
+  var grid = document.getElementById('cbtSideGrid');
+  if(!grid) return;
+  if(!jambMode){ return; }
+  grid.innerHTML = '';
+  var g = cbtGroupAt(cbtCur);
+  var from = g ? g.from : 0;
+  var to = g ? g.to : cbtN - 1;
+  for(var i = from; i <= to; i++){
+    (function(i){
+      var b = document.createElement('button');
+      b.className = 'qn' + (i === cbtCur ? ' cur' : '') + (cbtAns[i] != null ? ' ans' : '');
+      b.type = 'button';
+      b.textContent = i - from + 1;
+      b.setAttribute('aria-label', 'Go to question ' + (i - from + 1));
+      b.onclick = function(){ cbtCur = i; renderCBTQ(); buildCBTNav(); cbtPaintSubjects(); };
+      grid.appendChild(b);
+    })(i);
+  }
+  var cnt = document.getElementById('cbtSideCount');
+  if(cnt){
+    var done = 0;
+    for(var k = 0; k < cbtN; k++) if(cbtAns[k] != null) done++;
+    cnt.textContent = done + ' of ' + cbtN + ' answered' + (g ? ' · ' + g.subject : '');
+  }
+}
+
+/* ---- submission confirmation: S / Submit opens it; only Y confirms ---- */
+function jambSubmitOpen(){
+  if(!jambMode || !cbtPaper) return;
+  var done = 0;
+  for(var k = 0; k < cbtN; k++) if(cbtAns[k] != null) done++;
+  var t = document.getElementById('jambSubmitText');
+  if(t) t.textContent = 'You have answered ' + done + ' of ' + cbtN + ' questions. '
+    + (cbtN - done > 0 ? (cbtN - done) + ' question' + (cbtN - done !== 1 ? 's are' : ' is') + ' still unanswered. ' : '')
+    + 'Are you sure you want to submit now?';
+  var o = document.getElementById('jambSubmitOverlay');
+  if(o) o.classList.add('show');
+}
+function jambSubmitReturn(){
+  var o = document.getElementById('jambSubmitOverlay');
+  if(o) o.classList.remove('show');
+}
+function jambSubmitConfirm(){
+  if(!jambMode) return;
+  jambSubmitReturn();
+  jambSubmitArmed = true;
+  submitCBT(false);
+}
+
+/* ---- examination calculator -------------------------------------------
+   Basic operations only, matching the UTME hall calculator: + - x /,
+   brackets, %, square root, square, decimal. Evaluated by a small
+   recursive-descent parser — never eval(). Opening or closing it touches
+   nothing but its own panel; the current question and answers are safe. */
+var jcExpr = '';
+var jcFresh = false;   // display holds a result; next digit starts a new entry
+function jambCalcToggle(force){
+  var p = document.getElementById('jambCalc');
+  if(!p) return;
+  var show = (typeof force === 'boolean') ? force : p.hidden;
+  p.hidden = !show;
+  if(show) jcPaint();
+}
+function jcPaint(){
+  var d = document.getElementById('jcDisplay');
+  if(d) d.textContent = jcExpr || '0';
+}
+function jcFormat(v){
+  if(typeof v !== 'number' || !isFinite(v) || isNaN(v)) return null;
+  return String(parseFloat(v.toPrecision(10)));
+}
+function jambCalcKey(k){
+  if(k === 'C'){ jcExpr = ''; jcFresh = false; jcPaint(); return; }
+  if(k === 'B'){ jcExpr = jcFresh ? '' : jcExpr.slice(0, -1); jcFresh = false; jcPaint(); return; }
+  if(k === '='){ jcEquals(); return; }
+  if(k === 'sqrt' || k === 'sq' || k === '%'){
+    var v = jcEval(jcExpr);
+    if(v === null){ jcPaint(); return; }
+    var r = k === 'sqrt' ? Math.sqrt(v) : (k === 'sq' ? v * v : v / 100);
+    var f = jcFormat(r);
+    jcExpr = f === null ? '' : f;
+    jcFresh = f !== null;
+    jcPaint();
+    return;
+  }
+  if(jcFresh && /[0-9.(]/.test(k)) jcExpr = '';
+  jcFresh = false;
+  jcExpr += k;
+  jcPaint();
+}
+function jcEquals(){
+  var v = jcEval(jcExpr);
+  var f = jcFormat(v);
+  jcExpr = f === null ? '' : f;
+  jcFresh = f !== null;
+  var d = document.getElementById('jcDisplay');
+  if(d) d.textContent = f === null ? 'Error' : f;
+}
+/* Tokeniser + recursive descent: + - * / ( ) unary minus, decimals. */
+function jcEval(src){
+  if(!src) return null;
+  var toks = [], i = 0, n = src.length;
+  while(i < n){
+    var c = src[i];
+    if(c === ' '){ i++; continue; }
+    if(/[0-9.]/.test(c)){
+      var j = i, dot = false, num = '';
+      while(j < n && /[0-9.]/.test(src[j])){
+        if(src[j] === '.'){ if(dot) return null; dot = true; }
+        num += src[j]; j++;
+      }
+      var v = parseFloat(num);
+      if(isNaN(v)) return null;
+      toks.push({ t: 'n', v: v }); i = j; continue;
+    }
+    if('+-*/()'.indexOf(c) > -1){ toks.push({ t: c }); i++; continue; }
+    return null;
+  }
+  var pos = 0;
+  function peek(){ return toks[pos]; }
+  function parseExpr(){
+    var v = parseTerm();
+    if(v === null) return null;
+    while(peek() && (peek().t === '+' || peek().t === '-')){
+      var op = toks[pos++].t;
+      var r = parseTerm();
+      if(r === null) return null;
+      v = op === '+' ? v + r : v - r;
+    }
+    return v;
+  }
+  function parseTerm(){
+    var v = parseFactor();
+    if(v === null) return null;
+    while(peek() && (peek().t === '*' || peek().t === '/')){
+      var op = toks[pos++].t;
+      var r = parseFactor();
+      if(r === null) return null;
+      if(op === '/'){ if(r === 0) return null; v = v / r; } else v = v * r;
+    }
+    return v;
+  }
+  function parseFactor(){
+    var tk = peek();
+    if(!tk) return null;
+    if(tk.t === '-'){ pos++; var nv = parseFactor(); return nv === null ? null : -nv; }
+    if(tk.t === 'n'){ pos++; return tk.v; }
+    if(tk.t === '('){
+      pos++;
+      var v = parseExpr();
+      if(v === null || !peek() || peek().t !== ')') return null;
+      pos++;
+      return v;
+    }
+    return null;
+  }
+  var out = parseExpr();
+  if(out === null || pos !== toks.length) return null;
+  return out;
+}
+
+/* ---- refresh recovery (browser-side only; no server change) ----------
+   While a JAMB sitting is open, the paper (questions carry no answers —
+   the backend stripped them), the chosen answers and the wall-clock
+   deadline are kept in sessionStorage. Returning to the Web Test screen
+   offers a resume of the SAME attempt with the time genuinely remaining.
+   The clock is never reset: an expired deadline submits what was saved. */
+function jambSaveSession(){
+  if(!jambMode || !cbtPaper) return;
+  try {
+    sessionStorage.setItem(JAMB_SESSION_KEY, JSON.stringify({
+      attemptId: cbtPaper.attemptId, paper: cbtPaper,
+      answers: cbtAns, cur: cbtCur, deadline: jambDeadline
+    }));
+  } catch (e) {}
+}
+function jambReadSession(){
+  try {
+    var raw = sessionStorage.getItem(JAMB_SESSION_KEY);
+    if(!raw) return null;
+    var s = JSON.parse(raw);
+    if(!s || !s.paper || !s.paper.questions || !s.paper.questions.length) return null;
+    return s;
+  } catch (e) { return null; }
+}
+function jambClearSession(){
+  try { sessionStorage.removeItem(JAMB_SESSION_KEY); } catch (e) {}
+}
+function jambPaintResume(){
+  var host = document.getElementById('jtResume');
+  if(!host) return;
+  var s = jambReadSession();
+  /* A sitting already open in this tab is not an interruption to resume. */
+  if(!s || jambMode){ host.hidden = true; host.innerHTML = ''; return; }
+  var answered = 0;
+  Object.keys(s.answers || {}).forEach(function(k){ if(s.answers[k] != null) answered++; });
+  var leftMs = (Number(s.deadline) || 0) - Date.now();
+  var expired = leftMs <= 0;
+  host.hidden = false;
+  host.innerHTML = '<div class="jt-resume"><div class="jt-resume-t">'
+    + '<b>' + (expired ? 'Your JAMB sitting ran out of time' : 'A JAMB sitting is in progress') + '</b>'
+    + '<span>' + answered + ' answer' + (answered !== 1 ? 's' : '') + ' saved'
+    + (expired ? ' — resume to submit them now.' : ' · ' + Math.max(1, Math.ceil(leftMs / 60000)) + ' minute' + (Math.ceil(leftMs / 60000) !== 1 ? 's' : '') + ' left on the clock.')
+    + '</span></div>'
+    + '<div class="jt-resume-b">'
+    + '<button class="btn btn-red" type="button" onclick="jambResume()">' + (expired ? 'Submit saved answers' : 'Resume your sitting') + '</button>'
+    + '<button class="btn btn-outline" type="button" onclick="jambDiscardResume()">Discard</button>'
+    + '</div></div>';
+}
+function jambDiscardResume(){
+  jambClearSession();
+  jambPaintResume();
+  toast('Saved sitting discarded — nothing was submitted');
+}
+function jambResume(){
+  var s = jambReadSession();
+  if(!s){ jambPaintResume(); return; }
+  jambClearSession();
+  cbtOpenPaper(s.paper);
+  cbtAns = s.answers || {};
+  cbtCur = Math.max(0, Math.min(cbtN - 1, Number(s.cur) || 0));
+  jambDeadline = Number(s.deadline) || 0;
+  var left = Math.floor((jambDeadline - Date.now()) / 1000);
+  if(left <= 0){
+    cbtSecs = 0;
+    renderCBTQ(); buildCBTNav(); cbtPaintSubjects(); jambPaintSide();
+    submitCBT(true);
+    return;
+  }
+  cbtSecs = left;
+  if(cbtTimerId){ clearInterval(cbtTimerId); cbtTimerId = null; }
+  var el = document.getElementById('cbtTime');
+  if(el) el.textContent = mmss(cbtSecs);
+  renderCBTQ(); buildCBTNav(); cbtPaintSubjects(); jambPaintSide();
+  startTimer();
+  jambSaveSession();
+}
+
+/* ---- keyboard controls --------------------------------------------------
+   Active only in JAMB mode on the CBT screen. Never fires while typing in
+   a field, while another overlay is open, or (except for its own keys)
+   while the calculator is open. */
+function jambKeyHandler(e){
+  if(!jambMode) return;
+  var scr = document.querySelector('.screen.active');
+  if(!scr || scr.id !== 'cbt') return;
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  var k = e.key;
+  var submitOverlay = document.getElementById('jambSubmitOverlay');
+  if(submitOverlay && submitOverlay.classList.contains('show')){
+    if(k === 'y' || k === 'Y'){ e.preventDefault(); jambSubmitConfirm(); }
+    else if(k === 'r' || k === 'R' || k === 'Escape'){ e.preventDefault(); jambSubmitReturn(); }
+    return;
+  }
+  if(document.querySelector('.overlay.show')) return;
+  var calc = document.getElementById('jambCalc');
+  if(calc && !calc.hidden){
+    /* G.O.C enhancement: the hall calculator is mouse-operated; here the
+       keyboard works too. Examination keys are suspended while it is open. */
+    if(/^[0-9.+\-*/()=%]$/.test(k)){ e.preventDefault(); jambCalcKey(k === '=' ? '=' : k); }
+    else if(k === 'Enter'){ e.preventDefault(); jambCalcKey('='); }
+    else if(k === 'Backspace'){ e.preventDefault(); jambCalcKey('B'); }
+    else if(k === 'Escape'){ e.preventDefault(); jambCalcToggle(false); }
+    return;
+  }
+  var t = e.target;
+  if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  if(k === 'ArrowRight'){ e.preventDefault(); cbtMove(1); return; }
+  if(k === 'ArrowLeft'){ e.preventDefault(); cbtMove(-1); return; }
+  if(k.length !== 1) return;
+  var key = k.toLowerCase();
+  if(key >= 'a' && key <= 'd'){
+    var idx = key.charCodeAt(0) - 97;
+    var q = cbtQuestionAt(cbtCur);
+    var opts = (q && (q.options || q.opts)) || [];
+    if(idx < opts.length){
+      cbtAns[cbtCur] = idx;
+      renderCBTQ(); buildCBTNav(); cbtPaintSubjects();
+    }
+    return;
+  }
+  if(key === 'n'){ cbtMove(1); return; }
+  if(key === 'p'){ cbtMove(-1); return; }
+  if(key === 's'){ jambSubmitOpen(); return; }
+  /* y and r act only inside the submission prompt (handled above). */
+}
+document.addEventListener('keydown', jambKeyHandler);
 
 /* ================= RESULTS & REVIEW =================
    Driven entirely by the student's own marked papers. The screen used to show a

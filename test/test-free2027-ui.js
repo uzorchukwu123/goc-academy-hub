@@ -59,13 +59,26 @@ function El(tag) {
   };
 }
 El.prototype._parts = function () { return String(this.className || '').split(/\s+/).filter(Boolean); };
+/* Like a real browser, the two views are one content seen two ways: setting
+   innerHTML gives the element that text (tags stripped, entities decoded),
+   and setting textContent is what innerHTML then reads back escaped. The
+   exam now paints question stems through the maths renderer into innerHTML,
+   and these checks read textContent — they must see the same question. */
+function htmlToText(h) {
+  return String(h).replace(/<[^>]*>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+}
+function textToHtml(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 Object.defineProperty(El.prototype, 'textContent', {
   get: function () { return this._text; },
-  set: function (v) { this._text = String(v == null ? '' : v); }
+  set: function (v) { this._text = String(v == null ? '' : v); this._html = textToHtml(this._text); }
 });
 Object.defineProperty(El.prototype, 'innerHTML', {
   get: function () { return this._html; },
-  set: function (v) { this._html = String(v == null ? '' : v); }
+  set: function (v) { this._html = String(v == null ? '' : v); this._text = htmlToText(this._html); }
 });
 El.prototype.getAttribute = function (k) { return this.attributes[k] === undefined ? null : this.attributes[k]; };
 El.prototype.setAttribute = function (k, v) { this.attributes[k] = String(v); if (k === 'id') this.id = String(v); };
@@ -1235,7 +1248,7 @@ settle(load(w1)).then(function () {
     ok('a guest sees the activity pool without being told they must sit all five subjects',
       /Activity pool: <b>50<\/b> questions/.test(html) && /registered subject combination/.test(html) &&
       !/Your paper: <b>40<\/b> questions/.test(html), html);
-    ok('the service-worker cache is bumped to goc-v206', /const CACHE = 'goc-v206';/.test(sw), (sw.match(/const CACHE = '[^']+'/) || [''])[0]);
+    ok('the service-worker cache is bumped to goc-v207', /const CACHE = 'goc-v207';/.test(sw), (sw.match(/const CACHE = '[^']+'/) || [''])[0]);
     ok('the old cache name is gone', sw.indexOf('goc-v205') < 0);
     ok('the install, activation and cache-first strategy remain present',
       /caches\.open\(CACHE\)\.then\(c => c\.addAll\(ASSETS\)\)\.then\(\(\) => self\.skipWaiting\(\)\)/.test(sw) &&
