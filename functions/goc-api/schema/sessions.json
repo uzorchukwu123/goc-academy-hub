@@ -1,0 +1,48 @@
+{
+  "$comment": "PROPOSED schema — NOT APPLIED. Read APPWRITE-FUNCTIONS-DEPLOYMENT.md before creating anything. Verify against the live project first: if a 'sessions' collection already exists, STOP and reconcile rather than creating a duplicate.",
+  "purpose": "Durable replacement for the OneBit server's process-local sessions Map (server/server.js:1561). Appwrite Functions run on independent short-lived instances, so sessions cannot live in process memory.",
+  "databaseId": "goc_academy",
+  "collectionId": "sessions",
+  "collectionName": "Sessions",
+  "documentSecurity": false,
+  "permissions": {
+    "$comment": "Least privilege: NO client role may read or write sessions. Only the Function's server API key touches this collection. Granting any 'users' or 'any' permission here would let a browser read session digests or mint sessions.",
+    "create": [],
+    "read": [],
+    "update": [],
+    "delete": []
+  },
+  "attributes": [
+    { "key": "tokenHash", "type": "string", "size": 64, "required": true, "array": false, "$comment": "sha256 of the bearer token. The raw token is NEVER stored." },
+    { "key": "identitySystem", "type": "string", "size": 20, "required": true, "array": false, "$comment": "appwrite-auth | local-staff | local-tutor | free2027. Keeps the three existing identity systems separate." },
+    { "key": "accountId", "type": "string", "size": 64, "required": true, "array": false },
+    { "key": "name", "type": "string", "size": 200, "required": false, "default": "", "array": false },
+    { "key": "role", "type": "string", "size": 20, "required": true, "array": false, "$comment": "admin | student | tutor | participant" },
+    { "key": "roleKey", "type": "string", "size": 40, "required": false, "default": "", "array": false, "$comment": "core.adminRoleKey output; drives capability checks." },
+    { "key": "title", "type": "string", "size": 100, "required": false, "default": "", "array": false, "$comment": "The Founder-only guard compares this to 'Founder'." },
+    { "key": "subjectsJson", "type": "string", "size": 2000, "required": false, "default": "[]", "array": false, "$comment": "Opaque JSON array; avoids requiring an array attribute." },
+    { "key": "mustChangePassword", "type": "boolean", "required": false, "default": false, "array": false },
+    { "key": "unlocked", "type": "boolean", "required": false, "default": false, "array": false, "$comment": "Console passcode gate." },
+    { "key": "sessionMinutes", "type": "integer", "required": false, "default": 60, "array": false },
+    { "key": "createdAt", "type": "datetime", "required": true, "array": false },
+    { "key": "expiresAt", "type": "datetime", "required": true, "array": false },
+    { "key": "revokedAt", "type": "datetime", "required": false, "array": false, "$comment": "Set on logout, password change or deactivation. Empty means live." }
+  ],
+  "indexes": [
+    { "key": "idx_account", "type": "key", "attributes": ["accountId", "identitySystem"], "$comment": "Required by revokeAccount (password change / deactivation)." },
+    { "key": "idx_expires", "type": "key", "attributes": ["expiresAt"], "$comment": "Required by goc-maintenance's bounded purge." }
+  ],
+  "documentIdStrategy": "sha256(token) truncated to 36 chars. Lookup is a direct getDocument; the FULL digest is still compared, so the truncated ID is only an index, not the credential.",
+  "migrationImpact": {
+    "existingDataTouched": "none",
+    "createsNewResource": true,
+    "duplicatesExistingResource": "UNKNOWN — must be verified against the live project before applying",
+    "rollback": "Leave the collection in place. It holds only sessions; deleting it would log everyone out of the Appwrite deployment but cannot affect OneBit sessions or any academic record."
+  },
+  "verificationRequiredBeforeApply": [
+    "Confirm no collection named 'sessions' already exists in goc_academy.",
+    "Confirm the project plan supports the attribute and index counts above.",
+    "Confirm datetime attributes are supported by the project's Appwrite version.",
+    "Confirm the Function's API key has databases.read and databases.write on this collection only."
+  ]
+}

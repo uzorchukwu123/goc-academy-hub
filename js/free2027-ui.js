@@ -110,7 +110,7 @@
   function boot() {
     var ready = (GOC.api && GOC.api.ready) ? GOC.api.ready : Promise.resolve('mock');
     return Promise.resolve(ready).then(function () {
-      return fetch('api/health', { headers: { Accept: 'application/json' } })
+      return fetch(((GOC && GOC.apiBase) || 'api') + '/health', { headers: { Accept: 'application/json' } })
         .then(function (r) { return r.ok ? r.json() : null; })
         .catch(function () { return null; });
     }).then(function (h) {
