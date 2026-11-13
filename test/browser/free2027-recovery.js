@@ -1,6 +1,10 @@
 'use strict';
 /* Optional real-browser regression for the 2027 Free Tutorial recovery.
    Run against a FRESH, ISOLATED local server and SMTP capture (see
+   docs/free-tutorial-2027.md). HOSTNAME ENTRY: there is no website-mode
+   switch any more — GOC_BROWSER_BASE must resolve to the UTME entry
+   (utme.gocacademy.live, e.g. a hosts-file entry pointing at the isolated
+   server) or the page will correctly open the original hub instead.
    docs/free-tutorial-2027.md). It creates synthetic records and screenshots;
    never point it at production data. No secret has a default value here. */
 const fs = require('fs');
@@ -71,19 +75,17 @@ async function waitCode(email) {
   for (let i = 0; i < 50; i++) { const c = mailedCode(email); if (c) return c; await new Promise((r) => setTimeout(r, 200)); }
   return null;
 }
-/* Drive the Founder's real Website Mode Control panel, then return to the
-   homepage so the hero can be inspected in the mode that was just applied. */
-async function switchWebsiteMode(page, toFree) {
-  await page.evaluate(() => go('admin'));
-  await active(page, 'admin');
-  await closeAdminSheet(page);
-  await page.click('button.adm-tile[data-section="websitemode"]');
-  const label = toFree ? 'Switch to 2027 Free Tutorial Mode' : 'Switch to Original Mode';
-  await page.waitForSelector('#f27ModeBody button:has-text("' + label + '")');
-  await page.click('#f27ModeBody button:has-text("' + label + '")');
-  await page.waitForFunction((f) => document.body.classList.contains('f27-mode') === f, toFree);
+/* There is no Website Mode Control to drive any more: which experience a
+   visitor enters is fixed by the hostname. This harness exercises the Free
+   Tutorial, so GOC_BROWSER_BASE must resolve to the UTME entry
+   (utme.gocacademy.live, e.g. via a hosts entry to the isolated server).
+   What used to be a mode round trip is now simply the assertion that this
+   base IS the Free entry and stays it. */
+async function assertUtmeEntry(page) {
   await page.evaluate(() => go('landing'));
   await active(page, 'landing');
+  const free = await page.evaluate(() => document.body.classList.contains('f27-mode'));
+  check('hostname-entry', 'this base enters the Free Tutorial (body.f27-mode set by the server answer)', free);
 }
 
 /* Submit only exists on the final question, so reach it with Next first. */
@@ -748,58 +750,26 @@ function csvRow(subject, topic, text, a, b, c, d, ans) {
     check('leaderboard', 'ranked competition table contains the submitted student', await page.evaluate(() => /GOC-F-\d{3,}|GOC-F27-[A-F0-9]{20}/.test(document.querySelector('#freeBoardBody tbody').textContent) && /Score/.test(document.querySelector('#freeBoardBody thead').textContent)));
     await shot(page, '15-leaderboard');
 
-    /* 14. Recovered dedicated Website Mode Control, reversible without data loss. */
+    /* 14. No Website Mode Control exists; the entry is the hostname. */
     await page.evaluate(() => go('admin'));
     await active(page, 'admin');
     await closeAdminSheet(page);
-    await page.click('button.adm-tile[data-section="websitemode"]');
-    await page.waitForSelector('#f27ModeBody button:has-text("Switch to Original Mode")');
-    check('mode-control', 'Founder has a separate Website Mode Control panel', await page.evaluate(() => document.getElementById('admSheetTitle').textContent === 'Website Mode Control'));
-    await shot(page, '16-website-mode-control');
-    await page.click('#f27ModeBody button:has-text("Switch to Original Mode")');
-    await page.waitForFunction(() => !document.body.classList.contains('f27-mode'));
-    await page.evaluate(() => go('landing'));
-    await page.click('#lpBurger');
-    check('mode-control', 'Original Mode restores the original drawer account actions', await visible(page, '#lpDrawer .dw-original') && !(await visible(page, '#lpDrawer .dw-cbt')));
-    check('mode-control', 'Original Mode brings the drawer Create free account back, clickable', await visible(page, '#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]'));
-    check('mode-control', 'Original Mode brings the hub Log in shortcut back', await visible(page, '#lpDrawer .dw-hub-login'));
-    check('mode-control', 'the hub login shortcut is only stood down by the Free Tutorial mode class', await page.evaluate(() => !document.body.classList.contains('f27-mode') && getComputedStyle(document.querySelector('#lpDrawer .dw-hub-login')).display !== 'none'));
-    await shot(page, '17-original-mode-drawer');
-    await page.click('#lpDrawer .dw-original[onclick="dwGo(\'signup\')"]');
-    await active(page, 'signup');
-    check('mode-control', 'Original Mode: drawer Create free account still opens the ORIGINAL #signup', await page.evaluate(() => document.getElementById('signup').classList.contains('active') && !!document.getElementById('signName')));
+    check('hostname-entry', 'the Management Console has no Website Mode Control tile',
+      await page.evaluate(() => !document.querySelector('button.adm-tile[data-section="websitemode"]')));
     await page.evaluate(() => go('landing'));
     await active(page, 'landing');
-    await page.click('#lpBurger');
-    await page.click('#lpDrawer .dw-updates-link');
-    await active(page, 'updates');
-    check('drawer', 'Original Mode restores the Updates & News destination', true);
-    await page.evaluate(() => go('landing'));
-    await page.click('#lpBurger');
-    await page.click('#lpDrawer .dw-x');
-    await page.evaluate(() => go('admin'));
-    await closeAdminSheet(page);
-    await page.click('button.adm-tile[data-section="websitemode"]');
-    await page.waitForSelector('#f27ModeBody button:has-text("Switch to 2027 Free Tutorial Mode")');
-    await page.click('#f27ModeBody button:has-text("Switch to 2027 Free Tutorial Mode")');
-    await page.waitForFunction(() => document.body.classList.contains('f27-mode'));
-    check('mode-control', 'switching back preserves both independent banks', currentSession()?.activities.length === 2 && Object.keys(readData().free2027.questionBanks).length === 2);
+    check('hostname-entry', 'the UTME entry keeps both independent banks intact',
+      currentSession()?.activities.length === 2 && Object.keys(readData().free2027.questionBanks).length === 2);
 
-    /* Owner correction: the homepage hero must follow the active mode, and must
-       restore completely on switch-back. Two full round trips per layout, driven
-       through the real console control, prove nothing accumulates: no stale
-       class, no permanently hidden button, no stale destination. */
+    /* The homepage hero follows the entry this hostname serves — here, the
+       Free Tutorial — on both layouts, and nothing about switching exists
+       that could leave a stale class or destination behind. */
     for (const [label, vp] of [['mobile', { width: 390, height: 844 }], ['desktop', { width: 1366, height: 900 }]]) {
       await page.setViewportSize(vp);
-      for (let pass = 1; pass <= 2; pass++) {
-        await switchWebsiteMode(page, false);
-        await checkHeroForMode(page, label + ' round ' + pass, false);
-        await checkAccountCreationVisibility(page, label + ' round ' + pass, false);
-        await switchWebsiteMode(page, true);
-        await checkHeroForMode(page, label + ' round ' + pass, true);
-        await checkAccountCreationVisibility(page, label + ' round ' + pass, true);
-      }
-      check('mode-hero', label + ': student records survive every mode switch', currentSession()?.participants.length >= 1 && currentSession()?.attempts.filter((a) => a.submittedAt).length === 2);
+      await assertUtmeEntry(page);
+      await checkHeroForMode(page, label + ' utme entry', true);
+      await checkAccountCreationVisibility(page, label + ' utme entry', true);
+      check('mode-hero', label + ': student records intact on the UTME entry', currentSession()?.participants.length >= 1 && currentSession()?.attempts.filter((a) => a.submittedAt).length === 2);
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await shot(page, '17b-hero-mode-roundtrips');

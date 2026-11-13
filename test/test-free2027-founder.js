@@ -290,7 +290,8 @@ function makeWorld(srv) {
     ok('Academic Director keeps roster/programme access', (await call(srv, 'GET', '/api/students', undefined, at, 'http-acad')).status === 200 && (await call(srv, 'GET', '/api/free2027/admin/participants', undefined, at, 'http-acad')).status === 200);
     var lesson = await call(srv, 'POST', '/api/free2027/admin/lessons', { title: 'Academic Director lesson', subject: 'Biology', summary: 'Still allowed' }, at, 'http-acad');
     ok('Academic Director keeps academic programme management', lesson.status === 200 && /^F27-L-/.test(lesson.body.lesson.id), lesson.status + ' ' + lesson.raw);
-    ok('Academic Director still cannot change Website Mode', (await call(srv, 'PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, at, 'http-acad')).status === 403);
+    ok('Academic Director still cannot change programme availability', (await call(srv, 'PUT', '/api/free2027/admin/edition', { enabled: false }, at, 'http-acad')).status === 403);
+    ok('and the website-mode endpoint no longer exists for anyone', (await call(srv, 'PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, at, 'http-acad')).status === 404);
     ok('Academic Director still cannot manage Founder-only manager accounts', (await call(srv, 'GET', '/api/managers', undefined, at, 'http-acad')).status === 403);
     ok('the server log never prints the configured phrase or Founder email', srv.log().indexOf(GATE) < 0 && srv.log().indexOf(EMAIL) < 0, srv.log().slice(-300));
   } finally { await stop(srv); }

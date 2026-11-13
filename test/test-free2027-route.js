@@ -4,7 +4,8 @@
 
      • registration with a one-time code, and the code rules (wrong code,
        single use, one a minute);
-     • the mode switch, and the confirmation the server itself insists on;
+     • the absence of any website-mode switch, and programme availability
+       (deactivate refuses candidates; reactivate restores them, records intact);
      • an activity that cannot be sat before it opens or after it closes, and a
        latecomer who gets in only because the administrator reopened it;
      • an interrupted examination that resumes with its answers, its remaining
@@ -126,7 +127,8 @@ var weeklyId = null, compId = null;
 waitForBoot(40).then(async function (h) {
   head('the server opens in the edition');
   ok('the server is up', h.status === 200, h.raw);
-  ok('the health check names the mode', h.body && h.body.free2027 && h.body.free2027.on === true && h.body.free2027.mode === 'free2027', h.raw);
+  ok('the health check names this hostname\'s entry (an unnamed host opens the original hub; utme.gocacademy.live is covered by test-entry-host.js)',
+    h.body && h.body.free2027 && h.body.free2027.on === true && h.body.free2027.mode === 'original', h.raw);
   var cfg = await call('GET', '/api/free2027/config');
   ok('the public config lists both modes and the seven screens', cfg.status === 200 && cfg.body.modes.length === 2 && cfg.body.screens.length === 7 && cfg.body.screens.indexOf('free-login') > -1, cfg.raw.slice(0, 160));
   ok('the config carries no participant, address or code', cfg.raw.indexOf('@') < 0 && cfg.raw.indexOf('otpCode') < 0);
@@ -428,18 +430,24 @@ waitForBoot(40).then(async function (h) {
   ok('a reopen with a real closing time is accepted', (await call('POST', '/api/free2027/admin/activities/' + compId + '/reopen', { closesAt: Date.now() + 3600000 }, adm)).status === 200);
   ok('a candidate with no attempt left still cannot sit it again', (await call('POST', '/api/free2027/activities/' + compId + '/start', {}, cat.token)).status === 403);
 
-  head('the mode switch needs a confirmation, and is reversible');
-  ok('switching with no confirmation is refused by the SERVER', (await call('PUT', '/api/free2027/admin/mode', { mode: 'original' }, adm)).status === 400);
-  ok('an unknown mode is refused', (await call('PUT', '/api/free2027/admin/mode', { mode: 'banana', confirm: true }, adm)).status === 400);
-  var toOrig = await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, adm);
-  ok('Original Mode is applied', toOrig.status === 200 && toOrig.body.mode === 'original', toOrig.raw);
-  ok('the public config says Original Mode', (await call('GET', '/api/free2027/config')).body.mode === 'original');
+  head('there is no website-mode switch any more — only programme availability');
+  ok('the old mode endpoint is gone for the Founder too',
+    (await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, adm)).status === 404);
+  ok('this test host is not the UTME hostname, so its entry is the original hub',
+    (await call('GET', '/api/free2027/config')).body.mode === 'original');
   var h2 = await call('GET', '/api/health');
-  ok('and the health check agrees, so the page restores the hub', h2.body.free2027.mode === 'original' && h2.body.free2027.on === true);
-  ok('the original hub still answers while the edition is in Original Mode',
-    (await call('GET', '/api/updates')).status === 200);
-  ok('the edition\'s own data is untouched by the switch', dataFile().free2027.sessions[0].participants.length === 11);
-  ok('switching back is one call', (await call('PUT', '/api/free2027/admin/mode', { mode: 'free2027', confirm: true }, adm)).body.mode === 'free2027');
+  ok('and the health check agrees, while the programme stays active',
+    h2.body.free2027.mode === 'original' && h2.body.free2027.on === true);
+  ok('the original hub still answers', (await call('GET', '/api/updates')).status === 200);
+  ok('the edition\'s own data is untouched', dataFile().free2027.sessions[0].participants.length === 11);
+  var off = await call('PUT', '/api/free2027/admin/edition', { enabled: false }, adm);
+  ok('the Founder can deactivate the programme', off.status === 200 && off.body.enabled === false, off.raw);
+  ok('while inactive the programme refuses candidates on every hostname',
+    (await call('POST', '/api/free2027/login', { email: 'ada@example.com', password: 'AdaPass-2027' })).status === 404);
+  var onAgain = await call('PUT', '/api/free2027/admin/edition', { enabled: true }, adm);
+  ok('and reactivating restores access without touching a record',
+    onAgain.status === 200 && onAgain.body.enabled === true &&
+    dataFile().free2027.sessions[0].participants.length === 11, onAgain.raw);
 
   head('programme records: lessons, progress and the audit trail');
   var lp = await call('GET', '/api/free2027/programme', undefined, ada.token);
@@ -467,8 +475,8 @@ waitForBoot(40).then(async function (h) {
   ok('an unknown lesson cannot be edited', (await call('PUT', '/api/free2027/admin/lessons/F27-L-999', { title: 'Ghost lesson' }, adm)).status === 404);
   var all2 = await call('GET', '/api/free2027/admin/lessons', undefined, acadT);
   ok('both administrators read the same catalogue', all2.status === 200 && all2.body.lessons.length === 2, all2.raw.slice(0, 200));
-  ok('the Academic Director cannot change the Free Tutorial site mode',
-    (await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, acadT)).status === 403);
+  ok('the Academic Director cannot change programme availability',
+    (await call('PUT', '/api/free2027/admin/edition', { enabled: false }, acadT)).status === 403);
   ok('the Academic Director cannot archive programme/system data',
     (await call('GET', '/api/free2027/admin/archives', undefined, acadT)).status === 403);
   var finMade = await call('POST', '/api/managers', { name: 'Local Finance', role: 'finance', password: 'starter123', passcode: '4821' }, adm);

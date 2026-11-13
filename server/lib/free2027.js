@@ -70,9 +70,9 @@ function ensureEdition(db, opts) {
   var courses = rules.cleanCourseList(ed.courses);
   ed.courses = courses.length ? courses : rules.DEFAULT_COURSES.slice();
 
-  if (rules.MODES.indexOf(ed.mode) < 0) {
-    ed.mode = ed.enabled ? rules.MODE_FREE : rules.MODE_ORIGINAL;
-  }
+  /* No stored website mode is maintained any more: which experience a
+     visitor sees is decided by the hostname they arrived on. An `mode`
+     field left in an older data file is simply never read again. */
   if (!Array.isArray(ed.sessions)) ed.sessions = [];
   if (!Array.isArray(ed.archives)) ed.archives = [];
   if (!Array.isArray(ed.otps)) ed.otps = [];
@@ -1033,14 +1033,21 @@ function createFree2027(deps) {
 
   /* --------------------------------------------------------------- public */
 
-  function publicConfig() {
+  /* The experience a visitor is entering is decided by the HOSTNAME they
+     arrived on (resolved by the server into `entry`: the Free Tutorial
+     entry or the original-hub entry) — never by a stored website mode and
+     never by the browser. `on` stays programme availability: while the
+     edition is disabled, every entry reports the original hub and the
+     participant API refuses (requireOn), exactly as before. */
+  function publicConfig(entry) {
     var db = readData();
     var ed = edition(db);
     var session = currentSession(ed);
+    var mode = ed.enabled === true && entry === rules.MODE_FREE ? rules.MODE_FREE : rules.MODE_ORIGINAL;
     return {
       on: ed.enabled === true,
-      mode: rules.activeMode(ed, ed.enabled),
-      label: rules.modeLabel(rules.activeMode(ed, ed.enabled)),
+      mode: mode,
+      label: rules.modeLabel(mode),
       modes: rules.MODES.slice(),
       modeLabels: rules.MODE_LABELS,
       courses: (ed.courses || []).slice(),
@@ -1328,7 +1335,7 @@ function createFree2027(deps) {
     var p = findParticipant(ctx.session, data.id);
     if (!p) throw FreeError(401, 'Your registration was not found. Please verify your email again.');
     if (p.active === false) throw FreeError(403, 'This email address has been switched off for this programme.');
-    return { participant: rules.selfParticipant(p), session: { id: ctx.session.id, label: ctx.session.label }, mode: rules.activeMode(ctx.ed, ctx.ed.enabled) };
+    return { participant: rules.selfParticipant(p), session: { id: ctx.session.id, label: ctx.session.label }, mode: ctx.ed.enabled === true ? rules.MODE_FREE : rules.MODE_ORIGINAL };
   }
   /* One-time subject choice for a record that predates combinations. It writes
      ONLY the subjects field and refuses to replace a combination that is
@@ -1895,7 +1902,7 @@ function createFree2027(deps) {
         lastAt: submissions.length ? submissions.reduce(function (m, a) { return Math.max(m, Number(a.submittedAt) || 0); }, 0) : null
       },
       session: { id: ctx.session.id, label: ctx.session.label },
-      mode: rules.activeMode(ctx.ed, ctx.ed.enabled)
+      mode: ctx.ed.enabled === true ? rules.MODE_FREE : rules.MODE_ORIGINAL
     };
   }
 
@@ -2006,9 +2013,6 @@ function createFree2027(deps) {
     var published = session.activities.filter(function (a) { return a && a.published && a.status !== rules.STATUS_ARCHIVED; });
     return {
       enabled: ed.enabled === true,
-      mode: rules.activeMode(ed, ed.enabled),
-      modes: rules.MODES.slice(),
-      labels: rules.MODE_LABELS,
       session: {
         id: session.id, label: session.label, seq: session.seq,
         startedAt: session.startedAt, endedAt: session.endedAt,
@@ -2028,28 +2032,10 @@ function createFree2027(deps) {
     };
   }
 
-  /* The mode switch. `confirm` must be present: the page asks the
-     administrator first, and the server insists rather than trusting the page. */
-  function setMode(body) {
-    var mode = rules.cleanMode(body && body.mode);
-    if (!rules.MODES.length || rules.MODES.indexOf(String(body && body.mode)) < 0) {
-      throw FreeError(400, 'Choose Original Mode or 2027 Free Tutorial Mode.');
-    }
-    if (!(body && body.confirm === true)) throw FreeError(400, 'Confirm the switch before it is applied.');
-    return locked(async function () {
-      var db = readData();
-      var ed = edition(db);
-      ed.mode = mode;
-      /* Turning the edition on in the console is what "activates" it; turning
-         it back to Original leaves every record exactly where it is. */
-      if (mode === rules.MODE_FREE) ed.enabled = true;
-      ed.rev = (ed.rev || 0) + 1;
-      ed.modeChangedAt = now();
-      writeData(db);
-      return { mode: ed.mode, label: rules.modeLabel(ed.mode), enabled: ed.enabled };
-    });
-  }
-
+  /* Programme availability — NOT a website-mode switch. This only says
+     whether the Free Tutorial programme is active at all (its API refuses
+     while inactive, via requireOn). Which experience a visitor sees is
+     decided by the hostname they arrived on, never by this setting. */
   function setEdition(body) {
     return locked(async function () {
       var db = readData();
@@ -2057,7 +2043,7 @@ function createFree2027(deps) {
       if (body && body.enabled !== undefined) ed.enabled = body.enabled === true;
       ed.rev = (ed.rev || 0) + 1;
       writeData(db);
-      return { enabled: ed.enabled, mode: rules.activeMode(ed, ed.enabled) };
+      return { enabled: ed.enabled };
     });
   }
 
@@ -2710,12 +2696,13 @@ function createFree2027(deps) {
   }
 
   /* -------------------------------------------------------- console notes
-     Everything the console should be able to say about the mode on the sign-in
-     screen: whether the edition is on, and which mode the public site is in. */
+     The one availability fact the server's own sign-in log needs: whether
+     the edition is active. Which experience a visitor sees is decided by
+     the hostname they arrived on, so there is no mode to report here. */
   function modeInfo() {
     var db = readData();
     var ed = edition(db);
-    return { on: ed.enabled === true, mode: rules.activeMode(ed, ed.enabled), label: rules.modeLabel(rules.activeMode(ed, ed.enabled)) };
+    return { on: ed.enabled === true };
   }
 
   /* =======================================================================
@@ -3013,7 +3000,6 @@ function createFree2027(deps) {
     adminProgress: adminProgress,
     recordAudit: recordAudit,
     auditLog: auditLog,
-    setMode: setMode,
     setEdition: setEdition,
     setCourses: setCourses,
     listParticipants: listParticipants,

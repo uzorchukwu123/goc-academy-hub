@@ -30,15 +30,17 @@
 </head>
 <body>
 <script>
-/* Website mode BEFORE first paint. The server is the only authority on the
-   mode (Founder console switch, stored server-side); this script only reads
-   the last mode the server itself confirmed to this browser, recorded by
-   js/free2027-ui.js on every application. A returning browser therefore
-   opens in the correct mode immediately: in Free Tutorial mode the class
-   that hides the original hub is on <body> before any of it can paint. A
-   browser that has never been told a mode gets a neutral veil
-   (body.f27-pending) instead of a guess, and the boot sequence in
-   js/free2027-ui.js lifts it the moment the server answers. */
+/* The entry BEFORE first paint. Which experience a visitor enters is fixed
+   by the hostname (utme.gocacademy.live -> Free Tutorial, anything else ->
+   the original hub); the server is the only authority on it and confirms it
+   per request. This script only reads the last entry the server itself
+   confirmed to this browser, recorded by js/free2027-ui.js on every
+   application. A returning browser therefore opens in the correct entry
+   immediately: on the Free Tutorial entry the class that hides the original
+   hub is on <body> before any of it can paint. A browser that has never
+   been told gets a neutral veil (body.f27-pending) instead of a guess, and
+   the boot sequence in js/free2027-ui.js lifts it the moment the server
+   answers. */
 (function () {
   try {
     var h = JSON.parse(localStorage.getItem('goc.free2027.modeHint') || 'null');

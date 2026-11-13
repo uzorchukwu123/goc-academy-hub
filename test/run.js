@@ -33,7 +33,8 @@ var suites = ['test-rules.js', 'test-p1.js', 'test-p2.js', 'test-p6.js', 'test-p
               'test-production-persistence.js', 'test-backup-integrity.js',
               /* Appwrite Sites + Functions migration. Additive only: no existing
                  suite was removed or weakened. */
-              'test-migration-api-config.js', 'test-migration-gateway.js', 'test-migration-sessions.js'];
+              'test-migration-api-config.js', 'test-migration-gateway.js', 'test-migration-sessions.js',
+              'test-entry-host.js'];
 var failed = [];
 
 suites.forEach(function (s) {

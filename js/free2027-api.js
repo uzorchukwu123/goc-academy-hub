@@ -167,7 +167,9 @@
        used and the server's own guard (signed in + unlocked + the route's
        capability) decides whether the call is allowed. */
     adminOverview: function () { return request('GET', '/admin/overview', undefined, { admin: true }); },
-    setMode: function (m, confirm) { return request('PUT', '/admin/mode', { mode: m, confirm: confirm === true }, { admin: true }); },
+    /* Programme availability only — the programme's own active/inactive
+       setting. There is no website-mode call: the hostname decides which
+       experience a visitor enters. */
     setEnabled: function (on) { return request('PUT', '/admin/edition', { enabled: on === true }, { admin: true }); },
     setCourses: function (list) { return request('PUT', '/admin/courses', { courses: list }, { admin: true }); },
     participants: function (q) { return request('GET', '/admin/participants' + (q ? '?q=' + encodeURIComponent(String(q)) : ''), undefined, { admin: true }); },

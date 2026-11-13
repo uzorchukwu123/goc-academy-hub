@@ -219,18 +219,20 @@ Console link. Staff still authenticate with their existing account credentials
 and the console passcode.
 
 The 2027 Free Tutorial registration, courses, lessons, activities, quizzes,
-progress, and audit records are namespaced under `db.free2027`. The mode can
-restrict unrelated original student screens during testing, but does not remove
-or rewrite them. Existing Appwrite integration for original G.O.C modules stays
-in place; Free Tutorial routes use the local question-bank snapshot and do not
-call Appwrite Database APIs. Do not set `GOC_APPWRITE_OFF` in production.
+progress, and audit records are namespaced under `db.free2027`. Existing
+Appwrite integration for original G.O.C modules stays in place; Free Tutorial
+routes use the local question-bank snapshot and do not call Appwrite Database
+APIs. Do not set `GOC_APPWRITE_OFF` in production.
 
-**Enable the edition** with `GOC_FREE_2027=1` or from the separate Founder-only
-**Website Mode Control** console panel. It is disabled by default on a fresh
-deployment. Switching back to Original Mode restores the original hub without
-deleting either programme or original-hub records. Programme edition/session
-settings stay in the 2027 Free Tutorial panel; the mode switch is not duplicated
-there.
+**Entry is the hostname.** Point `utme.gocacademy.live` at this same
+application (same OneBit app/process, its own TLS certificate, Host header
+preserved, served — never redirected): that address always opens the Free
+Tutorial, while `gocacademy.live` always opens the original hub. There is no
+website-mode switch anywhere. **Programme availability** is separate: enable
+the edition with `GOC_FREE_2027=1`, or afterwards from the Founder's
+**Programme Active/Inactive** toggle in *Programme settings*. It is disabled
+by default on a fresh deployment. Deactivating never deletes programme or
+original-hub records, and reactivating restores access exactly as it was.
 
 #### SMTP email verification
 
@@ -292,7 +294,7 @@ records and search.
 `GOC_DATA_DIR` must point to persistent storage in production so profiles,
 enrolments, progress, quiz attempts, settings, audit records, and identity
 registry survive restarts. Session archives should be separately backed up.
-Only the Founder may use Website Mode Control, change Free Tutorial edition
+Only the Founder may change Free Tutorial programme availability or edition
 settings, or archive programme sessions; the Academic Director can manage
 academic programme content and review participation/progress, but cannot access
 these system controls.
@@ -467,8 +469,8 @@ stays green offline.
       switch that stops the hub contacting Appwrite entirely).
 - [ ] 2027 Free Tutorial Edition, if this deployment opens it: `GOC_FREE_2027=1`, a real SMTP
       sender configured (the console's *2027 Free Tutorial* panel says whether one is), SMTP secrets configured only via environment variables, `GOC_DATA_DIR` persistent, and the archive folder
-      copied off the box on a schedule. With the switch unset the hub behaves exactly as
-      before and every `/api/free2027/*` route is a 404.
+      copied off the box on a schedule. With the programme inactive the hub behaves exactly as
+      before and every `/api/free2027/*` participant route is a 404.
 - [ ] `server/backups/` is accumulating rotating local copies of `data.json`
       (`GOC_BACKUP_INTERVAL_MIN` / `GOC_BACKUP_KEEP` — see above). If this is an
       Appwrite-Database install, confirm student data has its own backup plan

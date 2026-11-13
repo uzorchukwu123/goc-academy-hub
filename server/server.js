@@ -2294,12 +2294,26 @@ const free2027 = free2027Lib.createFree2027({
 });
 const FREE2027 = free2027.rules;
 
+/* Which experience a request is entering is decided by the HOSTNAME it
+   arrived on — permanently, with no website-mode switch anywhere:
+     utme.gocacademy.live  -> the 2027 Free Tutorial entry
+     anything else         -> the original G.O.C Academy Hub entry
+   The match is an exact allowlist against the Host header (lowercased,
+   port stripped). X-Forwarded-Host is never consulted, an unknown or
+   spoofed host fails closed to the original hub, and the value is only
+   ever used to choose between the two fixed experiences — it is never
+   reflected into a response or used to build a URL. */
+const FREE_ENTRY_HOSTS = ['utme.gocacademy.live'];
+function entryFor(req) {
+  const host = String((req && req.headers && req.headers.host) || '').toLowerCase().split(':')[0];
+  return FREE_ENTRY_HOSTS.indexOf(host) > -1 ? FREE2027.MODE_FREE : FREE2027.MODE_ORIGINAL;
+}
+
 /* One programme audit entry per successful administrative change, written by the
    response hook in the dispatcher (the same place the hub's manager log is
    written). Only the method, path and the resulting target are recorded; a body
    is never copied, so no passcode or address can reach the audit trail. */
 const FREE_AUDIT_RULES = [
-  ['PUT', /^\/api\/free2027\/admin\/mode$/, 'mode.change'],
   ['PUT', /^\/api\/free2027\/admin\/edition$/, 'edition.change'],
   ['PUT', /^\/api\/free2027\/admin\/courses$/, 'courses.change'],
   ['POST', /^\/api\/free2027\/admin\/activities$/, 'activity.create'],
@@ -3236,12 +3250,11 @@ async function markTheoryScript(attemptId, marks, marker, guard) {
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
       const db = readData();
-      /* `free2027` is the central switch as the browser sees it: {on, mode}.
-         It only ever names a mode — no record, count or address. The page uses
-         it to decide whether to open the homepage in Original Mode or in 2027
-         Free Tutorial Mode. */
+      /* `free2027` as the browser sees it: {on, mode}. `on` is programme
+         availability; `mode` is the experience THIS request's hostname
+         enters (entryFor) — no record, count or address is ever named. */
       const fed = db.free2027 || {};
-      const fmode = FREE2027.activeMode(fed, fed.enabled === true);
+      const fmode = fed.enabled === true ? entryFor(req) : FREE2027.MODE_ORIGINAL;
       okJson(res, {
         service: 'goc-academy-hub', version: 1,
         passcodeLength: Number(db.settings.consolePasscodeLength) || 4,
@@ -9043,11 +9056,12 @@ const ROUTES = [
      Nothing in this block reads or writes a G.O.C student, attempt or staff
      record; see server/lib/free2027.js. */
 
-  /* What the public page needs to know: is the edition on, which mode is the
-     site in, and the course list. Answered with `on:false` rather than an error
-     when the edition is off, so the page can simply stay in Original Mode. */
+  /* What the public page needs to know: is the edition on, which experience
+     this request's hostname enters, and the course list. Answered with
+     `on:false` rather than an error when the edition is off, so the page
+     simply stays with the original hub on every hostname. */
   { method: 'GET', path: /^\/api\/free2027\/config$/, need: null, handler: freeRoute((req, res) => {
-      const out = free2027.publicConfig();
+      const out = free2027.publicConfig(entryFor(req));
       /* Whether a code can actually be emailed is a fact about the deployment,
          not about the candidate, and the page needs it before the first
          registration: without it the homepage would promise an email that no
@@ -9164,11 +9178,9 @@ const ROUTES = [
       okJson(res, await emailStatus(live));
     }) },
 
-  /* The switch. `confirm: true` is required by the server as well as the page,
-     so a replayed request without the acknowledgement is refused. */
-  { method: 'PUT', path: /^\/api\/free2027\/admin\/mode$/, need: 'console', cap: 'homepage.edit', handler: freeRoute((req, res, body) => {
-      return free2027.setMode(body).then(r => okJson(res, r));
-    }) },
+  /* Programme availability only — whether the Free Tutorial programme is
+     active at all. There is deliberately no website-mode endpoint: which
+     experience a visitor sees is decided by the hostname (entryFor). */
   { method: 'PUT', path: /^\/api\/free2027\/admin\/edition$/, need: 'console', cap: 'homepage.edit', handler: freeRoute((req, res, body) => {
       return free2027.setEdition(body).then(r => okJson(res, r));
     }) },
