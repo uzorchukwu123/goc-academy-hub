@@ -12,7 +12,8 @@
      D. question-bank deletion (individual / bulk / delete-all) is bank-scoped
         and never destroys attempts, answers, scores or results;
      E. activity deletion requires explicit confirmation;
-     F. switching website mode destroys nothing.
+     F. toggling programme availability destroys nothing (and there is no
+        website-mode switch left to destroy anything with).
 
    node test/test-free2027-data-safety.js */
 'use strict';
@@ -284,25 +285,27 @@ function auditLens(db) { return db.free2027.sessions.map(function (s) { return (
   ok('delete-all on competition is independently confirmed and scoped', delAllC.status === 200 && delAllC.body.deleted === compCountBefore && delAllC.body.remaining === 0);
   ok('student records survive both banks being cleared', stable(sess().participants) === participantsBefore && sess().attempts.length === allAttemptsBefore + 1);
 
-  /* ================= E. mode switching destroys nothing =================== */
-  head('E. Website Mode Control preserves every record');
+  /* ============ E. availability toggling destroys nothing =============== */
+  head('E. Programme availability preserves every record (no mode switch exists)');
   var beforeMode = stable(sessionData(dataFile()));
   var auditBefore = auditLens(dataFile());
   var banksBeforeMode = stable(dataFile().free2027.questionBanks);
-  var toOriginal = await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, adm);
-  ok('the Founder can switch to Original Mode', toOriginal.status === 200, toOriginal.raw.slice(0, 160));
-  ok('switching to Original Mode changes no student/activity/attempt/result data', stable(sessionData(dataFile())) === beforeMode);
-  ok('the mode switch only appends to the audit trail, never truncates it', auditLens(dataFile()).every(function (n, i) { return n >= auditBefore[i]; }), JSON.stringify(auditLens(dataFile())));
+  var modeGone = await call('PUT', '/api/free2027/admin/mode', { mode: 'original', confirm: true }, adm);
+  ok('the old website-mode endpoint no longer exists', modeGone.status === 404, modeGone.raw.slice(0, 160));
+  var deactivate = await call('PUT', '/api/free2027/admin/edition', { enabled: false }, adm);
+  ok('the Founder can deactivate the programme', deactivate.status === 200 && deactivate.body.enabled === false, deactivate.raw.slice(0, 160));
+  ok('deactivating changes no student/activity/attempt/result data', stable(sessionData(dataFile())) === beforeMode);
+  ok('deactivating only appends to the audit trail, never truncates it', auditLens(dataFile()).every(function (n, i) { return n >= auditBefore[i]; }), JSON.stringify(auditLens(dataFile())));
   var cfgOriginal = await call('GET', '/api/free2027/config');
-  ok('the public config reports Original Mode', cfgOriginal.body.mode === 'original', cfgOriginal.raw.slice(0, 120));
-  var backToFree = await call('PUT', '/api/free2027/admin/mode', { mode: 'free2027', confirm: true }, adm);
-  ok('the Founder can switch back to Free Tutorial Mode', backToFree.status === 200);
-  ok('switching back changes no student/activity/attempt/result data', stable(sessionData(dataFile())) === beforeMode);
+  ok('while inactive the public config reports the programme off, original entry', cfgOriginal.body.on === false && cfgOriginal.body.mode === 'original', cfgOriginal.raw.slice(0, 120));
+  var reactivate = await call('PUT', '/api/free2027/admin/edition', { enabled: true }, adm);
+  ok('the Founder can reactivate the programme', reactivate.status === 200 && reactivate.body.enabled === true);
+  ok('reactivating changes no student/activity/attempt/result data', stable(sessionData(dataFile())) === beforeMode);
   var afterModeResults = await call('GET', '/api/free2027/results', undefined, ada);
-  ok('every result is still readable after switching modes twice', afterModeResults.body.results.length === resultsAfterBank.body.results.length);
-  ok('switching modes never resets the question banks', stable(dataFile().free2027.questionBanks) === banksBeforeMode);
+  ok('every result is still readable after an off/on cycle', afterModeResults.body.results.length === resultsAfterBank.body.results.length);
+  ok('toggling availability never resets the question banks', stable(dataFile().free2027.questionBanks) === banksBeforeMode);
   var cfgFree = await call('GET', '/api/free2027/config');
-  ok('the public config reports Free Tutorial Mode again', cfgFree.body.mode === 'free2027');
+  ok('the programme reports active again (this host enters the original hub; the UTME host is covered by test-entry-host.js)', cfgFree.body.on === true, cfgFree.raw.slice(0, 120));
 
   /* ================= F. guest CBT Portal entry ============================ */
   head('F. direct CBT Portal entry needs no account');
@@ -327,8 +330,9 @@ function auditLens(db) { return db.free2027.sessions.map(function (s) { return (
   var adm2 = await founder();
   var detail2 = await call('GET', '/api/free2027/admin/attempts/' + sat1.id, undefined, adm2);
   ok('the deleted activity historical paper is still readable after restart', detail2.status === 200 && detail2.body.activity.title === 'Week 1' && detail2.body.activity.deleted === true);
-  var modeAfterRestart = await call('GET', '/api/free2027/config');
-  ok('the selected website mode persists across the restart', modeAfterRestart.body.mode === 'free2027');
+  var cfgAfterRestart = await call('GET', '/api/free2027/config');
+  ok('programme availability persists across the restart (no website mode exists to persist)',
+    cfgAfterRestart.body.on === true, cfgAfterRestart.raw.slice(0, 120));
   kill();
 
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));

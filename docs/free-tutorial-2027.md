@@ -135,13 +135,23 @@ The CBT runner uses a light background, dark readable text, white question cards
 - Leaving an active CBT paper asks for confirmation. Resuming returns the same
   attempt, paper, saved answers and server countdown.
 
-## Website Mode Control
+## Entry is the hostname — there is no Website Mode Control
 
-The Founder console has a separate **Website Mode Control** tile/panel. It uses
-the existing confirmed, reversible mode API; programme settings are not duplicated
-inside the 2027 Free Tutorial panel. Switching modes does not delete question
-banks, activities, attempts, participant records or original-hub data. Academic
-Directors and students cannot change the website mode.
+Which experience a visitor enters is fixed by the address they opened:
+`utme.gocacademy.live` always opens this Free Tutorial, and `gocacademy.live`
+always opens the original G.O.C Academy Hub. One application, one deployment;
+the server resolves the request's hostname (`entryFor` in `server/server.js`,
+an exact allowlist — unknown or spoofed hosts get the original hub) and answers
+`/api/health` and `/api/free2027/config` for that entry. There is no
+website-mode switch in the console, no mode endpoint, and no stored mode.
+
+Separate from entry, the programme has an availability setting: while the
+programme is **inactive**, the participant API refuses on every hostname and
+both addresses open the original hub. The Founder controls it with the
+**Programme Active/Inactive** toggle in *Programme settings* (or the
+`GOC_FREE_2027` deployment override). Toggling it never changes which
+experience an address opens and never deletes question banks, activities,
+attempts, participant records or original-hub data.
 
 ## Founder contact entrance and removed entrances
 

@@ -1,5 +1,5 @@
 /* test-free2027-admin.js — the console side of the 2027 Free Tutorial Edition:
-   the programme and separate site-mode functions must be visible in the running Management
+   the programme function must be visible in the running Management
    Console for the right roles.
 
    ROOT CAUSE THIS PINS: the tile injection used to bail out at DOMContentLoaded
@@ -45,8 +45,8 @@ function makeWorld() {
   var toasts = [];
   var world = {
     console: console,
-    mode: 'free2027',
-    modeCalls: [],
+    enabled: true,
+    enabledCalls: [],
     document: {
       readyState: 'complete',
       getElementById: function (id) { return els[id] || null; },
@@ -62,11 +62,11 @@ function makeWorld() {
       free: {
         adminOverview: function () {
           return Promise.resolve({
-            enabled: true, mode: world.mode, courses: ['Law'], session: { id: 'F27-S1', label: 'S1', participants: 0, verified: 0, activities: 0, published: 0, submitted: 0, lessons: 0, audit: 0 },
+            enabled: world.enabled, courses: ['Law'], session: { id: 'F27-S1', label: 'S1', participants: 0, verified: 0, activities: 0, published: 0, submitted: 0, lessons: 0, audit: 0 },
             otpDelivery: { available: true }, archives: 0, otp: { length: 6, ttlMin: 15 }, topN: 10
           });
         },
-        setMode: function (mode, confirmed) { world.modeCalls.push([mode, confirmed]); world.mode = mode; return Promise.resolve({ mode: mode, label: rules.modeLabel(mode), enabled: true }); }
+        setEnabled: function (on) { world.enabledCalls.push(on); world.enabled = on === true; return Promise.resolve({ enabled: world.enabled }); }
       }
     }
   };
@@ -106,40 +106,50 @@ head('after sign-in the menu repaint adds the tiles for the right role');
 w.admMe = { id: 'GOC-A-002', roleKey: 'academic-director' };
 w.admMenuApply();
 ok('the Academic Director sees 2027 Free Tutorial Management', w.els.admTileNav.innerHTML.indexOf('data-section="free2027"') > -1, w.els.admTileNav.innerHTML.slice(-200));
-ok('but NOT Website Mode Control (Founder only)', w.els.admTileNav.innerHTML.indexOf('data-section="websitemode"') < 0);
+ok('and no Website Mode Control tile exists any more', w.els.admTileNav.innerHTML.indexOf('data-section="websitemode"') < 0);
 w.admMe = { id: 'GOC-A-001', roleKey: 'founder' };
 w.admMenuApply();
 ok('the Founder sees 2027 Free Tutorial Management', w.els.admTileNav.innerHTML.indexOf('data-section="free2027"') > -1);
-ok('AND the separate Website Mode Control', w.els.admTileNav.innerHTML.indexOf('data-section="websitemode"') > -1);
-ok('a repaint does not duplicate the tiles', (w.els.admTileNav.innerHTML.match(/data-section="free2027"/g) || []).length === 1 && (w.els.admTileNav.innerHTML.match(/data-section="websitemode"/g) || []).length === 1);
+ok('and STILL no Website Mode Control tile — for anyone', w.els.admTileNav.innerHTML.indexOf('data-section="websitemode"') < 0);
+ok('a repaint does not duplicate the tile', (w.els.admTileNav.innerHTML.match(/data-section="free2027"/g) || []).length === 1);
 
 head('opening the functions');
 w.admOpen('free2027');
 ok('the Free Tutorial tile opens the programme panel', /2027 Free Tutorial Management/.test(w.els.admSheetBody.innerHTML) && w.els.admSheetTitle.textContent === '2027 Free Tutorial', w.els.admSheetTitle.textContent);
 w.admOpen('websitemode');
-ok('the Website Mode Control tile opens its own separate panel', /Website Mode Control/.test(w.els.admSheetBody.innerHTML) && w.els.admSheetTitle.textContent === 'Website Mode Control', w.els.admSheetTitle.textContent);
+ok('websitemode is no longer intercepted — it falls through to the plain console like any unknown section',
+   /original section: websitemode/.test(w.els.admSheetBody.innerHTML) && !/Website Mode Control/.test(w.els.admSheetBody.innerHTML), w.els.admSheetTitle.textContent);
 w.admOpen('students');
 ok('the original sections still open through the wrapper', /original section: students/.test(w.els.admSheetBody.innerHTML));
 w.admMe = { id: 'GOC-A-002', roleKey: 'academic-director' };
-var before = w.els.admSheetBody.innerHTML;
-w.admOpen('websitemode');
-ok('the Academic Director is refused Website Mode Control', w.els.admSheetBody.innerHTML === before && w.toasts.some(function (t) { return /Founder only/.test(t); }), w.toasts.join('|'));
 w.admOpen('free2027');
-ok('but still gets Free Tutorial Management', /2027 Free Tutorial Management/.test(w.els.admSheetBody.innerHTML));
+ok('the Academic Director still gets Free Tutorial Management', /2027 Free Tutorial Management/.test(w.els.admSheetBody.innerHTML));
 
-head('the recovered mode panel reuses the existing confirmed server API');
+head('programme settings carry the Programme Active toggle — and no mode switching');
 w.admMe = { id: 'GOC-A-001', roleKey: 'founder' };
-w.admOpen('websitemode');
+w.admOpen('free2027');
 setTimeout(function () {
-  ok('the dedicated panel shows both reversible mode actions', /Switch to Original Mode/.test(w.els.f27ModeBody.innerHTML) && /Switch to 2027 Free Tutorial Mode/.test(w.els.f27ModeBody.innerHTML));
-  w.f27AdmSetMode('original');
+  ok('programme settings show the programme state, not a website mode',
+    /2027 Free Tutorial programme/.test(w.els.f27AdmBody.innerHTML) && /Active/.test(w.els.f27AdmBody.innerHTML) &&
+    !/Website mode/.test(w.els.f27AdmBody.innerHTML) && !/Switch to/.test(w.els.f27AdmBody.innerHTML),
+    w.els.f27AdmBody.innerHTML.slice(0, 200));
+  ok('the Founder is offered Deactivate while active', /Deactivate programme/.test(w.els.f27AdmBody.innerHTML));
+  w.f27AdmSetEnabled(false);
   setTimeout(function () {
-    ok('the existing API receives the explicit server confirmation', w.modeCalls.length === 1 && w.modeCalls[0][0] === 'original' && w.modeCalls[0][1] === true, JSON.stringify(w.modeCalls));
-    ok('the dedicated panel refreshes after the switch', /Original Mode/.test(w.els.f27ModeBody.innerHTML));
+    ok('deactivating goes through the availability API only', w.enabledCalls.length === 1 && w.enabledCalls[0] === false, JSON.stringify(w.enabledCalls));
+    ok('and the settings repaint to Inactive with an Activate control',
+      /Inactive/.test(w.els.f27AdmBody.innerHTML) && /Activate programme/.test(w.els.f27AdmBody.innerHTML), w.els.f27AdmBody.innerHTML.slice(0, 200));
+    ok('the newer course/session settings remain available', /f27Courses/.test(w.els.f27AdmBody.innerHTML) && /Session in progress/.test(w.els.f27AdmBody.innerHTML));
+    w.admMe = { id: 'GOC-A-002', roleKey: 'academic-director' };
     w.admOpen('free2027');
     setTimeout(function () {
-      ok('programme settings no longer duplicate the site-wide mode buttons', !/Switch to Original Mode/.test(w.els.f27AdmBody.innerHTML) && /Website Mode Control/.test(w.els.f27AdmBody.innerHTML));
-      ok('the newer course/session settings remain available', /f27Courses/.test(w.els.f27AdmBody.innerHTML) && /Session in progress/.test(w.els.f27AdmBody.innerHTML));
+      ok('the Academic Director sees the state but NO availability toggle',
+        !/Activate programme/.test(w.els.f27AdmBody.innerHTML) && !/Deactivate programme/.test(w.els.f27AdmBody.innerHTML),
+        w.els.f27AdmBody.innerHTML.slice(0, 200));
+      var beforeCalls = w.enabledCalls.length;
+      w.f27AdmSetEnabled(true);
+      ok('and a direct availability call from the Academic Director is refused client-side',
+        w.enabledCalls.length === beforeCalls && w.toasts.some(function (t) { return /Only the Founder/.test(t); }), w.toasts.join('|'));
       console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
       process.exit(fails ? 1 : 0);
     }, 100);

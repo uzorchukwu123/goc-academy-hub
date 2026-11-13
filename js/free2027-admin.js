@@ -11,8 +11,9 @@
    unless the account is signed in, unlocked, and holds the capability named on
    the route):
 
-     • the WEBSITE MODE — Original Mode <-> 2027 Free Tutorial Mode, with a
-       confirmation step before anything changes;
+     • PROGRAMME AVAILABILITY — whether the Free Tutorial programme is active
+       at all (never which experience a web address opens: that is fixed by
+       the hostname, utme.gocacademy.live vs gocacademy.live);
      • PARTICIPANTS — the verified list, switching an address off, removing a
        record, and a deliberate CSV export (the only place a full email address
        is disclosed, as a downloaded file);
@@ -115,21 +116,10 @@
     return '<div class="ad-card"><div class="ad-h">2027 Free Tutorial Management</div>' +
       '<p class="ad-p">The temporary 2027 Free Tutorial Edition runs beside the hub, on its own records ' +
       '(<b>GOC-F-001</b>, <b>GOC-F-002</b>, … students), its own activities and its own sessions. Nothing here reads or changes a ' +
-      'G.O.C student, attempt or staff record. Website mode is switched from the separate ' +
-      '<b>Website Mode Control</b> function.</p>' +
+      'G.O.C student, attempt or staff record. Students enter through <b>utme.gocacademy.live</b>; ' +
+      'programme availability is set in <b>Programme settings</b>.</p>' +
       '<div class="ad-seg" id="f27AdmTabs">' + tabsHtml() + '</div>' +
       '<div id="f27AdmBody"><div class="ad-loading">Reading the programme…</div></div></div>';
-  }
-  /* Recovered from PR #9 without replacing the newer programme/bank panels:
-     site-wide mode switching has its own Founder-only console function. The
-     existing server confirmation, capability guard and reversible mode API are
-     reused; academic settings remain in the programme panel. */
-  function modePanel() {
-    return '<div class="ad-card"><div class="ad-h">Website Mode Control</div>' +
-      '<p class="ad-p">Switch between the original G.O.C Academy Hub and the 2027 Free Tutorial Edition. ' +
-      'The choice survives server restarts. Switching either way deletes no records; Original Mode restores ' +
-      'the complete original experience.</p>' +
-      '<div id="f27ModeBody"><div class="ad-loading">Reading the mode…</div></div></div>';
   }
   function tabsHtml() {
     var tabs = [['mode', 'Programme settings'], ['participants', 'Participants'], ['activities', 'Activities'],
@@ -166,13 +156,12 @@
     var open = global.admOpen;
     if (typeof open === 'function' && !open.__f27) {
       var wrapped = function (section) {
-        if (section === 'free2027' || section === 'websitemode') {
+        if (section === 'free2027') {
           if (section === 'free2027' && !mayManageProgramme()) { say('The Free Tutorial Console is for the Founder and Academic Director.'); return; }
-          if (section === 'websitemode' && !isFounder()) { say('Website Mode Control is for the Founder only.'); return; }
           var b = $('admSheetBody'), back = $('admSheetBack'), sheet = $('admSheet'), title = $('admSheetTitle');
           if (b) {
-            if (title) title.textContent = section === 'websitemode' ? 'Website Mode Control' : '2027 Free Tutorial';
-            b.innerHTML = section === 'websitemode' ? modePanel() : panel();
+            if (title) title.textContent = '2027 Free Tutorial';
+            b.innerHTML = panel();
             b.scrollTop = 0;
             if (back) back.classList.add('show');
             if (sheet) sheet.classList.add('show');
@@ -185,7 +174,6 @@
               tiles[i].classList.toggle('active', tiles[i].getAttribute('data-section') === section);
             }
           }
-          if (section === 'websitemode') { global.f27ModeLoad(); return; }
           A.tab = 'mode';
           global.f27AdmLoad();
           return;
@@ -207,11 +195,7 @@
               '<button class="adm-tile" data-section="free2027" onclick="admOpen(\'free2027\')" aria-label="2027 Free Tutorial">' +
               '<span class="at-label">2027 Free Tutorial</span></button>');
           }
-          if (isFounder() && nav.innerHTML.indexOf('data-section="websitemode"') < 0) {
-            nav.insertAdjacentHTML('beforeend',
-              '<button class="adm-tile" data-section="websitemode" onclick="admOpen(\'websitemode\')" aria-label="Website Mode Control">' +
-              '<span class="at-label">Website Mode Control</span></button>');
-          }
+
         }
         return out;
       };
@@ -243,22 +227,47 @@
     return loadMode();
   };
 
-  /* ======================================================= 1. WEBSITE MODE */
+  /* ================================================ 1. PROGRAMME SETTINGS */
+
+  /* Programme availability only. This toggle says whether the Free Tutorial
+     programme is active at all; it can never switch website experiences —
+     utme.gocacademy.live always opens this programme (while active) and
+     gocacademy.live always opens the original hub. */
+  global.f27AdmSetEnabled = function (on, btn) {
+    if (!isFounder()) { say('Only the Founder can change programme availability.'); return; }
+    if (!confirmDo((on ? 'Activate' : 'Deactivate') + ' the 2027 Free Tutorial programme?' + (on
+      ? '\n\nStudents at utme.gocacademy.live will be able to register, log in and sit activities again. This does not change which experience any web address opens.'
+      : '\n\nStudents will no longer be able to register, log in or sit activities, on any address. Every record, question and result stays exactly as it is, and reactivating restores access.'))) return;
+    busy(btn, true);
+    api.setEnabled(on).then(function (r) {
+      busy(btn, false);
+      say('2027 Free Tutorial programme is now ' + (r.enabled ? 'active' : 'inactive'));
+      global.f27AdmLoad();
+    }, function (er) {
+      busy(btn, false);
+      say((er && er.message) || 'That could not be changed.');
+    });
+  };
 
   function loadMode() {
-    loading('Reading the mode…');
+    loading('Reading programme settings…');
     api.adminOverview().then(function (o) {
       A.overview = o;
       var on = o.enabled === true;
       body(
-        '<div class="ad-metric"><span>Website mode</span><b>' + esc(rules.modeLabel(o.mode)) + '</b></div>' +
-        '<div class="ad-metric"><span>2027 edition</span><b>' + (on ? 'Active' : 'Switched off') + '</b></div>' +
+        '<div class="ad-metric"><span>2027 Free Tutorial programme</span><b>' + (on ? 'Active' : 'Inactive') + '</b></div>' +
         '<div class="ad-metric"><span>Delivery of one-time codes</span><b>' +
           (o.otpDelivery && o.otpDelivery.available ? 'Email (SMTP configured)' :
             'Email verification not configured — registration is unavailable') +
         '</b></div>' +
-        '<p class="ad-note">Website mode is switched from the separate <b>Website Mode Control</b> console function, ' +
-        'which only the Founder may use. Academic programme content and reports remain available here.</p>' +
+        '<p class="ad-note">Students reach this programme at <b>utme.gocacademy.live</b>; the original hub stays at ' +
+        '<b>gocacademy.live</b>. Which experience an address opens is fixed by the address itself — there is no website ' +
+        'mode to switch. The control below only sets whether the programme is active.</p>' +
+        (isFounder()
+          ? '<div class="ad-actions" style="margin:4px 0 14px"><button class="ad-btn ' + (on ? '' : 'pri') +
+            '" onclick="f27AdmSetEnabled(' + (on ? 'false' : 'true') + ',this)">' +
+            (on ? 'Deactivate programme' : 'Activate programme') + '</button></div>'
+          : '') +
         '<div class="ad-grid2" style="margin-top:14px">' +
           '<div class="ad-field"><label>Course list (one per line)</label>' +
             '<textarea id="f27Courses" rows="7">' + esc((o.courses || []).join('\n')) + '</textarea></div>' +
@@ -274,65 +283,14 @@
         '</div>'
       );
     }, function (er) {
-      body(failText(er) + '<p class="ad-note">The edition may be switched off for this deployment. Set <code>GOC_FREE_2027</code> to <code>1</code> ' +
-        'in the environment to make the switch available.</p>');
+      body(failText(er) + '<p class="ad-note">Programme settings could not be read. If this deployment forces the programme ' +
+        'off with <code>GOC_FREE_2027</code>, remove that override before these settings can apply.</p>');
     });
   }
 
-  global.f27AdmSetMode = function (mode) {
-    if (!isFounder()) { say('Only the Founder can change Free Tutorial site settings.'); return; }
-    var label = rules.modeLabel(mode);
-    var free = mode === rules.MODE_FREE;
-    /* The confirmation step. The server insists on `confirm:true` too, so this
-       is not the only thing standing between a mis-click and the switch. */
-    if (!confirmDo('Switch the website to ' + label + '?' + (free
-      ? '\n\nThe original G.O.C Academy Hub homepage remains public; unrelated student modules are disabled and the 2027 Free Tutorial student experience is enabled.'
-      : '\n\nEvery feature of the G.O.C Academy Hub comes straight back, exactly as it was.'))) return;
-    api.setMode(mode, true).then(function (r) {
-      say('Website is now in ' + r.label);
-      if ($('f27ModeBody')) global.f27ModeLoad();
-      else if ($('f27AdmBody') && A.tab === 'mode') loadMode();
-      if (global.GOC && GOC.freeUI && GOC.freeUI.applyMode) {
-        /* The console is looking at the site it just changed, so the new mode is
-           applied without moving the administrator off the console. */
-        GOC.freeUI.applyMode(r.mode, r.enabled !== false, { stay: true });
-      }
-    }, function (er) {
-      say(er.message || 'The mode could not be changed.');
-    });
-  };
-
-  /* Founder-only mode panel recovered from PR #9. It uses the same confirmed
-     server route as before, never a second store or a client-only switch. */
-  global.f27ModeLoad = function () {
-    var host = $('f27ModeBody');
-    if (!host) return;
-    if (!isFounder()) {
-      host.innerHTML = '<p class="ad-warn">Website Mode Control is for the Founder only.</p>';
-      return;
-    }
-    host.innerHTML = '<div class="ad-loading">Reading the mode…</div>';
-    api.adminOverview().then(function (o) {
-      A.overview = o;
-      var on = o.enabled === true;
-      var free = o.mode === rules.MODE_FREE && on;
-      host.innerHTML =
-        '<div class="ad-metric"><span>Current website mode</span><b>' + esc(rules.modeLabel(o.mode)) + '</b></div>' +
-        '<div class="ad-metric"><span>2027 edition</span><b>' + (on ? 'Active' : 'Switched off') + '</b></div>' +
-        '<p class="ad-note">Original Mode restores the full G.O.C Academy Hub. Free Tutorial Mode keeps the public ' +
-        'homepage and enables the CBT Portal. Switching either way deletes nothing; every record and setting stays ' +
-        'in place, and the stored choice survives server restarts.</p>' +
-        '<div class="ad-actions">' +
-          '<button class="ad-btn ' + (free ? '' : 'pri') + '" onclick="f27AdmSetMode(\'' + rules.MODE_ORIGINAL + '\')">Switch to Original Mode</button>' +
-          '<button class="ad-btn ' + (free ? 'pri' : '') + '" onclick="f27AdmSetMode(\'' + rules.MODE_FREE + '\')">Switch to 2027 Free Tutorial Mode</button>' +
-        '</div>' +
-        '<div class="ad-actions" style="margin-top:6px"><button class="ad-btn" onclick="f27AdmReloadSite()">Reload the public site</button></div>';
-    }, function (er) { host.innerHTML = failText(er); });
-  };
-
   global.f27AdmReloadSite = function () {
     /* A plain reload is the simplest way to be certain the public site is
-       drawn from the stored mode. */
+       drawn fresh from the server's current answers. */
     global.location.reload();
   };
 
@@ -1537,7 +1495,6 @@
   GOC.freeAdmin = {
     mount: mount,
     panel: panel,
-    modePanel: modePanel,
     load: function () { return global.f27AdmLoad(); },
     tab: function (t) { A.tab = t; return global.f27AdmLoad(); }
   };

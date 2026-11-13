@@ -43,7 +43,9 @@ var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
    itself is unchanged. */
 /* Seven bank-management routes join the existing picker. All use the same
    questions.manage capability; no guard or capability map is changed. */
-var CONSOLE_ROUTES = 110 + 27 + 8;
+/* The website-mode route (PUT /api/free2027/admin/mode) is gone — entry is
+   the hostname now — so the free2027 console family contributes one fewer. */
+var CONSOLE_ROUTES = 110 + 27 + 7;
 var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
 ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));
