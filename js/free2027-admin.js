@@ -54,6 +54,15 @@
   function roleKey() { return global.admMe && String(global.admMe.roleKey || ''); }
   function isFounder() { return roleKey() === 'founder' || (global.admMe && global.admMe.id === 'GOC-A-001'); }
   function mayManageProgramme() { return isFounder() || roleKey() === 'academic-director'; }
+  /* fmt(): question text the way the candidate will read it — formulas set
+     by the hub's own renderer (GOC.core.renderMath), everything else
+     escaped exactly as esc() would. Falls back to esc() if the renderer is
+     somehow absent, so a preview can never break because of it. */
+  function fmt(v) {
+    var c = GOC.core;
+    if (c && c.renderMath) return c.renderMath(v == null ? '' : v, { bare: true });
+    return esc(v);
+  }
   function esc(v) {
     return String(v == null ? '' : v)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1323,13 +1332,13 @@
     var d = readQuestionForm(bank);
     host.innerHTML = '<div class="f27-question-preview-label">ADMIN PREVIEW</div>' +
       '<h4>Question 1</h4>' +
-      '<p class="f27-question-preview-text">' + esc(d.text.trim() || 'Your question will appear here.') + '</p>' +
+      '<p class="f27-question-preview-text">' + fmt(d.text.trim() || 'Your question will appear here.') + '</p>' +
       '<ol class="f27-question-preview-options">' + OPTION_LETTERS.map(function (letter, i) {
         if (i === 4 && !d.options[i]) return '';
-        return '<li><b>' + letter + '.</b><span>' + esc(d.options[i] || 'Enter option ' + letter) + '</span></li>';
+        return '<li><b>' + letter + '.</b><span>' + fmt(d.options[i] || 'Enter option ' + letter) + '</span></li>';
       }).join('') + '</ol>' +
       '<p class="f27-question-preview-answer">Correct Answer: <b>' + esc(d.answerLetter || 'Not selected') + '</b></p>' +
-      (d.explanation.trim() ? '<p class="f27-question-preview-explanation"><b>Explanation:</b> ' + esc(d.explanation.trim()) + '</p>' : '');
+      (d.explanation.trim() ? '<p class="f27-question-preview-explanation"><b>Explanation:</b> ' + fmt(d.explanation.trim()) + '</p>' : '');
   }
 
   global.f27BankAdd = function (bank, id) {

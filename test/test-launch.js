@@ -107,22 +107,33 @@ ok('the neither GOC_SIGNUP_CODE nor the code is needed to seed a fresh install',
 
 /* ------------------------------------------------ the standing rules ------- */
 head('the constraints the whole build is written under');
-/* Two confirmed, deliberate storage exceptions:
+/* Three confirmed, deliberate storage exceptions:
    - js/api.js mirrors a student's session token into sessionStorage (never
      localStorage) so a refresh doesn't log them out — see Task 6.
    - js/app.js keeps a per-scholar practice/CBT review history in localStorage
      so a student can reopen an unassessed run after logging out and coming
      back (these runs are never filed on the server). Keyed by Scholar ID.
-   localStorage stays banned in api.js/core/pwa; sessionStorage stays banned in
-   every file but api.js. */
+   - js/app.js keeps an in-progress JAMB sitting (paper, answers, wall-clock
+     deadline — nothing else) in sessionStorage so a refreshed exam page can
+     resume the SAME attempt with the time genuinely remaining. It is
+     cleared on submit and on exit, and sessionStorage dies with the tab.
+   localStorage stays banned in api.js/core/pwa; sessionStorage stays banned
+   in every file but api.js and the one JAMB sitting, whose key must be the
+   only sessionStorage use in app.js. */
 ['js/app.js', 'js/api.js', 'js/goc-core.js', 'js/pwa.js'].forEach(function (f) {
   var src = read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   var localStorageAllowed = (f === 'js/app.js');
   ok(f + ' uses ' + (localStorageAllowed ? 'localStorage only for the per-scholar practice review history' : 'no localStorage'),
      localStorageAllowed ? /localStorage/.test(src) : !/localStorage/.test(src));
   var sessionStorageAllowed = (f === 'js/api.js');
-  ok(f + ' uses ' + (sessionStorageAllowed ? 'sessionStorage only for the student refresh-token mirror' : 'no sessionStorage'),
-     sessionStorageAllowed ? /sessionStorage/.test(src) : !/sessionStorage/.test(src));
+  var jambSittingAllowed = (f === 'js/app.js');
+  var sessionUses = (src.match(/sessionStorage\.(?:getItem|setItem|removeItem)\(([^)]*)\)/g) || []);
+  var sessionOk = sessionStorageAllowed ? /sessionStorage/.test(src)
+    : jambSittingAllowed ? sessionUses.length > 0 && sessionUses.every(function (u) { return /JAMB_SESSION_KEY/.test(u); })
+    : !/sessionStorage/.test(src);
+  ok(f + ' uses ' + (sessionStorageAllowed ? 'sessionStorage only for the student refresh-token mirror'
+       : jambSittingAllowed ? 'sessionStorage only for the resumable JAMB sitting'
+       : 'no sessionStorage'), sessionOk, sessionUses.join(' '));
 });
 /* This checks resources the page itself fetches (script/link/img/iframe) —
    not outbound navigation links. An <a href="https://wa.me/..."> WhatsApp

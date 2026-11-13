@@ -553,3 +553,19 @@ body.f27-mode #free-exam .f27-cbt-bar .f27-cbt-btn[hidden] { display: none !impo
   .f27-cbt-header .f27-cbt-title-wrap { flex: 1 1 100%; order: 3; }
   .f27-cbt-header .f27-cbt-timer { order: 2; }
 }
+
+/* ---- mode before paint -------------------------------------------------
+   The inline script in index.html adds f27-mode (with f27-pending) to
+   <body> before first paint when this browser's last server-confirmed
+   mode was the Free Tutorial. While the server has not yet answered, a
+   neutral veil covers the page so neither mode flashes; applyMode()
+   removes f27-pending the moment the mode is settled. With no remembered
+   mode no class is added and the original hub paints exactly as before. */
+body.f27-pending > :not(#f27Veil) { visibility: hidden; }
+#f27Veil {
+  position: fixed; inset: 0; z-index: 9999; display: none;
+  align-items: center; justify-content: center;
+  background: #0F2A1D; color: #fff;
+  font: 700 15px var(--font, system-ui, sans-serif); letter-spacing: .01em;
+}
+body.f27-pending #f27Veil { display: flex; }

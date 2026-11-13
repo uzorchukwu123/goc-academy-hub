@@ -29,6 +29,30 @@
 </style>
 </head>
 <body>
+<script>
+/* Website mode BEFORE first paint. The server is the only authority on the
+   mode (Founder console switch, stored server-side); this script only reads
+   the last mode the server itself confirmed to this browser, recorded by
+   js/free2027-ui.js on every application. A returning browser therefore
+   opens in the correct mode immediately: in Free Tutorial mode the class
+   that hides the original hub is on <body> before any of it can paint. A
+   browser that has never been told a mode gets a neutral veil
+   (body.f27-pending) instead of a guess, and the boot sequence in
+   js/free2027-ui.js lifts it the moment the server answers. */
+(function () {
+  try {
+    var h = JSON.parse(localStorage.getItem('goc.free2027.modeHint') || 'null');
+    window.__gocModeHint = h;
+    if (h && h.on && h.mode === 'free2027') document.body.classList.add('f27-mode');
+    else if (!h) document.body.classList.add('f27-pending');
+  } catch (e) { document.body.classList.add('f27-pending'); }
+})();
+</script>
+<div id="f27Veil" role="status" aria-label="Loading G.O.C Academy Hub">
+  <div class="f27-veil-mark">G.O.C</div>
+  <div class="f27-veil-name">G.O.C Academy Hub</div>
+  <div class="f27-veil-line">Opening the academy…</div>
+</div>
 <div class="phone is-login" id="phone">
   <div class="notch"></div>
 
@@ -1174,6 +1198,14 @@
         <div class="timer" id="cbtTimer"><svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="cbtTime">29:58</span></div>
       </div>
       <div class="wt-subs" id="cbtSubjects" hidden></div>
+      <!-- JAMB exam mode only: candidate identity + calculator access.
+           Hidden outside a real JAMB paper; study/practice CBT never sees it. -->
+      <div class="cbt-candidate" id="cbtCandidate" hidden>
+        <div class="cc-who"><span class="cc-name" id="cbtCandName">Candidate</span><span class="cc-id" id="cbtCandId"></span></div>
+        <div class="cc-paper" id="cbtCandPaper"></div>
+        <button class="cc-calc" type="button" onclick="jambCalcToggle()" aria-label="Open calculator"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7.5h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01"/></svg><span>Calculator</span></button>
+      </div>
+      <div class="cbt-main">
       <!-- Fixed exam body — no page scroll; question text auto-sizes to fit -->
       <div class="exam-body">
         <div class="q-num" id="cbtNum">Question 1 of 40</div>
@@ -1181,6 +1213,15 @@
         <div class="q-image" id="cbtImage" hidden></div>
         <div class="q-text exam-q" id="cbtQ"></div>
         <div class="exam-opts" id="cbtOpts"></div>
+      </div>
+      <!-- JAMB exam mode only: persistent desktop question palette.
+           On smaller screens the slide-up question panel is used instead. -->
+      <aside class="cbt-side" id="cbtSide" hidden>
+        <div class="cbt-side-head">Question palette</div>
+        <div class="cbt-side-grid" id="cbtSideGrid"></div>
+        <div class="cbt-side-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+        <div class="cbt-side-count" id="cbtSideCount"></div>
+      </aside>
       </div>
       <div class="exam-bar">
         <button class="btn btn-ghost exam-nav-btn" onclick="cbtMove(-1)">Prev</button>
@@ -1202,6 +1243,7 @@
       </div>
       <div class="wrap">
         <p class="sub-lead">Two sessions make up the Test: a written theory paper for each of your subjects, and one objective sitting covering your whole combination.</p>
+        <div id="jtResume" hidden></div>
         <div id="wtSections"></div>
         <div class="sec-head"><div class="section-t">Your test record</div></div>
         <div class="card wrap" style="padding:6px 16px"><div id="wtHistory"></div></div>
@@ -2180,6 +2222,54 @@
     </div>
   </div>
 
+  <!-- ============ JAMB EXAM: CALCULATOR (JAMB mode only) ============ -->
+  <div class="jamb-calc" id="jambCalc" hidden>
+    <div class="jc-head"><span>Calculator</span><button class="jc-close" type="button" onclick="jambCalcToggle(false)" aria-label="Close calculator">&times;</button></div>
+    <div class="jc-display" id="jcDisplay">0</div>
+    <div class="jc-keys">
+      <button type="button" class="jc-fn" onclick="jambCalcKey('C')">C</button>
+      <button type="button" class="jc-fn" onclick="jambCalcKey('B')">&#9003;</button>
+      <button type="button" onclick="jambCalcKey('(')">(</button>
+      <button type="button" onclick="jambCalcKey(')')">)</button>
+      <button type="button" class="jc-fn" onclick="jambCalcKey('sqrt')">&radic;</button>
+      <button type="button" class="jc-fn" onclick="jambCalcKey('sq')">x&sup2;</button>
+      <button type="button" class="jc-fn" onclick="jambCalcKey('%')">%</button>
+      <button type="button" class="jc-op" onclick="jambCalcKey('/')">&divide;</button>
+      <button type="button" onclick="jambCalcKey('7')">7</button>
+      <button type="button" onclick="jambCalcKey('8')">8</button>
+      <button type="button" onclick="jambCalcKey('9')">9</button>
+      <button type="button" class="jc-op" onclick="jambCalcKey('*')">&times;</button>
+      <button type="button" onclick="jambCalcKey('4')">4</button>
+      <button type="button" onclick="jambCalcKey('5')">5</button>
+      <button type="button" onclick="jambCalcKey('6')">6</button>
+      <button type="button" class="jc-op" onclick="jambCalcKey('-')">&minus;</button>
+      <button type="button" onclick="jambCalcKey('1')">1</button>
+      <button type="button" onclick="jambCalcKey('2')">2</button>
+      <button type="button" onclick="jambCalcKey('3')">3</button>
+      <button type="button" class="jc-op" onclick="jambCalcKey('+')">+</button>
+      <button type="button" onclick="jambCalcKey('0')">0</button>
+      <button type="button" onclick="jambCalcKey('.')">.</button>
+      <button type="button" class="jc-eq" onclick="jambCalcKey('=')">=</button>
+    </div>
+    <p class="jc-note">Basic examination calculator — same operations as the UTME hall calculator.</p>
+  </div>
+
+  <!-- ============ JAMB EXAM: SUBMIT CONFIRMATION (JAMB mode only) ============ -->
+  <div class="overlay" id="jambSubmitOverlay">
+    <div class="test-info">
+      <h3>Submit this examination?</h3>
+      <p id="jambSubmitText"></p>
+      <ul>
+        <li>Once submitted, your answers are final and will be marked.</li>
+        <li>Press <b>Y</b> to confirm submission, or <b>R</b> to return to the examination.</li>
+      </ul>
+      <div class="ti-actions">
+        <button class="btn btn-outline" onclick="jambSubmitReturn()">Return (R)</button>
+        <button class="btn btn-red" onclick="jambSubmitConfirm()">Submit (Y)</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ QUESTION PANEL OVERLAY (shared by CBT + wtRun) ============ -->
   <!-- Kept inside #phone so overflow:hidden clips it if CSS ever fails to load. -->
   <div class="qpanel-backdrop" id="qPanelBackdrop" onclick="qPanelClose()" hidden></div>
@@ -2202,6 +2292,11 @@
 <script>
 // Fallback: if go() never runs within 5s, force-show landing screen silently
 window.__gocBootTimer = setTimeout(function() {
+  /* In Free Tutorial mode the original landing must never be forced on
+     screen, and a still-pending mode veil lifts rather than trapping the
+     visitor if the scripts below failed to run. */
+  if (document.body.classList.contains('f27-mode')) return;
+  document.body.classList.remove('f27-pending');
   if (!document.querySelector('.screen.active')) {
     var l = document.getElementById('landing');
     if (l) { l.classList.add('active'); }

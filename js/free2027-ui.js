@@ -52,6 +52,26 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  /* fmt(): question text as the candidate should read it — formulas set by
+     the hub's own renderer (GOC.core.renderMath, the same one the original
+     hub uses for its questions and notes), everything else escaped exactly
+     as esc() would. Bare LaTeX with no $...$ around it is recognised the
+     same way the hub's notes recognise it, so a Free Tutorial import
+     carrying \frac{1}{2}mv^2 or H_2SO_4 shows the formula, never the raw
+     commands. If the renderer is somehow absent this is exactly esc(), so
+     a question can never break because of it. */
+  function fmt(v) {
+    var c = GOC.core;
+    if (c && c.renderMath) return c.renderMath(v == null ? '' : v, { bare: true });
+    return esc(v);
+  }
+  /* The one-line reading of the same text, for aria-labels and other places
+     that can hold no markup. */
+  function fmtPlain(v) {
+    var c = GOC.core;
+    if (c && c.mathPlain) return c.mathPlain(v == null ? '' : v);
+    return String(v == null ? '' : v);
+  }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function clock(sec) {
     var s = Math.max(0, Math.round(Number(sec) || 0));
@@ -80,14 +100,38 @@
      Original Mode removes it, and the hub is exactly what it was. */
   /* opts.stay — apply the mode without moving the person looking at it (the
      administrator flipping the switch from inside the console). */
+  /* The last mode the SERVER told this browser — never a browser-made
+     choice. applyMode() records it on every application; the inline script
+     in index.html reads it before first paint so a returning browser opens
+     in the correct mode with no flash of the other one, and boot() falls
+     back to it when the server cannot be reached, because a failed request
+     must never silently dress the site in the wrong mode. The server
+     remains the only authority: every successful answer replaces it. */
+  var MODE_HINT_KEY = 'goc.free2027.modeHint';
+  function readModeHint() {
+    try {
+      var h = JSON.parse(global.localStorage.getItem(MODE_HINT_KEY) || 'null');
+      if (h && (h.mode === rules.MODE_FREE || h.mode === rules.MODE_ORIGINAL)) {
+        return { mode: h.mode, on: h.on !== false };
+      }
+    } catch (e) {}
+    return null;
+  }
+  function saveModeHint(mode, on) {
+    try { global.localStorage.setItem(MODE_HINT_KEY, JSON.stringify({ mode: mode, on: !!on })); } catch (e) {}
+  }
+
   function applyMode(mode, on, opts) {
     var o = opts || {};
     F.mode = mode;
     F.on = !!on;
+    saveModeHint(mode, on);
     var body = document.body;
     if (!body || !body.classList) return;
     var free = on && mode === rules.MODE_FREE;
     body.classList.toggle('f27-mode', free);
+    /* The mode is now known: the neutral pre-paint veil (index.html) lifts. */
+    body.classList.remove('f27-pending');
     /* Original Mode needs no chrome override at all — the hub draws its own. */
     if (!free) body.classList.remove('goc-original-area');
     var note = $('freeHomeMode');
@@ -107,6 +151,22 @@
 
   /* Ask the server, once, at boot. /api/health already answers with the mode —
      it costs no extra round trip on a cold load. */
+  /* Boot with the server unreachable: keep the last mode the server did
+     confirm to this browser, and — only when there is no such memory —
+     leave the original hub completely alone, as before. Either way the
+     pre-paint veil lifts (applyMode does it), so a dead connection can
+     never leave the page covered. */
+  function bootFallback() {
+    var hint = readModeHint();
+    if (hint) return applyMode(hint.mode, hint.on);
+    return applyMode(rules.MODE_ORIGINAL, false);
+  }
+  var bootRetried = false;
+  function scheduleBootRetry() {
+    if (bootRetried) return;
+    bootRetried = true;
+    setTimeout(function () { boot(); }, 4000);
+  }
   function boot() {
     var ready = (GOC.api && GOC.api.ready) ? GOC.api.ready : Promise.resolve('mock');
     return Promise.resolve(ready).then(function () {
@@ -115,7 +175,15 @@
         .catch(function () { return null; });
     }).then(function (h) {
       var f = (h && h.free2027) || null;
-      if (!f || f.on !== true) return applyMode(rules.MODE_ORIGINAL, false);
+      if (!f) {
+        /* No answer is not an answer: a failed request must never dress the
+           site in the wrong mode. Keep the last server-confirmed mode and
+           ask once more shortly — hub APIs wake in their own time. */
+        bootFallback();
+        scheduleBootRetry();
+        return F.mode;
+      }
+      if (f.on !== true) return applyMode(rules.MODE_ORIGINAL, false);
       return api.config().then(function (c) {
         F.config = c;
         /* Boot is the page's own entry point: it may move the visitor, so the
@@ -123,11 +191,11 @@
         applyMode(c.mode, c.on, { boot: true });
         if (c.on && c.mode === rules.MODE_FREE) resumeParticipant();
       }, function () {
-        /* The config endpoint failed: stay in Original Mode rather than show a
-           half-built edition. */
-        applyMode(rules.MODE_ORIGINAL, false);
+        /* The config endpoint failed: keep the last server-confirmed mode
+           rather than impose a mode the server never confirmed. */
+        bootFallback();
       });
-    }).catch(function () { applyMode(rules.MODE_ORIGINAL, false); });
+    }).catch(function () { bootFallback(); scheduleBootRetry(); });
   }
 
   /* A student who refreshes the page, reopens the browser or comes back after a
@@ -856,7 +924,7 @@
     if (label) label.textContent = 'Q ' + (F.exam.index + 1) + ' / ' + n;
     var pass = $('freeExamPassage');
     if (pass) {
-      if (q && q.passage) { pass.hidden = false; pass.innerHTML = '<b>' + esc(q.passage.title || '') + '</b><br>' + esc(q.passage.text || ''); }
+      if (q && q.passage) { pass.hidden = false; pass.innerHTML = '<b>' + esc(q.passage.title || '') + '</b><br>' + fmt(q.passage.text || ''); }
       else { pass.hidden = true; pass.innerHTML = ''; }
     }
     var img = $('freeExamImage');
@@ -865,16 +933,16 @@
       else { img.hidden = true; img.innerHTML = ''; }
     }
     var qt = $('freeExamQ');
-    if (qt) qt.textContent = q ? q.text : '';
+    if (qt) qt.innerHTML = q ? fmt(q.text) : '';
     var host = $('freeExamOpts');
     if (host && q) {
       host.innerHTML = (q.options || []).map(function (o, i) {
         var on = F.exam.answers[q.id] === i;
         var letter = String.fromCharCode(65 + i);
         return '<button type="button" class="f27-cbt-option' + (on ? ' sel' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '" ' +
-          'aria-label="Option ' + letter + ': ' + esc(o) + '" onclick="freeExamPick(' + i + ')">' +
+          'aria-label="Option ' + letter + ': ' + esc(fmtPlain(o)) + '" onclick="freeExamPick(' + i + ')">' +
           '<span class="f27-cbt-letter" aria-hidden="true">[ ' + letter + ' ]</span>' +
-          '<span class="f27-cbt-text">' + esc(o) + '</span></button>';
+          '<span class="f27-cbt-text">' + fmt(o) + '</span></button>';
       }).join('');
     }
     paintSubjectNav();
@@ -1178,7 +1246,7 @@
     var mark = isKey ? ' <b>✓ correct</b>' : '';
     var mine = chosen ? ' <b>← your answer</b>' : '';
     return '<div class="f27-fine"' + (isKey ? ' style="font-weight:700"' : '') + '>' +
-      letter + '. ' + esc(text == null ? '' : text) + mark + mine + '</div>';
+      letter + '. ' + fmt(text == null ? '' : text) + mark + mine + '</div>';
   }
   function paintReview(v) {
     var host = $('freeResultBody');
@@ -1202,10 +1270,10 @@
         '<div class="f27-item-top"><b>Question ' + q.n + '</b>' +
         '<span class="f27-chip ' + chip + '">' + label + '</span></div>' +
         '<p class="f27-fine">' + esc(q.subject || '') + (q.topic ? ' · ' + esc(q.topic) : '') + '</p>' +
-        (q.passage ? '<div class="f27-cbt-passage"><b>' + esc(q.passage.title || 'Passage') + '</b><p>' + esc(q.passage.text || '') + '</p></div>' : '') +
-        '<p>' + esc(q.text || '') + '</p>' + opts +
-        '<p class="f27-fine">Your answer: <b>' + esc(yourText) + '</b></p>' +
-        '<p class="f27-fine">Correct answer: <b>' + esc(keyText) + '</b></p>' +
+        (q.passage ? '<div class="f27-cbt-passage"><b>' + esc(q.passage.title || 'Passage') + '</b><p>' + fmt(q.passage.text || '') + '</p></div>' : '') +
+        '<p>' + fmt(q.text || '') + '</p>' + opts +
+        '<p class="f27-fine">Your answer: <b>' + fmt(yourText) + '</b></p>' +
+        '<p class="f27-fine">Correct answer: <b>' + fmt(keyText) + '</b></p>' +
         '</div>';
     }).join('');
     host.innerHTML = '<div class="f27-result" style="text-align:left;max-width:720px">' +
