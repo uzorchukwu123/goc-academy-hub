@@ -10013,11 +10013,62 @@ function dashRow(title, sub, cta){
 function dashStat(k, v){
   return '<div class="wt-stat"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>';
 }
+/* The JAMB-oriented catalogue row from the dashboard's last catalogue read
+   (null when the sitting is not listed for this student). It is only ever a
+   mirror of what the server chose to list: dashPaintJamb never invents a
+   sitting, and starting goes through wtConfirmStart -> POST /api/me/tests/start,
+   which re-checks the bank-depth gate server-side before opening anything. */
+var dashJambTest = null;
+function dashPaintJamb(rows){
+  if(!document.getElementById('dashJamb')) return;
+  if(!rows){
+    dashJambTest = null;
+    dashSet('dashJamb', '<div class="wt-none">The JAMB-oriented sitting is not available right now.</div>');
+    return;
+  }
+  var j = null;
+  rows.forEach(function(t){ if(t.section === 'jamb') j = t; });
+  dashJambTest = j;
+  if(!j){
+    /* Not listed means the dedicated JAMB bank is not yet deep enough in every
+       one of this student's subjects (the server holds the sitting back until
+       it is). Say exactly that; never offer a Start the server would refuse. */
+    dashSet('dashJamb', '<div class="wt-none">The JAMB-oriented sitting opens once its question bank is ready in all of your subjects. Sit the Objective sitting meanwhile.</div>');
+    return;
+  }
+  var line = j.questions + ' question' + (j.questions !== 1 ? 's' : '')
+    + ' · ' + wtMinutes(j.durationSec) + ' · your whole combination';
+  if(j.papers && j.papers.length) line += ' · ' + wtPapersLine(j.papers);
+  var sat = Number(j.attempts) || 0;
+  if(j.repeatable && sat > 0) line += ' · sat ' + sat + ' time' + (sat !== 1 ? 's' : '') + ' — you can sit it again';
+  if(j.locked){
+    dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
+      + esc(line) + ' · for GOC students — ask the academy about joining</span></div>'
+      + '<button class="wt-start locked" disabled>Locked · GOC</button></div>');
+    return;
+  }
+  dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
+    + esc(line) + '</span></div>'
+    + '<button class="wt-start" onclick="dashJambSit(this)">' + (j.repeatable && sat > 0 ? 'Sit again' : 'Sit it') + '</button></div>');
+}
+/* Dashboard/Study JAMB entry: start the listed sitting through the very same
+   instructions + start route as the Web Test screen; when no sitting is
+   listed (or the catalogue has not been read yet), land on the Web Test
+   screen, which explains the readiness position itself. */
+function dashJambSit(btn){
+  if(dashJambTest && !dashJambTest.locked) wtConfirmStart(dashJambTest, btn);
+  else openWebTest();
+}
+function openJambTest(){
+  if(dashJambTest && !dashJambTest.locked){ wtConfirmStart(dashJambTest, null); return; }
+  openWebTest();
+}
 /* What is actually published for this student, in the order they would sit it. */
 function dashPaintNext(){
   if(!GOC.api.listMyTests) return;
   GOC.api.listMyTests().then(function(r){
     var rows = (r && r.tests) || [];
+    dashPaintJamb(rows);
     if(!rows.length){
       dashSet('dashNext', '<div class="wt-none">No paper has been published for your subjects yet. One will appear here the moment it is.</div>');
       return;
@@ -10042,6 +10093,7 @@ function dashPaintNext(){
     }
     dashSet('dashNext', h || '<div class="wt-none">No paper has been published for your subjects yet.</div>');
   }, function(){
+    dashPaintJamb(null);
     dashSet('dashNext', '<div class="wt-none">Your papers are not available right now.</div>');
   });
 }
