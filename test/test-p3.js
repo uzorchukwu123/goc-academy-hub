@@ -112,7 +112,7 @@ async function main() {
   ok('the logo symbol is untouched', src.indexOf('id="goc-mark"') > -1);
   ok('no in-app coins remain in the markup', src.indexOf('🪙') < 0);
 
-  head('the hub — three separated sessions, the student\'s own subjects only');
+  head('the hub — the sessions the website still offers, the student\'s own subjects only');
   await run('GOC.api.login')(SID, PW);
   run('applyIdentity')({ id: SID, name: 'Tunde Bello', role: 'student', subjects: MINE, exam: 'JAMB / UTME' });
 
@@ -130,8 +130,8 @@ async function main() {
   run('openWebTest')();
   await flush();
   ok('the hub screen is showing', shown('webtest'));
-  ok('three session cards', cards('wtSections').length === 3, cards('wtSections').length);
-  ['Theory session', 'Objective session', 'JAMB-oriented session'].forEach(function (t) {
+  ok('two session cards', cards('wtSections').length === 2, cards('wtSections').length);
+  ['Theory session', 'Objective session'].forEach(function (t) {
     ok('card: ' + t, text('wtSections').indexOf(t) > -1);
   });
   /* How a paper is marked is the academy's business, not the student's. Nothing
@@ -163,8 +163,8 @@ async function main() {
   ok('a submitted written paper offers no Start, only "Submitted"',
      (markup('wtSections').match(/class="wt-start done"/g) || []).length === THEORY_SUBS.length,
      (markup('wtSections').match(/class="wt-start done"/g) || []).length);
-  ok('theory offers a live Start only for the papers not yet sat, plus the objective and JAMB-oriented sittings',
-     (markup('wtSections').match(/class="wt-start"/g) || []).length === (WRITTEN.length - THEORY_SUBS.length) + 2,
+  ok('theory offers a live Start only for the papers not yet sat, plus the objective sitting',
+     (markup('wtSections').match(/class="wt-start"/g) || []).length === (WRITTEN.length - THEORY_SUBS.length) + 1,
      (markup('wtSections').match(/class="wt-start"/g) || []).length);
   ok('and the student is told where the missing subject is examined instead',
      text('wtSections').indexOf('objective sitting only') > -1, text('wtSections'));
@@ -197,7 +197,7 @@ async function main() {
   ok('nothing student-facing says weekly or monthly',
      !/weekly|monthly/i.test(text('wtSections') + ' ' + text('wtLead') + ' ' + text('wtHistory')),
      text('wtLead'));
-  ok('still three sessions', cards('wtSections').length === 3);
+  ok('still two sessions', cards('wtSections').length === 2);
 
   head('the objective session — one sitting of the whole combination');
   /* The student passes no subject: the sitting is the combination. */
@@ -469,11 +469,10 @@ async function main() {
   ok('no topic breakdown before marking', id('wtrBrkWrap').hidden === true);
   ok('completion XP was still credited', tres.xpAwarded > 0, tres.xpAwarded);
 
-  head('the JAMB-oriented session is a live full-combination timed sitting');
-  /* It is now a real sitting: the data layer opens it as an objective-style
-     paper over the whole combination, the catalogue lists it once, and starting
-     it from the page opens the full CBT screen (not the wtRun screen the
-     objective/theory sittings use). */
+  head('the JAMB sitting is still in the data layer but is not offered on the website');
+  /* Part Two retired the student-facing session. Nothing was deleted: the data
+     layer still opens and catalogues it, so existing records stay readable and
+     a sitting saved before the change can still be resumed. */
   var jm = await run('GOC.api.startTest')({ period: 'test', section: 'jamb', subject: 'Mathematics' })
     .then(function (p) { return p; }, function (e) { return { error: e.message }; });
   ok('the data layer opens a JAMB-oriented paper', jm && !jm.error && jm.section === 'jamb', JSON.stringify(jm));
@@ -495,14 +494,12 @@ async function main() {
       return t.period === 'test';
     }), r.tests.map(function (t) { return t.period; }).join(','));
   });
-  run('wtStart')('test', 'jamb', 'Mathematics');
-  await flush();
-  ok('starting it from the page opens the full CBT screen', shown('cbt') && run('cbtPaper') !== null);
-  ok('and not the objective/theory runner', !shown('wtRun'));
-  /* Leave the JAMB paper without submitting, so the CBT screen is clear before
-     the self-directed run below reuses it. */
-  run('confirmExit')();
-  await flush();
+  ok('the page offers no JAMB-oriented session card',
+     text('wtSections').indexOf('JAMB-oriented session') < 0,
+     text('wtSections'));
+  ok('and therefore no Start button for one',
+     markup('wtSections').indexOf('wtStart(&quot;test&quot;,&quot;jamb&quot;') < 0
+     && markup('wtSections').indexOf("wtStart('test','jamb'") < 0);
 
   /* Seed practice questions so studyPool() returns a non-empty pool when
      openCBT/openPractice calls studyCatalogue().  The seeded bank ships

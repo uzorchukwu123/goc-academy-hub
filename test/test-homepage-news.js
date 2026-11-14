@@ -33,7 +33,7 @@ function grab(name) {
 }
 
 head('clear information architecture on the landing');
-[['Programmes', "dwGoTo('lpTiers')"], ['Updates & News', "go('updates')"], ['Try GOC free', "dwGoTo('lpTry')"], ['Get started', "go('signup')"], ['Log in', "go('login-v2')"]].forEach(function (pair) {
+[['Programmes', "dwGoTo('lpTiers')"], ['Updates & News', "go('updates')"], ['Try GOC free', "dwGoTo('lpTry')"]].forEach(function (pair) {
   ok('top nav offers “' + pair[0] + '”', index.indexOf(pair[0]) >= 0 && index.indexOf(pair[1]) >= 0);
 });
 ok('the hero offers the free preview beside sign-up', /onclick="dwGoTo\('lpTry'\)">Try a free practice session<\/button>/.test(index));

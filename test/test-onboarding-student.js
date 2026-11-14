@@ -108,8 +108,9 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 10); }
   ok('every step was visited in order', seen.join(',') === mod.STUDENT_STEPS.map(function (s) { return s.target; }).join(','), seen.join(','));
   ok('navigation really happened (go + openers, in step order)',
     w.navLog.filter(function (n) { return n.indexOf('go:home') === 0; }).length >= 3
-    && w.navLog.indexOf('call:openPractice') > -1 && w.navLog.indexOf('call:openCBT') > w.navLog.indexOf('call:openPractice')
-    && w.navLog.indexOf('call:openMyNotes') > -1 && w.navLog.indexOf('go:profile') === w.navLog.length - 1,
+    && w.navLog.indexOf('call:openPractice') > -1
+    && w.navLog.indexOf('call:openCBT') < 0 && w.navLog.indexOf('call:openMyNotes') < 0
+    && w.navLog.indexOf('go:profile') === w.navLog.length - 1,
     w.navLog.join(' '));
   ok('nothing was skipped on a healthy app', tour.current() && tour.current().skipped.length === 0, JSON.stringify(tour.current() && tour.current().skipped));
   var doneCard = cardOf(w);
@@ -156,9 +157,9 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 10); }
   var w4 = makeWorld();
   var tour4 = mod.create(w4.env);
   tour4.register('mixed', [
-    { go: 'home', target: 'dashUp', title: 'Real', body: 'exists' },
+    { go: 'home', target: 'dashHello', title: 'Real', body: 'exists' },
     { go: 'home', target: 'no-such-element', title: 'Ghost', body: 'missing' },
-    { go: 'home', target: 'dashJamb', title: 'Real 2', body: 'exists' }
+    { go: 'home', target: 'tut-webtest', title: 'Real 2', body: 'exists' }
   ]);
   await tour4.start('mixed', { userId: 'u1' });
   await tour4.next(); await tick(5);

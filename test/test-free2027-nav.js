@@ -71,11 +71,11 @@ ok('heroAccount picks the edition login in Free Mode and the hub login otherwise
    Every homepage/drawer sign-up entry point stands down in that mode only. */
 ok('every homepage hub sign-up entry point is hidden in Free Tutorial Mode', /body\.f27-mode #landing button\[onclick="go\('signup'\)"\], body\.f27-mode #lpDrawer button\[onclick="dwGo\('signup'\)"\] \{ display: none !important; \}/.test(flatCss));
 ok('that rule is mode-scoped, never unconditional', !/(^|[;}])\s*#landing button\[onclick="go\('signup'\)"\]\s*\{\s*display:\s*none/.test(flatCss) && !/(^|[;}])\s*#lpDrawer button\[onclick="dwGo\('signup'\)"\]\s*\{\s*display:\s*none/.test(flatCss));
-ok('the header/desktop-nav Get started button is untouched in the markup', /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
+ok('the obsolete header/desktop-nav Get started button is removed', !/<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
 ok('the mobile drawer Create free account button is untouched in the markup', /<button class="btn btn-red btn-block dw-original" onclick="dwGo\('signup'\)">Create free account<\/button>/.test(html));
 ok('all five homepage sign-up entry points keep their original handler', (html.match(/onclick="go\('signup'\)"/g) || []).length >= 5);
 ok('desktop (>=900px) shows the inline CBT Portal entry', /@media \(min-width: 900px\) \{\s*body\.f27-mode #landing \.lp-actions \.dw-cbt-link \{ display: inline-block; \}\s*\}/.test(flatCss));
-ok('the landing keeps its original Log in / Get started in the markup', /<button class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && /<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
+ok('the obsolete inline-nav Log in / Get started pair is removed', !/<button class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)">Log in<\/button>/.test(html) && !/<button class="lp-cta dw-original" onclick="go\('signup'\)">Get started<\/button>/.test(html));
 /* Owner correction (navigation): the edition landing page is the single student
    entry point, so it no longer carries a duplicate Log in link in its own nav
    bar, and the hub's Log in shortcut stands down in Free Tutorial Mode only. */
