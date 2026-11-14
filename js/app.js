@@ -3388,7 +3388,7 @@ function admOpen(section){
       '<div id="admChkOut"><div class="ad-empty">Press Check to list them.</div></div></div>'
     ); },
     tutors: function(){ return (
-      '<div class="ad-card"><div class="ad-h">New tutor</div><p class="ad-p">A tutor sees only the subjects you give them. The starting password must be changed at their first sign-in.</p>'+
+      '<div class="ad-card"><div class="ad-h">New tutor</div><p class="ad-p">A tutor sees only the subjects you give them. The starting password must be changed at their first sign-in. Tutors sign in at <b>/tutor</b> — give them that address with their tutor ID.</p>'+
       '<div class="ad-field"><label>Name</label><input id="admTutName" placeholder="e.g. Mrs Ada Obi"></div>'+
       '<div class="ad-field"><label>Subjects</label><div id="admTutSubjNew">'+admTutSubjectBoxes('admTutNew', [])+'</div></div>'+
       '<div class="ad-field"><label>Starting password</label><input id="admTutPw" type="text" autocomplete="off" placeholder="at least 8 characters"></div>'+

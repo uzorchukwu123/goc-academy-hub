@@ -4516,6 +4516,27 @@ const ROUTES = [
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
 
+  /* The tutor application itself, delivered only to an authenticated
+     tutor session ('tutor-setup', so a first-login password change can
+     still load it; subject APIs stay closed until then). The central
+     gate above has already re-read the tutor record for this request,
+     so a switched-off tutor is refused here like everywhere else. The
+     file lives outside the static root and is never cached. */
+  { method: 'GET', path: /^\/api\/tutor\/app$/, need: 'tutor-setup', handler: async (req, res, body, sess) => {
+      try {
+        const code = await fs.promises.readFile(path.join(ROOT, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+        res.writeHead(200, {
+          'Content-Type': 'text/javascript; charset=utf-8',
+          'Content-Length': Buffer.byteLength(code),
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff'
+        });
+        return res.end(code);
+      } catch (e) {
+        return errJson(res, 503, 'The tutor screens are not available right now.');
+      }
+    } },
+
   { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
       const ip = getClientIp(req);
       if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
@@ -9648,6 +9669,14 @@ const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\
   + '\n' + AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
   + '\nUser-agent: *\nDisallow: /\n';
 
+/* Tutor entrance (Stage 8, owner-approved): a sign-in shell with NONE of
+   the tutor application in it. The shell signs in through the existing
+   POST /api/tutor/login, then — and only then — fetches the application
+   from GET /api/tutor/app with the session token and runs it. The tutor
+   screens therefore never appear in a public file or an unauthenticated
+   response; server/tutor/ stays outside the static root throughout. */
+const TUTOR_SHELL = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Tutor sign-in · G.O.C Academy Hub</title>\n<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}</style>\n</head>\n<body>\n<main class="card" id="tutorGate">\n<h1>G.O.C Tutor</h1>\n<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>\n<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">\n<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">\n<div class="err" id="tutorErr"></div>\n<button type="button" id="tutorGo">Sign in</button>\n</main>\n<script src="js/onboarding.js"></script>\n<script>\n(function(){\n  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");\n  function fail(m){ err.textContent = m; btn.disabled = false; btn.textContent = "Sign in"; }\n  btn.addEventListener("click", function(){\n    var id = document.getElementById("tutorId").value.trim(), pw = document.getElementById("tutorPw").value;\n    if(!id || !pw){ fail("Enter your tutor ID and password."); return; }\n    btn.disabled = true; btn.textContent = "Signing in\u2026"; err.textContent = "";\n    fetch("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, password: pw }) })\n    .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "Sign-in failed."); return j; }); })\n    .then(function(j){\n      return fetch("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })\n      .then(function(r){ if(!r.ok) throw new Error("The tutor screens could not be loaded."); return r.text(); })\n      .then(function(code){\n        window.__zxSession = { token: j.token, user: j.user };\n        var s = document.createElement("script");\n        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));\n        document.body.appendChild(s);\n        document.getElementById("tutorGate").style.display = "none";\n        if(window.GOCOnboarding && window.GOCTours){\n          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);\n          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);\n        }\n      });\n    })\n    .catch(function(e){ fail(e.message || "Sign-in failed."); });\n  });\n})();\n</script>\n</body>\n</html>';
+
 /* Turn barred crawlers away. The politeness layer above only binds crawlers
    that obey it; this refuses the ones that announce themselves. Generic
    HTTP-library names (Go-http-client, node-fetch) are deliberately NOT
@@ -9770,6 +9799,17 @@ const server = http.createServer(async (req, res) => {
   // fetch at a user's request must not tell them to stay out. Everyone else
   // (browsers, health checks, and the crawlers refused below) still gets it.
   if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
+
+  if (urlPath === '/tutor') {
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': Buffer.byteLength(TUTOR_SHELL),
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    return res.end(req.method === 'HEAD' ? undefined : TUTOR_SHELL);
+  }
 
   if (urlPath === '/robots.txt') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }

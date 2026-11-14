@@ -77,6 +77,10 @@
         if (env.call) { env.call('admOpen', step.adm); }
         else if (typeof root.admOpen === 'function') root.admOpen(step.adm);
       }
+      if (step.zx) {
+        if (env.call) { env.call('__zxTourGo', step.zx); }
+        else if (typeof root.__zxTourGo === 'function') root.__zxTourGo(step.zx);
+      }
     }
     function delay(ms) {
       return new Promise(function (res) { (env.setTimeout || setTimeout)(res, ms); });
@@ -384,6 +388,29 @@
     return steps;
   }
 
+  /* ---- Tutor tour (Stage 8): runs in the /tutor shell over the real
+     tutor application, moving between its views through the app's own
+     __zxTourGo bridge. A tutor only ever sees their own subjects —
+     the tour inherits that scoping from the API, it has none of its own. ---- */
+  var TUTOR_STEPS = [
+    { zx: 'dash', target: 'zxTourDepth', title: 'Welcome to your tutor dashboard',
+      body: 'Everything here is your subject, and only your subject. These figures show how deep your papers are — objective, theory, JAMB-style, practice and notes — so you can see at a glance where the bank is thin.' },
+    { zx: 'dash', target: 'zxTourQuestions', title: 'Your questions',
+      body: 'Questions you add wait for academy approval before students see them; returned ones come back with the reason. Watch the counts here to see what is live.' },
+    { zx: 'questions', target: 'zxTourQView', title: 'Adding questions',
+      body: 'Add questions one by one, or import a prepared file. Everything passes through approval, so nothing reaches a student unreviewed — including yours.' },
+    { zx: 'dash', target: 'zxTourNotes', title: 'Reading notes',
+      body: 'The lessons your students read under Read / Learn. Publish carefully: a live note is in students\u2019 hands immediately, and you can hold one back at any time.' },
+    { zx: 'notices', target: 'zxTourNtView', title: 'Class notices',
+      body: 'Post a notice and every GOC student taking your subject sees it on their dashboard at once. Remove it when it is out of date.' },
+    { zx: 'scripts', target: 'zxTourSView', title: 'Marking theory scripts',
+      body: 'Written scripts waiting for your marks. A saved mark counts straight away and the result reaches the student; the academy is told when a script is fully marked.' },
+    { zx: 'dash', target: 'zxTourSnap', title: 'How your class is doing',
+      body: 'Snapshot, at-risk and top-performer cards read your subject\u2019s real activity. Tap a student\u2019s name anywhere in them to open that student\u2019s page — only ever within your subject.' },
+    { zx: 'dash', target: 'zxTourScripts', title: 'You\u2019re set',
+      body: 'That\u2019s the whole desk. This tour returns whenever you sign in fresh — and your password and sign-out live at the top of the dashboard whenever you need them.' }
+  ];
+
   var api = null;
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     api = create({
@@ -392,11 +419,12 @@
       call: function (name, arg) { if (typeof window[name] === 'function') window[name](arg); }
     });
     api.register('student', STUDENT_STEPS);
+    api.register('tutor', TUTOR_STEPS);
     window.GOCOnboarding = api;
-    window.GOCTours = { student: STUDENT_STEPS };
+    window.GOCTours = { student: STUDENT_STEPS, tutor: TUTOR_STEPS };
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { create: create, STUDENT_STEPS: STUDENT_STEPS, consoleSteps: consoleSteps, CONSOLE_COPY: CONSOLE_COPY, CONSOLE_ORDER: CONSOLE_ORDER };
+    module.exports = { create: create, STUDENT_STEPS: STUDENT_STEPS, TUTOR_STEPS: TUTOR_STEPS, consoleSteps: consoleSteps, CONSOLE_COPY: CONSOLE_COPY, CONSOLE_ORDER: CONSOLE_ORDER };
   }
 })(typeof window !== 'undefined' ? window : globalThis);
