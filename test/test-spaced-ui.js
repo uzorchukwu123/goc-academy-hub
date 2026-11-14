@@ -18,15 +18,15 @@ function ok(name, cond, extra) {
 }
 
 console.log('\nMarkup');
-var studyAt = html.indexOf('id="study"'), setAt = html.indexOf('id="studySet"');
+/* Part Two retired the Review Due card and its Study-hub refresh. The review
+   session itself is preserved and is exercised below. */
 ['rvCard', 'rvCardText', 'rvCardNote', 'rvCardBtn'].forEach(function (id) {
-  var at = html.indexOf('id="' + id + '"');
-  ok(id + ' sits inside the Study screen', at > studyAt && at < setAt);
+  ok(id + ' is removed from the Study hub', html.indexOf('id="' + id + '"') < 0);
 });
-ok('the card starts hidden', /id="rvCard"[^>]*display:none/.test(html));
-ok('the button opens the review screen', /id="rvCardBtn"[^>]*onclick="go\('review'\)"/.test(html));
-ok('a review screen with a host and a subtitle exists', /<section class="screen pad" id="review">/.test(html) && html.indexOf('id="rvHost"') > html.indexOf('id="review"') && html.indexOf('id="rvSub"') > html.indexOf('id="review"'));
-ok('opening Study refreshes the card', /id === 'study' && typeof refreshReview === 'function'\) refreshReview\(\)/.test(app));
+ok('the card is no longer refreshed when Study opens', !/id === 'study' && typeof refreshReview === 'function'\) refreshReview\(\)/.test(app));
+ok('a review screen with a host and a subtitle still exists', /<section class="screen pad" id="review">/.test(html) && html.indexOf('id="rvHost"') > html.indexOf('id="review"') && html.indexOf('id="rvSub"') > html.indexOf('id="review"'));
+ok('the Study hub keeps a compact Review entry, not the retired card',
+  /id="sg-review"[^>]*go\('review'\)/.test(html));
 ok('opening the review screen starts a session', /id === 'review' && typeof rvOpen === 'function'\) rvOpen\(\)/.test(app));
 
 var from = app.indexOf('function rvWhen('), endMark = 'function rvAdvance(){ rvIndex++; rvRender(); }';
@@ -64,36 +64,9 @@ ok('under a day', sandbox.rvWhen(now + 3600000, now) === 'within a day');
 ok('one day is tomorrow', sandbox.rvWhen(now + DAY, now) === 'tomorrow');
 ok('several days', sandbox.rvWhen(now + 7 * DAY, now) === 'in 7 days');
 
-console.log('\nCard');
-sandbox.paintReviewCard({ review: { dueCount: 1, upcoming: 0, due: [row(1)] } });
-ok('one due: singular wording, button shown, card shown', els.rvCardText.textContent === '1 question is due for review' && els.rvCardBtn.style.display === '' && els.rvCard.style.display === '');
-sandbox.paintReviewCard({ review: { dueCount: 12, upcoming: 3 } });
-ok('many due: plural wording with the full count', els.rvCardText.textContent === '12 questions are due for review');
-sandbox.paintReviewCard({ review: { dueCount: 0, upcoming: 2, nextDue: Date.now() + 3 * DAY } });
-ok('none due but some waiting: says when, no button', /Nothing due right now/.test(els.rvCardText.textContent) && /in 3 days/.test(els.rvCardNote.textContent) && els.rvCardBtn.style.display === 'none' && els.rvCard.style.display === '');
-sandbox.paintReviewCard({ review: { dueCount: 0, upcoming: 0, nextDue: null } });
-ok('no mistakes at all hides the card', els.rvCard.style.display === 'none');
-sandbox.paintReviewCard(null);
-ok('null hides it too', els.rvCard.style.display === 'none');
-listImpl = function () { return Promise.resolve({ review: { dueCount: 4, upcoming: 0 } }); };
-var p = sandbox.refreshReview();
-
-p.then(function () {
-  ok('refreshReview paints what the server returned', els.rvCard.style.display === '' && /4 questions/.test(els.rvCardText.textContent));
-  listImpl = function () { return Promise.reject(new Error('offline')); };
-  return sandbox.refreshReview();
-}).then(function () {
-  ok('offline: the card is left as it was', /4 questions/.test(els.rvCardText.textContent));
-  sandbox.studentId = null;
-  return sandbox.refreshReview();
-}).then(function () {
-  ok('signed out: the card is hidden', els.rvCard.style.display === 'none');
-  sandbox.studentId = 'GOC-1';
-
-  console.log('\nSession');
-  listImpl = function () { return Promise.resolve({ review: { dueCount: 12, upcoming: 0, nextDue: null, due: [row(1), row(2)] } }); };
-  return sandbox.rvOpen();
-}).then(function () {
+/* The card no longer exists; the session starts directly. */
+listImpl = function () { return Promise.resolve({ review: { dueCount: 12, upcoming: 0, nextDue: null, due: [row(1), row(2)] } }); };
+sandbox.rvOpen().then(function () {
   ok('the first question is shown with its options', /Question 1/.test(els.rvHost.innerHTML) && (els.rvHost.innerHTML.match(/rvPick\(/g) || []).length === 4 && els.rvSub.textContent === 'Question 1 of 2', els.rvHost.innerHTML.slice(0, 200));
   ok('the right answer is not shown before answering', !/Correct answer|right answer/i.test(els.rvHost.innerHTML));
   answerImpl = function () { return Promise.resolve({ ok: true, correct: true, answer: 2, explanation: 'Because.', box: 1, mastered: false, nextDue: Date.now() + 3 * DAY, dueCount: 11 }); };

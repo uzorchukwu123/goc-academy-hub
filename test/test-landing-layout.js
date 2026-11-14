@@ -27,7 +27,7 @@ check('the original hero signup route is intact', /hero-original-cta" onclick="g
    visibility; ONLY its destination is mode-aware. */
 check('the hero account link keeps its original text, class and position', /<button class="lp-btn-ghost" onclick="heroAccount\(\)">I already have an account<\/button>/.test(html));
 check('the hero account link is a mode-aware action, not a hard-coded hub route', !/class="lp-btn-ghost" onclick="go\('login-v2'\)"/.test(html));
-check('the original nav Log in / Get started are intact', /class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)"/.test(html) && /class="lp-cta dw-original" onclick="go\('signup'\)"/.test(html));
+check('the obsolete inline-nav Log in / Get started pair is removed', !/class="lp-link dw-original dw-hub-login" onclick="go\('login-v2'\)"/.test(html) && !/class="lp-cta dw-original" onclick="go\('signup'\)"/.test(html));
 check('the original drawer Create free account / Log in are intact', /dw-original" onclick="dwGo\('signup'\)"/.test(html) && /dw-original dw-hub-login" onclick="dwGo\('login-v2'\)"/.test(html));
 /* The hero's hub "Get started" is displayed in Original Mode only. Strip the
    mode-scoped rules first, so this still proves that NOTHING hides an original

@@ -83,7 +83,7 @@ ok('Scholarship and Stage were not exposed in the mobile drawer',
 
 console.log('\nC-D: Try GOC is before Get in touch/Contact');
 ok('Try GOC now sits between Parents and Contact', iParents < iTry && iTry < iContact);
-ok('Updates & News stays after Contact', iContact < iNews);
+ok('Get in touch is the last content section, after Updates & News', iNews < iContact);
 ok('the Try GOC block itself is unchanged',
   /id="lpTry"[\s\S]*?<div class="lp-eyebrow">Try G\.O\.C<\/div>[\s\S]*?<h2>Free JAMB Practice Preview<\/h2>[\s\S]*?no account, no name, no email needed[\s\S]*?onclick="demoOpen\(\)"[\s\S]*?Try a free practice session[\s\S]*?not official JAMB questions/.test(index));
 ok('Get in touch is still the contact section', /id="contact"[\s\S]{0,160}<div class="lp-eyebrow">Get in touch<\/div>/.test(index));

@@ -120,11 +120,11 @@ head('Priority 6 — the stored combination drives every subject-aware surface')
    video would arrive from loadPublishedVideos() once the server has one for
    every subject under test. */
 run("videos = [" +
-  "{type:'live',subj:'Use of English',title:'Comprehension Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Physics',title:'Newton Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Chemistry',title:'Hydrocarbons Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Biology',title:'Cell Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Maths',title:'Quadratic Equations Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}" +
+  "{type:'lesson',subj:'Use of English',title:'Comprehension Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
+  "{type:'lesson',subj:'Physics',title:'Newton Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
+  "{type:'lesson',subj:'Chemistry',title:'Hydrocarbons Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
+  "{type:'lesson',subj:'Biology',title:'Cell Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
+  "{type:'lesson',subj:'Maths',title:'Quadratic Equations Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}" +
   "]");
 run("resources = [{resourceId:'FIXTURE-SYL',storageFileId:'',description:'',published:true,cat:'syllabus',type:'SYL',tcol:'#15803D',subj:'all',title:'JAMB 2027 Syllabus — Fixture',meta:'All subjects · test fixture',fileExt:'pdf'}]");
 run('applySubjects')(['Use of English', 'Physics', 'Chemistry', 'Mathematics']);
@@ -167,7 +167,7 @@ head('a filter for a dropped paper cannot survive');
 run('setClassFilter')('Mathematics');
 run('applySubjects')(['Use of English', 'Biology', 'Chemistry', 'Physics']);
 ok('filter fell back to All', run('classFilter') === 'all', run('classFilter'));
-ok('the shelf is not empty', markup('liveList').length > 0);
+ok('the lesson shelf is not empty', markup('lessonList').length > 0);
 
 head('the account is the source of truth');
 run('applyIdentity')({ id: 'GOC-S-042', name: 'Ada Test', role: 'student',
