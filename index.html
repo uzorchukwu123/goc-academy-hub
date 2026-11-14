@@ -205,7 +205,7 @@
 
       <!-- One student identity: every G.O.C student gets the full academy. -->
       <div class="lp-sec" id="lpTiers">
-        <div class="lp-eyebrow">Programme</div>
+        <div class="lp-eyebrow">Programmes</div>
         <h2>One student identity: the GOC student</h2>
         <p class="lead">Every enrolled student gets the full academy — no limited accounts.</p>
         <div class="tier-compare landing-tiers">
@@ -324,6 +324,14 @@
         <p class="lead">Students learn with expert tutors, practise in a structured app, and sit assessed tests whose results are reviewed question by question. Parents can follow every important announcement above, try the free preview, and talk to the academy directly — no account needed for any of that.</p>
         <div class="hero-btns"><button class="lp-btn-light" type="button" onclick="dwGoTo('lpTry')">Try the free preview</button><button class="lp-btn-ghost" type="button" onclick="scrollToContact()">Contact the academy</button></div>
       </div>
+      <div class="lp-sec lp-try" id="lpTry">
+        <div class="lp-eyebrow">Try G.O.C</div>
+        <h2>Free JAMB Practice Preview</h2>
+        <p class="lead">Experience a JAMB-style practice session and discover how learning works at G.O.C Academy Hub. Five questions, real explanations — no account, no name, no email needed.</p>
+        <button class="lp-cta lp-try-btn" type="button" onclick="demoOpen()">Try a free practice session</button>
+        <p class="lp-try-note">Sample questions written for this preview. They are not official JAMB questions, and nothing you do here is recorded.</p>
+      </div>
+
       <div class="lp-sec alt" id="contact">
         <div class="lp-eyebrow">Get in touch</div>
         <h2>Talk to G.O.C Academy</h2>
@@ -358,14 +366,6 @@
       </div>
 
       <!-- Updates & News intro — a calm teaser that invites visitors without blocking the page -->
-      <div class="lp-sec lp-try" id="lpTry">
-        <div class="lp-eyebrow">Try G.O.C</div>
-        <h2>Free JAMB Practice Preview</h2>
-        <p class="lead">Experience a JAMB-style practice session and discover how learning works at G.O.C Academy Hub. Five questions, real explanations — no account, no name, no email needed.</p>
-        <button class="lp-cta lp-try-btn" type="button" onclick="demoOpen()">Try a free practice session</button>
-        <p class="lp-try-note">Sample questions written for this preview. They are not official JAMB questions, and nothing you do here is recorded.</p>
-      </div>
-
       <div class="lp-sec lp-news-intro" id="lpNewsIntro">
         <div class="lp-news-intro-inner">
           <div class="lp-news-intro-icon" aria-hidden="true">
@@ -2180,11 +2180,13 @@
         </div>
         <p class="dw-motto">Raising Smart Scholars for Academic Excellence</p>
         <nav class="dw-nav">
+          <!-- Same approved destinations as before, ordered to match the page:
+               About, Subjects, Programmes, How it works, Try GOC, Contact, Updates. -->
           <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>About G.O.C</button>
-          <button onclick="dwGoTo('lpTiers')"><span class="dwi">◇</span>Programmes</button>
-          <button onclick="dwGoTo('lpTry')"><span class="dwi">◇</span>Try GOC — free practice</button>
           <button onclick="dwGoTo('lpSubjects')"><span class="dwi">◇</span>Subjects offered</button>
+          <button onclick="dwGoTo('lpTiers')"><span class="dwi">◇</span>Programmes</button>
           <button onclick="dwGoTo('lpHow')"><span class="dwi">◇</span>How it works</button>
+          <button onclick="dwGoTo('lpTry')"><span class="dwi">◇</span>Try GOC — free practice</button>
           <button onclick="dwGoTo('contact')"><span class="dwi">◇</span>Contact us</button>
           <button onclick="dwGo('updates')" class="dw-updates-link"><span class="dwi-bell" aria-hidden="true">🔔</span>Updates &amp; News<span class="dw-new-badge">New</span></button>
         </nav>
