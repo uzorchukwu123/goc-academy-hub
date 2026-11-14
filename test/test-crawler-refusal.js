@@ -1,19 +1,14 @@
-/* test-crawler-refusal.js — Phase 3D slice 2, revised: turn TRAINING crawlers
-   away, let interactive AI assistants in.
+/* test-crawler-refusal.js — no crawler is refused any more.
 
-   Real server on a spare port, throwaway copy of the app. Proves that:
-     1. a request naming a known AI training crawler / search bot / scraper
-        gets 403 (pages, scripts and the API alike), with nothing of the app
-        in the body
-     2. robots.txt stays readable to them, so a polite crawler can obey it
-     3. interactive AI assistants (ChatGPT-User, Claude-Web, Perplexity-User)
-        get the public app like any browser — but private files still 404 and
-        protected APIs still demand authorization
-     4. ordinary browsers and a client with no User-Agent are untouched
-        (including the Go-http-client that hosting health checks use)
-     5. static files are rate-limited per IP (429 + Retry-After), while the API
-        and robots.txt stay reachable
-   No dependencies.  Run:  node test/test-crawler-refusal.js  */
+   The site used to return 403 to named AI training crawlers, search bots and
+   plain HTTP tools. It now treats every User-Agent the same for the public
+   interface: a crawler can read the homepage, scripts and styles one file at a
+   time, and robots.txt allows all. Private files stay 404 and private APIs
+   stay unauthorized. Static rate limiting still protects the server from a
+   request flood; it is not a crawler block.
+
+   Real server on a spare port, throwaway copy of the app.
+   Run:  node test/test-crawler-refusal.js  */
 'use strict';
 var http = require('http');
 var path = require('path');
@@ -25,7 +20,7 @@ var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var PORT = Number(process.env.GOC_REFUSE_PORT) || 8153;
 var LIMIT = 60;
 
-var SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-refuse-test-'));
+var SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-crawl-refuse-'));
 fs.mkdirSync(path.join(SANDBOX, 'server'), { recursive: true });
 fs.cpSync(path.join(APP, 'server'), path.join(SANDBOX, 'server'), { recursive: true });
 ['js', 'css', 'icons'].forEach(function (d) {
@@ -41,7 +36,7 @@ try { fs.rmSync(path.join(SANDBOX, 'server', 'data.json'), { force: true }); } c
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
-  else { fails++; console.log('  FAIL  ' + name + (extra ? '   (' + String(extra).slice(0, 140) + ')' : '')); }
+  else { fails++; console.log('  FAIL  ' + name + (extra ? '   (' + String(extra).slice(0, 160) + ')' : '')); }
 }
 function head(t) { console.log('\n' + t); }
 
@@ -84,6 +79,7 @@ function waitForBoot(tries) {
 function seq(items, fn) {
   return items.reduce(function (p, it) { return p.then(function () { return fn(it); }); }, Promise.resolve());
 }
+function noindex(v) { return /noindex|nofollow|noarchive|nosnippet|noimageindex/i.test(String(v || '')); }
 
 var BOTS = [
   ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.1; +https://openai.com/gptbot)', 'GPTBot'],
@@ -115,40 +111,43 @@ var INTERACTIVE = [
 ];
 
 waitForBoot(100).then(function () {
-  head('known crawlers are refused');
+  head('named crawlers get the public app, not a 403');
   return seq(BOTS, function (b) {
     return call('GET', '/', b[0]).then(function (r) {
-      ok(b[1] + ' gets 403 on /', r.status === 403, r.status);
-      ok('  and no part of the app went out', r.raw.indexOf('<') < 0 && r.raw.indexOf('GOC') < 0);
+      ok(b[1] + ' gets the homepage', r.status === 200 && /<html/i.test(r.raw), r.status);
+      ok('  and is not told noindex', !noindex(r.headers['x-robots-tag']), r.headers['x-robots-tag']);
+      return call('GET', '/js/app.js', b[0]);
+    }).then(function (r) {
+      ok('  ' + b[1] + ' can read the app script individually', r.status === 200 && r.raw.length > 1000, r.status + ' bytes=' + r.raw.length);
     });
   });
 }).then(function () {
-  return call('GET', '/js/app.js', BOTS[0][0]);
-}).then(function (r) {
-  ok('a crawler cannot fetch the app script either', r.status === 403 && r.raw.length < 40, r.status);
-  return call('GET', '/api/health', BOTS[1][0]);
-}).then(function (r) {
-  ok('a crawler is refused on the API too', r.status === 403, r.status);
-  ok('  the refusal still says noindex', /noindex/.test(r.headers['x-robots-tag'] || ''));
-  return call('GET', '/sw.js', BOTS[7][0]);
-}).then(function (r) {
-  ok('a search-engine bot cannot fetch the service worker', r.status === 403, r.status);
   return call('GET', '/robots.txt', BOTS[0][0]);
 }).then(function (r) {
-  ok('robots.txt stays readable to a crawler (so it can obey)', r.status === 200 && /Disallow: \//.test(r.raw), r.status);
+  ok('robots.txt is readable and allows the crawler', r.status === 200 && /User-agent: GPTBot\s*\nAllow: \//.test(r.raw), r.status);
+  return call('GET', '/api/health', BOTS[0][0]);
+}).then(function (r) {
+  ok('the API health check still answers a crawler', r.status === 200, r.status);
+  return call('GET', '/server/data.json', BOTS[0][0]);
+}).then(function (r) {
+  ok('the database is still not served to a crawler', r.status === 404, r.status);
+  return call('GET', '/api/me', BOTS[0][0]);
+}).then(function (r) {
+  ok('private API data still needs a session', r.status === 401, r.status);
 
-  head('people and tools that must keep working');
+  head('people and ordinary tools still get the app');
   return seq(HUMANS, function (h) {
     return call('GET', '/', h[0]).then(function (r) {
       ok(h[1] + ' still gets the app', r.status === 200 && r.raw.indexOf('<html') >= 0, r.status);
+      ok('  and is not told noindex', !noindex(r.headers['x-robots-tag']), r.headers['x-robots-tag']);
     });
   });
 }).then(function () {
-  head('interactive AI assistants are let in — to the public interface only');
+  head('interactive AI assistants are treated like every other crawler');
   return seq(INTERACTIVE, function (h) {
     return call('GET', '/', h[0]).then(function (r) {
       ok(h[1] + ' gets the public app', r.status === 200 && r.raw.indexOf('<html') >= 0, r.status);
-      ok('  and is not told noindex', !/noindex/.test(r.headers['x-robots-tag'] || ''), r.headers['x-robots-tag']);
+      ok('  and is not told noindex', !noindex(r.headers['x-robots-tag']), r.headers['x-robots-tag']);
       return call('GET', '/css/styles.css', h[0]);
     }).then(function (r) {
       ok('  ' + h[1] + ' can read the public styles', r.status === 200, r.status);
@@ -157,7 +156,7 @@ waitForBoot(100).then(function () {
       ok('  but ' + h[1] + ' cannot reach the database file', r.status === 404, r.status);
       return call('GET', '/api/me', h[0]);
     }).then(function (r) {
-      ok('  and ' + h[1] + ' gets no private API data without signing in', r.status === 401, r.status);
+      ok('  and gets no private API data without signing in', r.status === 401, r.status);
     });
   });
 }).then(function () {
@@ -165,7 +164,7 @@ waitForBoot(100).then(function () {
 }).then(function (r) {
   ok('the health check still passes for Go-http-client', r.status === 200, r.status);
 
-  head('static files are rate-limited per IP');
+  head('static files are rate-limited per IP, not blocked by identity');
   var codes = [], retry = null, i = 0;
   function burst() {
     if (i >= LIMIT + 40) return Promise.resolve();
@@ -191,10 +190,10 @@ waitForBoot(100).then(function () {
   ok('robots.txt is not caught by it either', r.status === 200, r.status);
   return call('GET', '/', HUMANS[0][0]);
 }).then(function (r) {
-  ok('the limited response carries X-Robots-Tag', r.status === 429 && /noindex/.test(r.headers['x-robots-tag'] || ''), r.status);
+  ok('the limited response is not marked noindex', r.status === 429 && !noindex(r.headers['x-robots-tag']), r.status + ' ' + r.headers['x-robots-tag']);
 }).then(function () {
   stop();
-  console.log('\n' + (fails ? fails + ' check(s) FAILED' : 'crawler refusal: all checks passed'));
+  console.log('\n' + (fails ? fails + ' check(s) FAILED' : 'crawler access: all checks passed'));
   process.exit(fails ? 1 : 0);
 }).catch(function (e) {
   stop();

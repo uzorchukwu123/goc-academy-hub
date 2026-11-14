@@ -2,7 +2,7 @@
 
    Real HTTP against a disposable server. Proves:
      1. the draw is exactly five questions with answers/explanations
-        withheld, from the dedicated 15-question sample pool only;
+        withheld, drawn from the real Question Bank through studyPool();
      2. submission marks exactly, returns score/percent/full review, and
         the token is single-use;
      3. validation and the per-IP draw limit engage;
@@ -17,6 +17,7 @@ var path = require('path');
 var fs = require('fs');
 var os = require('os');
 var crypto = require('crypto');
+var vm = require('vm');
 var spawn = require('child_process').spawn;
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var PORT = Number(process.env.GOC_DEMO_PORT) || 8185;
@@ -125,6 +126,47 @@ function dataHash() {
 
   head('client journey wiring');
   ok('the homepage Try button opens the demo', /onclick="demoOpen\(\)"/.test(index) && /function demoOpen\(\)/.test(app));
+  var tryBlock = index.slice(index.indexOf('id="lpTry"'), index.indexOf('id="lpNewsIntro"'));
+  ok('the homepage Try GOC button is the one wired to the preview',
+    /class="lp-cta lp-try-btn"[^>]*onclick="demoOpen\(\)"/.test(tryBlock)
+    && /Try a free practice session/.test(tryBlock));
+  ok('the preview is a public screen, not an authenticated dashboard route',
+    /var openScreens = \[[^\]]*'demo'/.test(app) && /var publicScreens = \[[^\]]*'demo'/.test(app));
+  function grab(name) {
+    var i = app.indexOf('function ' + name + '(');
+    var depth = 0, j = app.indexOf('{', i);
+    for (var k = j; k < app.length; k++) {
+      if (app[k] === '{') depth++;
+      else if (app[k] === '}') { depth--; if (depth === 0) return app.slice(i, k + 1); }
+    }
+    throw new Error('missing ' + name);
+  }
+  var demoState = { cbtDemo: null, srLast: null };
+  var dctx = vm.createContext(demoState);
+  vm.runInContext(grab('isDemoSurface'), dctx);
+  ok('the public preview surface is recognised from the homepage',
+    demoState.isDemoSurface('demo') === true);
+  ok('the shared CBT runner is public only while the preview owns it',
+    demoState.isDemoSurface('cbt') === false);
+  demoState.cbtDemo = { token: 'x' };
+  ok('the preview run keeps the public shell', demoState.isDemoSurface('cbt') === true);
+  demoState.cbtDemo = null;
+  demoState.srLast = { mode: 'practice' };
+  ok('an authenticated practice result keeps the student shell',
+    demoState.isDemoSurface('studyRes') === false);
+  demoState.srLast = { mode: 'demo' };
+  ok('the preview result keeps the public shell', demoState.isDemoSurface('studyRes') === true);
+  ok('ordinary student screens are never marked public', demoState.isDemoSurface('home') === false
+    && demoState.isDemoSurface('study') === false && demoState.isDemoSurface('profile') === false);
+  ok('the page toggles the public layout for the preview surfaces',
+    /classList\.toggle\('is-login', publicScreens\.indexOf\(id\) > -1 \|\| demoSurface\)/.test(app));
+  var demoCss = fs.readFileSync(path.join(APP, 'css', 'styles.css'), 'utf8');
+  ok('the authenticated sidebar and tabbar cannot render over the preview',
+    /\.phone\.is-login \.tabbar\{display:none!important\}/.test(demoCss)
+    && /\.phone\.is-login \.screens\{left:0\}/.test(demoCss));
+  ok('the preview keeps its public header and back-to-home action',
+    /id="demo"/.test(index) && /Try G\.O\.C — Free Practice Preview/.test(index)
+    && /aria-label="Back to homepage"[^>]*onclick="go\('landing'\)"/.test(index));
   ok('the demo intro is a fixed pre-exam page, not a scrolling form', /id="demoIntro"/.test(index)
     && /class="screen demo-screen"/.test(index) && /#demo\.demo-screen\{ overflow:hidden; }/.test(fs.readFileSync(path.join(APP, 'css', 'styles.css'), 'utf8')));
   ok('the real CBT runner is reused, not a second exam interface', /function cbtOpenDemo\(/.test(app)

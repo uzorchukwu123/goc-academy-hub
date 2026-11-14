@@ -9,7 +9,7 @@
         Each viewport named in the audit is checked against that rule.
      2. ISSUE-05: index.html carries a meta description and an Open Graph /
         Twitter sharing preview, and no noindex robots meta.
-   Live agent/crawler behaviour is covered by test-crawler-shield.js and
+   Live crawler access is covered by test-crawler-shield.js and
    test-crawler-refusal.js.  Run:  node test/test-pitch-readiness.js  */
 'use strict';
 var fs = require('fs');

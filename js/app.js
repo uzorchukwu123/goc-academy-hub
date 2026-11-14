@@ -467,20 +467,77 @@ function loadAffirmations(){
 function drawerEls(){
   return { d: document.getElementById('lpDrawer'), s: document.getElementById('lpScrim'), b: document.getElementById('lpBurger') };
 }
+var drawerReturnFocus = null;
+function drawerFocusables(){
+  var d = document.getElementById('lpDrawer');
+  if(!d || !d.querySelectorAll) return [];
+  return Array.prototype.filter.call(
+    d.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+    function(el){ return el && el.getAttribute && el.getAttribute('aria-hidden') !== 'true'; }
+  );
+}
+function drawerScrollLock(on){
+  try{
+    if(document.documentElement && document.documentElement.classList)
+      document.documentElement.classList.toggle('drawer-open', !!on);
+  }catch(e){}
+}
 function openDrawer(){
   var e = drawerEls(); if(!e.d) return;
   e.d.style.transform = '';
-  e.d.classList.add('on'); e.s.classList.add('on');
+  if(e.s){ e.s.style.opacity = ''; e.s.classList.add('on'); }
+  e.d.classList.add('on');
   e.d.setAttribute('aria-hidden','false');
-  if(e.b) e.b.setAttribute('aria-expanded','true');
+  if(e.b){
+    e.b.setAttribute('aria-expanded','true');
+    e.b.setAttribute('aria-label','Close menu');
+    if(drawerReturnFocus === null) drawerReturnFocus = document.activeElement || e.b;
+  }
+  drawerScrollLock(true);
+  /* Move keyboard focus into the menu once the slide-in has begun. */
+  setTimeout(function(){
+    var d = document.getElementById('lpDrawer');
+    if(!d || !d.classList.contains('on')) return;
+    var f = drawerFocusables();
+    if(f.length && f[0].focus) f[0].focus();
+  }, 30);
 }
 function closeDrawer(){
   var e = drawerEls(); if(!e.d) return;
+  var wasOpen = e.d.classList.contains('on');
   e.d.style.transform = '';
-  e.d.classList.remove('on'); e.s.classList.remove('on');
+  e.d.classList.remove('on');
+  if(e.s){ e.s.classList.remove('on'); e.s.style.opacity = ''; }
   e.d.setAttribute('aria-hidden','true');
-  if(e.b) e.b.setAttribute('aria-expanded','false');
+  if(e.b){
+    e.b.setAttribute('aria-expanded','false');
+    e.b.setAttribute('aria-label','Open menu');
+  }
+  drawerScrollLock(false);
+  var back = drawerReturnFocus;
+  drawerReturnFocus = null;
+  if(wasOpen && back && back.focus){
+    try{ back.focus(); }catch(err){}
+  }
 }
+/* Keyboard support: Escape always closes the menu, and Tab stays inside it
+   while it is open instead of wandering into the page behind the scrim. */
+document.addEventListener('keydown', function(ev){
+  var e = drawerEls(); if(!e.d || !e.d.classList.contains('on')) return;
+  if(ev.key === 'Escape' || ev.keyCode === 27){
+    ev.preventDefault();
+    closeDrawer();
+    return;
+  }
+  if(ev.key !== 'Tab' && ev.keyCode !== 9) return;
+  var f = drawerFocusables(); if(!f.length) return;
+  var first = f[0], last = f[f.length - 1];
+  if(ev.shiftKey && (document.activeElement === first || !e.d.contains(document.activeElement))){
+    ev.preventDefault(); last.focus();
+  } else if(!ev.shiftKey && (document.activeElement === last || !e.d.contains(document.activeElement))){
+    ev.preventDefault(); first.focus();
+  }
+});
 function dwGo(id){ closeDrawer(); setTimeout(function(){ go(id); }, 180); }
 function dwGoTo(secId){
   closeDrawer();
@@ -521,6 +578,8 @@ function dwGoTo(secId){
     else { off = Math.min(0, -width + Math.max(0, dx)); }
     d.classList.add('on');
     d.setAttribute('aria-hidden','false');   // it is visible, so it must not be hidden from screen readers
+    var b = document.getElementById('lpBurger'); if(b) b.setAttribute('aria-expanded','true');
+    drawerScrollLock(true);
     d.style.transition = 'none';
     d.style.transform = 'translateX(' + off + 'px)';
     if(s){ s.classList.add('on'); s.style.opacity = String(1 - Math.abs(off)/width); }
@@ -539,6 +598,15 @@ function dwGoTo(secId){
   }, {passive:true});
 })();
 
+/* The anonymous Try GOC preview owns the screen from entry to result. These
+   surfaces must never inherit the authenticated student's sidebar/tabbar, even
+   though the CBT runner and result screen are shared with the signed-in app. */
+function isDemoSurface(id){
+  if(id === 'demo') return true;
+  if(id === 'cbt' && typeof cbtDemo !== 'undefined' && cbtDemo) return true;
+  if(id === 'studyRes' && typeof srLast !== 'undefined' && srLast && srLast.mode === 'demo') return true;
+  return false;
+}
 function go(id){
   if(typeof closeDrawer === 'function') closeDrawer();
   /* Priority 9 — no in-app screen may be reached once the session has run out,
@@ -546,8 +614,9 @@ function go(id){
      refuses the data anyway; this stops the empty shell being shown at all.
      The public screens stay open, because that is where an expired student is
      being sent. */
-  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship','free-admin'];
-  if(openScreens.indexOf(id) < 0 && ssExpired()){ ssEnd(); return; }
+  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship','free-admin','demo'];
+  var demoSurface = isDemoSurface(id);
+  if(openScreens.indexOf(id) < 0 && !demoSurface && ssExpired()){ ssEnd(); return; }
   if(id === 'login-v2' && typeof ssClearNotice === 'function' && !(ss && ss.ending)) ssClearNotice();
   // Access guard: the admin console is never reachable as a student, and only
   // after passing the secure access portal (firewall) as an admin.
@@ -612,7 +681,7 @@ function go(id){
     clearInterval(wtTimerId); wtTimerId = null;
   }
   // The preview banner belongs only to student-facing screens.
-  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin'){
+  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin' || demoSurface){
     previewing = false;
     document.body.classList.remove('previewing');
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
@@ -632,8 +701,8 @@ function go(id){
   // (which lost on specificity and left a 256px sidebar over the tutorial).
   // Hub screens are untouched: they still get the sidebar and the 256px offset.
   var publicScreens = ['landing','login-v2','signup','updates','legal','free-admin',
-    'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard'];
-  document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
+    'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard','demo'];
+  document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1 || demoSurface);
   // highlight tab (map sub-screens to their section)
   var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
   var active = map[id] || id;

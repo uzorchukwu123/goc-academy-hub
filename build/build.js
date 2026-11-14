@@ -32,7 +32,8 @@ if (maintenance.enabled(process.env)) {
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'index.html'), maintenance.page());
   fs.writeFileSync(path.join(OUT, 'sw.js'), maintenance.serviceWorker());
-  console.log('Maintenance build: ' + path.relative(ROOT, OUT) + '/index.html and sw.js only.');
+  fs.writeFileSync(path.join(OUT, 'robots.txt'), 'User-agent: *\nAllow: /\n');
+  console.log('Maintenance build: ' + path.relative(ROOT, OUT) + '/index.html, sw.js and robots.txt only.');
   console.log('GOC_MAINTENANCE_MODE is on — no application asset was copied.');
   console.log('Unset GOC_MAINTENANCE_MODE and rebuild to restore the full app.');
   process.exit(0);
@@ -109,6 +110,8 @@ write('index.html', html);
 fs.cpSync(path.join(ROOT, 'icons'), path.join(OUT, 'icons'), { recursive: true });
 fs.cpSync(path.join(ROOT, 'js', 'vendor'), path.join(OUT, 'js', 'vendor'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'manifest.webmanifest'), path.join(OUT, 'manifest.webmanifest'));
+fs.copyFileSync(path.join(ROOT, 'robots.txt'), path.join(OUT, 'robots.txt'));
+fs.copyFileSync(path.join(ROOT, 'sitemap.xml'), path.join(OUT, 'sitemap.xml'));
 
 // Every file the service worker caches (and every local file index.html names) must be in the build,
 // otherwise addAll() fails on a student's phone and the app never installs.

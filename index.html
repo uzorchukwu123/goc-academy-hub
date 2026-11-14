@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#DC2626">
 <meta name="description" content="G.O.C Academy Hub — Raising Smart Scholars for Academic Excellence. Expert tutoring, AI literacy and a gamified study app for JAMB, WAEC, NECO and Post-UTME, plus the Free UTME 2027 Tutorial.">
 <!-- Sharing preview (Open Graph / Twitter). No robots meta: crawler access is
-     governed server-side (robots.txt + User-Agent rules in server/server.js),
-     which allows interactive AI assistants while keeping training crawlers out. -->
+     open. server/server.js serves an allow-all robots.txt, sets no noindex
+     header, lists every public file in sitemap.xml, and lets crawlers read them one by one. -->
 <meta property="og:title" content="G.O.C Academy Hub">
 <meta property="og:description" content="Raising Smart Scholars for Academic Excellence — expert tutoring, AI literacy and a gamified study app for JAMB, WAEC, NECO and Post-UTME, plus the Free UTME 2027 Tutorial.">
 <meta property="og:type" content="website">
@@ -77,7 +77,7 @@
     <!-- ============ LANDING (public homepage) ============ -->
     <section class="screen" id="landing">
       <nav class="lp-nav">
-        <button class="lp-burger" onclick="openDrawer()" aria-label="Open menu" aria-controls="lpDrawer" aria-expanded="false" id="lpBurger">
+        <button class="lp-burger" onclick="openDrawer()" aria-label="Open menu" aria-controls="lpDrawer" aria-expanded="false" aria-haspopup="dialog" id="lpBurger">
           <span></span><span></span><span></span>
         </button>
         <div class="lp-brand">
@@ -91,7 +91,6 @@
                hero, the Try GOC section and the closing band carry the one
                sign-up route, and the drawer links to the same sections. The hub
                login screen itself is untouched and still reachable by URL. -->
-          <button class="lp-link" onclick="dwGoTo('lpTiers')">Programmes</button>
           <button class="lp-link" onclick="go('updates')">Updates &amp; News</button>
           <button class="lp-link" onclick="dwGoTo('lpTry')">Try GOC free</button>
           <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
@@ -197,28 +196,6 @@
           <div class="sj"><div class="si" style="background:#E6F4EC">🧪</div><h4>Chemistry</h4><p>Organic, physical &amp; inorganic</p></div>
           <div class="sj"><div class="si" style="background:#E7F1F4">🧬</div><h4>Biology</h4><p>Cells, genetics, ecology</p></div>
           <div class="sj"><div class="si" style="background:#FDECC8">➗</div><h4>Mathematics</h4><p>Algebra, calculus, statistics</p></div>
-        </div>
-      </div>
-
-      <!-- One student identity: every G.O.C student gets the full academy. -->
-      <div class="lp-sec" id="lpTiers">
-        <div class="lp-eyebrow">Programmes</div>
-        <h2>One student identity: the GOC student</h2>
-        <p class="lead">Every enrolled student gets the full academy — no limited accounts.</p>
-        <div class="tier-compare landing-tiers">
-          <div class="tc-grid">
-            <div class="tc-card goc">
-              <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
-              <ul>
-                <li>Unlimited practice and past questions, every year</li>
-                <li>Objective and Theory Web Tests, plus the JAMB-oriented test</li>
-                <li>Every note, unlimited reviews and saved questions</li>
-                <li>Live classes, lesson videos and class replays</li>
-                <li>Read resources in the app, and earn streak freezes</li>
-                <li>Ask-a-tutor help and class notices</li>
-              </ul>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -649,8 +626,8 @@
             <form id="loginForm" onsubmit="login();return false" style="margin-top:24px">
               <div class="field">
                 <label for="loginId">Account ID</label>
-                <input type="text" id="loginId" placeholder="GOC-S-… / GOC-T-… / GOC-A-…" autocomplete="username" value="">
-                <p class="field-hint">Use the Scholar, tutor or management ID issued by the academy.</p>
+                <input type="text" id="loginId" placeholder="GOC-S-…" autocomplete="username" value="">
+                <p class="field-hint">Use the Scholar ID issued by the academy.</p>
               </div>
               <div class="field">
                 <label for="loginPw">Password</label>
@@ -1235,14 +1212,15 @@
         <div class="cbt-side-count" id="cbtSideCount"></div>
       </aside>
       </div>
+      <!-- The same navigator powers the mobile Q-panel, and becomes the
+           persistent right-hand palette on desktop. -->
+      <div class="qnav" id="cbtNav" aria-label="Question navigator" style="display:none" role="navigation"></div>
       <div class="exam-bar">
         <button class="btn btn-ghost exam-nav-btn" onclick="cbtMove(-1)">Prev</button>
         <button class="btn exam-qnum-btn" onclick="qPanelOpen('cbt')"><span id="cbtPanelLabel">Q 1 / 40</span> <span class="exam-grid-icon">&#9783;</span></button>
         <button class="btn btn-outline exam-nav-btn" onclick="cbtMove(1)">Next</button>
         <button class="btn btn-red exam-nav-btn" onclick="submitCBT()">Submit</button>
       </div>
-      <!-- Hidden nav kept for JS compatibility -->
-      <div class="qnav" id="cbtNav" style="display:none"></div>
     </section>
 
     <!-- ============ WEB TEST — HUB (Priority 3) ============ -->
@@ -2120,8 +2098,8 @@
   <!-- ============ TABBAR ============ -->
   <!-- Mobile-only slide-out menu for the public homepage.
        Hidden entirely at >=900px, where the inline nav links are used. -->
-      <div class="lp-scrim" id="lpScrim" onclick="closeDrawer()"></div>
-      <aside class="lp-drawer" id="lpDrawer" aria-hidden="true">
+      <div class="lp-scrim" id="lpScrim" aria-hidden="true" onclick="closeDrawer()"></div>
+      <aside class="lp-drawer" id="lpDrawer" role="dialog" aria-modal="true" aria-label="Site menu" aria-hidden="true">
         <div class="dw-head">
           <div class="lp-brand">
             <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
@@ -2132,10 +2110,9 @@
         <p class="dw-motto">Raising Smart Scholars for Academic Excellence</p>
         <nav class="dw-nav">
           <!-- Same approved destinations as before, ordered to match the page:
-               About, Subjects, Programmes, How it works, Try GOC, Contact, Updates. -->
+               About, Subjects, How it works, Try GOC, Contact, Updates. -->
           <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>About G.O.C</button>
           <button onclick="dwGoTo('lpSubjects')"><span class="dwi">◇</span>Subjects offered</button>
-          <button onclick="dwGoTo('lpTiers')"><span class="dwi">◇</span>Programmes</button>
           <button onclick="dwGoTo('lpHow')"><span class="dwi">◇</span>How it works</button>
           <button onclick="dwGoTo('lpTry')"><span class="dwi">◇</span>Try GOC — free practice</button>
           <button onclick="dwGoTo('contact')"><span class="dwi">◇</span>Contact us</button>

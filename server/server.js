@@ -9918,66 +9918,26 @@ const ROUTES = [
 
 ];
 
-/* ------------------------------------------------------------ CRAWLER SHIELD
-   Phase 3D slice 1, revised for pitch readiness (approved). The public
-   interface is meant to be opened and inspected — including by interactive
-   AI assistants and browser agents acting at a person's request — while AI
-   TRAINING crawlers, search indexers and scrapers stay out, and everything
-   private stays exactly as protected as before. Three layers:
-     1. /robots.txt explicitly ALLOWS the interactive agents below, disallows
-        the training crawlers by name, and disallows everything else;
-     2. every response carries X-Robots-Tag noindex EXCEPT responses to an
-        interactive agent (so a page fetched for a user is not self-blocked,
-        while nothing is offered up for indexing);
-     3. any request whose User-Agent names a known training crawler,
-        search-engine bot or scraping tool gets a plain 403 (robots.txt alone
-        stays readable, so a polite crawler can learn it is not welcome).
-   Allowing an interactive agent changes nothing about authorization: the API
-   still demands its tokens, server/ and test/ are still never served, and
-   only the app's public file types are ever handed out. There is deliberately
-   no sitemap. Honest limit: a scraper can fake its User-Agent — but a faked
-   interactive identity only reaches what any visitor's browser can reach. */
-const ROBOTS_DIRECTIVE = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
-
-/* Interactive, user-directed AI browsing agents: they fetch a public page at
-   a person's request so that person can read and inspect it. Allowed. */
-const INTERACTIVE_AGENTS = ['ChatGPT-User', 'Claude-Web', 'Claude-User', 'Perplexity-User'];
-
-/* AI training / indexing crawlers. Barred by name, in robots.txt and by 403. */
-const AI_CRAWLERS = [
-  'GPTBot', 'OAI-SearchBot', 'ClaudeBot', 'anthropic-ai',
-  'Google-Extended', 'CCBot', 'PerplexityBot', 'Bytespider',
-  'Amazonbot', 'Applebot-Extended', 'Meta-ExternalAgent', 'Meta-ExternalFetcher',
-  'FacebookBot', 'cohere-ai', 'Diffbot', 'ImagesiftBot', 'Omgilibot', 'YouBot',
-  'Timpibot', 'PetalBot', 'AI2Bot', 'Scrapy'
+/* ------------------------------------------------------------ CRAWLER ACCESS
+   The public site is deliberately open to crawlers, search engines and
+   user-directed AI assistants. There is no bot User-Agent gate: a crawler may
+   fetch the homepage and every public static file (HTML, CSS, JS, manifest,
+   images) one by one, exactly as a browser can. Private routes remain private:
+   /server/ and /test/ are never served, the static allow-list below still
+   refuses source documents and unknown file types, and every API keeps its
+   normal authorization checks. */
+const CRAWLER_AGENTS = [
+  'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-Web', 'Claude-User',
+  'anthropic-ai', 'Google-Extended', 'PerplexityBot', 'Perplexity-User',
+  'Googlebot', 'bingbot', 'DuckDuckBot', 'Baiduspider', 'YandexBot',
+  'CCBot', 'Bytespider', 'Amazonbot', 'Applebot', 'Applebot-Extended',
+  'Meta-ExternalAgent', 'Meta-ExternalFetcher', 'FacebookBot', 'cohere-ai',
+  'Diffbot', 'ImagesiftBot', 'Omgilibot', 'YouBot', 'Timpibot', 'PetalBot',
+  'AI2Bot', 'Scrapy', 'AhrefsBot', 'SemrushBot', 'archive.org_bot', 'ia_archiver'
 ];
-const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\n').join('\n')
-  + '\n' + AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
-  + '\nUser-agent: *\nDisallow: /\n';
-
-/* Turn barred crawlers away. The politeness layer above only binds crawlers
-   that obey it; this refuses the ones that announce themselves. Generic
-   HTTP-library names (Go-http-client, node-fetch) are deliberately NOT
-   listed: hosting health checks use them. */
-const OTHER_BOTS = [
-  'Googlebot', 'AdsBot-Google', 'Google-InspectionTool', 'GoogleOther', 'bingbot', 'BingPreview',
-  'Slurp', 'DuckDuckBot', 'Baiduspider', 'YandexBot', 'Sogou', 'Exabot', 'SeznamBot', 'facebookexternalhit',
-  'AhrefsBot', 'SemrushBot', 'MJ12bot', 'DotBot', 'BLEXBot', 'DataForSeoBot', 'Barkrowler',
-  'archive.org_bot', 'ia_archiver', 'HTTrack', 'wget', 'python-requests', 'aiohttp', 'libwww-perl'
-];
-function uaRegExp(names) {
-  return new RegExp(names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
-}
-const BOT_RE = uaRegExp(AI_CRAWLERS.concat(OTHER_BOTS));
-function isCrawler(req) {
-  const ua = String(req.headers['user-agent'] || '');
-  return ua.length > 0 && BOT_RE.test(ua);
-}
-const INTERACTIVE_RE = uaRegExp(INTERACTIVE_AGENTS);
-function isInteractiveAgent(req) {
-  const ua = String(req.headers['user-agent'] || '');
-  return ua.length > 0 && INTERACTIVE_RE.test(ua);
-}
+const ROBOTS_TXT = ['User-agent: *', 'Allow: /', '']
+  .concat(CRAWLER_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\n'))
+  .join('\n') + '\nSitemap: https://gocacademy.live/sitemap.xml\n';
 
 /* Static files are public and unauthenticated, so they get a per-IP limit the
    way login does: a fixed one-minute window. The app itself fetches about a
@@ -10007,6 +9967,7 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.xml': 'application/xml; charset=utf-8',
   '.md': 'text/plain; charset=utf-8'
 };
 
@@ -10019,7 +9980,7 @@ const TYPES = {
 const PUBLIC_ROOT = process.env.GOC_PUBLIC_DIR ? path.resolve(ROOT, process.env.GOC_PUBLIC_DIR) : ROOT;
 /* Read once at boot, like the other deployment switches: changing it needs a
    restart so a running process cannot half-enter or half-leave maintenance. */
-const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico']);
+const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico', '.xml']);
 
 function serveStatic(req, res, urlPath) {
   let rel;
@@ -10075,10 +10036,8 @@ const server = http.createServer(async (req, res) => {
   // X-Frame-Options stops other sites framing the hub (clickjacking) while
   // leaving the app's own framing and top-level AI-browser visits untouched.
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  // Interactive AI agents are exempt from the noindex directive: a page they
-  // fetch at a user's request must not tell them to stay out. Everyone else
-  // (browsers, health checks, and the crawlers refused below) still gets it.
-  if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
+  // No X-Robots-Tag: the public site is indexable and crawlable, including by
+  // AI assistants. Private paths are protected by their normal auth/404 rules.
 
   /* MAINTENANCE GATE (Workstream A) — before the password
      setup link, static files, any session lookup and every API route. See
@@ -10096,11 +10055,6 @@ const server = http.createServer(async (req, res) => {
       'X-Content-Type-Options': 'nosniff'
     });
     return res.end(req.method === 'HEAD' ? undefined : ROBOTS_TXT);
-  }
-
-  if (isCrawler(req)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end('Forbidden');
   }
 
   if (urlPath.indexOf('/api/') !== 0) {

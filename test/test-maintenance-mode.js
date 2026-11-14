@@ -13,8 +13,8 @@
                  and the same records are still there.
 
    Also proves the Appwrite Function gate (GOC_MAINTENANCE_MODE in config.js)
-   and both build paths (maintenance build emits only index.html + sw.js; the
-   normal build emits the full app again).
+   and both build paths (maintenance build emits index.html + sw.js + an
+   allow-all robots.txt; the normal build emits the full app again).
 
    Run:  node test/test-maintenance-mode.js
    Needs esbuild only for the final "normal build" half; without it that half
@@ -147,7 +147,7 @@ var child = null;
   ok('it is self-contained (inline SVG, no remote asset)', /<svg/.test(home.raw) && !/(?:src|href)="https?:/i.test(home.raw));
   ok('it carries no reopening date', !/\b(19|20)\d\d-\d\d-\d\d\b|\b\d{1,2}(st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\b/.test(home.raw));
   ok('no private application data is echoed', !/GOC-S-\d|GOC-A-\d|passcode|data\.json|APPWRITE|Scholar ID:/i.test(home.raw));
-  ok('it is marked no-store and noindex', /no-store/.test(home.headers['cache-control'] || '') && /noindex/.test(home.headers['x-robots-tag'] || ''), home.headers['x-robots-tag']);
+  ok('it is marked no-store and carries no crawler block', /no-store/.test(home.headers['cache-control'] || '') && !/noindex|nofollow/i.test(home.headers['x-robots-tag'] || ''), home.headers['x-robots-tag']);
   ok('it advertises a retry', home.headers['retry-after'] === '3600', home.headers['retry-after']);
   ok('it is not frameable by another origin', /frame-ancestors 'self'/.test(home.headers['content-security-policy'] || '') && /SAMEORIGIN/.test(home.headers['x-frame-options'] || ''));
 
@@ -190,7 +190,7 @@ var child = null;
   var healthPost = await request('POST', '/api/health', { body: {} });
   ok('health refuses a write method', healthPost.status === 405, healthPost.status);
   var robots = await request('GET', '/robots.txt');
-  ok('robots.txt disallows everything', robots.status === 200 && /Disallow: \//.test(robots.raw), robots.raw);
+  ok('robots.txt still allows crawlers', robots.status === 200 && /Allow: \//.test(robots.raw) && !/Disallow: \//.test(robots.raw), robots.raw);
 
   head('the cached application cannot be navigated back into');
   var sw = await request('GET', '/sw.js');
@@ -283,7 +283,11 @@ var child = null;
   });
   ok('the maintenance build reports what it did', /Maintenance build/.test(mBuild), mBuild);
   var mFiles = fs.readdirSync(mOut).sort();
-  ok('it emits only index.html and sw.js', mFiles.length === 2 && mFiles[0] === 'index.html' && mFiles[1] === 'sw.js', mFiles.join());
+  ok('it emits index.html, sw.js and an allow-all robots.txt',
+    mFiles.length === 3 && mFiles.indexOf('index.html') > -1 && mFiles.indexOf('sw.js') > -1
+    && mFiles.indexOf('robots.txt') > -1, mFiles.join());
+  ok('  the static robots.txt allows crawlers',
+    /User-agent: \*\s*\nAllow: \//.test(fs.readFileSync(path.join(mOut, 'robots.txt'), 'utf8')));
   var mHtml = fs.readFileSync(path.join(mOut, 'index.html'), 'utf8');
   ok('the emitted page is the announcement', mHtml.indexOf(M.HEADLINE) > -1 && mHtml.indexOf(M.CLOSING) > -1);
   ok('it ships no application script', mHtml.indexOf('js/app.js') < 0 && mHtml.indexOf('<script') < 0);
