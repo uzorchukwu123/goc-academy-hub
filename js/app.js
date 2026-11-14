@@ -496,6 +496,8 @@ function openDrawer(){
   drawerScrollLock(true);
   /* Move keyboard focus into the menu once the slide-in has begun. */
   setTimeout(function(){
+    var d = document.getElementById('lpDrawer');
+    if(!d || !d.classList.contains('on')) return;
     var f = drawerFocusables();
     if(f.length && f[0].focus) f[0].focus();
   }, 30);
