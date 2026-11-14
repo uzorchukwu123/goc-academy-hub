@@ -3464,3 +3464,16 @@ a.cv:hover{color:var(--red)}
 .goc-tour-next{ background:#DC2626; color:#fff; border:0; border-radius:12px; padding:11px 20px; font-size:14px; font-weight:800; cursor:pointer; font-family:inherit; }
 .goc-tour-next:hover{ background:#B91C1C; }
 @media (max-width:480px){ .goc-tour-card{ padding:16px 16px 12px; } }
+
+/* ============ LANDING: announcements, Try GOC, parents (Stage 9) ============ */
+.lp-news-list{ display:grid; gap:10px; margin-top:16px; }
+.lp-news-card{ background:#fff; border:1px solid var(--line,#E5E7EB); border-radius:14px; padding:14px 16px; text-align:left; }
+.lp-news-card h3{ font-size:15px; margin:6px 0 4px; color:#111827; }
+.lp-news-card p{ font-size:13px; color:#4B5563; line-height:1.55; margin:0 0 8px; }
+.lp-news-meta{ display:flex; gap:8px; align-items:center; font-size:11.5px; color:#9CA3AF; }
+.lp-news-more{ background:none; border:0; color:#DC2626; font-weight:800; font-size:13px; cursor:pointer; padding:0; font-family:inherit; }
+.lp-news-empty{ font-size:13px; color:#9CA3AF; }
+.lp-try{ text-align:left; }
+.lp-try-btn{ margin-top:14px; }
+.lp-try-note{ font-size:12.5px; color:#9CA3AF; margin-top:10px; line-height:1.5; }
+@media (min-width:720px){ .lp-news-list{ grid-template-columns:repeat(3,1fr); } }

@@ -92,6 +92,9 @@
                Mode; in Free Tutorial Mode it stands down (css/free2027.css) so
                a free-tutorial student is never sent to an account they never
                created. Nothing is deleted and the hub login page still works. -->
+          <button class="lp-link" onclick="dwGoTo('lpTiers')">Programmes</button>
+          <button class="lp-link" onclick="go('updates')">Updates &amp; News</button>
+          <button class="lp-link" onclick="dwGoTo('lpTry')">Try GOC free</button>
           <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
           <button class="lp-link dw-original dw-hub-login" onclick="go('login-v2')">Log in</button>
           <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
@@ -115,6 +118,7 @@
                    position and visibility in both modes; only its destination
                    is mode-aware (heroAccount): the hub login in Original Mode,
                    the edition's student login in Free Tutorial Mode. -->
+              <button class="lp-btn-light" onclick="dwGoTo('lpTry')">Try a free practice session</button>
               <button class="lp-btn-light hero-cbt" onclick="freeCbtPortal()">CBT Portal</button>
               <button class="lp-btn-light hero-original-cta" onclick="go('signup')">Get started</button>
               <button class="lp-btn-ghost" onclick="heroAccount()">I already have an account</button>
@@ -157,7 +161,7 @@
       </div>
 
       <div class="lp-sec" id="lpFeatures">
-        <div class="lp-eyebrow">One connected ecosystem</div>
+        <div class="lp-eyebrow">About G.O.C Academy Hub</div>
         <h2>Three parts working as one</h2>
         <p class="lead">Tutoring teaches. AI literacy builds understanding. The web app gives every student a structured place to learn, practise and track real progress.</p>
         <div class="lp-grid">
@@ -241,7 +245,7 @@
            js/app.js and the motion block in css/styles.css; without them this is
            still a working swipeable strip. -->
       <div class="lp-sec hw-sec" id="lpHow">
-        <div class="lp-eyebrow">How it works</div>
+        <div class="lp-eyebrow">The Independent Scholars System</div>
         <h2>From learner to independent scholar</h2>
         <p class="hw-hint">Swipe, or use the side dots, to move through the four steps</p>
         <div class="hw" id="hw">
@@ -327,6 +331,12 @@
         </div>
       </div>
 
+      <div class="lp-sec" id="lpParents">
+        <div class="lp-eyebrow">Parents, schools &amp; partners</div>
+        <h2>See the learning, not just the promise</h2>
+        <p class="lead">Students learn with expert tutors, practise in a structured app, and sit assessed tests whose results are reviewed question by question. Parents can follow every important announcement above, try the free preview, and talk to the academy directly — no account needed for any of that.</p>
+        <div class="hero-btns"><button class="lp-btn-light" type="button" onclick="dwGoTo('lpTry')">Try the free preview</button><button class="lp-btn-ghost" type="button" onclick="scrollToContact()">Contact the academy</button></div>
+      </div>
       <div class="lp-sec alt" id="contact">
         <div class="lp-eyebrow">Get in touch</div>
         <h2>Talk to G.O.C Academy</h2>
@@ -361,6 +371,14 @@
       </div>
 
       <!-- Updates & News intro — a calm teaser that invites visitors without blocking the page -->
+      <div class="lp-sec lp-try" id="lpTry">
+        <div class="lp-eyebrow">Try G.O.C</div>
+        <h2>Free JAMB Practice Preview</h2>
+        <p class="lead">Experience a JAMB-style practice session and discover how learning works at G.O.C Academy Hub. Five questions, real explanations — no account, no name, no email needed.</p>
+        <button class="lp-cta lp-try-btn" type="button" onclick="demoOpen()">Try a free practice session</button>
+        <p class="lp-try-note">Sample questions written for this preview. They are not official JAMB questions, and nothing you do here is recorded.</p>
+      </div>
+
       <div class="lp-sec lp-news-intro" id="lpNewsIntro">
         <div class="lp-news-intro-inner">
           <div class="lp-news-intro-icon" aria-hidden="true">
@@ -374,6 +392,7 @@
               Learn more
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
+            <div class="lp-news-list" id="lpNewsList"><p class="lp-news-empty">Loading the latest announcements…</p></div>
           </div>
         </div>
       </div>
@@ -2180,7 +2199,9 @@
         </div>
         <p class="dw-motto">Raising Smart Scholars for Academic Excellence</p>
         <nav class="dw-nav">
-          <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>The ecosystem</button>
+          <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>About G.O.C</button>
+          <button onclick="dwGoTo('lpTiers')"><span class="dwi">◇</span>Programmes</button>
+          <button onclick="dwGoTo('lpTry')"><span class="dwi">◇</span>Try GOC — free practice</button>
           <button onclick="dwGoTo('lpSubjects')"><span class="dwi">◇</span>Subjects offered</button>
           <button onclick="dwGoTo('lpHow')"><span class="dwi">◇</span>How it works</button>
           <button onclick="dwGoTo('contact')"><span class="dwi">◇</span>Contact us</button>

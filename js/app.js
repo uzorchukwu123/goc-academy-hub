@@ -1454,15 +1454,50 @@ function sendContact(){
 var updatesData = [];      // cache of GET /updates
 
 /* Homepage updates are public, so this runs before anyone logs in. */
+/* Landing "Latest announcements" (Stage 9): the top three of the same
+   public feed the Updates & News screen renders — one source, two
+   presentations, never a duplicate news store. Bodies are summarised
+   here; the full text lives one click away on the Updates screen. */
+function lpSummary(text, n){
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if(t.length <= n) return t;
+  var cut = t.slice(0, n);
+  var sp = cut.lastIndexOf(' ');
+  return (sp > 40 ? cut.slice(0, sp) : cut) + '…';
+}
+function renderLpNews(){
+  var host = document.getElementById('lpNewsList');
+  if(!host) return;
+  var labels = { admission: 'Admission', utme: 'UTME', scholarship: 'Scholarship', news: 'News' };
+  var rows = (updatesData || []).slice(0, 3);
+  if(!rows.length){
+    host.innerHTML = '<p class="lp-news-empty">No announcements yet — new ones will appear here and on the Updates &amp; News page.</p>';
+    return;
+  }
+  host.innerHTML = rows.map(function(u){
+    return '<article class="lp-news-card"><div class="lp-news-meta"><span class="up-tag ' + esc(u.cat || 'news') + '">'
+      + esc(labels[u.cat] || 'News') + '</span><span>' + esc(u.date || '') + '</span></div>'
+      + '<h3>' + esc(u.title || '') + '</h3><p>' + esc(lpSummary(u.body, 150)) + '</p>'
+      + '<button type="button" class="lp-news-more" onclick="lpNewsOpen(\'' + esc(u.cat || 'news') + '\')">Read more →</button></article>';
+  }).join('');
+}
+function lpNewsOpen(cat){
+  go('updates');
+  upActiveFilter = cat;
+  renderUpdates();
+}
 function loadUpdates(){
   return GOC.api.listUpdates().then(function(rows){
     updatesData = rows || [];
     renderUpdates();
+    renderLpNews();
     var mu = document.getElementById('admUpList'); if(mu) mu.innerHTML = admUpdatesHTML();
     return updatesData;
   }).catch(function(){
     var l = document.getElementById('upList');
     if(l) l.innerHTML = '<p class="ad-p">Updates could not be loaded right now.</p>';
+    var ln = document.getElementById('lpNewsList');
+    if(ln) ln.innerHTML = '<p class="lp-news-empty">Announcements could not be loaded right now — please try again shortly.</p>';
     return [];
   });
 }
