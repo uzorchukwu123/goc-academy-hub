@@ -72,6 +72,17 @@ ok('the authenticated tab bar/sidebar is not displayed', style('tabbar', 'displa
 ok('the preview header names the public experience and offers Home',
   /Try G\.O\.C — Free Practice Preview/.test(markup('demo')) && /Back to homepage/.test(markup('demo')));
 
+head('session state cannot turn the preview into a student shell');
+run('ss.on = true; ss.expiresAt = Date.now() - 1000; demoOpen();');
+ok('an expired student session still opens the anonymous preview', shown('demo')
+  && id('phone').classList.contains('is-login') && style('tabbar', 'display') === 'none');
+ok('an expired session is not redirected to the dashboard', !shown('home') && !shown('login-v2'));
+run('ss.on = true; ss.expiresAt = Date.now() + 60000; demoOpen();');
+ok('a valid student session also opens the anonymous preview', shown('demo')
+  && id('phone').classList.contains('is-login') && style('tabbar', 'display') === 'none');
+ok('a valid session does not leak the dashboard on the preview', !shown('home') && !shown('study'));
+run('ss.on = false; ss.expiresAt = 0;');
+
 head('the shared CBT runner keeps the public shell and real controls');
 run('cbtOpenDemo(' + JSON.stringify({ token: 'token-1', questions: QUESTIONS, durationSec: 600 }) + ')');
 ok('the CBT runner is active', shown('cbt'));
@@ -104,6 +115,8 @@ run('go("home")');
 ok('a real hub screen restores the student shell', !id('phone').classList.contains('is-login')
   && style('tabbar', 'display') === 'flex', style('tabbar', 'display'));
 ok('the dashboard content itself is still present and active', shown('home') && !!id('dashHello'));
+ok('the session guard still protects authenticated screens after the preview',
+  /if\(openScreens\.indexOf\(id\) < 0 && !demoSurface && ssExpired\(\)\)/.test(read('js/app.js')));
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

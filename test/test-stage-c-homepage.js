@@ -100,6 +100,15 @@ var nav = section('<nav class="dw-nav">', '</nav>');
 var buttons = section('<div class="dw-btns">', '</div>');
 ok('the drawer keeps its identity, scrim and close control',
   /id="lpDrawer"/.test(index) && /class="lp-scrim" id="lpScrim"/.test(index) && /class="dw-x"[^>]*aria-label="Close menu"/.test(index));
+ok('the drawer is a labelled modal dialog for assistive technology',
+  /<aside class="lp-drawer"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-label="Site menu"/.test(index)
+  && /<button class="lp-burger"[^>]*aria-controls="lpDrawer"[^>]*aria-expanded="false"[^>]*id="lpBurger"/.test(index)
+  && /class="lp-scrim" id="lpScrim" aria-hidden="true"/.test(index));
+ok('drawer controls have comfortable touch targets and cannot be clipped',
+  /\.lp-drawer\{[^}]*overscroll-behavior:contain/.test(css)
+  && /\.dw-nav button\{[^}]*min-height:50px/.test(css)
+  && /\.dw-x\{[^}]*width:40px[^}]*height:40px/.test(css)
+  && /@media \(max-width:360px\)\{[\s\S]*?\.lp-drawer\{/.test(css));
 ok('drawer markup still exposes the existing navigation and account groups',
   nav.length > 0 && buttons.length > 0 && /id="lpDrawer"/.test(drawer));
 ok('the drawer links mirror the landing order (About, Subjects, How, Try, Contact, Updates)',
@@ -173,16 +182,21 @@ var ctx = {
   setTimeout: function (fn) { fn(); },
   go: function (id) { goCalls.push(id); }
 };
-vm.runInNewContext([grab('drawerEls'), grab('openDrawer'), grab('closeDrawer'), grab('dwGo'), grab('dwGoTo')].join('\n'), ctx);
+vm.runInNewContext('var drawerReturnFocus = null;\n' + [grab('drawerEls'), grab('drawerFocusables'), grab('drawerScrollLock'), grab('openDrawer'), grab('closeDrawer'), grab('dwGo'), grab('dwGoTo')].join('\n'), ctx);
 
 ctx.openDrawer();
 ok('openDrawer adds .on, un-hides the drawer and expands the burger',
   els.lpDrawer.classes.on === true && els.lpScrim.classes.on === true
-  && els.lpDrawer.attrs['aria-hidden'] === 'false' && els.lpBurger.attrs['aria-expanded'] === 'true');
+  && els.lpDrawer.attrs['aria-hidden'] === 'false' && els.lpBurger.attrs['aria-expanded'] === 'true'
+  && els.lpBurger.attrs['aria-label'] === 'Close menu');
 ctx.closeDrawer();
 ok('closeDrawer reverses the same state',
   !els.lpDrawer.classes.on && !els.lpScrim.classes.on
-  && els.lpDrawer.attrs['aria-hidden'] === 'true' && els.lpBurger.attrs['aria-expanded'] === 'false');
+  && els.lpDrawer.attrs['aria-hidden'] === 'true' && els.lpBurger.attrs['aria-expanded'] === 'false'
+  && els.lpBurger.attrs['aria-label'] === 'Open menu');
+ok('Escape and Tab are handled while the menu is open',
+  /addEventListener\('keydown'/.test(app) && /ev\.key === 'Escape'/.test(app)
+  && /ev\.key !== 'Tab'/.test(app) && /drawerFocusables\(\)/.test(app));
 
 drawerTargets.forEach(function (id) {
   scrollCalls.length = 0;
