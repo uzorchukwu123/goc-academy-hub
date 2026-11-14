@@ -817,20 +817,20 @@
       <div class="dash-hero" id="tut-hero">
         <span class="hero-glow" aria-hidden="true"></span>
         <svg class="hero-mark" aria-hidden="true" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg>
-        <div class="statusbar"><span class="brandline"><svg class="gmark" style="width:22px;height:22px;color:#fff" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg><b>G.O.C Academy Hub</b></span><span id="dashExamLine">UTME 2027 · Sciences</span></div>
+        <div class="statusbar"><span class="brandline"><svg class="gmark" style="width:22px;height:22px;color:#fff" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg><b>G.O.C Academy Hub</b></span><span id="dashExamLine">UTME 2027</span></div>
         <div class="row between">
           <div>
-            <div class="hello" id="dashHello">Good afternoon,</div>
-            <div class="name" id="dashName">Amara 👋</div>
+            <div class="hello" id="dashHello">Welcome,</div>
+            <div class="name" id="dashName">Loading…</div>
           </div>
           <div class="row gap8">
-            <span class="chip" style="background:rgba(255,255,255,.16);color:#fff" id="dashStreakChip">🔥 12</span>
+            <span class="chip" style="background:rgba(255,255,255,.16);color:#fff" id="dashStreakChip">…</span>
           </div>
         </div>
         <div class="hero-stats">
-          <div class="hstat"><div class="v" id="dashLevel">Lv 8</div><div class="l">Scholar</div></div>
-          <div class="hstat"><div class="v gold" id="dashXp">1,240</div><div class="l">Academy XP</div></div>
-          <div class="hstat"><div class="v gold" id="dashStreak">12 🔥</div><div class="l">Day streak</div></div>
+          <div class="hstat"><div class="v" id="dashLevel">—</div><div class="l">Scholar</div></div>
+          <div class="hstat"><div class="v gold" id="dashXp">—</div><div class="l">Academy XP</div></div>
+          <div class="hstat"><div class="v gold" id="dashStreak">—</div><div class="l">Day streak</div></div>
         </div>
       </div>
 
@@ -905,6 +905,9 @@
           <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
         </div>
 
+        <div class="sec-head"><div class="section-t">Next Up</div></div>
+        <div class="card wrap dash-card"><div id="dashUp"><div class="wt-none">Working out your next step…</div></div></div>
+
         <div class="sec-head" id="tut-webtest"><div class="section-t">Waiting for you</div><button class="ss-link" onclick="openWebTest()">Open Web Test</button></div>
         <div class="card wrap dash-card"><div id="dashNext"><div class="wt-none">Checking your papers…</div></div></div>
 
@@ -923,12 +926,17 @@
         <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
         <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
 
+                <div class="sec-head"><div class="section-t">Your subjects</div><button class="ss-link" onclick="go('study')">Study</button></div>
+        <div class="card wrap dash-card"><div id="dashSubjects"><div class="wt-none">Loading your subjects…</div></div></div>
+
         <div class="sec-head"><div class="section-t">Carry on</div></div>
         <div class="dash-jump" id="tut-jump">
           <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
           <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
           <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
           <button class="dj" onclick="openMyNotes()"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>My Notes</b><s>Your private uploads</s></button>
+          <button class="dj" onclick="openCBT()"><span class="dj-i" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>Study CBT</b><s>Timed, marked at the end</s></button>
+          <button class="dj" onclick="go('resources')"><span class="dj-i" style="background:#475467"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg></span><b>Resources</b><s>Academy library</s></button>
           <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
         </div>
         <div class="spacer"></div>

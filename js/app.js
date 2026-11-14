@@ -1176,7 +1176,7 @@ function logout(){
   var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   var entry = document.getElementById('adminEntry'); if(entry) entry.style.display='none';
   // Blank the identity fields so a signed-out page never shows the last user.
-  ['idName','idCode','dashId','dashName','profName','profId','admWho'].forEach(function(k){
+  ['idName','idCode','dashId','dashName','profName','profId','admWho','dashLevel','dashXp','dashStreak','dashStreakChip'].forEach(function(k){
     var e = document.getElementById(k); if(e) e.textContent = '\u2014';
   });
   go('landing');
@@ -7997,6 +7997,17 @@ function openStudySet(mode, subject, past){
     live.forEach(function(e){ if(!pick && (!want || e.subject === want)) pick = e; });
     suSubj = (pick || live[0]).subject;
     suSelectAll(true);
+    /* Next Up's weakest-topic recommendation narrows the set-up to that one
+       topic when the subject really holds it; anything else keeps the
+       ordinary all-topics set-up. */
+    if(suMode === 'practice' && dashUpWeakPick){
+      if(canonSubject(dashUpWeakPick.subject) === suSubj
+         && suTopicList().some(function(t){ return t.topic === dashUpWeakPick.topic; })){
+        suPick = {};
+        suPick[dashUpWeakPick.topic] = true;
+      }
+      dashUpWeakPick = null;
+    }
     suResetYears();
     renderStudySet();
   }, function(err){
@@ -10078,6 +10089,8 @@ function renderDash(){
   var helloEl = document.getElementById('dashHello');
   if(helloEl && role === 'student') helloEl.textContent = greetingWord();
   dashPaintNext();
+  dashPaintUp();
+  dashPaintSubjects();
   dashPaintStanding();
   dashPaintLast();
   dashPaintBroadcasts();
@@ -10220,6 +10233,118 @@ function dashPaintLast(){
   }, function(){
     dashSet('dashLast', '<div class="wt-none">Your record is not available right now.</div>');
   });
+}
+
+/* ================= NEXT UP (Stage 5) =================
+   One recommended next step, chosen only from data the academy already
+   holds for this student, in a fixed priority: an unfinished available
+   exam paper first, then questions due for spaced review, then practice
+   on the weakest topic their own practice record shows. If a source
+   needed to rule out a higher priority cannot be read, the card says so
+   instead of guessing — it never invents a paper, a due count or a weak
+   topic. */
+var dashUpCurrent = null;
+var dashUpWeakPick = null;
+function dashUpFromTests(rows){
+  var rank = { objective: 0, jamb: 1, theory: 2 };
+  var open = (rows || []).filter(function(t){ return t && !t.completed && !t.locked; });
+  open.sort(function(a, b){ return (rank[a.section] != null ? rank[a.section] : 3) - (rank[b.section] != null ? rank[b.section] : 3); });
+  var t = open[0];
+  if(!t) return null;
+  var title = t.section === 'jamb' ? 'Sit your JAMB-oriented sitting'
+    : t.section === 'objective' ? 'Sit your Objective sitting'
+    : 'Sit your ' + (t.subject || '') + ' theory paper';
+  var sub = (Number(t.questions) || 0) + ' question' + (Number(t.questions) !== 1 ? 's' : '')
+    + (t.durationSec ? ' · ' + wtMinutes(t.durationSec) : ' · no time limit') + ' · waiting for you';
+  return { kind: 'paper', section: t.section, title: title, sub: sub, cta: 'Sit it' };
+}
+function dashUpFromReview(payload){
+  var q = (payload && payload.review) || payload || {};
+  var due = Number(q.dueCount) || 0;
+  if(!due) return null;
+  return { kind: 'review', title: 'Review what is due',
+           sub: due + ' question' + (due !== 1 ? 's are' : ' is') + ' due for another look, spaced so they stick', cta: 'Start review' };
+}
+function dashWeakTopic(runs){
+  var agg = {};
+  (runs || []).forEach(function(r){
+    (r.topics || []).forEach(function(t){
+      if(!t || !t.topic) return;
+      var key = (r.subject || '') + '|' + t.topic;
+      agg[key] = agg[key] || { subject: r.subject || '', topic: t.topic, sum: 0, runs: 0 };
+      agg[key].sum += Number(t.percent) || 0;
+      agg[key].runs++;
+    });
+  });
+  var best = null;
+  Object.keys(agg).forEach(function(k){
+    var a = agg[k];
+    a.percent = Math.round(a.sum / a.runs);
+    if(!best || a.percent < best.percent || (a.percent === best.percent && a.runs > best.runs)) best = a;
+  });
+  return best;
+}
+function dashUpPick(d){
+  var paper = dashUpFromTests(d.rows);
+  if(paper) return paper;
+  if(!d.testsOk) return { kind: 'unavailable' };
+  var review = dashUpFromReview(d.review);
+  if(review) return review;
+  if(!d.reviewOk) return { kind: 'unavailable' };
+  var weak = dashWeakTopic(d.runs);
+  if(weak) return { kind: 'practice', subject: weak.subject, topic: weak.topic, percent: weak.percent,
+    title: 'Practise ' + weak.topic,
+    sub: 'Your weakest topic in ' + (weak.subject || 'practice') + ' so far · ' + weak.percent + '% across ' + weak.runs + ' run' + (weak.runs !== 1 ? 's' : ''), cta: 'Practise it' };
+  if(!d.practiceOk) return { kind: 'unavailable' };
+  return { kind: 'start', title: 'Start with practice',
+           sub: 'No paper is waiting and nothing is due — build the habit one question at a time', cta: 'Open Practice' };
+}
+function dashUpFetch(fn){
+  try {
+    return Promise.resolve(fn()).then(function(v){ return { ok: true, value: v }; },
+                                      function(){ return { ok: false, value: null }; });
+  } catch(e){ return Promise.resolve({ ok: false, value: null }); }
+}
+function dashPaintUp(){
+  if(!document.getElementById('dashUp')) return;
+  if(!GOC.api) { dashSet('dashUp', '<div class="wt-none">Your next step is not available right now.</div>'); return; }
+  var tests = dashUpFetch(function(){ return GOC.api.listMyTests(); });
+  var review = dashUpFetch(function(){ return GOC.api.listReview(); });
+  var practice = dashUpFetch(function(){ return GOC.api.listPractice(); });
+  Promise.all([tests, review, practice]).then(function(rs){
+    var pick = dashUpPick({
+      testsOk: rs[0].ok, rows: (rs[0].value && rs[0].value.tests) || [],
+      reviewOk: rs[1].ok, review: rs[1].value,
+      practiceOk: rs[2].ok, runs: (rs[2].value && rs[2].value.runs) || []
+    });
+    dashUpCurrent = pick;
+    if(pick.kind === 'unavailable'){
+      dashSet('dashUp', '<div class="wt-none">Your next step is not available right now — your papers, review and practice below still work.</div>');
+      return;
+    }
+    dashSet('dashUp', '<div class="wt-row"><div class="nm"><b>' + esc(pick.title) + '</b><span>' + esc(pick.sub)
+      + '</span></div><button class="wt-start" onclick="dashUpGo()">' + esc(pick.cta) + '</button></div>');
+  });
+}
+function dashUpGo(){
+  var p = dashUpCurrent;
+  if(!p) return;
+  if(p.kind === 'paper'){ if(p.section === 'jamb') openJambTest(); else openWebTest(); return; }
+  if(p.kind === 'review'){ go('review'); return; }
+  if(p.kind === 'practice'){ dashUpWeakPick = { subject: p.subject, topic: p.topic }; openStudySet('practice', p.subject); return; }
+  openPractice();
+}
+function dashPaintSubjects(){
+  if(!document.getElementById('dashSubjects')) return;
+  var subs = mySubjects || [];
+  if(!subs.length){
+    dashSet('dashSubjects', '<div class="wt-none">Your subjects appear here once your combination is set on your account.</div>');
+    return;
+  }
+  dashSet('dashSubjects', subs.map(function(s){
+    return '<div class="wt-row"><div class="nm"><b>' + esc(s) + '</b><span>Your paper</span></div>'
+      + '<button class="wt-start" onclick="openStudySet(\'practice\',&quot;' + esc(s) + '&quot;)">Practise</button></div>';
+  }).join(''));
 }
 
 /* ================= THE SCHOLAR LEAGUE (Priorities 10, 11, 12) =================
