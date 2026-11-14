@@ -1,11 +1,10 @@
 /* test-no-open-student.js — Stage A: the Open Student tier is gone.
    One student identity (G.O.C STUDENT) with the full entitlement set.
-   Proves, over the pure rules and real HTTP:
+   Proves, over the pure rules and real HTTP (Stage B registration flow):
      · the core no longer exports tier machinery (TIERS / cleanTier);
      · every feature is available to every student and limits are the
        former full (GOC) limits;
-     · a self-registered student is stored with NO tier key, is pending
-       until approved, then signs in with full access;
+     · an approved registration produces a student record with NO tier key;
      · /api/me carries features/limits and no tier;
      · both tier-switch routes are gone (404);
      · a legacy record carrying a stored tier:'open' value loads and
@@ -56,7 +55,7 @@ var serverLog = '', child = null;
 function boot() {
   serverLog = '';
   child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')], {
-    cwd: SANDBOX, env: Object.assign({}, process.env, { PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'), GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027' }), stdio: ['ignore', 'pipe', 'pipe'] });
+    cwd: SANDBOX, env: Object.assign({}, process.env, { PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'), GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027', GOC_PUBLIC_URL: 'https://hub.example.ng', GOC_REMINDER_DRY_RUN: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', function (c) { serverLog += c; });
   child.stderr.on('data', function (c) { serverLog += c; });
 }
@@ -82,35 +81,46 @@ function waitForBoot(tries) {
   });
 }
 function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server', 'data.json'), 'utf8')); }
+function setupTokenFor(email) {
+  try {
+    var lines = fs.readFileSync(path.join(SANDBOX, 'server', 'reminders-outbox.jsonl'), 'utf8').split('\n').filter(Boolean).map(function (l) { return JSON.parse(l); });
+    var m = lines.filter(function (x) { return x.to === email; }).pop();
+    var match = m && /\/setup\/([A-Za-z0-9_-]+)/.exec(m.text || '');
+    return match ? match[1] : null;
+  } catch (e) { return null; }
+}
 var COMBO = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
 
 boot();
 waitForBoot(30).then(async function (h) {
-  head('sign-up stores no tier and waits for approval');
+  head('registration stores no tier; approval creates the one student kind');
   ok('server is up', h.status === 200, h.raw);
   var lin = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
   var adm = lin.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
-  var reg = await call('POST', '/api/students', { name: 'New Student', password: 'secret123',
+  var code = (await call('POST', '/api/registrations/codes', { label: 'Tier check', maxUses: 5 }, adm)).body.code;
+  var reg = await call('POST', '/api/registrations', { code: code, name: 'New Student', password: 'secret123',
     email: 'new.student@example.com', phone: '08022220000', goal: 'JAMB / UTME 2027', subjects: COMBO,
     privacyConsent: { accepted: true } });
-  ok('sign-up succeeds', reg.status === 200 || reg.status === 201, reg.raw);
-  var sid = reg.body && reg.body.student && reg.body.student.id;
-  ok('the sign-up reply carries no tier', !!sid && !('tier' in reg.body.student), reg.raw.slice(0, 200));
-  var stored = readDb().students.find(function (s) { return s.id === sid; });
-  ok('the stored record carries no tier key', !!stored && !('tier' in stored), stored && JSON.stringify(Object.keys(stored)));
-  ok('the account is pending approval (not active yet)', !!stored && stored.active === false && stored.pendingApproval === true);
-  var early = await call('POST', '/api/auth/login', { id: sid, password: 'secret123' });
-  ok('a pending account cannot sign in', early.status === 401 || early.status === 403, early.status + ' ' + early.raw.slice(0, 120));
-
-  head('approval gives the one full access');
-  var ap = await call('POST', '/api/students/' + sid + '/approve', null, adm);
+  ok('the application is received', reg.status === 200 && reg.body.received === true, reg.raw);
+  var db0 = readDb();
+  var app = db0.registrationApplications[0];
+  ok('no student record and no tier anywhere yet', db0.students.length === 0 && !/"tier"/.test(JSON.stringify(app)), JSON.stringify(app).slice(0, 160));
+  var ap = await call('POST', '/api/registrations/applications/' + app.id + '/approve', null, adm);
   ok('the founder approves', ap.status === 200, ap.raw.slice(0, 160));
+  var sid = ap.body.application.scholarId;
+  var stored = readDb().students.find(function (s) { return s.id === sid; });
+  ok('the stored student record carries no tier key', !!stored && !('tier' in stored) && stored.active === true, stored && JSON.stringify(Object.keys(stored)));
+  var early = await call('POST', '/api/auth/login', { id: sid, password: 'secret123' });
+  ok('before password setup, sign-in is refused (no tier involvement)', early.status === 403 && /Set your password/.test(early.body.error || ''), early.raw.slice(0, 160));
+  var token = setupTokenFor('new.student@example.com');
+  ok('the setup link was emailed', !!token);
+  ok('password setup completes', (await call('POST', '/api/registrations/setup', { token: token, password: 'secret123' })).status === 200);
   var login = await call('POST', '/api/auth/login', { id: sid, password: 'secret123' });
   ok('the approved student signs in', login.status === 200 && !!login.body.token, login.raw.slice(0, 160));
   var tok = login.body.token;
   var me = await call('GET', '/api/me', null, tok);
-  ok('/api/me answers with no tier anywhere', me.status === 200 && !('tier' in (me.body.student || me.body)) && !/"tier"/.test(me.raw), me.raw.slice(0, 200));
+  ok('/api/me answers with no tier anywhere', me.status === 200 && !/"tier"/.test(me.raw), me.raw.slice(0, 200));
   var feats = (me.body && (me.body.features || (me.body.student && me.body.student.features))) || {};
   var lims = (me.body && (me.body.limits || (me.body.student && me.body.student.limits))) || {};
   ok('/api/me carries the full feature set', feats.askTutor === true && feats.webTestObjective === true && feats.streakFreezes === true, JSON.stringify(feats).slice(0, 200));

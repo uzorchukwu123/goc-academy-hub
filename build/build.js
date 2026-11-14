@@ -29,7 +29,7 @@ if (OUT === ROOT || ROOT.startsWith(OUT + path.sep) || OUT === path.join(ROOT, '
   console.error('Refusing to build into ' + OUT); process.exit(1);
 }
 
-var TEST_HOOKS = ['_setJambReadyMin', '_grantXp'];
+var TEST_HOOKS = ['_setJambReadyMin', '_grantXp', '_setupTokenFor'];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
 function write(rel, data) {

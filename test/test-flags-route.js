@@ -55,13 +55,14 @@ waitForBoot(20).then(async function (h) {
   var lin = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
   adm = lin.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
-  var reg = await call('POST', '/api/students', { name: 'Tobi Flag', password: 'secret123',
-    email: 'tobi.flag@example.com', phone: '08011110000', goal: 'JAMB / UTME 2027', subjects: COMBO,
-    privacyConsent: { accepted: true } });
+  /* Stage B: enrolled through the console route — registration itself is
+     application-first now (covered by the registration suites), and every
+     approved student is a full G.O.C student, so no approval/tier step is
+     needed to stand one up here. */
+  var reg = await call('POST', '/api/admin/students', { name: 'Tobi Flag',
+    email: 'tobi.flag@example.com', phone: '08011110000', goal: 'JAMB / UTME 2027', subjects: COMBO }, adm);
   stuId = reg.body.student.id;
-  await call('POST', '/api/students/' + stuId + '/approve', {}, adm);
-  await call('PUT', '/api/students/' + stuId + '/tier', { tier: 'goc' }, adm);
-  stuTok = (await call('POST', '/api/auth/login', { id: stuId, password: 'secret123' })).body.token;
+  stuTok = (await call('POST', '/api/auth/login', { id: stuId, password: reg.body.temporaryPassword })).body.token;
   var qs = await call('GET', '/api/questions?subject=Chemistry&activeOnly=true', undefined, adm);
   var liveQ = ((qs.body && qs.body.questions) || []).filter(function (q) { return q.active && (q.status === undefined || q.status === 'live'); });
   qid = liveQ.length ? liveQ[0].id : null;

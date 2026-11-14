@@ -87,6 +87,13 @@
        the account has been closed by management but its history is kept. */
     var students = [];
 
+    /* Stage B: registration codes and applications (demo mirror). In-memory
+       only, like everything in this driver; codes' plaintext and setup
+       tokens live in this closure and are never returned after creation. */
+    var registrationCodes = [];
+    var registrationApplications = [];
+    var regSeq = 0;
+
     /* Homepage "talk to us" form. No server in this mode, so a submission
        just lives here for the length of the tab — sendContact() (below,
        driver-independent) still tries the real mail relay first; this is
@@ -440,6 +447,30 @@
       return true;
     }
 
+    function findRegCode(clean) {
+      if (!clean) return null;
+      for (var i = 0; i < registrationCodes.length; i++) if (registrationCodes[i].plain === clean) return registrationCodes[i];
+      return null;
+    }
+    function findRegApplication(id) {
+      for (var i = 0; i < registrationApplications.length; i++) if (registrationApplications[i].id === String(id)) return registrationApplications[i];
+      return null;
+    }
+    function demoPublicApplication(a) {
+      /* The demo stores its setup token in the clear (closure only); the
+         shared public view never carries it (nor the stored password). */
+      return core.publicRegistrationApplication(a);
+    }
+    function newDemoRegistrationCode() {
+      var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', out = 'GOC-REG-';
+      for (var g = 0; g < 2; g++) {
+        for (var i = 0; i < 6; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+        if (g === 0) out += '-';
+      }
+      return out;
+    }
+    function sub0(list) { return Array.isArray(list) ? list.slice() : []; }
+
     return {
       name: 'demo',
 
@@ -450,6 +481,11 @@
         var isStudent = /^GOC-S-\d+$/.test(id);
         if (!isStaff && !isStudent) return fail('That does not look like a G.O.C ID.');
         var acct = isStaff ? find(staff, id) : find(students, id);
+        /* Stage B: an approved registration account cannot sign in until the
+           student sets their password through the setup link. */
+        if (!isStaff && acct && acct.setupPending) {
+          return fail('Your account is approved. Set your password using the link we emailed you, then sign in with your Scholar ID (' + acct.id + ').');
+        }
         // Same message for "no such ID" and "wrong password", so the login
         // screen never confirms which IDs exist.
         if (!acct || String(password) !== acct.pw) return fail('That ID and password do not match.');
@@ -534,49 +570,187 @@
         return ok(staff.map(function (a) { return { id: a.id, name: a.name, title: a.title }; }));
       },
 
-      /* Sign-up is open to the public: no session and no access code. Every self-made
-         account is Open. */
-      createStudent: function (data) {
-        /* Explicit privacy-policy acceptance, mirroring POST /api/students:
-           no acceptance, no account — however the call arrives. */
-        var consent = data && data.privacyConsent;
-        if (!consent || consent.accepted !== true) {
-          return fail('Please read and accept the Privacy Policy to create your account.');
-        }
-        var name = String((data && data.name) || '').trim();
-        var pw = String((data && data.password) || '');
-        if (name.length < 2) return fail('Enter your full name.');
-        if (pw.length < 6) return fail('Choose a password of at least 6 characters.');
-        /* This academy registers UTME candidates only. */
-        var ex = core.requireExam(data && data.goal);
-        if (!ex.ok) return fail(ex.error);
-        /* Use of English plus exactly three sciences — checked here, not only
-           in the form, so the rule holds however the call arrives. */
-        var sub = core.validateSubjects((data && data.subjects) || []);
-        if (!sub.ok) return fail(sub.error);
-        var max = 0;
-        students.forEach(function (s) {
-          var n = parseInt(String(s.id).replace('GOC-S-', ''), 10);
-          if (!isNaN(n) && n > max) max = n;
-        });
-        var rec = {
-          id: 'GOC-S-' + pad3(max + 1), name: name, pw: pw,
-          /* Kept like the server keeps them, so the Profile reminders row can
-             tell whether there is an address to write to. */
-          email: String((data && data.email) || '').trim(),
-          phone: String((data && data.phone) || '').trim(),
-          /* Admin-approval flow: account starts inactive, pending approval. */
-          last: 'Awaiting approval', tag: 'a', tl: 'Pending',
-          xp: 0, streak: 0, active: false, pendingApproval: true,
-          subjects: sub.subjects,
-          /* The acceptance, stamped with the server-side policy version rule:
-             the demo keeps the same shape the real server stores. */
-          privacyConsent: { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION }
-        };
-        students.push(rec);
-        /* No session is issued — the student must wait for approval. */
-        return ok({ pending: true, student: { id: rec.id, name: rec.name } });
+            /* Stage B — registration (mirrors POST /api/registrations*): an
+         application is not an account. The offline demo keeps the same
+         shapes and state machine in memory; unlike the server it cannot hash
+         (no sync crypto in the browser), so the generated code and the setup
+         token sit in this closure only — never persisted, never listed. */
+      validateRegistrationCode: function (data) {
+        var c = findRegCode(core.cleanRegistrationCode(data && data.code));
+        return ok({ ok: !!c && core.registrationCodeStatus(c, Date.now()) === 'active' });
       },
+      submitRegistration: function (data) {
+        var v = core.validateRegistrationApplication(data || {});
+        if (v.error) return fail(v.error);
+        var c = findRegCode(core.cleanRegistrationCode(data && data.code));
+        if (!c || core.registrationCodeStatus(c, Date.now()) !== 'active') {
+          return fail('That registration code is not valid. Check it and try again.');
+        }
+        var block = core.registrationEmailBlock(registrationApplications, students, v.rec.email);
+        if (block) return fail(block);
+        regSeq += 1;
+        var app = {
+          id: 'REGAPP-' + ('000' + regSeq).slice(-4),
+          codeId: c.id, codeLabel: c.label || '',
+          name: v.rec.name, email: v.rec.email, phone: v.rec.phone,
+          goal: v.rec.goal, subjects: sub0(v.rec.subjects),
+          pw: String((data && data.password) || ''),
+          consentVersion: core.PRIVACY_POLICY_VERSION,
+          status: 'pending', createdAt: new Date().toISOString(),
+          decidedBy: null, decidedAt: null, rejectReason: null,
+          scholarId: null, provisionStep: null, provisionError: null, setup: null,
+          history: [{ at: new Date().toISOString(), by: null, action: 'submitted', detail: 'Application received' }]
+        };
+        c.uses.push({ applicationId: app.id, state: 'held', at: app.createdAt });
+        registrationApplications.push(app);
+        return ok({ received: true });
+      },
+      completePasswordSetup: function (data) {
+        var token = String((data && data.token) || '');
+        var app = null;
+        registrationApplications.forEach(function (a) { if (a.setup && a.setup.token === token) app = a; });
+        if (!app || !app.scholarId) return fail('This password-setup link is not valid. Ask the academy to send you a new one.');
+        if (app.setup.usedAt) return fail('This password-setup link has already been used. Sign in with your Scholar ID and the password you set.');
+        if (Date.parse(app.setup.expiresAt) <= Date.now()) return fail('This password-setup link has expired. Ask the academy to send you a new one.');
+        var pw = String((data && data.password) || '');
+        if (pw.length < 8) return fail('Choose a password of at least 8 characters.');
+        var stu = find(students, app.scholarId);
+        if (!stu) return fail('Your account is not ready yet. Contact the academy.');
+        stu.pw = pw;
+        stu.setupPending = false;
+        app.setup.usedAt = new Date().toISOString();
+        app.setupCompletedAt = new Date().toISOString();
+        app.history.push({ at: new Date().toISOString(), by: null, action: 'password-setup-completed', detail: 'Password set by the student' });
+        return ok({ ok: true, scholarId: app.scholarId });
+      },
+      listRegistrationCodes: function () {
+        var e = requireUnlocked(); if (e) return e;
+        return ok({ codes: registrationCodes.map(function (c) { return core.publicRegistrationCode(c, Date.now()); }),
+                    counts: core.registrationCounts(registrationApplications, registrationCodes, Date.now()) });
+      },
+      createRegistrationCode: function (data) {
+        var e = requireUnlocked(); if (e) return e;
+        var label = String((data && data.label) || '').trim().slice(0, 60);
+        var maxUses = Math.floor(Number(data && data.maxUses));
+        if (!label) return fail('Give the code a label (for example, the school or group it is for).');
+        if (!(maxUses >= 1 && maxUses <= 10000)) return fail('Uses must be between 1 and 10,000.');
+        var expiresAt = null;
+        var days = Math.floor(Number(data && data.expiresInDays));
+        if (data && data.expiresInDays != null && data.expiresInDays !== '') {
+          if (!(days >= 1 && days <= 3650)) return fail('Expiry must be between 1 and 3,650 days, or left blank.');
+          expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        }
+        var plain = newDemoRegistrationCode();
+        regSeq += 1;
+        var c = { id: 'REGCODE-DEMO' + regSeq, label: label, plain: plain, hint: plain.slice(-4),
+                  maxUses: maxUses, uses: [], expiresAt: expiresAt, revokedAt: null, revokedBy: null,
+                  createdBy: session.id, createdAt: new Date().toISOString() };
+        registrationCodes.push(c);
+        /* The plaintext is returned once, here — the listing shows a hint. */
+        return ok({ code: plain, registrationCode: core.publicRegistrationCode(c, Date.now()) });
+      },
+      revokeRegistrationCode: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var c = null;
+        registrationCodes.forEach(function (x) { if (x.id === String(id)) c = x; });
+        if (!c) return fail('No such registration code.');
+        if (c.revokedAt) return fail('That code is already revoked.');
+        c.revokedAt = new Date().toISOString();
+        c.revokedBy = session.id;
+        return ok({ registrationCode: core.publicRegistrationCode(c, Date.now()) });
+      },
+      listRegistrationApplications: function () {
+        var e = requireUnlocked(); if (e) return e;
+        return ok({ applications: registrationApplications.map(function (a) { return demoPublicApplication(a); }),
+                    counts: core.registrationCounts(registrationApplications, registrationCodes, Date.now()) });
+      },
+      getRegistrationApplication: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        return ok({ application: demoPublicApplication(a) });
+      },
+      approveRegistrationApplication: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        if (a.status === 'approved') return fail('This application has already been approved.');
+        if (a.status === 'rejected') return fail('This application was rejected. Ask the applicant to apply again.');
+        var c = null;
+        registrationCodes.forEach(function (x) { if (x.id === a.codeId) c = x; });
+        /* Revalidate at approval, exactly like the server: a code revoked or
+           expired since submission blocks approval, recoverably. */
+        if (!c || c.revokedAt || (c.expiresAt && Date.parse(c.expiresAt) <= Date.now())) {
+          a.status = 'provisioning-failed'; a.provisionStep = 'validate-code';
+          a.provisionError = !c ? 'The registration code no longer exists.' : (c.revokedAt ? 'The registration code was revoked after this application was submitted.' : 'The registration code has expired.');
+          a.history.push({ at: new Date().toISOString(), by: session.id, action: 'provisioning-failed', detail: a.provisionError });
+          return fail('Provisioning stopped at validate-code: ' + a.provisionError + ' Use Resume to continue.');
+        }
+        if (!a.scholarId) {
+          var max = 0;
+          students.forEach(function (s) {
+            var n = parseInt(String(s.id).replace('GOC-S-', ''), 10);
+            if (!isNaN(n) && n > max) max = n;
+          });
+          a.scholarId = 'GOC-S-' + pad3(max + 1);
+        }
+        /* The account exists from now, but access waits for password setup:
+           the password on the record is a placeholder nobody knows. */
+        if (!find(students, a.scholarId)) {
+          students.push({
+            id: a.scholarId, name: a.name, email: a.email, phone: a.phone,
+            pw: 'setup-pending-' + Math.random().toString(36).slice(2),
+            last: 'Approved', tag: 'g', tl: 'New',
+            xp: 0, streak: 0, active: true, pendingApproval: false, setupPending: true,
+            subjects: sub0(a.subjects),
+            approvedBy: session.name || session.id, approvedAt: new Date().toISOString()
+          });
+        }
+        var use = null;
+        (c.uses || []).forEach(function (u) { if (u.applicationId === a.id) use = u; });
+        if (use && use.state === 'held') { use.state = 'finalised'; use.finalisedAt = new Date().toISOString(); }
+        delete a.pw; /* the application's stored password is discarded, like the server's hash */
+        a.setup = { token: 'demo-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+                    expiresAt: new Date(Date.now() + core.SETUP_TOKEN_TTL_MS).toISOString(),
+                    sentAt: new Date().toISOString(), usedAt: null, delivery: 'not-configured' };
+        a.status = 'approved'; a.provisionStep = 'done'; a.provisionError = null;
+        a.decidedBy = session.id; a.decidedAt = new Date().toISOString();
+        a.history.push({ at: new Date().toISOString(), by: session.id, action: 'approved', detail: 'Scholar ID ' + a.scholarId + ' created; setup email not-configured' });
+        return ok({ application: demoPublicApplication(a), setupDelivery: 'not-configured' });
+      },
+      rejectRegistrationApplication: function (id, reason) {
+        var e = requireUnlocked(); if (e) return e;
+        var why = String(reason || '').trim();
+        if (!why) return fail('Give a reason for the rejection — it is recorded with the decision.');
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        if (a.status === 'approved') return fail('This application has already been approved and cannot be rejected.');
+        if (a.status === 'rejected') return fail('This application has already been rejected.');
+        var c = null;
+        registrationCodes.forEach(function (x) { if (x.id === a.codeId) c = x; });
+        if (c) (c.uses || []).forEach(function (u) { if (u.applicationId === a.id && u.state === 'held') { u.state = 'released'; u.releasedAt = new Date().toISOString(); } });
+        a.status = 'rejected'; a.rejectReason = why;
+        a.decidedBy = session.id; a.decidedAt = new Date().toISOString();
+        delete a.pw;
+        a.history.push({ at: new Date().toISOString(), by: session.id, action: 'rejected', detail: why });
+        return ok({ application: demoPublicApplication(a) });
+      },
+      resendRegistrationSetup: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        if (a.status !== 'approved' || !a.scholarId) return fail('Only an approved application can be sent a setup link.');
+        if (a.setup && a.setup.usedAt) return fail('This student has already set their password.');
+        a.setup = { token: 'demo-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+                    expiresAt: new Date(Date.now() + core.SETUP_TOKEN_TTL_MS).toISOString(),
+                    sentAt: new Date().toISOString(), usedAt: null, delivery: 'not-configured' };
+        a.history.push({ at: new Date().toISOString(), by: session.id, action: 'setup-link-resent', detail: 'Delivery: not-configured' });
+        return ok({ setupDelivery: 'not-configured' });
+      },
+      /* Test-only (stripped from the production build): the demo sends no
+         email, so a suite playing the applicant reads the current setup
+         token here — the same thing the emailed link would carry. */
+      _setupTokenFor: function (applicationId) { var a = findRegApplication(applicationId); return a && a.setup ? a.setup.token : null; },
 
       /* Admin: enrol a student in person. Same validation as the public
          sign-up above, but no access code (staff are already unlocked) and
@@ -2676,7 +2850,9 @@
 
       listStudents:   function ()      { return req('GET', '/students'); },
       listStaff:      function ()      { return req('GET', '/staff'); },
-      createStudent:  function (d)     { return req('POST', '/students', d).then(function (r) { if (r.token) { token = r.token; writeStoredStudentToken(r.token); } return r; }); },
+      submitRegistration: function (d) { return req('POST', '/registrations', d); },
+      validateRegistrationCode: function (d) { return req('POST', '/registrations/validate-code', d); },
+      completePasswordSetup: function (d) { return req('POST', '/registrations/setup', d); },
       addStudent:     function (d)     { return req('POST', '/admin/students', d); },
       revealPassword: function ()      { return fail('Passwords are stored hashed and cannot be shown. Use "Reset password" instead.'); },
       resetPassword:  function (id)    { return req('POST', '/students/' + encodeURIComponent(norm(id)) + '/reset'); },
@@ -2816,6 +2992,14 @@
       listOverview:   function ()      { return req('GET', '/admin/overview'); },
       markTheory:     function (id, m) { return req('POST', '/results/' + encodeURIComponent(id) + '/mark', { marks: m || {} }); },
 
+      listRegistrationCodes: function () { return req('GET', '/registrations/codes'); },
+      createRegistrationCode: function (d) { return req('POST', '/registrations/codes', d); },
+      revokeRegistrationCode: function (id) { return req('POST', '/registrations/codes/' + encodeURIComponent(norm(id)) + '/revoke', {}); },
+      listRegistrationApplications: function () { return req('GET', '/registrations/applications'); },
+      getRegistrationApplication: function (id) { return req('GET', '/registrations/applications/' + encodeURIComponent(norm(id))); },
+      approveRegistrationApplication: function (id) { return req('POST', '/registrations/applications/' + encodeURIComponent(norm(id)) + '/approve', {}); },
+      rejectRegistrationApplication: function (id, reason) { return req('POST', '/registrations/applications/' + encodeURIComponent(norm(id)) + '/reject', { reason: reason }); },
+      resendRegistrationSetup: function (id) { return req('POST', '/registrations/applications/' + encodeURIComponent(norm(id)) + '/resend-setup', {}); },
       setStudentActive: function (id, on) { return req('PUT', '/students/' + encodeURIComponent(norm(id)) + '/active', { active: !!on }); },
       approveStudent:   function (id) { return req('POST', '/students/' + encodeURIComponent(norm(id)) + '/approve', {}); },
       rejectStudent:    function (id) { return req('DELETE', '/students/' + encodeURIComponent(norm(id)) + '/approve', {}); },
@@ -3117,7 +3301,9 @@ listPublishedVideos: function () {
 
     listStudents:   function ()       { return active.listStudents(); },
     listStaff:      function ()       { return active.listStaff(); },
-    createStudent:  function (d)      { return active.createStudent(d); },
+    submitRegistration: function (d) { return active.submitRegistration(d); },
+    validateRegistrationCode: function (d) { return active.validateRegistrationCode(d); },
+    completePasswordSetup: function (d) { return active.completePasswordSetup(d); },
     addStudent:     function (d)      { return active.addStudent(d); },
     revealPassword: function (id)     { return active.revealPassword(id); },
     resetPassword:  function (id)     { return active.resetPassword(id); },
@@ -3233,6 +3419,14 @@ listPublishedVideos: function () {
     markTheory:     function (id, m)  { return active.markTheory(id, m); },
 
     /* Priority 7 / 8 — account activation and founder-only credentials. */
+    listRegistrationCodes: function () { return active.listRegistrationCodes(); },
+    createRegistrationCode: function (d) { return active.createRegistrationCode(d); },
+    revokeRegistrationCode: function (id) { return active.revokeRegistrationCode(id); },
+    listRegistrationApplications: function () { return active.listRegistrationApplications(); },
+    getRegistrationApplication: function (id) { return active.getRegistrationApplication(id); },
+    approveRegistrationApplication: function (id) { return active.approveRegistrationApplication(id); },
+    rejectRegistrationApplication: function (id, reason) { return active.rejectRegistrationApplication(id, reason); },
+    resendRegistrationSetup: function (id) { return active.resendRegistrationSetup(id); },
     setStudentActive: function (id, on) { return active.setStudentActive(id, on); },
     approveStudent:  function (id)      { return active.approveStudent(id); },
     rejectStudent:   function (id)      { return active.rejectStudent(id); },

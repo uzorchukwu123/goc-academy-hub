@@ -339,16 +339,17 @@ function notCapRefused(r) {
      console gate before it, not by the capability check itself).
      ======================================================== */
   head('a student session never reaches the capability guard');
-  var signUp = await call('POST', '/api/students', {
+  /* Stage B: public sign-up is an application now, so the suite enrols its
+     student through the console route to obtain a student session. */
+  var signUp = await call('POST', '/api/admin/students', {
     name: 'Ayo Student', email: 'ayo@test.ng', phone: '08099999999',
-    subjects: ['Use of English', 'Mathematics', 'Physics', 'Chemistry'], cohort: 'cohort1', password: 'stupass12',
-    goal: 'JAMB / UTME', privacyConsent: { accepted: true }
-  });
-  ok('sign-up goes to pending (not the cap guard)', signUp.status === 200 && !isCapRefused(signUp), signUp.raw);
+    subjects: ['Use of English', 'Mathematics', 'Physics', 'Chemistry'],
+    goal: 'JAMB / UTME 2027'
+  }, ftok);
+  ok('console enrolment works (not the cap guard)', signUp.status === 200 && !isCapRefused(signUp), signUp.raw);
   /* a student session on a console route should get 403 "Management accounts only.", not the cap message */
   if (signUp.status === 200 && signUp.body && signUp.body.student) {
-    var approveStu = await call('POST', '/api/students/' + signUp.body.student.id + '/approve', undefined, ftok);
-    var stuLogin   = await call('POST', '/api/auth/login', { id: signUp.body.student.id, password: 'stupass12' });
+    var stuLogin   = await call('POST', '/api/auth/login', { id: signUp.body.student.id, password: signUp.body.temporaryPassword });
     if (stuLogin.status === 200) {
       var stuTok = stuLogin.body.token;
       var stuQ   = await call('GET', '/api/questions', undefined, stuTok);

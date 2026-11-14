@@ -52,11 +52,12 @@ function head(t) { console.log('\n' + t); }
 
 /* A raw HTTP client: the path is sent verbatim, so a malformed escape like
    "/%zz" actually reaches the server instead of being tidied up on the way. */
-function call(method, urlPath, body) {
+function call(method, urlPath, body, token) {
   return new Promise(function (resolve) {
     var payload = body == null ? null : JSON.stringify(body);
     var headers = {};
     if (payload) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(payload); }
+    if (token) headers['Authorization'] = 'Bearer ' + token;
     var req = http.request({ host: '127.0.0.1', port: PORT, method: method, path: urlPath, headers: headers },
       function (res) {
         var raw = '';
@@ -77,7 +78,10 @@ var child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')],
   cwd: SANDBOX,
   env: Object.assign({}, process.env, {
       PORT: String(PORT),
-      NODE_PATH: path.join(APP, 'node_modules')
+      NODE_PATH: path.join(APP, 'node_modules'),
+      /* The Stage B limit probes below mint a registration code as the Founder. */
+      GOC_FOUNDER_PW: 'founder2027',
+      GOC_PASSCODE: '2027'
     }),
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -153,25 +157,40 @@ waitForBoot(100).then(function () {
     ok('an encoded ../../ escape is refused', r.status === 403 || r.status === 404, 'status ' + r.status);
     ok('  and no password hash went out', r.raw.indexOf('scrypt$') < 0);
 
-    head('sign-up is limited per address: successful sign-ups, not wrong codes');
+    head('application submission is limited per address: successful submissions, not wrong codes');
+    /* Stage B: the per-address limit now governs /api/registrations. Each body
+       carries a live Founder-minted code; the limit counts successful
+       submissions. (test-signup-limits.js covers the limits in full.) */
     var seq = Promise.resolve();
     var seen = [];
+    var regCode = null;
+    seq = seq.then(function () {
+      return call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
+    }).then(function (l) {
+      var tok = l.body && l.body.token;
+      return call('POST', '/api/auth/unlock', { passcode: '2027' }, tok).then(function () { return tok; });
+    }).then(function (tok) {
+      return call('POST', '/api/registrations/codes', { label: 'security suite', maxUses: 10 }, tok);
+    }).then(function (cr) {
+      regCode = cr.body && cr.body.code;
+      ok('a registration code is minted for the limit probes', typeof regCode === 'string', cr.raw);
+    });
     function body(i) {
-      return { name: 'Limit Test ' + i, password: 'secret123', email: 'lim' + i + '@example.com', phone: '0801100000' + i,
+      return { code: regCode, name: 'Limit Test ' + i, password: 'secret123', email: 'lim' + i + '@example.com', phone: '0801100000' + i,
                goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'],
                privacyConsent: { accepted: true } };
     }
     for (var i = 0; i < 5; i++) {
       (function (n) {
         seq = seq.then(function () {
-          return call('POST', '/api/students', body(n)).then(function (r) { seen.push(r.status); });
+          return call('POST', '/api/registrations', body(n)).then(function (r) { seen.push(r.status); });
         });
       }(i));
     }
     return seq.then(function () {
-      ok('the first 5 sign-ups from one address are all accepted (the standard hourly limit)',
+      ok('the first 5 submissions from one address are all accepted (the standard hourly limit)',
          seen.every(function (s) { return s === 200; }), seen.join(','));
-      return call('POST', '/api/students', body(6));
+      return call('POST', '/api/registrations', body(6));
     }).then(function (r) {
       ok('the 6th is refused with 429', r.status === 429, 'status ' + r.status + ' ' + r.raw);
       ok('it carries a Retry-After in seconds, up to an hour',
@@ -179,7 +198,7 @@ waitForBoot(100).then(function () {
       ok('and a plain message that says to ask the academy',
          !!(r.body && /Too many accounts/.test(r.body.error) && /ask the academy/.test(r.body.error)), r.raw);
       ok('it created no account', !(r.body && r.body.student), r.raw);
-      return call('POST', '/api/students', Object.assign(body(7), { goal: 'WAEC' }));
+      return call('POST', '/api/registrations', Object.assign(body(7), { goal: 'WAEC' }));
     }).then(function (r) {
       ok('the limit answers before any other rule, so a blocked address learns nothing else', r.status === 429, 'status ' + r.status);
       ok('a wrong or missing code is not a failure here: the old attempt counter is not what blocks it',

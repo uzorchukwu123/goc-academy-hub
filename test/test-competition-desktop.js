@@ -91,7 +91,7 @@ ok('the existing 640px two-column step is unchanged',
    /@media \(min-width: 640px\) \{\s*body\.f27-mode #free-exam\.f27-exam-competition \.f27-cbt-options \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}\s*\}/.test(before));
 ok('the modal Question Navigator is untouched and still the mobile palette',
    /\.f27-cbt-modal \{/.test(before) && /id="freeExamPanel"/.test(html) && /onclick="freeExamPanel\(\)"/.test(html));
-ok('the service worker serves the new shell', /const CACHE = 'goc-v221';/.test(read('sw.js')));
+ok('the service worker serves the new shell', /const CACHE = 'goc-v222';/.test(read('sw.js')));
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

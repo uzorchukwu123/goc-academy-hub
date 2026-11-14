@@ -150,7 +150,7 @@ check('service worker never writes API responses to a cache', !/cache\.put|cache
 check('service worker only pre-caches the declared static asset list',
   /const ASSETS = \[/.test(sw) && /caches\.open\(CACHE\)\.then\(c => c\.addAll\(ASSETS\)\)/.test(sw));
 check('service worker passes non-GET requests straight through', /e\.request\.method !== 'GET'/.test(sw));
-check('service worker cache name is untouched by the migration', /const CACHE = 'goc-v221';/.test(sw));
+check('service worker cache name is untouched by the migration', /const CACHE = 'goc-v222';/.test(sw));
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

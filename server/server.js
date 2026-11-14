@@ -1292,6 +1292,11 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
   /* B#2 scholarship: all submitted applications and the Cohort-2.0 waitlist. */
   if (!Array.isArray(db.scholarshipApplications)) db.scholarshipApplications = [];
   if (!Array.isArray(db.scholarshipWaitlist))     db.scholarshipWaitlist = [];
+  /* Stage B: registration codes and applications. Server data store only —
+     applications are never student records and never touch Appwrite. Codes
+     are stored as SHA-256 hashes; the plaintext exists once, at creation. */
+  if (!Array.isArray(db.registrationCodes)) db.registrationCodes = [];
+  if (!Array.isArray(db.registrationApplications)) db.registrationApplications = [];
   /* Phase 3C slice 5: per-question and per-topic answer counters for the tutor dashboard
      (counts only, GOC students only; see core.recordAnswerStats). */
   if (!db.answerStats || typeof db.answerStats !== 'object' || Array.isArray(db.answerStats)) db.answerStats = {};
@@ -2116,6 +2121,200 @@ function nextScholarId(db) {
   });
   const n = max + 1;
   return 'GOC-S-' + (n < 10 ? '00' + n : n < 100 ? '0' + n : String(n));
+}
+
+
+/* ------------------------------------------------- Stage B: registrations
+   Registration codes, applications, approval provisioning and password
+   setup. The rules live in core (cleanRegistrationCode, registration*); this
+   block owns hashing, storage, Appwrite and email. Security invariants:
+     · a code's plaintext is generated here, shown once in the creation
+       response, and never stored — only its SHA-256 hash is;
+     · an application stores only a scrypt pwHash, which is discarded at
+       provisioning and never copied onto the student account;
+     · the password-setup token is 32 random bytes; only its SHA-256 hash
+       is stored, it is single-use, it expires, and it is emailed to the
+       applicant only — no API ever returns it to staff. */
+
+function sha256Hex(text) {
+  return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex');
+}
+
+const REG_CODE_GROUPS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+function newRegistrationCodePlain() {
+  const group = () => {
+    let out = '';
+    const bytes = crypto.randomBytes(6);
+    for (let i = 0; i < 6; i++) out += REG_CODE_GROUPS[bytes[i] % REG_CODE_GROUPS.length];
+    return out;
+  };
+  return 'GOC-REG-' + group() + '-' + group();
+}
+
+function findRegistrationCode(db, cleanCode) {
+  if (!cleanCode) return null;
+  const hash = sha256Hex(cleanCode);
+  return (db.registrationCodes || []).find(c => c.hash === hash) || null;
+}
+
+function nextRegistrationApplicationId(db) {
+  let max = 0;
+  (db.registrationApplications || []).forEach(a => {
+    const n = parseInt(String(a.id || '').replace('REGAPP-', ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  const n = max + 1;
+  return 'REGAPP-' + (n < 1000 ? ('000' + n).slice(-4) : String(n));
+}
+
+function registrationHistory(app, by, action, detail) {
+  app.history = Array.isArray(app.history) ? app.history : [];
+  app.history.push({ at: new Date().toISOString(), by: by || null, action, detail: detail || null });
+}
+
+/* The setup link goes to the applicant's own email address and nowhere else.
+   Delivery mirrors the reminder mailer: GOC_REMINDER_DRY_RUN=1 writes the
+   message to reminders-outbox.jsonl instead of mailing it. Without a public
+   URL or SMTP the delivery is honestly 'not-configured' — the token still
+   exists, nothing pretends the email was sent, and staff can resend once
+   mail is configured. Returns 'sent' | 'dry-run' | 'not-configured' | 'failed'. */
+async function deliverSetupEmail(app, token) {
+  const base = reminderPublicUrl();
+  if (!base) return 'not-configured';
+  const link = base + '/setup/' + token;
+  const text = 'Hello ' + app.name + ',\n\n' +
+    'Good news — your G.O.C Academy Hub registration has been approved.\n\n' +
+    'Your Scholar ID is ' + app.scholarId + '. You will sign in with this ID.\n\n' +
+    'Before you can sign in, set your password using this secure link:\n' + link + '\n\n' +
+    'The link can be used once and expires in 72 hours. If it expires, contact the academy and ask for a new one.\n' +
+    'If you did not apply to G.O.C Academy Hub, ignore this message.\n\nG.O.C Academy Hub';
+  if (process.env.GOC_REMINDER_DRY_RUN === '1') {
+    try {
+      fs.appendFileSync(path.join(DATA_DIR, 'reminders-outbox.jsonl'),
+        JSON.stringify({ at: new Date().toISOString(), to: app.email, subject: 'Your G.O.C Academy Hub account is approved — set your password', text }) + '\n');
+      return 'dry-run';
+    } catch (err) { console.error('[registrations] dry-run outbox write failed:', err.message); return 'failed'; }
+  }
+  const transport = getMailTransport();
+  if (!transport) return 'not-configured';
+  try {
+    await transport.sendMail({
+      from: process.env.GOC_SMTP_FROM || process.env.GOC_SMTP_USER,
+      to: app.email,
+      subject: 'Your G.O.C Academy Hub account is approved — set your password',
+      text
+    });
+    return 'sent';
+  } catch (err) { console.error('[registrations] setup email failed:', err.message); return 'failed'; }
+}
+
+/* Issue (or re-issue) the single-use setup token for an approved application.
+   Only the hash is stored; the plaintext leaves with the email. Re-issuing
+   replaces the hash, so any earlier link stops working at once. */
+async function issueSetupToken(db, app) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  app.setup = {
+    tokenHash: sha256Hex(token),
+    expiresAt: new Date(Date.now() + core.SETUP_TOKEN_TTL_MS).toISOString(),
+    sentAt: new Date().toISOString(),
+    usedAt: null,
+    delivery: null
+  };
+  app.setup.delivery = await deliverSetupEmail(app, token);
+  return app.setup.delivery;
+}
+
+/* Claim → provision. Each step is idempotent, persists before moving on, and
+   a failure stops at the named step with the application in
+   'provisioning-failed' so Resume can continue without duplicating anything.
+   Assumes the caller already persisted status 'provisioning'. */
+async function provisionRegistration(db, app, actorId) {
+  const fail = (step, err) => {
+    app.status = 'provisioning-failed';
+    app.provisionStep = step;
+    app.provisionError = String((err && err.message) || err || 'Unknown error').slice(0, 300);
+    registrationHistory(app, actorId, 'provisioning-failed', step + ': ' + app.provisionError);
+    writeData(db);
+    return { ok: false, step, error: app.provisionError };
+  };
+  try {
+    /* Revalidate the code at approval: a code revoked or expired after the
+       application was submitted blocks approval (the held use stays held
+       until a reviewer rejects the application). */
+    app.provisionStep = 'validate-code';
+    const code = (db.registrationCodes || []).find(c => c.id === app.codeId);
+    if (!code) return fail('validate-code', new Error('The registration code no longer exists.'));
+    if (code.revokedAt) return fail('validate-code', new Error('The registration code was revoked after this application was submitted.'));
+    if (code.expiresAt && Date.parse(code.expiresAt) <= Date.now()) return fail('validate-code', new Error('The registration code has expired.'));
+
+    /* The Scholar ID exists only from this moment — a pending application
+       never had one. Persisted before anything external is created. */
+    if (!app.scholarId) {
+      app.provisionStep = 'scholar-id';
+      app.scholarId = appwriteDatabases ? await nextAppwriteScholarId() : nextScholarId(db);
+      writeData(db);
+    }
+    const id = app.scholarId;
+
+    /* A password nobody knows: the Auth account and pwHash are placeholders
+       until the applicant sets their own password through the setup link. */
+    const unusable = crypto.randomBytes(24).toString('hex');
+    const rec = {
+      id, name: app.name, email: app.email, phone: app.phone,
+      goal: app.goal, exam: core.EXAM, subjects: app.subjects,
+      pwHash: hashPassword(unusable), plainPassword: unusable,
+      appwriteUserId: app.appwriteUserId || null,
+      mustChangePassword: false,
+      active: true, pendingApproval: false,
+      xp: 0, streak: 0, streakDay: null, streakFreezes: 0,
+      last: 'Approved', tag: 'g', tl: 'New',
+      createdAt: new Date().toISOString(),
+      approvedBy: actorId, approvedAt: new Date().toISOString()
+    };
+
+    if (appwriteDatabases) {
+      if (!app.appwriteUserId) {
+        app.provisionStep = 'auth-user';
+        const authUser = await createAppwriteAuthUser(rec);
+        app.appwriteUserId = authUser.$id;
+        rec.appwriteUserId = authUser.$id;
+        writeData(db);
+      }
+      app.provisionStep = 'student-document';
+      await createAppwriteStudent(rec);
+    } else {
+      app.provisionStep = 'student-record';
+      if (!db.students.find(x => x.id === id)) db.students.push(rec);
+    }
+    delete rec.plainPassword;
+
+    /* Finalise the held code use — finalised uses count against maxUses
+       forever; the seat is now a real account. */
+    app.provisionStep = 'finalize-code';
+    const use = (code.uses || []).find(u => u.applicationId === app.id);
+    if (use && use.state === 'held') { use.state = 'finalised'; use.finalisedAt = new Date().toISOString(); }
+
+    /* The application's stored password hash has served its purpose and is
+       discarded — the setup link is now the only credential path. */
+    delete app.pwHash;
+    app.passwordHashDiscardedAt = new Date().toISOString();
+
+    /* Privacy consent recorded against the Scholar ID, as sign-up did. */
+    if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
+    db.consentLog[id] = { at: app.createdAt || new Date().toISOString(), version: app.consentVersion || core.PRIVACY_POLICY_VERSION };
+
+    app.provisionStep = 'password-setup';
+    await issueSetupToken(db, app);
+
+    app.status = 'approved';
+    app.provisionStep = 'done';
+    app.provisionError = null;
+    registrationHistory(app, actorId, 'approved', 'Scholar ID ' + id + ' created; setup email ' + app.setup.delivery);
+    writeData(db);
+    return { ok: true, scholarId: id, setupDelivery: app.setup.delivery };
+  } catch (err) {
+    return fail(app.provisionStep || 'provisioning', err);
+  }
 }
 
 function todayLabel() {
@@ -3354,6 +3553,17 @@ const ROUTES = [
         }
       }
 
+      // Registration-flow accounts must set their password first: approval
+      // creates the account, but access opens only once the student completes
+      // the single-use setup link emailed to them. The state lives on the
+      // application (server store), so this holds in both storage modes.
+      if (isStudent && account && !account.pendingApproval) {
+        const regApp = (db.registrationApplications || []).find(a => a.scholarId === account.id && a.status === 'approved' && a.setup && !a.setup.usedAt);
+        if (regApp) {
+          return errJson(res, 403, 'Your account is approved. Set your password using the link we emailed you, then sign in with your Scholar ID (' + account.id + ').');
+        }
+      }
+
       // A pending account exists but has not been approved yet.
       if (isStudent && account && account.pendingApproval) {
         return errJson(res, 403, 'Your account is awaiting approval. The academy will review your registration and activate your access shortly.');
@@ -3614,15 +3824,32 @@ const ROUTES = [
       okJson(res, await Promise.all(students.map(s => publicStudent(db, s, { console: true }))));
     } },
 
-  /* Public: this is the sign-up form. UTME only, and the subject combination is
-     validated here as well as on screen — the rule belongs to the server.
-     Sign-up is open (Phase 3B slice 5): anyone may register, and every self-made
-     account is Open. There is no access code any more. What stops one person
-     minting accounts is a limit on SUCCESSFUL sign-ups per address. */
-  { method: 'POST', path: /^\/api\/students$/, need: null, handler: async (req, res, body) => {
+    /* ------------------------------------------------ Stage B: registrations
+     The public sign-up route (POST /api/students) is gone: new registrations
+     use the application-first process exclusively. Nothing below creates a
+     student account, a Scholar ID, an Appwrite Auth user or a session until
+     a reviewer approves an application (see provisionRegistration). The old
+     POST/DELETE /api/students/:id/approve routes further down remain only
+     for legacy pending student records created before this flow existed. */
+
+  /* Public: is this registration code usable? Generic ok/fail only — never
+     which check failed, never any part of any stored code. */
+  { method: 'POST', path: /^\/api\/registrations\/validate-code$/, need: null, handler: async (req, res, body) => {
       const ip = getClientIp(req);
-      /* Sign-up runs a deliberately slow password hash, so the failed-attempt
-         throttle that guards login still applies here too. */
+      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+      const db = readData();
+      const code = findRegistrationCode(db, core.cleanRegistrationCode(body && body.code));
+      const usable = !!code && core.registrationCodeStatus(code, Date.now()) === 'active';
+      if (!usable) noteFailure(ip);
+      okJson(res, { ok: usable });
+    } },
+
+  /* Public: submit a registration application. Validates the code
+     authoritatively, holds one use of it, and stores the application —
+     server data store only, pwHash only. Creates NO student account, NO
+     Scholar ID, NO session. */
+  { method: 'POST', path: /^\/api\/registrations$/, need: null, handler: async (req, res, body) => {
+      const ip = getClientIp(req);
       if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
       const db = readData();
       const lim = signupLimitsOf(db);
@@ -3631,87 +3858,211 @@ const ROUTES = [
         res.setHeader('Retry-After', String(blocked.retryAfter));
         return errJson(res, 429, core.signupLimitMessage(blocked.retryAfter, blocked.window));
       }
-
-      /* Explicit privacy-policy acceptance is required, server-side: the
-         sign-up form's ticked box sends { accepted: true, version }, and a
-         registration that arrives without it is refused before anything is
-         created. The version stored is the server's own current policy
-         version — never a value the browser chooses. */
-      const consent = body && body.privacyConsent;
-      if (!consent || consent.accepted !== true) {
-        return errJson(res, 400, 'Please read and accept the Privacy Policy to create your account.');
+      const v = core.validateRegistrationApplication(body || {});
+      if (v.error) return errJson(res, 400, v.error);
+      const code = findRegistrationCode(db, core.cleanRegistrationCode(body && body.code));
+      if (!code || core.registrationCodeStatus(code, Date.now()) !== 'active') {
+        noteFailure(ip);
+        return errJson(res, 400, 'That registration code is not valid. Check it and try again.');
       }
-
-      const name = clean(body.name, 80);
-      const password = String(body.password == null ? '' : body.password);
-      if (name.length < 2) return errJson(res, 400, 'Enter your full name.');
-      if (password.length < 8) return errJson(res, 400, 'Choose a password of at least 8 characters.');
-
-      const exam = core.requireExam(body.goal);
-      if (!exam.ok) return errJson(res, 400, exam.error);
-      const combo = core.validateSubjects(Array.isArray(body.subjects) ? body.subjects : []);
-      if (!combo.ok) return errJson(res, 400, combo.error);
-
-      const rec = {
-        id: appwriteDatabases
-          ? await nextAppwriteScholarId()
-          : nextScholarId(db),
-        name,
-        email: clean(body.email, 120),
-        phone: clean(body.phone, 30),
-        goal: exam.exam,
-        exam: core.EXAM,
-        subjects: combo.subjects,
-        pwHash: hashPassword(password),
-    plainPassword: password,
-    appwriteUserId: null,
-        mustChangePassword: false,
-        /* Self-registered accounts start inactive, pending admin approval.
-           Only the console activates them (admin-approval flow). */
-        active: false, pendingApproval: true,
-        xp: 0, streak: 0, streakDay: null, streakFreezes: 0,
-        last: 'Awaiting approval', tag: 'a', tl: 'Pending',
-        createdAt: new Date().toISOString()
+      const emailBlock = core.registrationEmailBlock(db.registrationApplications, appwriteDatabases ? await listAppwriteStudents() : db.students, v.rec.email);
+      if (emailBlock) return errJson(res, 400, emailBlock);
+      const app = {
+        id: nextRegistrationApplicationId(db),
+        codeId: code.id, codeLabel: code.label || '',
+        name: v.rec.name, email: v.rec.email, phone: v.rec.phone,
+        goal: v.rec.goal, exam: core.EXAM, subjects: v.rec.subjects,
+        pwHash: hashPassword(String((body && body.password) || '')),
+        consentVersion: core.PRIVACY_POLICY_VERSION,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        decidedBy: null, decidedAt: null, rejectReason: null,
+        scholarId: null, appwriteUserId: null,
+        provisionStep: null, provisionError: null, setup: null,
+        history: [{ at: new Date().toISOString(), by: null, action: 'submitted', detail: 'Application received' }]
       };
-      if (appwriteDatabases) {
-    let authUser = null;
-    try {
-      authUser = await createAppwriteAuthUser(rec);
-      rec.appwriteUserId = authUser.$id;
-
-      await createAppwriteStudent(rec);
-    } catch (err) {
-      if (authUser && authUser.$id) {
-        await deleteAppwriteAuthUser(authUser.$id);
-      }
-      console.error('Appwrite student registration failed:', err.message);
-      return errJson(res, 503, 'Registration could not be completed. Please try again.');
-    }
-  } else {
-        db.students.push(rec);
-      }
-      delete rec.plainPassword;
-      /* Record the acceptance against the Scholar ID with the server's own
-         policy version and a timestamp. Kept in the data blob (db.consentLog)
-         so it needs no students-collection attribute and works on any
-         Appwrite schema; /api/me reads it back for the device's visit-counter
-         gate. */
-      if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
-      db.consentLog[rec.id] = { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION };
-  writeData(db);
-      attempts.delete(ip);
+      code.uses = Array.isArray(code.uses) ? code.uses : [];
+      code.uses.push({ applicationId: app.id, state: 'held', at: app.createdAt });
+      db.registrationApplications.push(app);
+      writeData(db);
       noteSignup(ip);
+      okJson(res, { received: true });
+    } },
 
-      /* Admin-approval flow: no session is issued at sign-up. The student must
-         wait for a Founder or Academic Director to approve their account from
-         the console before they can log in. */
+  /* Public: complete password setup. The token is looked up by hash; it must
+     be unused and unexpired. Only after the password is actually set (both
+     the Auth account and the local hash, when Appwrite is configured) is the
+     token consumed — a failed attempt leaves the link usable. */
+  { method: 'POST', path: /^\/api\/registrations\/setup$/, need: null, handler: async (req, res, body) => {
+      const ip = getClientIp(req);
+      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+      const password = String((body && body.password) == null ? '' : body.password);
+      if (password.length < 8) return errJson(res, 400, 'Choose a password of at least 8 characters.');
+      if (password.length > 256) return errJson(res, 400, 'Password must not be longer than 256 characters.');
+      const token = String((body && body.token) || '');
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.setup && a.setup.tokenHash && a.setup.tokenHash === sha256Hex(token));
+      if (!app || !app.scholarId) { noteFailure(ip); return errJson(res, 400, 'This password-setup link is not valid. Ask the academy to send you a new one.'); }
+      if (app.setup.usedAt) { noteFailure(ip); return errJson(res, 400, 'This password-setup link has already been used. Sign in with your Scholar ID and the password you set.'); }
+      if (Date.parse(app.setup.expiresAt) <= Date.now()) { noteFailure(ip); return errJson(res, 400, 'This password-setup link has expired. Ask the academy to send you a new one.'); }
+      try {
+        const pwHash = hashPassword(password);
+        if (appwriteDatabases) {
+          if (!app.appwriteUserId) return errJson(res, 503, 'Your account is not ready yet. Contact the academy.');
+          await appwriteUsers.updatePassword(app.appwriteUserId, password);
+          await updateAppwriteStudent(app.scholarId, { passwordHash: pwHash, pwHash: pwHash });
+        } else {
+          const stu = db.students.find(x => x.id === app.scholarId);
+          if (!stu) return errJson(res, 503, 'Your account is not ready yet. Contact the academy.');
+          stu.pwHash = pwHash;
+        }
+      } catch (err) {
+        console.error('[registrations] password setup failed:', err.message);
+        return errJson(res, 503, 'Your password could not be set. Try again, or ask the academy for a new link.');
+      }
+      app.setup.usedAt = new Date().toISOString();
+      app.setup.tokenHash = null;
+      app.setupCompletedAt = new Date().toISOString();
+      registrationHistory(app, null, 'password-setup-completed', 'Password set by the student');
+      writeData(db);
+      attempts.delete(ip);
+      okJson(res, { ok: true, scholarId: app.scholarId });
+    } },
+
+  /* Console: registration codes (Finance + Founder). The plaintext code is
+     returned exactly once, in this creation response; listings carry only a
+     hint. Codes are never accepted from the client — always generated here. */
+  { method: 'GET', path: /^\/api\/registrations\/codes$/, need: 'console', cap: 'registrations.codes', handler: async (req, res) => {
+      const db = readData();
       okJson(res, {
-        pending: true,
-        student: { id: rec.id, name: rec.name }
+        codes: (db.registrationCodes || []).map(c => core.publicRegistrationCode(c, Date.now())),
+        counts: core.registrationCounts(db.registrationApplications, db.registrationCodes, Date.now())
       });
     } },
 
-  /* Priority 7 — close or reopen an account. History is never deleted. */
+  { method: 'POST', path: /^\/api\/registrations\/codes$/, need: 'console', cap: 'registrations.codes', handler: async (req, res, body, sess) => {
+      const db = readData();
+      const label = clean(body && body.label, 60);
+      const maxUses = Math.floor(Number(body && body.maxUses));
+      if (!label) return errJson(res, 400, 'Give the code a label (for example, the school or group it is for).');
+      if (!(maxUses >= 1 && maxUses <= 10000)) return errJson(res, 400, 'Uses must be between 1 and 10,000.');
+      let expiresAt = null;
+      const days = Math.floor(Number(body && body.expiresInDays));
+      if (body && body.expiresInDays != null && body.expiresInDays !== '') {
+        if (!(days >= 1 && days <= 3650)) return errJson(res, 400, 'Expiry must be between 1 and 3,650 days, or left blank.');
+        expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      }
+      /* Generate until the hash is unique (a collision is astronomically
+         unlikely, but a duplicate hash would shadow another code). */
+      let plain = newRegistrationCodePlain();
+      while (findRegistrationCode(db, plain)) plain = newRegistrationCodePlain();
+      const code = {
+        id: 'REGCODE-' + sha256Hex(plain).slice(0, 10).toUpperCase(),
+        label, hash: sha256Hex(plain), hint: plain.slice(-4),
+        maxUses, uses: [], expiresAt,
+        revokedAt: null, revokedBy: null,
+        createdBy: sess.data.id, createdAt: new Date().toISOString()
+      };
+      db.registrationCodes.push(code);
+      writeData(db);
+      /* The ONLY place the plaintext ever leaves the server. */
+      okJson(res, { code: plain, registrationCode: core.publicRegistrationCode(code, Date.now()) });
+    } },
+
+  { method: 'POST', path: /^\/api\/registrations\/codes\/([A-Za-z0-9-]+)\/revoke$/, need: 'console', cap: 'registrations.codes', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const code = (db.registrationCodes || []).find(c => c.id === params[0]);
+      if (!code) return errJson(res, 404, 'No such registration code.');
+      if (code.revokedAt) return errJson(res, 400, 'That code is already revoked.');
+      code.revokedAt = new Date().toISOString();
+      code.revokedBy = sess.data.id;
+      writeData(db);
+      okJson(res, { registrationCode: core.publicRegistrationCode(code, Date.now()) });
+    } },
+
+  /* Console: application review (Finance + Founder, students.approve). The
+     public views never carry pwHash or the setup-token hash. */
+  { method: 'GET', path: /^\/api\/registrations\/applications$/, need: 'console', cap: 'students.approve', handler: async (req, res) => {
+      const db = readData();
+      okJson(res, {
+        applications: (db.registrationApplications || []).map(a => core.publicRegistrationApplication(a)),
+        counts: core.registrationCounts(db.registrationApplications, db.registrationCodes, Date.now())
+      });
+    } },
+
+  { method: 'GET', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      okJson(res, { application: core.publicRegistrationApplication(app) });
+    } },
+
+  /* Approve (or resume a failed provisioning). The claim is persisted before
+     any external system is touched: a second approve while provisioning sees
+     'provisioning' and is refused 409, so duplicates cannot be created. */
+  { method: 'POST', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)\/approve$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      if (app.status === 'approved') return errJson(res, 409, 'This application has already been approved.');
+      if (app.status === 'rejected') return errJson(res, 409, 'This application was rejected. Ask the applicant to apply again.');
+      if (app.status === 'provisioning') return errJson(res, 409, 'Approval is already in progress for this application.');
+      const resuming = app.status === 'provisioning-failed';
+      app.status = 'provisioning';
+      app.provisionError = null;
+      app.decidedBy = sess.data.id;
+      app.decidedAt = new Date().toISOString();
+      registrationHistory(app, sess.data.id, resuming ? 'provisioning-resumed' : 'approval-started', null);
+      writeData(db);
+      const result = await provisionRegistration(db, app, sess.data.id);
+      if (!result.ok) {
+        return errJson(res, 502, 'Provisioning stopped at ' + result.step + ': ' + result.error + ' Use Resume to continue.');
+      }
+      okJson(res, { application: core.publicRegistrationApplication(app), setupDelivery: result.setupDelivery });
+    } },
+
+  /* Reject with a required reason. Releases the held code use; creates no
+     account of any kind. The application's password hash is discarded. */
+  { method: 'POST', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)\/reject$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const reason = clean(body && body.reason, 300);
+      if (!reason) return errJson(res, 400, 'Give a reason for the rejection — it is recorded with the decision.');
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      if (app.status === 'approved') return errJson(res, 409, 'This application has already been approved and cannot be rejected.');
+      if (app.status === 'rejected') return errJson(res, 409, 'This application has already been rejected.');
+      if (app.status === 'provisioning') return errJson(res, 409, 'Approval is in progress for this application.');
+      const code = (db.registrationCodes || []).find(c => c.id === app.codeId);
+      if (code) {
+        const use = (code.uses || []).find(u => u.applicationId === app.id);
+        if (use && use.state === 'held') { use.state = 'released'; use.releasedAt = new Date().toISOString(); }
+      }
+      app.status = 'rejected';
+      app.rejectReason = reason;
+      app.decidedBy = sess.data.id;
+      app.decidedAt = new Date().toISOString();
+      delete app.pwHash;
+      registrationHistory(app, sess.data.id, 'rejected', reason);
+      writeData(db);
+      okJson(res, { application: core.publicRegistrationApplication(app) });
+    } },
+
+  /* Resend the password-setup link (approved applications only). Issues a
+     fresh token — the old link dies at once — and emails it to the applicant.
+     The response reports delivery status only, never the link or token. */
+  { method: 'POST', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)\/resend-setup$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      if (app.status !== 'approved' || !app.scholarId) return errJson(res, 409, 'Only an approved application can be sent a setup link.');
+      if (app.setup && app.setup.usedAt) return errJson(res, 409, 'This student has already set their password.');
+      const delivery = await issueSetupToken(db, app);
+      registrationHistory(app, sess.data.id, 'setup-link-resent', 'Delivery: ' + delivery);
+      writeData(db);
+      okJson(res, { setupDelivery: delivery });
+    } },
+
+/* Priority 7 — close or reopen an account. History is never deleted. */
   { method: 'PUT', path: /^\/api\/students\/([A-Za-z0-9-]+)\/active$/, need: 'console', cap: 'students.deactivate', handler: async (req, res, body, sess, params) => {
       const db = readData();
       const studentId = params[0].toUpperCase();
@@ -9694,6 +10045,33 @@ const server = http.createServer(async (req, res) => {
 
   if (urlPath.indexOf('/api/') !== 0) {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    /* Stage B: the password-setup page the approval email links to. The
+       token in the path is NOT validated here (opening a link must never
+       consume it); the page posts it with the chosen password to
+       POST /api/registrations/setup, which checks it properly. */
+    const setupMatch = /^\/setup\/([A-Za-z0-9_-]{16,128})$/.exec(urlPath);
+    if (setupMatch) {
+      const tokenJson = JSON.stringify(setupMatch[1]);
+      const html = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Set your password — G.O.C Academy Hub</title></head>' +
+        '<body style="font-family:Arial,Helvetica,sans-serif;max-width:460px;margin:10vh auto;padding:0 20px;color:#1f2937">' +
+        '<h2 style="text-align:center">Welcome to G.O.C Academy Hub</h2>' +
+        '<p>Your registration has been approved. Choose the password you will sign in with, using your Scholar ID (it is in the email this link came from).</p>' +
+        '<form id="f"><label style="display:block;margin:14px 0 6px">New password</label>' +
+        '<input id="pw" type="password" autocomplete="new-password" style="width:100%;padding:10px;box-sizing:border-box" minlength="8" required>' +
+        '<label style="display:block;margin:14px 0 6px">Type it again</label>' +
+        '<input id="pw2" type="password" autocomplete="new-password" style="width:100%;padding:10px;box-sizing:border-box" minlength="8" required>' +
+        '<button style="margin-top:18px;width:100%;padding:12px;background:#b91c1c;color:#fff;border:0;border-radius:8px;font-weight:700">Set password</button></form>' +
+        '<p id="msg" role="status"></p>' +
+        '<script>document.getElementById("f").addEventListener("submit",function(e){e.preventDefault();var m=document.getElementById("msg");var pw=document.getElementById("pw").value;if(pw!==document.getElementById("pw2").value){m.textContent="The two passwords do not match.";return;}m.textContent="Setting your password...";fetch("/api/registrations/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:' + tokenJson + ',password:pw})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){m.innerHTML="Done. Your Scholar ID is <b>"+j.scholarId+"</b> — you can now <a href=\"/\">sign in</a> with it and your new password.";}else{m.textContent=(j&&j.error)||"That link could not be used.";}}).catch(function(){m.textContent="Something went wrong. Try again.";});});<\/script>' +
+        '</body></html>';
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(html),
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'"
+      });
+      return res.end(html);
+    }
     if (staticRateLimited(getClientIp(req))) {
       res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60', 'Cache-Control': 'no-store' });
       return res.end('Too many requests. Wait a minute and try again.');

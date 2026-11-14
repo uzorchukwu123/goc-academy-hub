@@ -47,14 +47,14 @@ function makeApp(overrides) {
 
   /* ---------------------------------------------------------- route accounting */
   console.log('\n— route accounting —');
-  check('inventory is the verified 251-route table', inventory.total === 251, String(inventory.total));
+  check('inventory is the verified 262-route table (Stage B added 11 registration routes)', inventory.total === 262, String(inventory.total));
   check('router compiles every inventoried route', app.router.total === inventory.total);
   const coverage = app.router.coverage();
   check('coverage report accounts for every route', coverage.length === inventory.total);
   check('every route has an explicit status',
     coverage.every(r => r.status === 'implemented' || r.status === 'not-started'));
   check('health is implemented', coverage.some(r => r.path === '/api/health' && r.status === 'implemented'));
-  check('all 32 capabilities are carried into the inventory', inventory.capabilities.length === 32);
+  check('all 33 capabilities are carried into the inventory (incl. registrations.codes)', inventory.capabilities.length === 33);
   check('all 9 auth tiers are carried into the inventory', Object.keys(inventory.counts.byAuthTier).length === 9);
   /* Families the original plan omitted must still be present. */
   ['/api/rounds', '/api/challenges', '/api/managers', '/api/staff', '/api/audit', '/api/notices',

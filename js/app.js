@@ -914,6 +914,134 @@ function admResetPw(id){
     var w = document.getElementById('admCredList'); if(w) w.innerHTML = admCredHTML();
   }).catch(function(err){ toast(err.message || 'Could not reset that password'); });
 }
+/* Stage B — the registration desk inside the Students section. Server rules
+   decide who may do what (codes: Finance; review: Finance — both plus the
+   Founder); these functions only ask and paint. The plaintext code appears
+   once, in admRegCodeCreate's one-time panel; application secrets (password
+   hashes, setup tokens) never reach this code at all. */
+var admRegAppsCache = [];
+function admRegLoad(){
+  var w = document.getElementById('admRegApps');
+  if(w){
+    GOC.api.listRegistrationApplications().then(function(r){
+      admRegAppsCache = (r && r.applications) || [];
+      var c = (r && r.counts) || {};
+      var badge = document.getElementById('admRegCounts');
+      if(badge) badge.textContent = '· ' + (c.pending || 0) + ' awaiting review' + (c.provisioningFailed ? ' · ' + c.provisioningFailed + ' need attention' : '');
+      w.innerHTML = admRegAppsHTML();
+    }).catch(function(err){
+      w.innerHTML = '<p class="ad-p">Applications are not available for your role ('+esc(err.message || 'refused')+').</p>';
+    });
+  }
+  var cw = document.getElementById('admRegCodes');
+  if(cw){
+    GOC.api.listRegistrationCodes().then(function(r){
+      cw.innerHTML = admRegCodesHTML((r && r.codes) || []);
+    }).catch(function(err){
+      cw.innerHTML = '<p class="ad-p">Registration codes are managed by Finance ('+esc(err.message || 'refused')+').</p>';
+    });
+  }
+}
+function admRegStatusChip(a){
+  if(a.status === 'pending') return '<span class="ad-tag a">Awaiting review</span>';
+  if(a.status === 'provisioning') return '<span class="ad-tag a">Creating account…</span>';
+  if(a.status === 'provisioning-failed') return '<span class="ad-tag r">Provisioning failed</span>';
+  if(a.status === 'approved') return '<span class="ad-tag g">Approved</span>';
+  return '<span class="ad-tag r">Rejected</span>';
+}
+function admRegAppsHTML(){
+  if(!admRegAppsCache.length) return '<p class="ad-p">No applications yet.</p>';
+  var order = { 'pending': 0, 'provisioning-failed': 1, 'provisioning': 2, 'approved': 3, 'rejected': 4 };
+  var rows = admRegAppsCache.slice().sort(function(x, y){ return (order[x.status] - order[y.status]) || String(y.createdAt || '').localeCompare(String(x.createdAt || '')); });
+  return rows.map(function(a){
+    var btns = '<button class="ad-btn" onclick="admRegDetail(\''+a.id+'\')">Details</button>';
+    if(a.status === 'pending' || a.status === 'provisioning-failed'){
+      btns += ' <button class="ad-btn pri" onclick="admRegApprove(\''+a.id+'\')">'+(a.status === 'pending' ? '✓ Approve' : '↻ Resume')+'</button>';
+      btns += ' <button class="ad-btn warn" onclick="admRegReject(\''+a.id+'\')">✗ Reject</button>';
+    }
+    if(a.status === 'approved' && !a.setupUsedAt){
+      btns += ' <button class="ad-btn" onclick="admRegResend(\''+a.id+'\')">Resend setup link</button>';
+    }
+    var extra = '';
+    if(a.status === 'provisioning-failed') extra = '<div class="ad-metric"><span>Stopped at</span><b>'+esc(a.provisionStep || '—')+': '+esc(a.provisionError || '')+'</b></div>';
+    if(a.status === 'approved') extra = '<div class="ad-metric"><span>Scholar ID</span><b>'+esc(a.scholarId || '—')+'</b></div>' +
+      '<div class="ad-metric"><span>Password setup</span><b>'+(a.setupUsedAt ? 'Completed' : ('Link ' + esc(a.setupDelivery || 'pending') + ', expires ' + esc(String(a.setupExpiresAt || '').slice(0, 10))))+'</b></div>';
+    if(a.status === 'rejected') extra = '<div class="ad-metric"><span>Reason</span><b>'+esc(a.rejectReason || '—')+'</b></div>';
+    return '<div class="ad-cred"><div class="ac-top"><div class="ad-av">'+esc(initials(a.name))+'</div>' +
+      '<div class="ac-who"><b>'+esc(a.name)+'</b><span>'+esc(a.email || '')+'</span></div>' + admRegStatusChip(a) + '</div>' +
+      '<div class="ad-metric"><span>Subjects</span><b>'+esc((a.subjects || []).join(', ') || '—')+'</b></div>' +
+      '<div class="ad-metric"><span>Applied</span><b>'+esc(String(a.createdAt || '').slice(0, 10))+' · code: '+esc(a.codeLabel || '—')+'</b></div>' + extra +
+      '<div class="ac-btns">' + btns + '</div></div>';
+  }).join('');
+}
+function admRegDetail(id){
+  var w = document.getElementById('admRegDetail');
+  if(!w) return;
+  GOC.api.getRegistrationApplication(id).then(function(r){
+    var a = r.application || {};
+    var hist = (a.history || []).map(function(h){
+      return '<div class="ad-metric"><span>'+esc(String(h.at || '').slice(0, 16).replace('T', ' '))+'</span><b>'+esc(h.action || '')+(h.detail ? ' — ' + esc(h.detail) : '')+(h.by ? ' · ' + esc(h.by) : '')+'</b></div>';
+    }).join('');
+    w.innerHTML = '<div class="ad-card" style="margin-top:12px"><div class="ad-h">'+esc(a.name || '')+' — application history</div>' +
+      '<div class="ad-metric"><span>Email</span><b>'+esc(a.email || '—')+'</b></div>' +
+      '<div class="ad-metric"><span>Phone</span><b>'+esc(a.phone || '—')+'</b></div>' +
+      '<div class="ad-metric"><span>Goal</span><b>'+esc(a.goal || '—')+'</b></div>' +
+      (a.decidedBy ? '<div class="ad-metric"><span>Decided by</span><b>'+esc(a.decidedBy)+' · '+esc(String(a.decidedAt || '').slice(0, 10))+'</b></div>' : '') +
+      (hist || '<p class="ad-p">No history yet.</p>') + '</div>';
+  }).catch(function(err){ toast(err.message || 'Could not load that application'); });
+}
+function admRegApprove(id){
+  GOC.api.approveRegistrationApplication(id).then(function(r){
+    toast('Approved — Scholar ID ' + (r.application && r.application.scholarId) + ' created; setup email: ' + (r.setupDelivery || 'unknown'));
+    admRegLoad();
+  }).catch(function(err){ toast(err.message || 'Could not approve that application'); admRegLoad(); });
+}
+function admRegReject(id){
+  var reason = typeof prompt === 'function' ? prompt('Reason for rejecting (required — recorded with the decision):') : null;
+  if(reason === null || !String(reason).trim()){ toast('A reason is required to reject an application.'); return; }
+  GOC.api.rejectRegistrationApplication(id, String(reason).trim()).then(function(){
+    toast('Application rejected — the held code use was released');
+    admRegLoad();
+  }).catch(function(err){ toast(err.message || 'Could not reject that application'); });
+}
+function admRegResend(id){
+  GOC.api.resendRegistrationSetup(id).then(function(r){
+    toast('A fresh setup link was emailed to the applicant (delivery: ' + (r.setupDelivery || 'unknown') + ')');
+    admRegLoad();
+  }).catch(function(err){ toast(err.message || 'Could not resend the setup link'); });
+}
+function admRegCodesHTML(codes){
+  if(!codes.length) return '<p class="ad-p">No registration codes yet — create the first one above.</p>';
+  return codes.map(function(c){
+    var state = c.status === 'active' ? '<span class="ad-tag g">Active</span>' : '<span class="ad-tag r">'+esc(c.status)+'</span>';
+    return '<div class="ad-cred"><div class="ac-top"><div class="ac-who"><b>'+esc(c.label || 'Code')+'</b><span>…'+esc(c.hint || '')+'</span></div>' + state + '</div>' +
+      '<div class="ad-metric"><span>Uses</span><b>'+c.used+' of '+c.maxUses+' ('+c.held+' waiting, '+c.finalised+' approved)</b></div>' +
+      '<div class="ad-metric"><span>Expires</span><b>'+esc(c.expiresAt ? String(c.expiresAt).slice(0, 10) : 'never')+'</b></div>' +
+      (c.status !== 'revoked' ? '<div class="ac-btns"><button class="ad-btn warn" onclick="admRegCodeRevoke(\''+c.id+'\')">Revoke code</button></div>' : '') +
+      '</div>';
+  }).join('');
+}
+function admRegCodeCreate(){
+  var label = ((document.getElementById('admRegCodeLabel') || {}).value || '').trim();
+  var maxUses = Number(((document.getElementById('admRegCodeMax') || {}).value || ''));
+  var daysRaw = ((document.getElementById('admRegCodeDays') || {}).value || '').trim();
+  var body = { label: label, maxUses: maxUses };
+  if(daysRaw !== '') body.expiresInDays = Number(daysRaw);
+  GOC.api.createRegistrationCode(body).then(function(r){
+    var once = document.getElementById('admRegCodeOnce');
+    if(once) once.innerHTML = '<div class="ad-note" style="margin:12px 0"><b>Your registration code — shown only now:</b><br><code style="font-size:1.15rem;font-weight:700">' + esc(r.code) + '</code><br>Copy it and share it with your applicants. It will not be shown again; if it is lost, revoke it below and create a new one.</div>';
+    toast('Registration code created — copy it now, it is shown only once');
+    admRegLoad();
+  }).catch(function(err){ toast(err.message || 'Could not create that code'); });
+}
+function admRegCodeRevoke(id){
+  if(typeof confirm === 'function' && !confirm('Revoke this registration code?\n\nNo new applications can use it, and approval of applications still waiting on it will be blocked.')) return;
+  GOC.api.revokeRegistrationCode(id).then(function(){
+    toast('Code revoked');
+    admRegLoad();
+  }).catch(function(err){ toast(err.message || 'Could not revoke that code'); });
+}
+
 /* Admin-approval flow: approve a pending registration. */
 function admApprove(id){
   GOC.api.approveStudent(id).then(function(){
@@ -1201,38 +1329,24 @@ function signupSubmit(){
     return;
   }
   busy(btn, true);
-  // The server issues the Scholar ID, so two people signing up at the same
-  // moment can never be handed the same one.
-  GOC.api.createStudent({name:nm, password:pw, email:em, phone:ph, goal:goal, subjects:check.subjects,
+  var code = ((document.getElementById('signCode')||{}).value||'').trim();
+  GOC.api.submitRegistration({code:code, name:nm, password:pw, email:em, phone:ph, goal:goal, subjects:check.subjects,
     privacyConsent: { accepted: true, version: GOC.core.PRIVACY_POLICY_VERSION } }).then(function(r2){
     busy(btn, false);
-    /* Admin-approval flow: account is pending, no session is issued.
-       Show the holding screen with the student's Scholar ID. */
-    if(r2.pending){
+    /* Stage B: submitting sent an APPLICATION, not an account. No Scholar ID
+       exists yet and no session is issued; approval creates the account and
+       the student sets their password through the emailed setup link. */
+    if(r2 && r2.received){
       notePrivacyConsent(GOC.core.PRIVACY_POLICY_VERSION);
-      var idEl = document.getElementById('pendingScholarId');
-      if(idEl) idEl.textContent = r2.student.id;
       var nmEl = document.getElementById('pendingStudentName');
-      if(nmEl) nmEl.textContent = r2.student.name;
+      if(nmEl) nmEl.textContent = nm;
       go('signup-pending');
       return;
     }
-    /* Fallback: if a session was somehow returned, go to dashboard as before. */
-    if(typeof animEnter === 'function') animEnter('id');
-    applyIdentity(r2.session);
-    loadSettings();
-    go('home');
-    buildWeek(); renderClasses(); renderResources();
-    wtCatalogue = null;
-    refreshMe();
-    renderLeague();
-    ssStart();
-    swStart();
-    toast('Account created · your Scholar ID is '+r2.student.id+' — it stays on your dashboard');
-    setTimeout(openFlyer, 700);
+    toast('Your application could not be sent. Try again.');
   }).catch(function(err){
     busy(btn, false);
-    var msg = err.message || 'Could not create that account';
+    var msg = err.message || 'Could not send that application';
     toast(msg);
   });
 }
@@ -3032,7 +3146,20 @@ function admOpen(section){
       '<p class="ad-note" id="admStuNote">'+admStuNoteHTML()+'</p>'+
       '<p class="ad-warn">Passwords are hashed and cannot be read back — use <b>Reset password</b> to issue a new one.</p>'+
       '<div class="ad-actions"><button class="ad-btn pri" onclick="admToggleAddStudent()">Add student</button><button class="ad-btn" onclick="admExportStudents()">Export</button></div>'+
-      '<div id="admAddStudentWrap"></div></div>'
+      '<div id="admAddStudentWrap"></div></div>'+
+      '<div class="ad-card"><div class="ad-h">Registration applications <span id="admRegCounts"></span></div>'+
+      '<p class="ad-p">Applications arrive with a registration code and wait here — an application is not an account. Approving creates the account and emails the student a secure link to set their own password; nobody at the academy ever sees or handles that password.</p>'+
+      '<div id="admRegApps"><div class="ad-loading">Loading applications…</div></div>'+
+      '<div id="admRegDetail"></div></div>'+
+      '<div class="ad-card"><div class="ad-h">Registration codes</div>'+
+      '<p class="ad-p">A code lets an applicant submit an application. The full code is shown <b>once</b>, when created — afterwards only its last four characters are listed. Revoking a code stops new applications with it and blocks approval of applications still waiting.</p>'+
+      '<div class="ad-grid2">'+
+      '<div class="ad-field"><label>Label (school or group)</label><input id="admRegCodeLabel" placeholder="e.g. Ikeja partner school"></div>'+
+      '<div class="ad-field"><label>Maximum applications</label><input id="admRegCodeMax" type="number" min="1" max="10000" value="30"></div></div>'+
+      '<div class="ad-field"><label>Expires after (days, blank = never)</label><input id="admRegCodeDays" type="number" min="1" max="3650" placeholder="never"></div>'+
+      '<div class="ad-actions"><button class="ad-btn pri" onclick="admRegCodeCreate()">Create code</button></div>'+
+      '<div id="admRegCodeOnce"></div>'+
+      '<div id="admRegCodes"><div class="ad-loading">Loading codes…</div></div></div>'
     ); },
     cohorts: function(){ return (
       '<div class="ad-card"><div class="ad-h">New cohort</div><p class="ad-p">Groups students under one study window, session length and question ceiling. Leave a field blank to inherit the academy default.</p>'+
@@ -3471,7 +3598,7 @@ function admOpen(section){
   if(section === 'videos') admLoadVideos();
   if(section === 'classes') admLoadClasses();
   if(section === 'cohorts') admLoadCohorts();
-  if(section === 'students') admLoadCohorts();
+  if(section === 'students'){ admLoadCohorts(); admRegLoad(); }
   if(section === 'results') { admXpInit(); if(!admCohortsCache.length) admLoadCohorts().then(admXpFillCohorts); admRLoad(); }
   if(section === 'theorymark') admTMLoad();
   if(section === 'league') admLgLoad();

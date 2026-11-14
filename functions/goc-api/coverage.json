@@ -1,8 +1,8 @@
 {
   "generatedBy": "functions/goc-api/tools/coverage-report.js",
-  "total": 251,
+  "total": 262,
   "implemented": 1,
-  "notStarted": 250,
+  "notStarted": 261,
   "percent": 0.4,
   "byFamily": {
     "api/health": 1,
@@ -42,7 +42,8 @@
     "api/classes": 1,
     "api/scholarship": 8,
     "api/free2027": 54,
-    "api/analytics": 2
+    "api/analytics": 2,
+    "api/registrations": 11
   },
   "routes": [
     {
@@ -2051,6 +2052,94 @@
       "family": "api/analytics",
       "authTier": "console",
       "capability": "analytics.site",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/validate-code",
+      "family": "api/registrations",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations",
+      "family": "api/registrations",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/setup",
+      "family": "api/registrations",
+      "authTier": "public",
+      "capability": null,
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/registrations/codes",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "registrations.codes",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/codes",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "registrations.codes",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/codes/([A-Za-z0-9-]+)/revoke",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "registrations.codes",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/registrations/applications",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "students.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "GET",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "students.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/approve",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "students.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/reject",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "students.approve",
+      "status": "not-started"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/resend-setup",
+      "family": "api/registrations",
+      "authTier": "console",
+      "capability": "students.approve",
       "status": "not-started"
     }
   ]

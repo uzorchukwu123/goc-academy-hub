@@ -5471,6 +5471,7 @@
     'overview.all': [],
     /* Finance & Administration */
     'students.approve': [FIN],
+    'registrations.codes': [FIN],
     'students.add': [FIN],
     'students.deactivate': [FIN],
     'payments.view': [FIN],
@@ -5677,6 +5678,10 @@
   var AUDIT_RULES = [
     ['PUT',    new RegExp('^/api/students/' + ID + '/active$'),        'student-active',         'Switched a student account on or off', 'active'],
     ['POST',   new RegExp('^/api/students/' + ID + '/approve$'),       'student-approve',        'Approved a sign-up', null],
+    ['POST',   new RegExp('^/api/registrations/applications/' + ID + '/approve$'), 'registration-approve', 'Approved a registration application', null],
+    ['POST',   new RegExp('^/api/registrations/applications/' + ID + '/reject$'),  'registration-reject',  'Rejected a registration application', null],
+    ['POST',   /^\/api\/registrations\/codes$/,                        'registration-code-create', 'Created a registration code', null],
+    ['POST',   new RegExp('^/api/registrations/codes/' + ID + '/revoke$'), 'registration-code-revoke', 'Revoked a registration code', null],
     ['DELETE', new RegExp('^/api/students/' + ID + '/approve$'),       'student-reject',         'Rejected a sign-up (record deleted)', null],
     ['POST',   new RegExp('^/api/students/' + ID + '/reset$'),         'student-password-reset', 'Reset a student password', null],
     ['DELETE', new RegExp('^/api/admin/cohorts/' + ID + '$'),          'cohort-delete',          'Deleted a cohort', null],
@@ -6122,6 +6127,166 @@
       ].map(safe).join(',');
     });
     return [header.map(safe).join(',')].concat(rows).join('\r\n');
+  }
+
+  /* ------------------------------------------ registration codes & applications (Stage B)
+     The only way in: REGISTRATION CODE → APPLICATION → ADMINISTRATIVE REVIEW →
+     APPROVAL → ACCOUNT CREATION → G.O.C STUDENT ACCESS. A pending application is
+     NOT a student account: no Scholar ID, no Auth account, no student document,
+     no session. Codes live server-side only; the database stores a SHA-256 hash,
+     never the code itself. The plaintext is shown once, at creation, to the
+     manager who created it. Applications keep only a scrypt password hash
+     (pwHash); administrators never see or handle the applicant's password —
+     after approval the applicant sets their password through a single-use,
+     time-limited setup link sent directly to them, and the application's
+     stored hash is discarded at provisioning. */
+
+  var REGISTRATION_CODE_RE = /^GOC-REG-[A-HJ-NP-Z2-9]{6}-[A-HJ-NP-Z2-9]{6}$/;
+  var SETUP_TOKEN_TTL_MS = 72 * 60 * 60 * 1000;   /* the setup link lives 72 hours */
+  var REGISTRATION_STATUSES = ['pending', 'provisioning', 'provisioning-failed', 'approved', 'rejected'];
+
+  /* Normalise what an applicant typed (case, spaces, stray dashes) into the
+     canonical code form, or null when it cannot be a code at all. The public
+     endpoints answer valid/invalid generically, so this never leaks which
+     part was wrong. */
+  function cleanRegistrationCode(input) {
+    var s = String(input == null ? '' : input).toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    if (s.indexOf('GOCREG') !== 0) return null;
+    var rest = s.slice(6);
+    if (rest.length !== 12) return null;
+    var code = 'GOC-REG-' + rest.slice(0, 6) + '-' + rest.slice(6);
+    return REGISTRATION_CODE_RE.test(code) ? code : null;
+  }
+
+  /* How many of a code's uses are spoken for: held by a pending (or being
+     provisioned / approved) application, or finalised at approval. A released
+     use (rejected application) counts for nothing. */
+  function registrationCodeCounts(code) {
+    var uses = (code && Array.isArray(code.uses)) ? code.uses : [];
+    var held = 0, finalised = 0, released = 0;
+    uses.forEach(function (u) {
+      if (u.state === 'held') held++;
+      else if (u.state === 'finalised') finalised++;
+      else if (u.state === 'released') released++;
+    });
+    return { held: held, finalised: finalised, released: released, used: held + finalised };
+  }
+
+  /* 'revoked' | 'expired' | 'exhausted' | 'active' — checked in that order so
+     the most deliberate state wins. `now` is ms since epoch. */
+  function registrationCodeStatus(code, now) {
+    if (!code) return 'revoked';
+    if (code.revokedAt) return 'revoked';
+    if (code.expiresAt && Date.parse(code.expiresAt) <= now) return 'expired';
+    var max = Math.max(1, Math.floor(Number(code.maxUses)) || 1);
+    if (registrationCodeCounts(code).used >= max) return 'exhausted';
+    return 'active';
+  }
+
+  /* What the console may see of a code: never the hash, never the full code —
+     just its last group as a hint so staff can tell codes apart. */
+  function publicRegistrationCode(code, now) {
+    if (!code) return null;
+    var c = registrationCodeCounts(code);
+    return {
+      id: code.id, label: code.label || '', hint: code.hint || '',
+      maxUses: Math.max(1, Math.floor(Number(code.maxUses)) || 1),
+      held: c.held, finalised: c.finalised, used: c.used,
+      status: registrationCodeStatus(code, now),
+      expiresAt: code.expiresAt || null,
+      createdBy: code.createdBy || null, createdAt: code.createdAt || null,
+      revokedAt: code.revokedAt || null, revokedBy: code.revokedBy || null
+    };
+  }
+
+  /* Validate what an applicant submitted (the code itself is checked by the
+     server against its hash — this is only the personal-details half).
+     Returns { error } or { rec } with the tidied fields; the server adds the
+     scrypt pwHash, so a plaintext password never sits in a record. */
+  function validateRegistrationApplication(d) {
+    var r = d || {};
+    var consent = r.privacyConsent;
+    if (!consent || consent.accepted !== true) {
+      return { error: 'Please read and accept the Privacy Policy to apply.' };
+    }
+    var name = String(r.name == null ? '' : r.name).replace(/\s+/g, ' ').trim();
+    if (name.length < 2) return { error: 'Enter your full name.' };
+    if (name.length > 80) return { error: 'Name is too long (80 characters at most).' };
+    var email = String(r.email == null ? '' : r.email).replace(/\s+/g, '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return { error: 'Enter a valid email address.' };
+    var phone = String(r.phone == null ? '' : r.phone).replace(/[\s()-]+/g, '').trim();
+    if (!/^\+?\d{7,15}$/.test(phone)) return { error: 'Enter a valid phone number.' };
+    var password = String(r.password == null ? '' : r.password);
+    if (password.length < 8) return { error: 'Choose a password of at least 8 characters.' };
+    if (password.length > 256) return { error: 'Password must not be longer than 256 characters.' };
+    var exam = requireExam(r.goal);
+    if (!exam.ok) return { error: exam.error };
+    var combo = validateSubjects(Array.isArray(r.subjects) ? r.subjects : []);
+    if (!combo.ok) return { error: combo.error };
+    return { rec: { name: name, email: email, phone: phone, goal: exam.exam, subjects: combo.subjects } };
+  }
+
+  /* May this email apply? A live application (pending / being provisioned /
+     approved) blocks a duplicate; a rejected one does not. The message is for
+     the applicant's own screen, about their own address — it reveals nothing
+     about anyone else. */
+  function registrationEmailBlock(applications, students, email) {
+    var e = String(email || '').toLowerCase().trim();
+    if (!e) return 'Enter a valid email address.';
+    var apps = Array.isArray(applications) ? applications : [];
+    for (var i = 0; i < apps.length; i++) {
+      if (String(apps[i].email || '').toLowerCase() !== e) continue;
+      if (apps[i].status === 'rejected') continue;
+      if (apps[i].status === 'approved') return 'This email already has a G.O.C account — sign in with your Scholar ID.';
+      return 'An application with this email is already awaiting review.';
+    }
+    var roster = Array.isArray(students) ? students : [];
+    for (var j = 0; j < roster.length; j++) {
+      if (String(roster[j].email || '').toLowerCase() === e) {
+        return 'This email already has a G.O.C account — sign in with your Scholar ID.';
+      }
+    }
+    return null;
+  }
+
+  /* What the console may see of an application: no pwHash, no setup-token
+     hash, no code hash — only the state the reviewer needs. */
+  function publicRegistrationApplication(a) {
+    if (!a) return null;
+    return {
+      id: a.id, status: a.status,
+      name: a.name, email: a.email, phone: a.phone,
+      goal: a.goal, subjects: Array.isArray(a.subjects) ? a.subjects.slice() : [],
+      createdAt: a.createdAt || null,
+      codeId: a.codeId || null, codeLabel: a.codeLabel || '',
+      decidedBy: a.decidedBy || null, decidedAt: a.decidedAt || null,
+      rejectReason: a.rejectReason || null,
+      scholarId: a.scholarId || null,
+      provisionStep: a.provisionStep || null, provisionError: a.provisionError || null,
+      setupDelivery: (a.setup && a.setup.delivery) || null,
+      setupExpiresAt: (a.setup && a.setup.expiresAt) || null,
+      setupUsedAt: (a.setup && a.setup.usedAt) || null,
+      history: Array.isArray(a.history) ? a.history.map(function (h) {
+        return { at: h.at || null, by: h.by || null, action: h.action || '', detail: h.detail || null };
+      }) : []
+    };
+  }
+
+  /* The headline counts for the Students console section. */
+  function registrationCounts(applications, codes, now) {
+    var apps = Array.isArray(applications) ? applications : [];
+    var out = { pending: 0, provisioning: 0, provisioningFailed: 0, approved: 0, rejected: 0, activeCodes: 0 };
+    apps.forEach(function (a) {
+      if (a.status === 'pending') out.pending++;
+      else if (a.status === 'provisioning') out.provisioning++;
+      else if (a.status === 'provisioning-failed') out.provisioningFailed++;
+      else if (a.status === 'approved') out.approved++;
+      else if (a.status === 'rejected') out.rejected++;
+    });
+    (Array.isArray(codes) ? codes : []).forEach(function (c) {
+      if (registrationCodeStatus(c, now) === 'active') out.activeCodes++;
+    });
+    return out;
   }
 
   /* ---------------------------------------------------- assignments (Phase A, slice 1 — pure rules)
@@ -6758,6 +6923,16 @@
     makeWaitlistEntry: makeWaitlistEntry,
     scholarshipStatus: scholarshipStatus,
     publicApplication: publicApplication,
+    cleanRegistrationCode: cleanRegistrationCode,
+    registrationCodeCounts: registrationCodeCounts,
+    registrationCodeStatus: registrationCodeStatus,
+    publicRegistrationCode: publicRegistrationCode,
+    validateRegistrationApplication: validateRegistrationApplication,
+    registrationEmailBlock: registrationEmailBlock,
+    publicRegistrationApplication: publicRegistrationApplication,
+    registrationCounts: registrationCounts,
+    SETUP_TOKEN_TTL_MS: SETUP_TOKEN_TTL_MS,
+    REGISTRATION_STATUSES: REGISTRATION_STATUSES.slice(),
     scholarshipCsv: scholarshipCsv,
     ASSIGNMENT_SECTION: ASSIGNMENT_SECTION,
     ASSIGNMENT_XP_WEIGHT: ASSIGNMENT_XP_WEIGHT,

@@ -23,7 +23,7 @@ fs.cpSync(path.join(APP, 'js'), path.join(SANDBOX, 'js'), { recursive: true });
 try { fs.rmSync(path.join(SANDBOX, 'server', 'data.json'), { force: true }); } catch (e) {}
 var serverLog = '';
 var child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')], {
-  cwd: SANDBOX, env: Object.assign({}, process.env, { PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'), GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027' }), stdio: ['ignore', 'pipe', 'pipe'] });
+  cwd: SANDBOX, env: Object.assign({}, process.env, { PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'), GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027', GOC_PUBLIC_URL: 'http://127.0.0.1:' + PORT, GOC_REMINDER_DRY_RUN: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
 child.stdout.on('data', function (c) { serverLog += c; }); child.stderr.on('data', function (c) { serverLog += c; });
 function stop() { try { child.kill(); } catch (e) {} try { fs.rmSync(SANDBOX, { recursive: true, force: true }); } catch (e) {} }
 function call(method, urlPath, body, token) {
@@ -78,8 +78,18 @@ function total(stats, subject, which) {
   var all = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
   function mk(name, n, subs) { return call('POST', '/api/admin/students', { name: name, email: n + '@example.com', phone: '0800000005' + n.slice(-1), goal: 'JAMB / UTME 2027', subjects: subs || all }, adm); }
   var g1 = await mk('Gina Goc', 'g1'), g2 = await mk('Bola Goc', 'g2'), g3 = await mk('Chi Goc', 'g3', ['Use of English', 'Chemistry', 'Mathematics', 'Biology']);
-  var o = await call('POST', '/api/students', { name: 'Olu Student', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: all, privacyConsent: { accepted: true } });
-  var ID1 = g1.body.student.id, ID2 = g2.body.student.id, ID3 = g3.body.student.id, IDO = o.body && o.body.student && o.body.student.id;
+  /* Stage B: the fourth student arrives the way a real applicant now does —
+     Founder-minted code -> application -> approval -> password set through the
+     emailed link, read from the dry-run outbox as the applicant would. */
+  var code1 = (await call('POST', '/api/registrations/codes', { label: 'tutors suite', maxUses: 5 }, adm)).body;
+  var sub = await call('POST', '/api/registrations', { code: code1.code, name: 'Olu Student', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: all, privacyConsent: { accepted: true } });
+  var apps = (await call('GET', '/api/registrations/applications?status=pending', null, adm)).body.applications || [];
+  var myApp = apps.filter(function (a) { return a.email === 'olu@example.com'; }).pop();
+  var appr = await call('POST', '/api/registrations/applications/' + myApp.id + '/approve', {}, adm);
+  var outbox = fs.readFileSync(path.join(SANDBOX, 'server', 'reminders-outbox.jsonl'), 'utf8');
+  var tokMatch = outbox.match(/\/setup\/([A-Za-z0-9_-]+)/);
+  var setup = await call('POST', '/api/registrations/setup', { token: tokMatch && tokMatch[1], password: 'secret123' });
+  var ID1 = g1.body.student.id, ID2 = g2.body.student.id, ID3 = g3.body.student.id, IDO = appr.body && appr.body.application && appr.body.application.scholarId;
   var tok1 = (await call('POST', '/api/auth/login', { id: ID1, password: g1.body.temporaryPassword })).body.token;
   ok('setup: four students created', !!ID1 && !!ID2 && !!ID3 && !!IDO);
   var tutorN = 0;

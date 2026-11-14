@@ -45,15 +45,16 @@ var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
    questions.manage capability; no guard or capability map is changed. */
 /* The website-mode route (PUT /api/free2027/admin/mode) is gone — entry is
    the hostname now — so the free2027 console family contributes one fewer. */
-/* Stage A removed the two tier routes (student tier, cohort tier): two fewer. */
-var CONSOLE_ROUTES = 110 + 27 + 7 - 2;
+/* Stage A removed the two tier routes (student tier, cohort tier): two fewer.
+   Stage B adds eight registration routes (3 code + 5 application): eight more. */
+var CONSOLE_ROUTES = 110 + 27 + 7 - 2 + 8;
 var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
 ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));
 /* leaderboard.manage joins the list for the 2027 Free Tutorial Edition's
    competition leaderboards: the same capability that already governs the hub's
    own leaderboard console section. */
-ok('the tags are the chosen ones, nothing stray', tagged.every(function (c) { return ['signup.limits', 'broadcast.send', 'notices.manage', 'results.view', 'results.export', 'theory.mark', 'students.deactivate', 'students.approve', 'students.passwords', 'students.add', 'cohort.manage', 'cohort.create', 'tutors.accounts', 'tutors.audit', 'questions.manage', 'resources.publish', 'classes.schedule', 'approvals.review', 'roster.view', 'challenges.manage', 'sittings.configure', 'homepage.edit', 'managers.accounts', 'alerts.all', 'overview.all', 'overview.own', 'system.migrate', 'scholarship.view', 'scholarship.export', 'scholarship.decide', 'scholarship.approve', 'scholarship.delete', 'analytics.site', 'leaderboard.manage'].indexOf(c) > -1; }), tagged.join(','));
+ok('the tags are the chosen ones, nothing stray', tagged.every(function (c) { return ['signup.limits', 'broadcast.send', 'notices.manage', 'results.view', 'results.export', 'theory.mark', 'students.deactivate', 'students.approve', 'students.passwords', 'students.add', 'cohort.manage', 'cohort.create', 'registrations.codes', 'tutors.accounts', 'tutors.audit', 'questions.manage', 'resources.publish', 'classes.schedule', 'approvals.review', 'roster.view', 'challenges.manage', 'sittings.configure', 'homepage.edit', 'managers.accounts', 'alerts.all', 'overview.all', 'overview.own', 'system.migrate', 'scholarship.view', 'scholarship.export', 'scholarship.decide', 'scholarship.approve', 'scholarship.delete', 'analytics.site', 'leaderboard.manage'].indexOf(c) > -1; }), tagged.join(','));
 var fo = ['alerts.all', 'system.migrate', 'overview.all', 'managers.accounts'].every(function (c) { var r = core.rolesWithCapability(c); return r.length === 1 && r[0] === 'founder'; });
 ok('alerts, the migration, the full overview and manager accounts are Founder-only', fo);
 var allConsole = (srcText.match(/need: 'console',/g) || []).length;
