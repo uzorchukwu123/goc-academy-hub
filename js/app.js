@@ -8441,7 +8441,8 @@ function answerPrac(i, btn){
      this question but can never push a second mark (or a second XP claim)
      for it — pracAnswered above is the lock, this is the record. */
   pracMarks[pracI] = { n: pracI + 1, id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: (d.options || []).slice(),
-                   answer: d.answer, given: i, isCorrect: right, explanation: d.explanation || '' };
+                   answer: d.answer, given: i, isCorrect: right, explanation: d.explanation || '',
+                   source: d.source || null, page: d.page || null, sourceText: d.sourceText || '' };
   pracPaintChrome(pracPaper.questions.length);
 }
 /* Finishing a practice run: the page has already marked every question for the
@@ -8489,6 +8490,7 @@ function pracLocalResult(paper){
   var answered = pracAnsweredCount();
   return {
     mode: 'practice', subject: paper.subject, assessed: false,
+    source: paper.source || null, noteTitle: paper.noteTitle || '',
     total: total, answered: answered, unanswered: total - answered,
     correct: correct, wrong: answered - correct,
     percent: total ? Math.round(correct * 100 / total) : 0,
@@ -11844,6 +11846,7 @@ function myNoteRow(n){
     + (when ? ' · ' + esc(when) : '') + '</span></div></div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
     + '<button type="button" class="btn btn-red" onclick="myNoteRead(\'' + esc(n.noteId) + '\')">Read</button>'
+    + '<button type="button" class="btn btn-outline" onclick="notePracticeOpen(\'' + esc(n.noteId) + '\')">Practise this note</button>'
     + '<button type="button" class="btn btn-outline" onclick="myNoteReplace(\'' + esc(n.noteId) + '\')">Replace</button>'
     + '<button type="button" class="btn btn-outline" onclick="myNoteDelete(\'' + esc(n.noteId) + '\')">Delete</button>'
     + '</div>';
@@ -11933,6 +11936,118 @@ function myNoteDelete(id){
     toast('Note deleted.');
     myNotesLoad();
   }, function(err){ toast((err && err.message) || 'That note could not be deleted.'); });
+}
+
+/* ================= PRACTISE THIS NOTE (Stage 4) =================
+   Questions are built on this device, only from the text of the one note
+   the student picked: js/note-questions.js is extractive, so every correct
+   answer is lifted from a sentence in that note and carries the sentence
+   (and page) it came from. The run opens in the ordinary Practice screen
+   with no paperId, so it is marked locally, earns no XP, is never sent to
+   the official banks and is never labelled JAMB material. A PDF with no
+   text layer (a scanned note) is explained honestly rather than guessed at. */
+var notePracNote = null;
+function notePracticeOpen(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  notePracNote = n;
+  var old = document.getElementById('gocNotePractice');
+  if(old) old.remove();
+  var ext = String(n.fileType || '').toLowerCase();
+  var readable = (ext === 'pdf' || ext === 'txt' || ext === 'md');
+  var overlay = document.createElement('div');
+  overlay.id = 'gocNotePractice';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(17,17,17,.72);display:flex;align-items:center;justify-content:center;padding:18px;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:86vh;overflow:auto;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'
+    + '<div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="eyebrow">Practise this note</div>'
+    + '<h3 style="margin:4px 0 6px;font-size:17px">' + esc(n.title || 'Untitled note') + '</h3>'
+    + '<div class="muted" style="font-size:12.5px">' + esc(n.subject || '') + (n.topic ? ' · ' + esc(n.topic) : '') + '</div></div>'
+    + '<button type="button" id="notePracClose" aria-label="Close" style="border:0;background:#f3f4f6;border-radius:10px;width:38px;height:38px;font-size:20px;cursor:pointer;">×</button></div>'
+    + '<p style="font-size:13px;line-height:1.55;color:#374151">Questions are built only from the words in this note, on your device. Every answer can be checked against the sentence it came from. These are your own practice questions — they are not official JAMB questions and they never enter the academy\u2019s question banks.</p>'
+    + (readable
+      ? '<div class="ad-field"><label for="notePracCount">How many questions?</label><select id="notePracCount"><option value="3">3</option><option value="5" selected>5</option><option value="8">8</option><option value="10">10</option></select></div>'
+        + '<div class="ad-field"><label for="notePracDiff">Difficulty</label><select id="notePracDiff"><option value="easy">Easy — direct definitions</option><option value="standard" selected>Standard — a mix</option><option value="challenge">Challenge — complete the sentence</option></select></div>'
+        + '<button type="button" class="btn btn-red btn-block" id="notePracGo">Build my questions</button>'
+      : '<div class="wt-none">Practise This Note can read PDFs with selectable text, and .txt or .md notes. This ' + esc(ext || 'file') + ' note cannot be read inside the app, so no questions can be built from it here. You can still read or download it from your library.</div>')
+    + '<div id="notePracStatus" class="muted" style="font-size:13px;line-height:1.55;margin-top:12px"></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('notePracClose').onclick = notePracticeClose;
+  overlay.addEventListener('click', function(e){ if(e.target === overlay) notePracticeClose(); });
+  var goBtn = document.getElementById('notePracGo');
+  if(goBtn) goBtn.onclick = notePracticeGenerate;
+}
+function notePracticeClose(){
+  var o = document.getElementById('gocNotePractice');
+  if(o) o.remove();
+}
+function notePracticeStatus(msg){
+  var el = document.getElementById('notePracStatus');
+  if(el) el.textContent = msg || '';
+}
+function noteExtractPages(n, blob){
+  var ext = String(n.fileType || '').toLowerCase();
+  if(ext === 'txt' || ext === 'md'){
+    return blob.text().then(function(text){ return [{ page: null, text: text }]; });
+  }
+  if(ext !== 'pdf') return Promise.reject(new Error('unsupported-format'));
+  return blob.arrayBuffer().then(function(buf){
+    return import(pdfjsAssetUrl('pdf.min.mjs')).then(function(pdfjsLib){
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsAssetUrl('pdf.worker.min.mjs');
+      return pdfjsLib.getDocument({ data: buf }).promise;
+    });
+  }).then(function(doc){
+    var pages = [];
+    var chain = Promise.resolve();
+    for(var p = 1; p <= doc.numPages; p++){
+      (function(pageNo){
+        chain = chain.then(function(){
+          return doc.getPage(pageNo).then(function(page){ return page.getTextContent(); }).then(function(tc){
+            pages.push({ page: pageNo, text: (tc.items || []).map(function(it){ return it.str || ''; }).join(' ') });
+          });
+        });
+      })(p);
+    }
+    return chain.then(function(){ return pages; });
+  });
+}
+function notePracticeGenerate(){
+  var n = notePracNote;
+  if(!n || !window.GOCNoteQuestions) return;
+  var count = Number((document.getElementById('notePracCount') || {}).value) || 5;
+  var difficulty = String((document.getElementById('notePracDiff') || {}).value || 'standard');
+  var btn = document.getElementById('notePracGo');
+  if(btn){ btn.disabled = true; btn.textContent = 'Reading your note…'; }
+  notePracticeStatus('Reading the text from “' + (n.title || 'your note') + '”…');
+  GOC.api.getMyNoteFile(n.noteId).then(function(blob){
+    return noteExtractPages(n, blob);
+  }).then(function(pages){
+    var built = window.GOCNoteQuestions.generateFromPages(pages, {
+      count: count, difficulty: difficulty,
+      noteId: n.noteId, noteTitle: n.title, subject: n.subject, topic: n.topic
+    });
+    if(!built.questions.length){
+      if(btn){ btn.disabled = false; btn.textContent = 'Build my questions'; }
+      if(built.stats.reason === 'no-readable-text'){
+        notePracticeStatus(String(n.fileType || '').toLowerCase() === 'pdf'
+          ? 'This PDF appears to be scanned pictures of pages — it has no readable text layer, so the app cannot build questions from it. A text-based PDF (saved or exported as text, not photographed/scanned), or a .txt/.md note, will work.'
+          : 'This note has no readable text the app can build questions from.');
+      } else {
+        notePracticeStatus('Only ' + (built.stats.sentences || 0) + ' usable sentence(s) could be found in this note — that is not enough to build fair questions with four real choices each. A longer or clearer note will work better; nothing was guessed or made up.');
+      }
+      return;
+    }
+    notePracticeClose();
+    pracOpen({
+      paperId: null, source: 'my-note', noteId: n.noteId, noteTitle: n.title,
+      subject: n.subject || 'My Notes', questions: built.questions
+    });
+    if(built.questions.length < count) toast('Built ' + built.questions.length + ' questions — that is all this note can support.');
+  }, function(err){
+    if(btn){ btn.disabled = false; btn.textContent = 'Build my questions'; }
+    notePracticeStatus((err && err.message) || 'That note could not be read just now.');
+  });
 }
 
 function setResFilter(f){ resFilter = f; renderResources(); }
