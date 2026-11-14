@@ -57,12 +57,12 @@ ok('at the cap: the button reads Full and is disabled', els.freezeBuyBtn.textCon
 sandbox.paintFreeze({});
 ok('no field (older server): treated as none held', /holding 0 of 2/.test(els.freezeNote.textContent));
 sandbox.paintFreeze({ streakFreezes: 1, features: { streakFreezes: false } });
-ok('with the feature unavailable the row says so, and the button is disabled',
-  /buying is unavailable right now/.test(els.freezeNote.textContent) && els.freezeBuyBtn.disabled && els.freezeBuyBtn.textContent === 'Unavailable',
+ok('an Open account is told buying is GOC-only, and the button is disabled',
+  /buying is for GOC students/.test(els.freezeNote.textContent) && els.freezeBuyBtn.disabled && els.freezeBuyBtn.textContent === 'GOC only',
   els.freezeNote.textContent);
 ok('the freezes they already hold are still shown', /holding 1 of 2/.test(els.freezeNote.textContent));
 sandbox.paintFreeze({ streakFreezes: 0, features: { streakFreezes: true } });
-ok('with the feature available the account gets the normal row back', /500 XP/.test(els.freezeNote.textContent) && !els.freezeBuyBtn.disabled);
+ok('a GOC account gets the normal row back', /500 XP/.test(els.freezeNote.textContent) && !els.freezeBuyBtn.disabled);
 
 buyImpl = function () { return Promise.resolve({ ok: true, xp: 30, streakFreezes: 1 }); };
 sandbox.buyFreeze();

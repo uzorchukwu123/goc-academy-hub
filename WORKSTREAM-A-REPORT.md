@@ -88,9 +88,9 @@ and proves:
 - a maintenance build emits only `index.html` + `sw.js`, and a normal build
   restores the full app.
 
-Full regression on the branch: **212/212 suites pass**, including all Stage A
-(earlier) and Stage B registration suites. `node build/build.js` still builds
-the full app normally.
+Full regression on the reconciled baseline: **229/229 suites pass** (main's 228
+suites plus the new maintenance suite), exit 0. `node build/build.js` still
+builds the full app normally.
 
 ## 5. Acceptance criteria (Part 10, maintenance)
 
@@ -116,32 +116,27 @@ the full app normally.
 - Enable it on **every** tier that serves traffic. This branch has not been
   deployed anywhere.
 
-## 7. Baseline note (important before opening a PR)
+## 7. Baseline note (reconciled)
 
-This session's working branch is `arena/be3c2044-goc-academy-hub`, checked out at
-`90a1e85` (**Stage B — application-first registration**). `origin/main` has
-since moved to `17cc20f` (**Merge pull request #15**) and, in this clone, the two
-histories are **unrelated** (`git merge-base` finds no common ancestor; each has
-one commit the other does not). The trees also differ materially: `origin/main`
-contains the tier system (`Two ways in`, `test-tiers-*`) and does not contain
-Stage B's registration routes/tests, while this branch contains Stage B and the
-older homepage.
+The branch originally sat on `90a1e85` (Stage B — application-first
+registration), an **unrelated history** to `origin/main` `17cc20f` (PR #15, the
+Open/GOC tier system). The two trees also described incompatible products:
+Stage B removed the tier model and required an application code; main has open
+sign-up with Open/GOC tiers and 23 tier suites.
 
-Consequences:
+The branch has now been reconciled onto **`origin/main`** (see
+`RECONCILIATION.md`):
 
-- Workstream A is complete and tested **on this branch**.
-- The maintenance gate is a single insertion at the same point in both
-  `server.js` dispatchers (after the security headers, before `/tutor`),
-  so porting it to `origin/main` is small: copy `server/lib/maintenance.js`,
-  insert the require/`MAINTENANCE_MODE`/gate, apply the `build/build.js` branch,
-  the two Function edits, `.env.example` / `APPWRITE-ENVIRONMENT.md`, the docs
-  and the test suite.
-- Do **not** open a PR from this branch to `main` until the histories are
-  reconciled (merge the branch into main locally, or re-apply the Stage B and
-  maintenance changes onto a fresh branch from `origin/main`). A PR across
-  unrelated histories cannot be merged cleanly, and Workstream B's inspection
-  below reports the exact differences so the reconciliation is deliberate.
+- `origin/main` is a parent of this branch, so a normal pull request now shows
+  only the maintenance work and the two reports — no mass deletion.
+- The working tree is main's application (tier system, “Two ways in”, 228
+  suites) plus the maintenance module/gate/build/Function/docs/test and the
+  reports.
+- Stage B is preserved in history at `90a1e85` but is **not** part of the
+  reconciled baseline. Its product direction (one student identity, no tiers)
+  contradicts main and could not be combined without deliberately reverting the
+  tier system — an owner decision, not a merge.
+- Maintenance is still one switch and one gate; porting it required only
+  re-inserting the same calls into main's dispatcher and build.
 
-No branch was created or switched in this session (session policy pins the
-working branch). Awaiting the owner's decision on how to reconcile the Stage B
-branch with `origin/main` before a focused PR is raised.
+No PR was opened and nothing was deployed.

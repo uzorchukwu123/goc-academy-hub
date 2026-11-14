@@ -11,28 +11,24 @@ Date of inspection: 14 November 2026.
 
 ## 0. Baseline — read this first
 
-Two different snapshots exist in this clone, and the difference matters:
+The branch has been **reconciled onto `origin/main`** (`17cc20f`, PR #15), so
+the tree these findings describe is now the actual working tree: main's tier
+system, “Two ways in”, 228 suites, plus the Workstream A maintenance switch and
+the two reports. `origin/main` is an ancestor, so a pull request from this
+branch shows only those additions.
 
-| Snapshot | Commit | Contains |
-| --- | --- | --- |
-| This session's branch | `90a1e85` — *Stage B: application-first registration* | The Stage B registration system (codes, applications, approval, setup links), 211/212 suites, the older homepage (**no** tier cards) |
-| `origin/main` (PR #15 merged) | `17cc20f` — *Merge pull request #15* | The tier system (Open/GOC), **“Two ways in”**, `test-tiers-*`, 228 suites, but **not** Stage B registration |
+Why reconciliation was needed: the branch had been cut from `90a1e85`
+(Stage B — application-first registration), which shares **no ancestor** with
+main. Stage B also describes the opposite registration product: it removes the
+Open/GOC tiers and requires a registration code. That cannot coexist with
+main's open sign-up and tier limits without deliberately reverting one of them.
+Main is the merged, live line and the line these requirements describe, so the
+reconciled baseline uses main and archives Stage B at `90a1e85` (recoverable,
+not active). See `RECONCILIATION.md` for the plain-words account and the
+step-by-step git history.
 
-`git merge-base` finds **no common ancestor** between the two; they are
-unrelated histories with overlapping trees. That is a repository problem, not a
-feature problem:
-
-- The requirements below were written against **`origin/main`** — “Two ways in”
-  and “Ready to study with purpose?” exist only there. All page/structure
-  findings below are therefore verified against the `origin/main` tree (read via
-  `git archive origin/main`), and labelled **main** where they differ from this
-  branch.
-- Everything shared by both snapshots (dashboard, Study hub, practice, Web Test,
-  reminders, streak freeze, tutorial, notes, bookmarks, demo preview, service
-  worker) was verified on this branch and cross-checked in main.
-- **Do not start implementation until the two histories are reconciled** (see
-  §22). Any improvement branch must start from one combined baseline, or the
-  Stage B registration work and the tier work will silently undo each other.
+All page/structure findings below are verified against main (and were
+cross-checked in the Stage B tree where the code was shared).
 
 What was actually examined: `server/server.js` (all routes), `server/lib/*`,
 `functions/goc-api/*`, `js/app.js`, `js/api.js`, `js/goc-core.js`,
@@ -114,9 +110,9 @@ names:
 
 The **sign-up screen** has its own collapsed `<details class="tier-compare"
 id="tierCompare">` panel with the same Open/GOC wording (`index.html` ~731).
-The actual registration functionality for the current process is the Stage B
-application form (`#signup` in this branch; `#signup` + tier panel in main) and
-`POST /api/registrations` — not this landing block.
+The actual registration is the `#signup` form (with its own collapsed tier
+panel) and `POST /api/students`, which creates an **Open** account — not this
+landing block.
 
 ### Dependencies before removal
 | Dependency | Detail |
@@ -679,8 +675,8 @@ drives tour + notice.
   must see identical questions.
 - Keep answers/explanations server-side until single-use submit; keep the
   in-memory token, rate limit and “no writes” guarantees.
-- Extend the result screen with a clear **“Register for full G.O.C access”**
-  CTA (the Stage B application flow may mean “apply”, not a direct account).
+- Extend the result screen with a clear **“Create your free Open account”**
+  CTA, followed by the existing invitation to ask the academy about GOC access.
 - Guard: never call `/api/me/*`, never send a student token, never write
   `practiceRuns`, `attempts`, `bookmarks`, flags or XP.
 - Consider using the JAMB CBT runner (`#wtRun`-style) if the brief wants the
@@ -810,13 +806,13 @@ alternating backgrounds after reorder.
 
 ## 18. Recommended staged sequence (minimises regressions)
 
-**Stage 0 — repository reconciliation (blocking).**
-Merge the Stage B history and the main/tier history into one branch; run the
-combined suite; tag the baseline. No feature work until this is green.
+**Stage 0 — repository reconciliation (done).**
+The branch now sits on `origin/main` with maintenance re-applied; 229/229
+suites pass and `origin/main` is an ancestor. See `RECONCILIATION.md`.
 
-**Stage 1 — maintenance mode.** Already implemented and tested on this branch;
-port it onto the reconciled baseline (single gate + module + docs + test). Merge
-independently once reviewed; do not deploy.
+**Stage 1 — maintenance mode.** Already implemented and tested on the
+reconciled baseline (single gate + module + docs + test). Merge independently
+once reviewed; do not deploy.
 
 **Stage 2 — data + streak integrity (server first, no UI).**
 Move or protect the local-only student records; fix freeze display/consumption,
@@ -858,8 +854,9 @@ updating `test/run.js` suites.
 
 ## 19. Owner decisions required before implementation
 
-1. **Baseline:** how should the Stage B branch and `origin/main` (tier work) be
-   combined? (Blocking.)
+1. **Baseline (resolved):** the branch now sits on `origin/main`; Stage B is
+   archived at `90a1e85`. Confirm that Stage B (one student identity, no tiers)
+   is indeed abandoned — if not, it becomes a separate reversal project.
 2. **Two Ways In:** confirm the landing `#lpTiers` block and its Create-account
    CTA are what “Two Ways In” means; keep the sign-up panel. Yes/no.
 3. **Dashboard scope:** several items live on the Study hub, not `#home`.
@@ -910,10 +907,13 @@ blocked on the owner’s decisions in §19 and explicit approval.
 
 ## 22. What is needed to proceed
 
-1. Resolve the unrelated-history baseline (§0): one branch containing both
-   Stage B and the tier work, with a green combined suite.
-2. Approve or amend the scope decisions in §19.
-3. Approve Stage 1 (maintenance) as an independent merge and the Stage 2–8
+1. ~~Resolve the unrelated-history baseline~~ — **done**: the branch now sits on
+   `origin/main` with a green 229-suite run and can be proposed as a normal PR.
+2. Decide whether Stage B (one student identity, no tiers) is really abandoned.
+   It is archived at `90a1e85`; restoring it would be a deliberate product
+   reversal, not a merge.
+3. Approve or amend the scope decisions in §19.
+4. Approve Stage 1 (maintenance) as an independent merge and the Stage 2–8
    plan (or a subset).
 
 Only then should implementation begin, one stage per focused PR, with the

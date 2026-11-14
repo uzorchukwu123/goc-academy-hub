@@ -84,11 +84,11 @@ var q2 = { subject: 'Physics', topic: 'Waves', text: 'A wave has frequency 50 Hz
 (function main() {
   waitForBoot(40).then(function () {
     head('Bookmarks — per-student saved questions (Phase 1, part 2)');
-    var idA, tokenA, tokenB, tokenC, keyA, keyB, pwA;
+    var idA, tokenA, tokenB, tokenC, keyA, keyB;
 
     return activeStudent.signedUp(call, signup).then(function (r) {
       ok('a student can sign up', r.status === 200 && r.body && r.body.token, r.status + ' ' + r.raw);
-      idA = r.body.session.id; tokenA = r.body.token; pwA = r.tempPassword;
+      idA = r.body.session.id; tokenA = r.body.token;
       return call('GET', '/api/me/bookmarks', undefined, tokenA);
     }).then(function (r) {
       ok('a new student has no bookmarks', r.status === 200 && Array.isArray(r.body.bookmarks) && r.body.bookmarks.length === 0);
@@ -119,7 +119,7 @@ var q2 = { subject: 'Physics', topic: 'Waves', text: 'A wave has frequency 50 Hz
       return call('GET', '/api/me/bookmarks', undefined, null);
     }).then(function (r) {
       ok('bookmarks need a student session', r.status === 401 || r.status === 403);
-      return call('POST', '/api/auth/login', { id: idA, password: pwA });
+      return call('POST', '/api/auth/login', { id: idA, password: 'secret123' });
     }).then(function (r) {
       tokenB = r.body.token;
       return call('GET', '/api/me/bookmarks', undefined, tokenB);

@@ -108,9 +108,7 @@ var child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')],
   env: Object.assign({}, process.env, {
     PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'),
     GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027',
-    GOC_PASSCODE: '2027', GOC_SIGNUP_CODE: SIGNUP,
-    /* so the password-setup email lands in the dry-run outbox the suite reads */
-    GOC_PUBLIC_URL: 'http://127.0.0.1:' + PORT, GOC_REMINDER_DRY_RUN: '1'
+    GOC_PASSCODE: '2027', GOC_SIGNUP_CODE: SIGNUP
   }),
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -123,47 +121,25 @@ function stop() {
 }
 
 (async function main() {
-  /* Demo driver first — no server needed. (Stage B: applications are made
-     with submitRegistration, not the removed createStudent.) */
-  var m = await rejects(mock.submitRegistration(body));
-  ok('demo: no acceptance, no application', m && /Privacy Policy/.test(m), m);
-  m = await rejects(mock.submitRegistration(Object.assign({}, body, { privacyConsent: { accepted: false } })));
+  /* Demo driver first — no server needed. */
+  var m = await rejects(mock.createStudent(body));
+  ok('demo: no acceptance, no account', m && /Privacy Policy/.test(m), m);
+  m = await rejects(mock.createStudent(Object.assign({}, body, { privacyConsent: { accepted: false } })));
   ok('demo: an explicit refusal is refused too', m && /Privacy Policy/.test(m), m);
-  await mock.login('GOC-A-001', 'founder2027'); await mock.unlockConsole('2027');
-  var dcode = await mock.createRegistrationCode({ label: 'consent suite', maxUses: 5 });
-  await mock.logout();
-  var r = await mock.submitRegistration(Object.assign({}, body, { code: dcode.code, email: 'consent@example.com', phone: '08000000111', privacyConsent: { accepted: true } }));
-  ok('demo: an accepted application is received (an application, not an account)', r && r.received === true, JSON.stringify(r));
-  await mock.login('GOC-A-001', 'founder2027'); await mock.unlockConsole('2027');
-  var dapps = await mock.listRegistrationApplications();
-  ok('demo: the application waits in the pending queue', (dapps.applications || []).some(function (x) { return x.email === 'consent@example.com' && x.status === 'pending'; }), JSON.stringify(dapps).slice(0, 160));
-  await mock.logout();
+  var r = await mock.createStudent(Object.assign({}, body, { privacyConsent: { accepted: true } }));
+  ok('demo: an accepted registration goes to pending', r && r.pending === true && r.student && r.student.id, JSON.stringify(r));
 
   await waitForBoot(40);
   head('The server refuses a registration without consent');
-  var no = await call('POST', '/api/registrations', Object.assign({}, body, { email: 'noconsent@example.com', phone: '08000000222' }));
+  var no = await call('POST', '/api/students', body);
   ok('no acceptance: 400 with a clear reason', no.status === 400 && /Privacy Policy/.test(no.body.error || ''), no.status + ' ' + no.raw);
   ok('and no account was created', !(no.body && no.body.student), no.raw);
-  var falseConsent = await call('POST', '/api/registrations', Object.assign({}, body, { email: 'falseconsent@example.com', phone: '08000000333', privacyConsent: { accepted: false } }));
+  var falseConsent = await call('POST', '/api/students', Object.assign({}, body, { privacyConsent: { accepted: false } }));
   ok('accepted:false is refused as well', falseConsent.status === 400, falseConsent.status + ' ' + falseConsent.raw);
 
   head('With consent, the acceptance is recorded and follows the student');
-  var fl = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
-  var ftok = fl.body && fl.body.token;
-  await call('POST', '/api/auth/unlock', { passcode: '2027' }, ftok);
-  var codeRes = await call('POST', '/api/registrations/codes', { label: 'consent suite', maxUses: 5 }, ftok);
-  var sub = await call('POST', '/api/registrations', Object.assign({}, body, { code: codeRes.body && codeRes.body.code, email: 'consent@example.com', phone: '08000000111', privacyConsent: { accepted: true } }));
-  ok('the application is received', sub.status === 200 && sub.body && sub.body.received === true, sub.status + ' ' + sub.raw);
-  var apps = await call('GET', '/api/registrations/applications?status=pending', null, ftok);
-  var mine = (apps.body.applications || []).filter(function (x) { return x.email === 'consent@example.com'; }).pop();
-  var appr = await call('POST', '/api/registrations/applications/' + mine.id + '/approve', {}, ftok);
-  var stuId = appr.body && appr.body.application && appr.body.application.scholarId;
-  var outbox = fs.readFileSync(path.join(SANDBOX, 'server', 'reminders-outbox.jsonl'), 'utf8');
-  var setupTok = (outbox.match(/\/setup\/([A-Za-z0-9_-]+)/) || [])[1];
-  await call('POST', '/api/registrations/setup', { token: setupTok, password: 'secret123' });
-  var slogin = await call('POST', '/api/auth/login', { id: stuId, password: 'secret123' });
-  var a = { id: stuId, token: slogin.body && slogin.body.token };
-  ok('the approved student signs in with the password they set', !!a.token, slogin.raw);
+  var a = await activeStudent(call, Object.assign({}, body, { email: 'consent@example.com', phone: '08000000111' }));
+  ok('the helper signs up, approves and logs in', !!a.token, JSON.stringify(a.signup && a.signup.body));
   var me = await call('GET', '/api/me', undefined, a.token);
   ok('/api/me carries the consent record', me.status === 200 && me.body.privacyConsent && !!me.body.privacyConsent.at, me.raw);
   ok('the record names the server\'s own policy version', me.body.privacyConsent.version === core.PRIVACY_POLICY_VERSION, me.raw);

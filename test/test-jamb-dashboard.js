@@ -120,11 +120,11 @@ sandbox.dashPaintJamb([{ section: 'theory', subject: 'Biology', questions: 5, du
 ok('a combination with no listed sitting gets the same honest card',
   /question bank is ready in all of your subjects/.test(els.dashJamb.innerHTML));
 
-head('a locked sitting');
+head('locked for this tier');
 sandbox.dashPaintJamb([Object.assign({}, JAMB_ROW, { locked: true })]);
 h = els.dashJamb.innerHTML;
-ok('the locked sitting shows a disabled Locked button and no tier copy',
-  !/GOC students|Open/i.test(h) && /<button class="wt-start locked" disabled>Locked<\/button>/.test(h), h);
+ok('the locked sitting is explained, with a disabled button',
+  /for GOC students/.test(h) && /<button class="wt-start locked" disabled>/.test(h), h);
 confirmed.length = 0; webTestOpens = 0;
 sandbox.dashJambSit(null);
 ok('a locked sitting is never started from the dashboard', confirmed.length === 0 && webTestOpens === 1);

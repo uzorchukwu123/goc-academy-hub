@@ -102,9 +102,13 @@ function _unused(token) {
       token = r.body.token;
       return call('POST', '/api/me/streak-freeze', {}, token);
     }).then(function (r) {
-      /* Every student may buy freezes — there is no tier gate — so the first
-         refusal a new student meets is the balance check itself. */
-      ok('a new student has too little XP: 409 reason xp', r.status === 409 && r.body.reason === 'xp', r.raw);
+      /* A self-registered account is Open, and buying freezes is a GOC
+         feature — the server refuses it before it ever looks at the balance. */
+      ok('an Open student cannot buy a freeze (403)', r.status === 403 && /GOC students/.test(r.body.error || ''), r.raw);
+      patchStudent({ tier: 'goc' });
+      return call('POST', '/api/me/streak-freeze', {}, token);
+    }).then(function (r) {
+      ok('a new GOC student has too little XP: 409 reason xp', r.status === 409 && r.body.reason === 'xp', r.raw);
       ok('and nothing is spent or granted', r.body.xp === 0 && r.body.streakFreezes === 0, r.raw);
       patchStudent({ xp: COST + 30 });
       return call('POST', '/api/me/streak-freeze', {}, token);

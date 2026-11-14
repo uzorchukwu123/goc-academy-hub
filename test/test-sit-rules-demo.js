@@ -28,7 +28,7 @@ function sit(section) {
 vm.runInContext('GOC.api._drivers.mock._setJambReadyMin(1)', ctx);
 activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Ada Demo', password: 'secret123',
   goal: 'JAMB / UTME 2027', subjects: COMBO }).then(function (r) {
-  // every student now has full GOC access — no promotion step exists
+  vm.runInContext('GOC.api._drivers.mock._setTier', ctx)(r.student.id, 'goc');   // Objective is for GOC students
   return mock.listMyTests();
 }).then(function (r) {
   var j = row(r, 'jamb'), o = row(r, 'objective');

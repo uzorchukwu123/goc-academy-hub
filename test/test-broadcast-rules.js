@@ -23,15 +23,15 @@ console.log('\nwho is in an audience');
 var goc = { id: 'S1', tier: 'goc', active: true, subjects: ['English Language', 'Chemistry', 'Physics', 'Mathematics'] };
 var bio = { id: 'S2', tier: 'goc', active: true, subjects: ['English Language', 'Biology'] };
 var open = Object.assign({}, goc, { id: 'S3', tier: 'open' });
-ok('every student is in the all-students audience', core.audienceHas({ kind: 'goc' }, goc) && core.audienceHas({ kind: 'goc' }, bio));
-ok('a subject audience takes only students who take it', core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, goc) && !core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, bio));
-ok('a stored tier value is ignored: the student is in both audiences', core.audienceHas({ kind: 'goc' }, open) && core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, open));
-ok('no stored tier: still in the audience', core.audienceHas({ kind: 'goc' }, { id: 'S4', active: true, subjects: ['Chemistry'] }));
-ok('an odd stored tier such as "GOCX" is ignored', core.audienceHas({ kind: 'goc' }, Object.assign({}, goc, { tier: 'GOCX' })));
+ok('every GOC student is in the GOC audience', core.audienceHas({ kind: 'goc' }, goc) && core.audienceHas({ kind: 'goc' }, bio));
+ok('a subject audience takes only GOC students who take it', core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, goc) && !core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, bio));
+ok('an Open student is in neither audience', !core.audienceHas({ kind: 'goc' }, open) && !core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, open));
+ok('no tier reads as Open', !core.audienceHas({ kind: 'goc' }, { id: 'S4', active: true, subjects: ['Chemistry'] }));
+ok('an odd tier such as "GOCX" is not GOC', !core.audienceHas({ kind: 'goc' }, Object.assign({}, goc, { tier: 'GOCX' })));
 ok('a deactivated student is left out', !core.audienceHas({ kind: 'goc' }, Object.assign({}, goc, { active: false })));
 ok('a bad audience or no student reaches nobody', !core.audienceHas(null, goc) && !core.audienceHas({ kind: 'goc' }, null) && !core.audienceHas({ kind: 'subject', subject: 'Latin' }, goc));
 ok('a student with no subject list is not in a subject audience', !core.audienceHas({ kind: 'subject', subject: 'Chemistry' }, { id: 'S5', tier: 'goc', active: true }));
-ok('recipients are counted from the roster', core.broadcastRecipients({ kind: 'goc' }, [goc, bio, open]).length === 3 && core.broadcastRecipients({ kind: 'subject', subject: 'Biology' }, [goc, bio, open]).map(function (s) { return s.id; }).join() === 'S2');
+ok('recipients are counted from the roster', core.broadcastRecipients({ kind: 'goc' }, [goc, bio, open]).length === 2 && core.broadcastRecipients({ kind: 'subject', subject: 'Biology' }, [goc, bio, open]).map(function (s) { return s.id; }).join() === 'S2');
 
 console.log('\nvalidation');
 var v = core.validateBroadcast(good);
@@ -64,7 +64,7 @@ var list = [
 ];
 ok('a student sees what is addressed to them, newest first', core.broadcastsForStudent(list, goc).map(function (b) { return b.id; }).join() === '2,1');
 ok('a Biology student sees the GOC one and the Biology one', core.broadcastsForStudent(list, bio).map(function (b) { return b.id; }).join() === '2,3');
-ok('a student with a stored open tier sees what is addressed to them', core.broadcastsForStudent(list, open).map(function (b) { return b.id; }).join() === '2,1');
+ok('an Open student sees none', core.broadcastsForStudent(list, open).length === 0);
 ok('a student receives no staff name, only "G.O.C Academy"', (function () {
   var b = core.broadcastsForStudent(list, goc)[0];
   return b.from === 'G.O.C Academy' && b.sentBy === undefined && b.audience === undefined && b.at === '2026-10-09T00:00:00.000Z';

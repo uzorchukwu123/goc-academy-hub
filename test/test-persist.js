@@ -319,7 +319,7 @@ function stop() {
      !!physicsRow && physicsRow.want === 17,
      physicsRow && JSON.stringify(physicsRow));
 
-  var studentLogin2 = await call('POST', '/api/auth/login', { id: student.student.id, password: enrolled.tempPassword });
+  var studentLogin2 = await call('POST', '/api/auth/login', { id: student.student.id, password: 'secret123' });
   var afterResults = await call('GET', '/api/me/results', undefined, studentLogin2.body.token);
   var afterCount = (afterResults.body && afterResults.body.attempts || []).length;
   ok('the attempt submitted before the restart is still on the student\'s record',

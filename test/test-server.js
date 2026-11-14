@@ -90,64 +90,45 @@ function stop() {
   try { fs.rmSync(SANDBOX, { recursive: true, force: true }); } catch (e) {}
 }
 
-var good = { name: 'Ada Test', password: 'secret123', email: 'ada.test@example.com',
+var good = { signupCode: SIGNUP, name: 'Ada Test', password: 'secret123', email: 'ada.test@example.com',
              phone: '08000000009', goal: 'JAMB / UTME 2027',
              subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'],
              privacyConsent: { accepted: true } };
 /* Kept for the sections that come after registration. */
-var stuToken = null, stuId = null, theoryId = null, stuPw = null;
-/* Stage B: a registration code minted by the Founder console governs every
-   application this suite submits. The code is single-pool (maxUses 100), the
-   plaintext comes back exactly once, at creation. */
-var codeInForce = null;
+var stuToken = null, stuId = null, theoryId = null;
+/* The access code currently in force. The Priority 8 section rotates it, and
+   every registration made after that point has to use the new one — which is
+   the whole point of the firewall. */
+var codeInForce = SIGNUP;
 
 waitForBoot(20).then(function (h) {
   head('the server is up');
   ok('health responds', h.status === 200 && h.body && h.body.service === 'goc-academy-hub', h.raw);
   ok('health does not leak the passcode', h.raw.indexOf('2027') < 0 || !/passcode"\s*:\s*"/.test(h.raw), h.raw);
 
-  head('registration is application-first — the registration code is the gate');
-  /* Stage B. The old public sign-up route no longer creates accounts at all,
-     and /api/registrations requires a live registration code. Proven first
-     without writing a row: with a VALID combination, a missing/empty/wrong
-     code is refused on the code itself; with a valid code, the combination
-     rules are what stop a bad one. */
-  var adm0 = null;
-  return call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' }).then(function (l) {
-    adm0 = l.body && l.body.token;
-    return call('POST', '/api/auth/unlock', { passcode: '2027' }, adm0);
-  }).then(function () {
-    return call('POST', '/api/registrations/codes', { label: 'test-server suite', maxUses: 100 }, adm0);
-  }).then(function (cr) {
-    codeInForce = cr.body && cr.body.code;
-    ok('the Founder mints a registration code, returned once', typeof codeInForce === 'string' && codeInForce.length > 8, cr.raw);
-    return call('POST', '/api/students', Object.assign({}, good));
-  }).then(function (old) {
-    ok('the old public sign-up route creates nothing (405)', old.status === 405 && !(old.body && old.body.student), old.status + ' ' + old.raw);
-    var loose = [
-      ['no code field at all', { code: undefined }],
-      ['an empty code', { code: '   ' }],
-      ['a code that is simply wrong', { code: 'GOC-REG-XXXXXX-XXXXXX' }]
-    ];
-    return loose.reduce(function (chain, c, i) {
-      return chain.then(function () {
-        var d = Object.assign({}, good, c[1], { email: 'fw' + i + '@example.com', phone: '0801000' + (1000 + i) });
-        return call('POST', '/api/registrations', d).then(function (r) {
-          ok(c[0] + ' is stopped by the registration code', r.status === 400 && /registration code is not valid/i.test((r.body && r.body.error) || ''), r.status + ' ' + r.raw);
-          ok(c[0] + ' created no account', !(r.body && r.body.student), r.raw);
-        });
+  head('sign-up is open — no access code is asked for');
+  /* Phase 3B slice 5. Proven without writing a row: each body below is refused on its
+     subject combination (two sciences), which can only happen if the code, missing or
+     wrong, was not what stopped it. */
+  var loose = [
+    ['no code field at all', { signupCode: undefined }],
+    ['an empty code', { signupCode: '   ' }],
+    ['a code that is simply wrong', { signupCode: 'NOT-THE-CODE' }]
+  ];
+  return loose.reduce(function (chain, c, i) {
+    return chain.then(function () {
+      var d = Object.assign({}, good, c[1], { subjects: ['Use of English', 'Physics', 'Chemistry'],
+                                              email: 'fw' + i + '@example.com', phone: '0801000' + (1000 + i) });
+      return call('POST', '/api/students', d).then(function (r) {
+        ok(c[0] + ' does not stop the sign-up on a code', r.status === 400 && !!(r.body && r.body.error) && !/access code/i.test(r.body.error), r.status + ' ' + r.raw);
+        ok(c[0] + ' is refused on the combination instead', /science|subject/i.test((r.body && r.body.error) || ''), r.raw);
+        ok(c[0] + ' created no account', !(r.body && r.body.student), r.raw);
       });
-    }, Promise.resolve());
-  }).then(function () {
-    var d = Object.assign({}, good, { code: codeInForce, subjects: ['Use of English', 'Physics', 'Chemistry'],
-                                      email: 'combo@example.com', phone: '08010009998' });
-    return call('POST', '/api/registrations', d);
-  }).then(function (r) {
-    ok('a valid code does not rescue a bad combination', r.status === 400 && /science|subject/i.test((r.body && r.body.error) || ''), r.status + ' ' + r.raw);
-    ok('and no account was created by it', !(r.body && r.body.student), r.raw);
-    /* The other rules answer plainly too — nothing hides behind the code. */
-    var probe = Object.assign({}, good, { code: codeInForce, goal: 'WAEC', email: 'probe@example.com', phone: '08010009999' });
-    return call('POST', '/api/registrations', probe);
+    });
+  }, Promise.resolve()).then(function () {
+    /* Nothing is hidden behind a code any more, so the other rules answer plainly. */
+    var probe = Object.assign({}, good, { goal: 'WAEC', email: 'probe@example.com', phone: '08010009999' });
+    return call('POST', '/api/students', probe);
   }).then(function (r) {
     ok('the examination rule answers a stranger plainly', r.status === 400 && /UTME/i.test(r.raw), r.status + ' ' + r.raw);
 
@@ -169,8 +150,8 @@ waitForBoot(20).then(function (h) {
     ];
     return refusals.reduce(function (chain, c, i) {
       return chain.then(function () {
-        var d = Object.assign({}, good, { code: codeInForce }, c[1], { email: 'r' + i + '@example.com', phone: '0800000' + (1000 + i) });
-        return call('POST', '/api/registrations', d).then(function (rr) {
+        var d = Object.assign({}, good, c[1], { email: 'r' + i + '@example.com', phone: '0800000' + (1000 + i) });
+        return call('POST', '/api/students', d).then(function (rr) {
           ok(c[0] + ' refused', rr.status >= 400 && rr.body && rr.body.error, rr.status + ' ' + rr.raw);
           ok(c[0] + ' explains itself', !!(rr.body && rr.body.error && rr.body.error.length > 10));
           ok(c[0] + ' created no account', !(rr.body && rr.body.student));
@@ -179,28 +160,26 @@ waitForBoot(20).then(function (h) {
     }, Promise.resolve());
   });
 }).then(function () {
-  head('an active student, enrolled the way staff enrol in person');
-  /* The registration (application-first) flow itself is covered end-to-end by
-     test-registrations-route.js; this suite needs an active, signed-in
-     student, so activeStudent enrols through the console route and signs in
-     with the temporary password it issues (see test/active-student.js). Every
-     approved student is a full G.O.C student — there is no second tier. */
+  head('a valid registration');
   return activeStudent.signedUp(call, good);
 }).then(function (r) {
   ok('accepted', r.status < 400 && r.body && r.body.student, r.status + ' ' + r.raw);
-  stuPw = r.tempPassword;
   var s = (r.body && r.body.student) || {};
+  /* This student stands in for an academy student, who is GOC; a public sign-up
+     is Open and may not sit Web Tests (Phase 3B). Only the test can flip it. */
+  (function () {
+    var dp = path.join(SANDBOX, 'server', 'data.json');
+    var dbf = JSON.parse(fs.readFileSync(dp, 'utf8'));
+    var rec = dbf.students.find(function (x) { return x.id === s.id; });
+    if (rec) { rec.tier = 'goc'; fs.writeFileSync(dp, JSON.stringify(dbf)); }
+  })();
   ok('a Scholar ID was issued', /^GOC-S-\d+$/.test(s.id || ''), s.id);
   ok('the combination was stored', (s.subjects || []).join(',') === 'Use of English,Physics,Chemistry,Mathematics',
      (s.subjects || []).join(','));
   ok('the examination is JAMB / UTME', s.exam === 'JAMB / UTME', s.exam);
   ok('the session carries the combination', !!(r.body.session && (r.body.session.subjects || []).length === 4));
-  /* The sign-in reply carries only the boolean flag mustChangePassword (no
-     credential). The enrolment reply is not checked here: the console route
-     intentionally hands the temporary password to staff in person — the
-     public registration replies, which must never do that, are checked in
-     test-registrations-route.js. */
-  ok('no password anywhere in the sign-in response', !/password|hash|salt|scrypt/i.test(String(r.raw).replace(/mustChangePassword/g, '')), String(r.raw).slice(0, 200));
+  /* sign-up now answers "pending" and the sign-in reply carries the boolean flag mustChangePassword (no credential) */
+  ok('no password anywhere in the sign-up or sign-in response', !/password|hash|salt|scrypt/i.test(r.signupRaw + String(r.raw).replace(/mustChangePassword/g, '')), (r.signupRaw + r.raw).slice(0, 200));
   var token = r.body && r.body.token;
   var sid = s.id;
   stuToken = token; stuId = sid;
@@ -736,7 +715,7 @@ waitForBoot(20).then(function (h) {
 
   var stale = await call('GET', '/api/me', undefined, stuToken);
   ok('the live session is dropped at once', stale.status === 401, stale.status);
-  var relog = await call('POST', '/api/auth/login', { id: stuId, password: stuPw });
+  var relog = await call('POST', '/api/auth/login', { id: stuId, password: good.password });
   ok('the student cannot sign in again', relog.status >= 400, relog.status);
   ok('and is told the records are safe',
      /deactivated/i.test(relog.raw) && /records are safe/i.test(relog.raw), relog.raw.slice(0, 160));
@@ -754,7 +733,7 @@ waitForBoot(20).then(function (h) {
 
   var on = await call('PUT', '/api/students/' + encodeURIComponent(stuId) + '/active', { active: true }, adm);
   ok('the console can reopen it', on.status === 200 && on.body.active === true, on.status);
-  var back = await call('POST', '/api/auth/login', { id: stuId, password: stuPw });
+  var back = await call('POST', '/api/auth/login', { id: stuId, password: good.password });
   ok('the student signs in again with the same password', back.status === 200 && !!back.body.token, back.status);
   stuToken = back.body.token;
   var mineAfter = await call('GET', '/api/me/results', undefined, stuToken);
@@ -902,7 +881,7 @@ waitForBoot(20).then(function (h) {
   ok('but the new warning reaches the student who is already signed in',
      mid.body.sessionWarnMinutes === 14, mid.body.sessionWarnMinutes);
 
-  var fresh = await call('POST', '/api/auth/login', { id: stuId, password: stuPw });
+  var fresh = await call('POST', '/api/auth/login', { id: stuId, password: good.password });
   var freshSi = await call('GET', '/api/auth/session-info', undefined, fresh.body.token);
   ok('the next login gets the new, shorter session',
      freshSi.body.sessionMinutes === 15 && freshSi.body.expiresInSec <= 900,
@@ -959,11 +938,14 @@ waitForBoot(20).then(function (h) {
 
   async function enrol(name) {
     var r = await activeStudent.signedUp(call,
-      { name: name, password: 'secret123', goal: 'JAMB / UTME 2027', subjects: SUBJ }, f.token);
-    /* activeStudent enrols through the console; every approved student is a
-       full G.O.C student, so no further adjustment is needed. The console
-       temporary password rides along so later sections can sign back in. */
-    r.body.tempPassword = r.tempPassword;
+      { signupCode: codeInForce, name: name, password: 'secret123', goal: 'JAMB / UTME 2027', subjects: SUBJ }, f.token);
+    /* These students stand in for academy students, who are GOC; a public
+       sign-up is Open and has a daily practice allowance (Phase 3B). Only the
+       test can flip it, by editing the sandbox data file. */
+    var dp = path.join(SANDBOX, 'server', 'data.json');
+    var dbf = JSON.parse(fs.readFileSync(dp, 'utf8'));
+    var rec = dbf.students.find(function (x) { return x.id === r.body.id || x.name === name; });
+    if (rec) { rec.tier = 'goc'; fs.writeFileSync(dp, JSON.stringify(dbf)); }
     return r.body;
   }
   /* Sits a paper and returns the submitted result. `answers` is a function
@@ -1104,7 +1086,7 @@ waitForBoot(20).then(function (h) {
   /* A student reads the same table, with their own row flagged and nobody
      else's marked as theirs. */
   var asStudent = (await call('POST', '/api/auth/login',
-    { id: alpha.student.id, password: alpha.tempPassword })).body;
+    { id: alpha.student.id, password: 'secret123' })).body;
   var mine = (await call('GET', '/api/league', undefined, asStudent.token)).body;
   ok('a student may read the standings', Array.isArray(mine.rows) && mine.rows.length > 0);
   ok('the student is told which row is theirs',
@@ -1137,11 +1119,11 @@ waitForBoot(20).then(function (h) {
   ok('its marked papers stay on file for the academy',
      kept.some(function (r) { return r.scholarId === alpha.student.id; }));
   ok('its login is refused while the account is closed',
-     (await call('POST', '/api/auth/login', { id: alpha.student.id, password: alpha.tempPassword })).status >= 400);
+     (await call('POST', '/api/auth/login', { id: alpha.student.id, password: 'secret123' })).status >= 400);
 
   await call('PUT', '/api/students/' + alpha.student.id + '/active', { active: true }, f.token);
   ok('reopening the account restores the login',
-     (await call('POST', '/api/auth/login', { id: alpha.student.id, password: alpha.tempPassword })).status === 200);
+     (await call('POST', '/api/auth/login', { id: alpha.student.id, password: 'secret123' })).status === 200);
   var back = find(await table(), alpha.student.id);
   ok('it returns to the standings', !!back);
   ok('with its XP intact', back && back.xp === rA.xp, back && (back.xp + ' vs ' + rA.xp));
@@ -1460,11 +1442,10 @@ waitForBoot(20).then(function (h) {
      core.mathPlain(lrow.text).indexOf('\\frac') < 0,
      core.mathPlain(lrow.text));
 
-  /* A roster written while the shared access code existed still holds its hash
-     and length. Nothing reads them any more, so the leftovers are harmless:
-     the old sign-up route stays closed even with the hash in place, and a
-     registration carrying a live code is refused on its subjects, not a code. */
-  head('leftover access-code settings are inert under Stage B');
+  /* A roster written while the access code existed still holds its hash and length. Nothing
+     reads them any more, so the leftovers are harmless: sign-up works without a code. Proven
+     without writing an account: refused on its subjects, not on a code. */
+  head('an older roster that still holds a code hash signs people up without it');
   var dataAt = path.join(SANDBOX, 'server', 'data.json');
   var db = JSON.parse(fs.readFileSync(dataAt, 'utf8'));
   db.settings.signupCodeHash = 'scrypt$00$' + crypto.scryptSync('GOC2027', '00', 64).toString('hex');
@@ -1473,14 +1454,9 @@ waitForBoot(20).then(function (h) {
   var legacyNo = await call('POST', '/api/students', Object.assign({}, good,
     { signupCode: 'GOC-2028', subjects: ['Use of English', 'Physics'],
       email: 'legacyno@example.com', phone: '08010003333' }));
-  ok('the old sign-up route stays closed despite the stored hash',
-     legacyNo.status === 405, legacyNo.status + ' ' + legacyNo.raw);
+  ok('a wrong code against a stored hash is not what stops it',
+     legacyNo.status === 400 && !/access code/i.test(legacyNo.raw), legacyNo.status + ' ' + legacyNo.raw);
   ok('and no account was written', !(legacyNo.body && legacyNo.body.student));
-  var legacyBad = await call('POST', '/api/registrations', Object.assign({}, good,
-    { code: codeInForce, subjects: ['Use of English', 'Physics'],
-      email: 'legacybad@example.com', phone: '08010004444' }));
-  ok('a live code with two subjects is refused on its subjects, not a code',
-     legacyBad.status === 400 && /science|subject/i.test(legacyBad.raw), legacyBad.status + ' ' + legacyBad.raw);
   return null;
 }).then(function () {
   console.log('\n' + passes + ' passed, ' + fails + ' failed');

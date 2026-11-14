@@ -129,10 +129,10 @@ function N(id, extra) { return Object.assign({ id: id, subject: 'Chemistry', tit
   var core = vm.runInContext('GOC.core', dctx), mock = vm.runInContext('GOC.api._drivers.mock', dctx);
   function rejects(p) { return p.then(function () { return null; }, function (e) { return e.message; }); }
   var CODE = 'GOC2027', COMBO = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
-  var r = await activeStudent.demo(mock, { signupCode: CODE, name: 'Opal Student', password: 'secret123', goal: 'JAMB / UTME 2027', subjects: COMBO });
+  var r = await activeStudent.demo(mock, { signupCode: CODE, name: 'Opal Open', password: 'secret123', goal: 'JAMB / UTME 2027', subjects: COMBO });
   var open = await mock.listMyNotices();
-  ok('every student reads notices unlocked (no tier gate)', open.locked === false && Array.isArray(open.notices));
-  
+  ok('an Open student reads as locked with nothing', open.locked === true && open.notices.length === 0);
+  mock._setTier(r.student.id, 'goc');
   var goc = await mock.listMyNotices();
   ok('a GOC student gets an empty list (the offline demo has no tutors)', goc.locked === false && goc.notices.length === 0);
   await mock.logout();

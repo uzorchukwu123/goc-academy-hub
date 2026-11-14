@@ -1,49 +1,162 @@
 {
   "generatedBy": "functions/goc-api/tools/coverage-report.js",
-  "total": 262,
+  "total": 253,
   "implemented": 1,
-  "notStarted": 261,
+  "notStarted": 252,
   "percent": 0.4,
   "byFamily": {
-    "api/health": 1,
-    "api/auth": 7,
-    "api/me": 32,
-    "api/students": 7,
-    "api/admin": 21,
-    "api/staff": 3,
-    "api/updates": 3,
-    "api/affirmations": 2,
-    "api/contact": 1,
-    "api/unsubscribe": 1,
-    "api/settings": 6,
-    "api/objective": 1,
-    "api/jamb": 1,
-    "api/rounds": 3,
-    "api/challenges": 3,
-    "api/tutor": 30,
-    "api/audit": 2,
-    "api/notices": 2,
-    "api/flags": 2,
-    "api/broadcasts": 4,
-    "api/alerts": 2,
-    "api/approvals": 3,
-    "api/tutors": 6,
-    "api/managers": 5,
-    "api/passages": 5,
-    "api/notes": 8,
-    "api/league": 1,
-    "api/topics": 2,
-    "api/questions": 12,
-    "api/import": 1,
-    "api/results": 4,
-    "api/resources": 2,
-    "api/question-images": 1,
-    "api/videos": 2,
-    "api/classes": 1,
-    "api/scholarship": 8,
-    "api/free2027": 54,
-    "api/analytics": 2,
-    "api/registrations": 11
+    "api/health": {
+      "total": 1,
+      "implemented": 1
+    },
+    "api/auth": {
+      "total": 7,
+      "implemented": 0
+    },
+    "api/me": {
+      "total": 32,
+      "implemented": 0
+    },
+    "api/students": {
+      "total": 8,
+      "implemented": 0
+    },
+    "api/admin": {
+      "total": 22,
+      "implemented": 0
+    },
+    "api/staff": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/updates": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/affirmations": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/contact": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/unsubscribe": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/settings": {
+      "total": 6,
+      "implemented": 0
+    },
+    "api/objective": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/jamb": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/rounds": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/challenges": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/tutor": {
+      "total": 30,
+      "implemented": 0
+    },
+    "api/audit": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/notices": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/flags": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/broadcasts": {
+      "total": 4,
+      "implemented": 0
+    },
+    "api/alerts": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/approvals": {
+      "total": 3,
+      "implemented": 0
+    },
+    "api/tutors": {
+      "total": 6,
+      "implemented": 0
+    },
+    "api/managers": {
+      "total": 5,
+      "implemented": 0
+    },
+    "api/passages": {
+      "total": 5,
+      "implemented": 0
+    },
+    "api/notes": {
+      "total": 8,
+      "implemented": 0
+    },
+    "api/league": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/topics": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/questions": {
+      "total": 12,
+      "implemented": 0
+    },
+    "api/import": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/results": {
+      "total": 4,
+      "implemented": 0
+    },
+    "api/resources": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/question-images": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/videos": {
+      "total": 2,
+      "implemented": 0
+    },
+    "api/classes": {
+      "total": 1,
+      "implemented": 0
+    },
+    "api/scholarship": {
+      "total": 8,
+      "implemented": 0
+    },
+    "api/free2027": {
+      "total": 54,
+      "implemented": 0
+    },
+    "api/analytics": {
+      "total": 2,
+      "implemented": 0
+    }
   },
   "routes": [
     {
@@ -1528,10 +1641,26 @@
     },
     {
       "method": "PUT",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier",
+      "family": "api/admin",
+      "authTier": "console",
+      "capability": "students.tier",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
       "path": "/api/students/([A-Za-z0-9-]+)/cohort",
       "family": "api/students",
       "authTier": "console",
       "capability": "cohort.manage",
+      "status": "not-started"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/tier",
+      "family": "api/students",
+      "authTier": "console",
+      "capability": "students.tier",
       "status": "not-started"
     },
     {
@@ -2052,94 +2181,6 @@
       "family": "api/analytics",
       "authTier": "console",
       "capability": "analytics.site",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/validate-code",
-      "family": "api/registrations",
-      "authTier": "public",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations",
-      "family": "api/registrations",
-      "authTier": "public",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/setup",
-      "family": "api/registrations",
-      "authTier": "public",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/registrations/codes",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "registrations.codes",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/codes",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "registrations.codes",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/codes/([A-Za-z0-9-]+)/revoke",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "registrations.codes",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/registrations/applications",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "students.approve",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "students.approve",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/approve",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "students.approve",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/reject",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "students.approve",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/resend-setup",
-      "family": "api/registrations",
-      "authTier": "console",
-      "capability": "students.approve",
       "status": "not-started"
     }
   ]

@@ -51,12 +51,13 @@ rejects(mock.buyStreakFreeze()).then(function (m) {
   SID = r && r.student && r.student.id;
   return rejects(mock.buyStreakFreeze());
 }).then(function (m) {
-  /* Every student may buy freezes — there is no tier gate — so the first
-     refusal a new student meets is the balance check, same as the server. */
-  ok('a new student has too little XP: refused with the cost', m && m.indexOf(String(COST)) >= 0, m);
+  /* A self-registered account is Open; buying freezes is a GOC feature, so
+     the tier refusal comes before any balance check — same as the server. */
+  ok('an Open student is refused as GOC-only', m && /GOC students/.test(m), m);
+  mock._setTier(SID, 'goc');
   return rejects(mock.buyStreakFreeze());
 }).then(function (m) {
-  ok('the refusal is the cost, not a category refusal', m && m.indexOf(String(COST)) >= 0, m);
+  ok('a new GOC student has too little XP: refused with the cost', m && m.indexOf(String(COST)) >= 0, m);
   return mock.myProfile();
 }).then(function (p) {
   ok('profile reports zero freezes and no XP spent', p.streakFreezes === 0 && p.xp === 0, JSON.stringify(p));

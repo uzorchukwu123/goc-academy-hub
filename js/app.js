@@ -112,6 +112,34 @@ function badgeContext(meArg){
     };
   });
 }
+/* Access tier (Phase 3B): says which kind of account this is and, for an Open
+   student, how many free practice questions are left today. Everything comes from
+   GET /api/me (`tier`, `today.practice`); a driver that sends no tier (offline
+   demo) leaves the row hidden rather than guessing. */
+function paintTier(me){
+  var row = document.getElementById('tierRow');
+  var note = document.getElementById('tierNote'), chip = document.getElementById('tierChip');
+  if(!row) return;
+  if(!me || !me.tier){ row.style.display = 'none'; return; }
+  var goc = GOC.core.cleanTier(me.tier) === 'goc';
+  var line;
+  if(goc){
+    line = 'GOC student \u00B7 full access';
+  } else {
+    var a = me.today && me.today.practice;
+    if(a && a.limit != null){
+      var left = Math.max(0, Number(a.remaining) || 0);
+      line = 'Open account \u00B7 ' + left + ' of ' + a.limit + ' free practice questions left today';
+      if(left === 0) line += ' (back at midnight)';
+    } else {
+      line = 'Open account \u00B7 free practice every day';
+    }
+    line += ' \u00B7 ask the academy about joining GOC';
+  }
+  if(note) note.textContent = line;
+  if(chip) chip.textContent = goc ? 'GOC' : 'Open';
+  row.style.display = '';
+}
 /* Streak freeze (Phase 2): a student can hold up to two, each bought with XP and
    spent automatically when exactly one day is missed. The rule and the numbers
    (cost, cap) come from GOC.core; this only shows them and asks GOC.api to buy. */
@@ -119,12 +147,16 @@ function paintFreeze(me){
   var held = Number(me && me.streakFreezes) || 0;
   var cost = GOC.core.STREAK_FREEZE_COST_XP, max = GOC.core.STREAK_FREEZE_MAX;
   var note = document.getElementById('freezeNote'), btn = document.getElementById('freezeBuyBtn');
+  /* Access tiers: buying a freeze is a GOC feature. The server refuses the
+     purchase for an Open account, so the row says so rather than offering a
+     button that always fails. Freezes earned in the weekly quest still show
+     and still work \u2014 only buying is gated. */
   var locked = !!(me && me.features && me.features.streakFreezes === false);
   if(note) note.textContent = locked
-    ? 'Covers one missed day \u00B7 holding ' + held + ' of ' + max + ' \u00B7 buying is unavailable right now'
+    ? 'Covers one missed day \u00B7 holding ' + held + ' of ' + max + ' \u00B7 buying is for GOC students'
     : 'Covers one missed day \u00B7 holding ' + held + ' of ' + max + ' \u00B7 ' + cost + ' XP each';
   if(btn){
-    btn.textContent = locked ? 'Unavailable' : (held >= max ? 'Full' : 'Get one');
+    btn.textContent = locked ? 'GOC only' : (held >= max ? 'Full' : 'Get one');
     btn.disabled = locked || held >= max;
   }
 }
@@ -185,7 +217,8 @@ function renderProfileBadges(){
     var me = ctx.me;
     set('profLevel', 'Lv ' + (me.level || 1));
     set('profStreakStat', String(me.streak || 0));
-      paintFreeze(me);
+    paintTier(me);
+    paintFreeze(me);
     refreshReminders();
     var earnedCount = 0;
     var earnedIds = [];
@@ -764,6 +797,7 @@ function loadStudents(){
     var w = document.getElementById('admCredList'); if(w) w.innerHTML = admCredHTML();
     var c = document.getElementById('admCount');    if(c) c.textContent = studentsData.length;
     var t = document.getElementById('admStuTabs');  if(t) t.innerHTML = admStuTabsHTML();
+    var tt = document.getElementById('admStuTierTabs'); if(tt) tt.innerHTML = admStuTierTabsHTML();
     var n = document.getElementById('admStuNote');  if(n) n.innerHTML = admStuNoteHTML();
     admKpiLoad();
     return studentsData;
@@ -785,12 +819,14 @@ function admCredHTML(){
     if(admStuFilter === 'pending') return s.pendingApproval === true;
     /* Pending accounts are only shown in the pending tab, not in active/all. */
     if(s.pendingApproval === true) return false;
+    if(admTierFilter !== 'any' && GOC.core.cleanTier(s.tier) !== admTierFilter) return false;
     if(admStuFilter === 'active') return s.active !== false;
     if(admStuFilter === 'closed') return s.active === false;
     return true;
   });
   if(!rows.length){
-    var what = (admStuFilter === 'closed' ? 'deactivated ' : admStuFilter === 'active' ? 'active ' : '');
+    var what = (admStuFilter === 'closed' ? 'deactivated ' : admStuFilter === 'active' ? 'active ' : '') +
+      (admTierFilter === 'goc' ? 'GOC ' : admTierFilter === 'open' ? 'Open ' : '');
     return '<div class="ad-empty">No '+what+'accounts.</div>';
   }
   return rows.map(function(s){
@@ -798,6 +834,8 @@ function admCredHTML(){
     var shown = revealed[s.id] ? esc(revealed[s.id]) : '••••••••';
     var isPending = s.pendingApproval === true;
     var open = s.active !== false && !isPending;
+    var isGoc = GOC.core.cleanTier(s.tier) === 'goc';
+    var tierNote = GOC.core.tierChangeNote(s.tierChangedBy, s.tierChangedAt);
     /* Pending accounts get a dedicated card with only Approve / Reject. */
     if(isPending){
       return '<div class="ad-cred pending">'+
@@ -830,13 +868,19 @@ function admCredHTML(){
           return '<option value="'+esc(c.cohortId)+'"'+(s.cohort===c.cohortId?' selected':'')+'>'+esc(c.name)+'</option>';
         }).join('')+
       '</select></div>'+
-      '<div class="ad-metric"><span>Access</span><b>GOC student</b></div>'+
+      '<div class="ad-metric"><span>Access</span><b><span class="ad-tier '+(isGoc ? 'goc' : 'open')+'">'+(isGoc ? 'GOC student' : 'Open')+'</span></b></div>'+
+      (tierNote ? '<div class="ad-tiernote">'+esc(tierNote)+'</div>' : '')+
       '<div class="ad-metric"><span>Account</span><b>'+(open ? 'Active' : 'Deactivated — records kept')+'</b></div>'+
       '<div class="ad-metric"><span>Academy XP</span><b>'+esc(s.xp || 0)+' XP · Level '+esc(s.level || 1)+'</b></div>'+
       '<div class="ad-metric"><span>Overall performance</span><b>'+esc(s.performance || 0)+'%</b></div>'+
       '<div class="ac-btns">'+
         '<button class="ad-btn" onclick="admReveal(\''+s.id+'\')">'+(revealed[s.id]?'Hide':'Reveal')+'</button>'+
         '<button class="ad-btn" onclick="admResetPw(\''+s.id+'\')">Reset password</button>'+
+      '</div>'+
+      '<div class="ac-btns">'+
+        (isGoc
+          ? '<button class="ad-btn warn" onclick="admSetTier(\''+s.id+'\',\'open\')">Restrict to Open</button>'
+          : '<button class="ad-btn pri" onclick="admSetTier(\''+s.id+'\',\'goc\')">Make GOC student</button>')+
       '</div>'+
       '<div class="ac-btns">'+
         (open
@@ -848,6 +892,23 @@ function admCredHTML(){
 /* Priority 7 — which accounts the list is showing, so a closed account is easy
    to find again. */
 var admStuFilter = 'all';
+/* Phase 3B slice 3 — the same list narrowed by access: 'any', 'goc' or 'open'. It combines with the
+   status filter above, so "Active" + "Open" shows the open accounts still in use. */
+var admTierFilter = 'any';
+function admStuSetTier(f){
+  admTierFilter = (f === 'goc' || f === 'open') ? f : 'any';
+  var seg = document.getElementById('admStuTierTabs');
+  if(seg) seg.innerHTML = admStuTierTabsHTML();
+  var list = document.getElementById('admCredList');
+  if(list) list.innerHTML = admCredHTML();
+}
+function admStuTierTabsHTML(){
+  var goc = studentsData.filter(function(s){ return GOC.core.cleanTier(s.tier) === 'goc'; }).length;
+  var tabs = [['any', 'Any access'], ['goc', 'GOC (' + goc + ')'], ['open', 'Open (' + (studentsData.length - goc) + ')']];
+  return tabs.map(function(t){
+    return '<button class="'+(admTierFilter === t[0] ? 'on' : '')+'" onclick="admStuSetTier(\''+t[0]+'\')">'+t[1]+'</button>';
+  }).join('');
+}
 function admStuSetFilter(f){
   admStuFilter = f;
   var seg = document.getElementById('admStuTabs');
@@ -883,6 +944,23 @@ function admSetActive(id, on){
     return loadStudents();
   }).catch(function(err){ toast(err.message || 'That account was not changed'); });
 }
+/* Phase 3B slice 3 — move a student between Open and GOC. Making someone GOC only adds
+   access, so it goes straight through; restricting takes access away (and trims saved
+   questions and practice history for good), so it asks first, in the words of
+   core.restrictWarning. The server records who did it and when, and enforces everything. */
+function admSetTier(id, tier){
+  var want = GOC.core.cleanTier(tier);
+  if(want === 'open' && typeof confirm === 'function'){
+    var st = studentsData.filter(function(x){ return x.id === id; })[0];
+    if(!confirm(GOC.core.restrictWarning(st ? st.name + ' (' + id + ')' : id))) return;
+  }
+  GOC.api.setStudentTier(id, want).then(function(){
+    toast(want === 'goc'
+      ? id + ' is now a GOC student — full access'
+      : id + ' is now Open — limited access');
+    return loadStudents();
+  }).catch(function(err){ toast(err.message || 'That student\'s access was not changed'); });
+}
 function admStuNoteHTML(){
   var closed = studentsData.filter(function(s){ return s.active === false; }).length;
   return closed
@@ -914,134 +992,6 @@ function admResetPw(id){
     var w = document.getElementById('admCredList'); if(w) w.innerHTML = admCredHTML();
   }).catch(function(err){ toast(err.message || 'Could not reset that password'); });
 }
-/* Stage B — the registration desk inside the Students section. Server rules
-   decide who may do what (codes: Finance; review: Finance — both plus the
-   Founder); these functions only ask and paint. The plaintext code appears
-   once, in admRegCodeCreate's one-time panel; application secrets (password
-   hashes, setup tokens) never reach this code at all. */
-var admRegAppsCache = [];
-function admRegLoad(){
-  var w = document.getElementById('admRegApps');
-  if(w){
-    GOC.api.listRegistrationApplications().then(function(r){
-      admRegAppsCache = (r && r.applications) || [];
-      var c = (r && r.counts) || {};
-      var badge = document.getElementById('admRegCounts');
-      if(badge) badge.textContent = '· ' + (c.pending || 0) + ' awaiting review' + (c.provisioningFailed ? ' · ' + c.provisioningFailed + ' need attention' : '');
-      w.innerHTML = admRegAppsHTML();
-    }).catch(function(err){
-      w.innerHTML = '<p class="ad-p">Applications are not available for your role ('+esc(err.message || 'refused')+').</p>';
-    });
-  }
-  var cw = document.getElementById('admRegCodes');
-  if(cw){
-    GOC.api.listRegistrationCodes().then(function(r){
-      cw.innerHTML = admRegCodesHTML((r && r.codes) || []);
-    }).catch(function(err){
-      cw.innerHTML = '<p class="ad-p">Registration codes are managed by Finance ('+esc(err.message || 'refused')+').</p>';
-    });
-  }
-}
-function admRegStatusChip(a){
-  if(a.status === 'pending') return '<span class="ad-tag a">Awaiting review</span>';
-  if(a.status === 'provisioning') return '<span class="ad-tag a">Creating account…</span>';
-  if(a.status === 'provisioning-failed') return '<span class="ad-tag r">Provisioning failed</span>';
-  if(a.status === 'approved') return '<span class="ad-tag g">Approved</span>';
-  return '<span class="ad-tag r">Rejected</span>';
-}
-function admRegAppsHTML(){
-  if(!admRegAppsCache.length) return '<p class="ad-p">No applications yet.</p>';
-  var order = { 'pending': 0, 'provisioning-failed': 1, 'provisioning': 2, 'approved': 3, 'rejected': 4 };
-  var rows = admRegAppsCache.slice().sort(function(x, y){ return (order[x.status] - order[y.status]) || String(y.createdAt || '').localeCompare(String(x.createdAt || '')); });
-  return rows.map(function(a){
-    var btns = '<button class="ad-btn" onclick="admRegDetail(\''+a.id+'\')">Details</button>';
-    if(a.status === 'pending' || a.status === 'provisioning-failed'){
-      btns += ' <button class="ad-btn pri" onclick="admRegApprove(\''+a.id+'\')">'+(a.status === 'pending' ? '✓ Approve' : '↻ Resume')+'</button>';
-      btns += ' <button class="ad-btn warn" onclick="admRegReject(\''+a.id+'\')">✗ Reject</button>';
-    }
-    if(a.status === 'approved' && !a.setupUsedAt){
-      btns += ' <button class="ad-btn" onclick="admRegResend(\''+a.id+'\')">Resend setup link</button>';
-    }
-    var extra = '';
-    if(a.status === 'provisioning-failed') extra = '<div class="ad-metric"><span>Stopped at</span><b>'+esc(a.provisionStep || '—')+': '+esc(a.provisionError || '')+'</b></div>';
-    if(a.status === 'approved') extra = '<div class="ad-metric"><span>Scholar ID</span><b>'+esc(a.scholarId || '—')+'</b></div>' +
-      '<div class="ad-metric"><span>Password setup</span><b>'+(a.setupUsedAt ? 'Completed' : ('Link ' + esc(a.setupDelivery || 'pending') + ', expires ' + esc(String(a.setupExpiresAt || '').slice(0, 10))))+'</b></div>';
-    if(a.status === 'rejected') extra = '<div class="ad-metric"><span>Reason</span><b>'+esc(a.rejectReason || '—')+'</b></div>';
-    return '<div class="ad-cred"><div class="ac-top"><div class="ad-av">'+esc(initials(a.name))+'</div>' +
-      '<div class="ac-who"><b>'+esc(a.name)+'</b><span>'+esc(a.email || '')+'</span></div>' + admRegStatusChip(a) + '</div>' +
-      '<div class="ad-metric"><span>Subjects</span><b>'+esc((a.subjects || []).join(', ') || '—')+'</b></div>' +
-      '<div class="ad-metric"><span>Applied</span><b>'+esc(String(a.createdAt || '').slice(0, 10))+' · code: '+esc(a.codeLabel || '—')+'</b></div>' + extra +
-      '<div class="ac-btns">' + btns + '</div></div>';
-  }).join('');
-}
-function admRegDetail(id){
-  var w = document.getElementById('admRegDetail');
-  if(!w) return;
-  GOC.api.getRegistrationApplication(id).then(function(r){
-    var a = r.application || {};
-    var hist = (a.history || []).map(function(h){
-      return '<div class="ad-metric"><span>'+esc(String(h.at || '').slice(0, 16).replace('T', ' '))+'</span><b>'+esc(h.action || '')+(h.detail ? ' — ' + esc(h.detail) : '')+(h.by ? ' · ' + esc(h.by) : '')+'</b></div>';
-    }).join('');
-    w.innerHTML = '<div class="ad-card" style="margin-top:12px"><div class="ad-h">'+esc(a.name || '')+' — application history</div>' +
-      '<div class="ad-metric"><span>Email</span><b>'+esc(a.email || '—')+'</b></div>' +
-      '<div class="ad-metric"><span>Phone</span><b>'+esc(a.phone || '—')+'</b></div>' +
-      '<div class="ad-metric"><span>Goal</span><b>'+esc(a.goal || '—')+'</b></div>' +
-      (a.decidedBy ? '<div class="ad-metric"><span>Decided by</span><b>'+esc(a.decidedBy)+' · '+esc(String(a.decidedAt || '').slice(0, 10))+'</b></div>' : '') +
-      (hist || '<p class="ad-p">No history yet.</p>') + '</div>';
-  }).catch(function(err){ toast(err.message || 'Could not load that application'); });
-}
-function admRegApprove(id){
-  GOC.api.approveRegistrationApplication(id).then(function(r){
-    toast('Approved — Scholar ID ' + (r.application && r.application.scholarId) + ' created; setup email: ' + (r.setupDelivery || 'unknown'));
-    admRegLoad();
-  }).catch(function(err){ toast(err.message || 'Could not approve that application'); admRegLoad(); });
-}
-function admRegReject(id){
-  var reason = typeof prompt === 'function' ? prompt('Reason for rejecting (required — recorded with the decision):') : null;
-  if(reason === null || !String(reason).trim()){ toast('A reason is required to reject an application.'); return; }
-  GOC.api.rejectRegistrationApplication(id, String(reason).trim()).then(function(){
-    toast('Application rejected — the held code use was released');
-    admRegLoad();
-  }).catch(function(err){ toast(err.message || 'Could not reject that application'); });
-}
-function admRegResend(id){
-  GOC.api.resendRegistrationSetup(id).then(function(r){
-    toast('A fresh setup link was emailed to the applicant (delivery: ' + (r.setupDelivery || 'unknown') + ')');
-    admRegLoad();
-  }).catch(function(err){ toast(err.message || 'Could not resend the setup link'); });
-}
-function admRegCodesHTML(codes){
-  if(!codes.length) return '<p class="ad-p">No registration codes yet — create the first one above.</p>';
-  return codes.map(function(c){
-    var state = c.status === 'active' ? '<span class="ad-tag g">Active</span>' : '<span class="ad-tag r">'+esc(c.status)+'</span>';
-    return '<div class="ad-cred"><div class="ac-top"><div class="ac-who"><b>'+esc(c.label || 'Code')+'</b><span>…'+esc(c.hint || '')+'</span></div>' + state + '</div>' +
-      '<div class="ad-metric"><span>Uses</span><b>'+c.used+' of '+c.maxUses+' ('+c.held+' waiting, '+c.finalised+' approved)</b></div>' +
-      '<div class="ad-metric"><span>Expires</span><b>'+esc(c.expiresAt ? String(c.expiresAt).slice(0, 10) : 'never')+'</b></div>' +
-      (c.status !== 'revoked' ? '<div class="ac-btns"><button class="ad-btn warn" onclick="admRegCodeRevoke(\''+c.id+'\')">Revoke code</button></div>' : '') +
-      '</div>';
-  }).join('');
-}
-function admRegCodeCreate(){
-  var label = ((document.getElementById('admRegCodeLabel') || {}).value || '').trim();
-  var maxUses = Number(((document.getElementById('admRegCodeMax') || {}).value || ''));
-  var daysRaw = ((document.getElementById('admRegCodeDays') || {}).value || '').trim();
-  var body = { label: label, maxUses: maxUses };
-  if(daysRaw !== '') body.expiresInDays = Number(daysRaw);
-  GOC.api.createRegistrationCode(body).then(function(r){
-    var once = document.getElementById('admRegCodeOnce');
-    if(once) once.innerHTML = '<div class="ad-note" style="margin:12px 0"><b>Your registration code — shown only now:</b><br><code style="font-size:1.15rem;font-weight:700">' + esc(r.code) + '</code><br>Copy it and share it with your applicants. It will not be shown again; if it is lost, revoke it below and create a new one.</div>';
-    toast('Registration code created — copy it now, it is shown only once');
-    admRegLoad();
-  }).catch(function(err){ toast(err.message || 'Could not create that code'); });
-}
-function admRegCodeRevoke(id){
-  if(typeof confirm === 'function' && !confirm('Revoke this registration code?\n\nNo new applications can use it, and approval of applications still waiting on it will be blocked.')) return;
-  GOC.api.revokeRegistrationCode(id).then(function(){
-    toast('Code revoked');
-    admRegLoad();
-  }).catch(function(err){ toast(err.message || 'Could not revoke that code'); });
-}
-
 /* Admin-approval flow: approve a pending registration. */
 function admApprove(id){
   GOC.api.approveStudent(id).then(function(){
@@ -1329,24 +1279,38 @@ function signupSubmit(){
     return;
   }
   busy(btn, true);
-  var code = ((document.getElementById('signCode')||{}).value||'').trim();
-  GOC.api.submitRegistration({code:code, name:nm, password:pw, email:em, phone:ph, goal:goal, subjects:check.subjects,
+  // The server issues the Scholar ID, so two people signing up at the same
+  // moment can never be handed the same one.
+  GOC.api.createStudent({name:nm, password:pw, email:em, phone:ph, goal:goal, subjects:check.subjects,
     privacyConsent: { accepted: true, version: GOC.core.PRIVACY_POLICY_VERSION } }).then(function(r2){
     busy(btn, false);
-    /* Stage B: submitting sent an APPLICATION, not an account. No Scholar ID
-       exists yet and no session is issued; approval creates the account and
-       the student sets their password through the emailed setup link. */
-    if(r2 && r2.received){
+    /* Admin-approval flow: account is pending, no session is issued.
+       Show the holding screen with the student's Scholar ID. */
+    if(r2.pending){
       notePrivacyConsent(GOC.core.PRIVACY_POLICY_VERSION);
+      var idEl = document.getElementById('pendingScholarId');
+      if(idEl) idEl.textContent = r2.student.id;
       var nmEl = document.getElementById('pendingStudentName');
-      if(nmEl) nmEl.textContent = nm;
+      if(nmEl) nmEl.textContent = r2.student.name;
       go('signup-pending');
       return;
     }
-    toast('Your application could not be sent. Try again.');
+    /* Fallback: if a session was somehow returned, go to dashboard as before. */
+    if(typeof animEnter === 'function') animEnter('id');
+    applyIdentity(r2.session);
+    loadSettings();
+    go('home');
+    buildWeek(); renderClasses(); renderResources();
+    wtCatalogue = null;
+    refreshMe();
+    renderLeague();
+    ssStart();
+    swStart();
+    toast('Account created · your Scholar ID is '+r2.student.id+' — it stays on your dashboard');
+    setTimeout(openFlyer, 700);
   }).catch(function(err){
     busy(btn, false);
-    var msg = err.message || 'Could not send that application';
+    var msg = err.message || 'Could not create that account';
     toast(msg);
   });
 }
@@ -2933,7 +2897,7 @@ function admSignupLimitsHTML(d){
   return '<div class="ad-metric"><span>New accounts per connection</span><b>'+esc(lim.perHour)+' an hour · '+esc(lim.perDay)+' a day</b></div>'+
     '<div class="ad-metric"><span>Last changed</span><b>'+last+'</b></div>'+
     '<div class="ad-sub">Sign-ups per connection</div>'+
-    '<p class="ad-p">Anyone can create an account, so there is no access code. To stop one person making account after account, each connection (network address) may create only so many accounts in an hour and in a day. Raise the numbers when a school or a shared phone network is signing up many students at once, and lower them again afterwards.</p>'+
+    '<p class="ad-p">Anyone can create an Open account, so there is no access code. To stop one person making account after account, each connection (network address) may create only so many accounts in an hour and in a day. Raise the numbers when a school or a shared phone network is signing up many students at once, and lower them again afterwards.</p>'+
     '<div class="ad-grid2">'+
       '<div class="ad-field"><label>Accounts per hour</label><input id="admSlHour" type="number" min="1" max="1000" inputmode="numeric" value="'+esc(lim.perHour)+'"></div>'+
       '<div class="ad-field"><label>Accounts per day</label><input id="admSlDay" type="number" min="1" max="1000" inputmode="numeric" value="'+esc(lim.perDay)+'"></div>'+
@@ -3142,24 +3106,12 @@ function admOpen(section){
     students: function(){ return (
       '<div class="ad-card"><div class="ad-h">Students &amp; login credentials</div><p class="ad-p">'+studentsData.length+' enrolled.</p>'+
       '<div class="ad-seg" id="admStuTabs">'+admStuTabsHTML()+'</div>'+
+      '<div class="ad-seg" id="admStuTierTabs" style="margin-top:8px">'+admStuTierTabsHTML()+'</div>'+
       '<div id="admCredList">'+admCredHTML()+'</div>'+
       '<p class="ad-note" id="admStuNote">'+admStuNoteHTML()+'</p>'+
       '<p class="ad-warn">Passwords are hashed and cannot be read back — use <b>Reset password</b> to issue a new one.</p>'+
       '<div class="ad-actions"><button class="ad-btn pri" onclick="admToggleAddStudent()">Add student</button><button class="ad-btn" onclick="admExportStudents()">Export</button></div>'+
-      '<div id="admAddStudentWrap"></div></div>'+
-      '<div class="ad-card"><div class="ad-h">Registration applications <span id="admRegCounts"></span></div>'+
-      '<p class="ad-p">Applications arrive with a registration code and wait here — an application is not an account. Approving creates the account and emails the student a secure link to set their own password; nobody at the academy ever sees or handles that password.</p>'+
-      '<div id="admRegApps"><div class="ad-loading">Loading applications…</div></div>'+
-      '<div id="admRegDetail"></div></div>'+
-      '<div class="ad-card"><div class="ad-h">Registration codes</div>'+
-      '<p class="ad-p">A code lets an applicant submit an application. The full code is shown <b>once</b>, when created — afterwards only its last four characters are listed. Revoking a code stops new applications with it and blocks approval of applications still waiting.</p>'+
-      '<div class="ad-grid2">'+
-      '<div class="ad-field"><label>Label (school or group)</label><input id="admRegCodeLabel" placeholder="e.g. Ikeja partner school"></div>'+
-      '<div class="ad-field"><label>Maximum applications</label><input id="admRegCodeMax" type="number" min="1" max="10000" value="30"></div></div>'+
-      '<div class="ad-field"><label>Expires after (days, blank = never)</label><input id="admRegCodeDays" type="number" min="1" max="3650" placeholder="never"></div>'+
-      '<div class="ad-actions"><button class="ad-btn pri" onclick="admRegCodeCreate()">Create code</button></div>'+
-      '<div id="admRegCodeOnce"></div>'+
-      '<div id="admRegCodes"><div class="ad-loading">Loading codes…</div></div></div>'
+      '<div id="admAddStudentWrap"></div></div>'
     ); },
     cohorts: function(){ return (
       '<div class="ad-card"><div class="ad-h">New cohort</div><p class="ad-p">Groups students under one study window, session length and question ceiling. Leave a field blank to inherit the academy default.</p>'+
@@ -3392,7 +3344,7 @@ function admOpen(section){
     /* Targeted broadcast (Phase 4 slice 4): a message to all GOC students or one subject's GOC students. */
     broadcast: function(){ return (
       '<div class="ad-card"><div class="ad-h">Send a broadcast</div>'+
-      '<p class="ad-p">A message for GOC students. They read it as a notice card on Home.</p>'+
+      '<p class="ad-p">A message for GOC students only. They read it as a notice card on Home. Open students never receive it.</p>'+
       '<div class="ad-field"><label>Who should get it</label><select id="admBcAud" onchange="admBcCount()">'+admBcAudienceOptsHTML()+'</select></div>'+
       '<div class="ad-metric"><span>This will reach</span><b id="admBcReach">counting…</b></div>'+
       '<div class="ad-field"><label>Title</label><input id="admBcTitle" maxlength="80" placeholder="e.g. Mock exam on Friday"></div>'+
@@ -3495,8 +3447,8 @@ function admOpen(section){
       '<div class="ad-field"><label>Console passcode</label><input id="admMgPc" type="text" inputmode="numeric" autocomplete="off" placeholder="4 to 8 digits"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" id="admMgNewBtn" onclick="admMgCreate()">Create manager</button></div></div>'+
       '<div class="ad-card"><div class="ad-h">Managers</div><div id="admMgList"><div class="ad-loading">Loading managers…</div></div></div>'+
-      '<div class="ad-card"><div class="ad-h">Manager action log</div><p class="ad-p">Sensitive actions only: password resets, switching accounts on or off, approvals, deletions. You see your own entries; the Founder sees all. Newest first, up to 1,000 kept. Times are Nigeria time.</p>'+
-      '<div class="ad-field"><label>Action</label><select id="admMgLogAction"><option value="">All actions</option><option value="student-active">Switched a student on or off</option><option value="student-reset">Reset a student password</option><option value="student-approve">Approved or rejected a sign-up</option><option value="tutor-active">Switched a tutor on or off</option><option value="tutor-password-reset">Reset a tutor password</option><option value="manager-active">Switched a manager on or off</option><option value="manager-password-reset">Reset a manager\'s starting password</option><option value="manager-delete">Deleted a manager account</option><option value="own-password-change">Changed own password</option><option value="approval-action">Approved or returned content</option><option value="delete-action">Deleted content</option></select></div>'+
+      '<div class="ad-card"><div class="ad-h">Manager action log</div><p class="ad-p">Sensitive actions only: password resets, tier changes, switching accounts on or off, approvals, deletions. You see your own entries; the Founder sees all. Newest first, up to 1,000 kept. Times are Nigeria time.</p>'+
+      '<div class="ad-field"><label>Action</label><select id="admMgLogAction"><option value="">All actions</option><option value="student-tier">Changed a student\'s access tier</option><option value="student-active">Switched a student on or off</option><option value="student-reset">Reset a student password</option><option value="student-approve">Approved or rejected a sign-up</option><option value="tutor-active">Switched a tutor on or off</option><option value="tutor-password-reset">Reset a tutor password</option><option value="manager-active">Switched a manager on or off</option><option value="manager-password-reset">Reset a manager\'s starting password</option><option value="manager-delete">Deleted a manager account</option><option value="own-password-change">Changed own password</option><option value="approval-action">Approved or returned content</option><option value="delete-action">Deleted content</option></select></div>'+
       '<div class="ad-field"><label>From</label><input id="admMgLogFrom" type="date"></div>'+
       '<div class="ad-field"><label>To</label><input id="admMgLogTo" type="date"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" onclick="admMgLogLoad()">Show</button><button class="ad-btn" onclick="admMgLogClear()">Clear filters</button><button class="ad-btn" id="admMgLogCsvBtn" onclick="admMgLogExport()" disabled>Export CSV</button></div>'+
@@ -3598,7 +3550,7 @@ function admOpen(section){
   if(section === 'videos') admLoadVideos();
   if(section === 'classes') admLoadClasses();
   if(section === 'cohorts') admLoadCohorts();
-  if(section === 'students'){ admLoadCohorts(); admRegLoad(); }
+  if(section === 'students') admLoadCohorts();
   if(section === 'results') { admXpInit(); if(!admCohortsCache.length) admLoadCohorts().then(admXpFillCohorts); admRLoad(); }
   if(section === 'theorymark') admTMLoad();
   if(section === 'league') admLgLoad();
@@ -4362,7 +4314,8 @@ function admRenderCohorts(){
     }
     if(count > 0){
       body += '<div class="ac-btns">'+
-        '</div>';
+        '<button class="ad-btn pri" onclick="admSetCohortTier(\''+esc(c.cohortId)+'\',\'goc\')">Make all GOC</button>'+
+        '<button class="ad-btn warn" onclick="admSetCohortTier(\''+esc(c.cohortId)+'\',\'open\')">Restrict all to Open</button></div>';
     }
     body += '<div class="ac-btns">'+
       (editing ? '' : '<button class="ad-btn" onclick="admToggleCohortEdit(\''+esc(c.cohortId)+'\')">Edit overrides</button>')+
@@ -4371,6 +4324,26 @@ function admRenderCohorts(){
       '</div>';
     return '<div class="ad-cred">'+body+'</div>';
   }).join('');
+}
+
+/* Phase 3B slice 3 — move a whole cohort between tiers. Same rule as one student: making GOC
+   goes straight through; restricting asks first, in the words of core.restrictWarning, and says how
+   many of the cohort are actually GOC today (the others are not touched). The server does the work. */
+function admSetCohortTier(cohortId, tier){
+  var want = GOC.core.cleanTier(tier);
+  var c = admCohortsCache.filter(function(x){ return x.cohortId === cohortId; })[0];
+  var name = c ? c.name : 'this cohort';
+  var members = studentsData.filter(function(s){ return s.cohort === cohortId; });
+  var affected = members.filter(function(s){ return GOC.core.cleanTier(s.tier) !== want; }).length;
+  if(!affected){ toast(GOC.core.cohortTierMessage(name, want, { changed: 0, unchanged: members.length })); return; }
+  if(want === 'open' && typeof confirm === 'function'){
+    if(!confirm(GOC.core.restrictWarning(affected + ' GOC student' + (affected === 1 ? '' : 's') + ' in ' + name))) return;
+  }
+  GOC.api.setCohortTier(cohortId, want).then(function(r){
+    toast(GOC.core.cohortTierMessage(name, want, r));
+    return loadStudents();
+  }).then(function(){ admRenderCohorts(); })
+    .catch(function(err){ toast(err.message || 'That cohort was not changed'); });
 }
 
 function admToggleCohortEdit(id){
@@ -7868,12 +7841,12 @@ function renderDay(){
       '<div class="tt-time">'+esc(bl.t)+'</div>'+
       '<div class="tt-main"><h4>'+esc(bl.topic)+'</h4><p>'+esc(bl.dur)+' · '+esc(bl.subj)+'</p>'+
       '<span class="tt-tag" style="background:'+hexA(bl.color)+';color:'+bl.color+'">'+esc(bl.subj)+'</span>'+
-      (bl.joinLocked ? '<span class="tt-tag" style="background:#f3f4f6;color:#6b7280;margin-left:6px">Join link unavailable</span>' : '')+'</div>';
+      (bl.joinLocked ? '<span class="tt-tag" style="background:#f3f4f6;color:#6b7280;margin-left:6px">Join link: GOC</span>' : '')+'</div>';
     // A real class carries its own Zoom link — open it the same way a
     // video's externalUrl already does. A demo block has no link, so it
     // still just names itself.
     d.onclick=function(){
-      if(bl.joinLocked){ toast('Live classes are not available right now.'); }
+      if(bl.joinLocked){ toast(GOC.core.LIVE_JOIN_LOCK_MESSAGE); }
       else if(bl.zoomLink){ window.open(bl.zoomLink, '_blank'); } else { toast(bl.subj+' · '+bl.topic); }
     };
     host.appendChild(d);
@@ -8173,6 +8146,7 @@ function renderStudySet(){
     : (suYearsOn().length ? 'Only questions from the ' + suYearsOn()[0].year + ' paper.' : 'No year selected \u2014 questions from any year.');
   if(yh && prac){
     var ye = suEntry(suSubj);
+    if(ye && ye.yearsLocked > 0) yh.textContent += ' Older years are for GOC students.';
   }
   var yhost = document.getElementById('suYears');
   if(yhost && prac){
@@ -8817,7 +8791,7 @@ function atMyOpen(){
   GOC.api.listMyFlags().then(function(r){
     var host = document.getElementById('atMyList'); if(!host) return;
     var flags = (r && r.flags) || [];
-    if(r && r.locked){ host.innerHTML = '<div class="wt-none">Asking a tutor is not available right now.</div>'; return; }
+    if(r && r.locked){ host.innerHTML = '<div class="wt-none">Asking a tutor is for GOC students. Ask the academy about joining.</div>'; return; }
     if(!flags.length){ host.innerHTML = '<div class="wt-none">You have not asked anything yet. Tap “Ask a tutor” on a question.</div>'; return; }
     host.innerHTML = flags.map(function(f){
       var reply = f.reply
@@ -9305,7 +9279,8 @@ function noteById(id){
 function openNote(id){
   var n = noteById(id);
   if(!n){ toast('That note is no longer available'); return; }
-  if(n.locked){ toast('That note is not available.'); return; }
+  /* An Open student sees the list but not the text; the server never sent it. */
+  if(n.locked){ toast(GOC.core.NOTE_LOCK_MESSAGE); return; }
   rdNote = n;
   go('lesson');
   renderLesson();
@@ -9502,8 +9477,10 @@ function wtRowEl(t, first){
   if(t.repeatable && sat > 0){
     line += '<span class="papers">Sat ' + sat + ' time' + (sat !== 1 ? 's' : '') + ' \u00b7 you can sit it again</span>';
   }
+  /* ACCESS TIER: an Open student sees the paper but cannot sit it. The server
+     refuses the start too; this just explains it up front. */
   if(t.locked){
-    line += '<span class="papers">Not available right now</span>';
+    line += '<span class="papers">For GOC students \u00b7 ask the academy about joining</span>';
   }
   nm.innerHTML = line;
   var b = document.createElement('button');
@@ -9514,7 +9491,7 @@ function wtRowEl(t, first){
   if(t.locked){
     b.disabled = true;
     b.className = 'wt-start locked';
-    b.textContent = 'Locked';
+    b.textContent = 'Locked \u00b7 GOC';
   } else if(t.completed){
     b.disabled = true;
     b.className = 'wt-start done';
@@ -10079,7 +10056,7 @@ function refreshMe(){
    invented and nothing is decided here — an account with no record says exactly
    that, and every figure comes from GOC.api. */
 /* Class notices (Phase 3C slice 7). Tutors post them; only GOC students taking that subject are sent any, and
-   The newest three show; the rest sit behind Show more. The text is
+   the server sends an Open student nothing. The newest three show; the rest sit behind Show more. The text is
    escaped, with line breaks kept. A tutor's name is never sent: a notice says which subject's tutor it is from. */
 var dashNoticesAll = [], dashNoticesOpen = false;
 var DASH_NOTICES_FIRST = 3;
@@ -10111,7 +10088,7 @@ function dashPaintNotices(){
 }
 
 /* Broadcasts (Phase 4 slice 5). The console sends them; only GOC students whose audience includes them are sent
-   any. Newest three show, the rest sit behind Show more. The text
+   any, and the server sends an Open student nothing. Newest three show, the rest sit behind Show more. The text
    is escaped, with line breaks kept. A sender's name is never sent: a message says it is from the academy. */
 var dashBroadcastsAll = [], dashBroadcastsOpen = false;
 var DASH_BROADCASTS_FIRST = 3;
@@ -10204,8 +10181,8 @@ function dashPaintJamb(rows){
   if(j.repeatable && sat > 0) line += ' · sat ' + sat + ' time' + (sat !== 1 ? 's' : '') + ' — you can sit it again';
   if(j.locked){
     dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
-      + esc(line) + '</span></div>'
-      + '<button class="wt-start locked" disabled>Locked</button></div>');
+      + esc(line) + ' · for GOC students — ask the academy about joining</span></div>'
+      + '<button class="wt-start locked" disabled>Locked · GOC</button></div>');
     return;
   }
   dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
@@ -11455,7 +11432,7 @@ function loadPublishedVideos(){
     renderClasses();
   });
 }
-/* Set when the server held videos back from this student. */
+/* Set when the server held videos back because this student is on the Open tier. */
 var videosLocked = false;
 function renderClasses(){
   var cs = document.getElementById('classFilters');
@@ -11479,8 +11456,8 @@ function renderClasses(){
      combination or whether the app has forgotten what they sit. */
   var scope = classFilter === 'all' ? orderedSubjects().join(', ') : canonSubject(classFilter);
   var le = document.getElementById('liveEmpty'), se = document.getElementById('lessonEmpty');
-  if(le) le.textContent = videosLocked ? 'Live class replays are not available right now.' : 'No live classes yet for ' + scope + '.';
-  if(se) se.textContent = videosLocked ? 'Lesson videos are not available right now.' : 'No lesson videos yet for ' + scope + '.';
+  if(le) le.textContent = videosLocked ? GOC.core.videoLockMessage('live') : 'No live classes yet for ' + scope + '.';
+  if(se) se.textContent = videosLocked ? GOC.core.videoLockMessage('lesson') : 'No lesson videos yet for ' + scope + '.';
 }
 function videoCard(v){
   var b = document.createElement('button');
@@ -11650,7 +11627,9 @@ function admAddStudentFormHTML(){
       '</div>'+
       '<div class="subj-foot"><span class="subj-count" id="admAddSubjCount">0 of 3 sciences chosen</span><span class="subj-msg" id="admAddSubjMsg" role="status" aria-live="polite"></span></div>'+
     '</div>'+
-    '<p class="field-hint" style="margin-top:6px">Every student you enrol is a GOC student with full access.</p>'+
+    '<div class="field"><label for="admAddTier">Access</label>'+
+      '<select id="admAddTier"><option value="goc" selected>GOC student — full access</option><option value="open">Open — limited access</option></select>'+
+      '<p class="field-hint" style="margin-top:6px">GOC is the default for a student you enrol. Choose Open only if this person should start with the free limits.</p></div>'+
     '<div id="admAddStuResult"></div>'+
     '<div class="ad-actions"><button class="ad-btn pri" id="admAddStuBtn" onclick="admSubmitAddStudent()">Create account</button><button class="ad-btn" onclick="admToggleAddStudent()">Cancel</button></div>'+
   '</div>';
@@ -11680,7 +11659,9 @@ function admSubmitAddStudent(){
   }
   var btn = document.getElementById('admAddStuBtn');
   busy(btn, true);
-  GOC.api.addStudent({name: name, email: email, phone: phone, goal: 'JAMB / UTME 2027', subjects: check.subjects}).then(function(r2){
+  var tierEl = document.getElementById('admAddTier');
+  var tier = tierEl && tierEl.value === 'open' ? 'open' : 'goc';
+  GOC.api.addStudent({name: name, email: email, phone: phone, goal: 'JAMB / UTME 2027', subjects: check.subjects, tier: tier}).then(function(r2){
     busy(btn, false);
     var out = document.getElementById('admAddStuResult');
     if(out){
@@ -11689,7 +11670,7 @@ function admSubmitAddStudent(){
         '<div class="ac-grid">'+
           '<div class="ac-cell"><label>Scholar ID</label><code>'+esc(r2.student.id)+'</code></div>'+
           '<div class="ac-cell"><label>Temporary password</label><code>'+esc(r2.temporaryPassword)+'</code></div>'+
-          '<div class="ac-cell"><label>Access</label><code>GOC student</code></div>'+
+          '<div class="ac-cell"><label>Access</label><code>'+(GOC.core.cleanTier(r2.student && r2.student.tier) === 'goc' ? 'GOC' : 'Open')+'</code></div>'+
         '</div>'+
         '<p class="ad-note">Give these to the student directly — they will be asked to set their own password on first login. This card will disappear once you close this form.</p>'+
       '</div>';
@@ -12388,7 +12369,7 @@ function demoSubmit(){
 
 function setResFilter(f){ resFilter = f; renderResources(); }
 
-/* Students may download resources and open them in the app. */
+/* Open students may download resources but not open them in the app (the server enforces it). */
 var resourcesCanView = true;
 function loadPublishedResources(){
   if(!GOC.api || !GOC.api.listPublishedResources) return;
@@ -12511,7 +12492,7 @@ function renderResources(){
       }
 
       if(!resourcesCanView){
-        toast('Opening files in the app is not available right now.');
+        toast(GOC.core.RESOURCE_VIEW_LOCK_MESSAGE);
         return;
       }
       var kind = resourceViewerKind(r.fileExt);

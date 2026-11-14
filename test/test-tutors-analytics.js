@@ -78,12 +78,12 @@ function total(stats, subject, which) {
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
   var subs = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
 
-  /* a console-made student and a self-registered student */
+  /* a GOC student (console-made) and an Open student (public sign-up) */
   var g = await call('POST', '/api/admin/students', { name: 'Gina Goc', email: 'gina@example.com', phone: '08000000031', goal: 'JAMB / UTME 2027', subjects: subs }, adm);
   var gTok = (await call('POST', '/api/auth/login', { id: g.body.student.id, password: g.body.temporaryPassword })).body.token;
   var o = await activeStudent(call, { name: 'Olu Open', password: 'secret123', email: 'olu@example.com', phone: '08000000032', goal: 'JAMB / UTME 2027', subjects: subs }, adm);
   var oTok = o.token;
-  ok('setup: two students created, neither carries a tier', !('tier' in g.body.student) && !!oTok);
+  ok('setup: one GOC student and one Open student', g.body.student.tier === 'goc' && !!oTok);
 
   var ten = await call('POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Physics'], password: 'start-pass-1' }, adm);
   var tk = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' })).body.token;
@@ -101,7 +101,7 @@ function total(stats, subject, which) {
   console.log('\nbefore anyone has practised');
   var a0 = await call('GET', '/api/tutor/analytics', null, tk);
   ok('the tutor\'s first subject is the default', a0.status === 200 && a0.body.subject === 'Physics', flat(a0));
-  ok('the snapshot counts both students, with no Open count', a0.body.snapshot.gocStudents === 2 && a0.body.snapshot.openStudents === undefined, flat(a0));
+  ok('the snapshot counts the GOC student, and the Open one only as a count', a0.body.snapshot.gocStudents === 1 && a0.body.snapshot.openStudents === 1, flat(a0));
   ok('nobody is active and there is no average yet', a0.body.snapshot.active === 0 && a0.body.snapshot.practice.average === null && a0.body.snapshot.tests.average === null);
   ok('no weak topics or hard questions yet', a0.body.weakTopics.items.length === 0 && a0.body.hardestQuestions.items.length === 0);
 
@@ -112,18 +112,18 @@ function total(stats, subject, which) {
   ok('the counters hold exactly those answers, none right', total(db1.answerStats, 'Physics', 'q').n === answered && total(db1.answerStats, 'Physics', 'q').c === 0, JSON.stringify(db1.answerStats).slice(0, 200));
   ok('per-topic and per-question totals agree', total(db1.answerStats, 'Physics', 't').n === answered);
   var s2 = await sitPractice(oTok, 'Physics', 10, true);
-  ok('a self-registered student\'s answers count too', s2.status === 200 && total(readDb().answerStats, 'Physics', 'q').n === answered + s2.body.answered);
+  ok('an Open student\'s answers are not counted', s2.status === 200 && total(readDb().answerStats, 'Physics', 'q').n === answered);
   ok('the stored counters hold no student ID, name or time', !/GOC-S-|Gina|Olu/.test(JSON.stringify(readDb().answerStats)));
   var s3 = await sitPractice(gTok, 'Physics', 10, false);
   var db3 = readDb();
-  ok('a second run adds to the same counters', total(db3.answerStats, 'Physics', 'q').n === answered + s2.body.answered + s3.body.answered && total(db3.answerStats, 'Physics', 'q').c === s3.body.correct);
+  ok('a second run adds to the same counters', total(db3.answerStats, 'Physics', 'q').n === answered + s3.body.answered && total(db3.answerStats, 'Physics', 'q').c === s3.body.correct);
   var s4 = await sitPractice(gTok, 'Chemistry', 5, true);
-  ok('another subject is kept apart', total(readDb().answerStats, 'Chemistry', 'q').n === s4.body.answered && total(readDb().answerStats, 'Physics', 'q').n === answered + s2.body.answered + s3.body.answered);
+  ok('another subject is kept apart', total(readDb().answerStats, 'Chemistry', 'q').n === s4.body.answered && total(readDb().answerStats, 'Physics', 'q').n === answered + s3.body.answered);
 
   console.log('\nthe route');
   var a1 = await call('GET', '/api/tutor/analytics?subject=Physics', null, tk);
   var sn = a1.body.snapshot;
-  ok('both students are counted as active', a1.status === 200 && sn.active === 2 && sn.gocStudents === 2 && sn.openStudents === undefined, flat(a1).slice(0, 300));
+  ok('the GOC student is active and the Open student is not counted as active', a1.status === 200 && sn.active === 1 && sn.gocStudents === 1 && sn.openStudents === 1, flat(a1).slice(0, 300));
   ok('answers kept on the server\'s own side count only after the app saves the run (the route reads stored runs)', typeof sn.practice.answers === 'number');
   ok('the reply holds no student ID, name, email or phone', !/GOC-S-|Gina|Olu|gina@|olu@|0800000/.test(flat(a1)), flat(a1).slice(0, 200));
   ok('Chemistry answers never appear in the Physics reply', !/Chemistry/.test(JSON.stringify(a1.body.weakTopics) + JSON.stringify(a1.body.hardestQuestions)));
@@ -159,7 +159,7 @@ function total(stats, subject, which) {
     var after = allAnswers();
     ok('a submitted objective paper adds its answered questions to the counters (each under its own subject)', wsub.status === 200 && after - before === Object.keys(resp).length, before + ' -> ' + after + ' ' + wsub.status);
     var ow = await call('POST', '/api/me/tests/start', { section: 'objective', subject: 'Physics' }, oTok);
-    ok('a self-registered student can sit it too (a paper opens)', ow.status === 200, ow.status + ' ' + flat(ow).slice(0, 120));
+    ok('an Open student cannot sit it, so adds nothing', ow.status === 403 && allAnswers() === after);
   } else {
     console.log('  skip  Web Test counting: could not open an objective paper here (' + ws.status + ' ' + flat(ws).slice(0, 120) + ')');
   }

@@ -48,14 +48,15 @@ function waitForBoot(n) {
 (async function () {
   head('the pure rules');
   var A = core.auditActionFor;
-  ok('the tier route no longer exists, so it is not an audited action', A('PUT', '/api/students/GOC-0042/tier', { tier: 'goc' }) === null);
+  ok('a tier change is recorded with the target and only the tier', JSON.stringify(A('PUT', '/api/students/GOC-0042/tier', { tier: ' GOC ', password: 'secret' })) === JSON.stringify({ action: 'student-tier', label: 'Changed a student access tier', target: 'GOC-0042', detail: 'goc' }));
+  ok('an unknown tier value stores no detail', A('PUT', '/api/students/GOC-0042/tier', { tier: 'vip' }).detail === null);
   ok('on/off is recorded as a true or false and nothing else', A('PUT', '/api/managers/GOC-A-003/active', { active: false }).detail === false && A('PUT', '/api/managers/GOC-A-003/active', { active: 'no' }).detail === null);
   ok('a password reset is recorded with no detail at all', A('POST', '/api/students/GOC-0042/reset', { password: 'hunter22' }).detail === null && A('PUT', '/api/tutors/GOC-T-001/password', { password: 'hunter22' }).detail === null);
   ok('approvals, rejections and deletions are recorded', ['POST /api/students/GOC-0042/approve', 'DELETE /api/students/GOC-0042/approve', 'POST /api/approvals/7/approve', 'POST /api/approvals/7/return', 'POST /api/approvals/batch/approve', 'DELETE /api/questions/12', 'DELETE /api/questions/bulk', 'DELETE /api/notes/3', 'DELETE /api/admin/resources/r-1', 'DELETE /api/managers/GOC-A-003', 'DELETE /api/admin/cohorts/c1'].every(function (x) { var p = x.split(' '); return !!A(p[0], p[1], {}); }));
   ok('reading, creating and editing are not recorded', [['GET', '/api/students'], ['POST', '/api/questions'], ['PUT', '/api/questions/12'], ['POST', '/api/managers'], ['GET', '/api/audit/manager-actions'], ['POST', '/api/alerts/al-1/seen'], ['PUT', '/api/questions/12/active']].every(function (x) { return A(x[0], x[1], {}) === null; }));
-  ok('a query string and letter case do not hide an action', A('post', '/api/students/GOC-0042/approve?x=1', {}).action === 'student-approve');
+  ok('a query string and letter case do not hide an action', A('put', '/api/students/GOC-0042/tier?x=1', { tier: 'open' }).action === 'student-tier');
   var list = [];
-  for (var i = 1; i <= core.MANAGER_LOG_KEEP + 5; i++) list = core.addManagerAction(list, core.stampManagerAction({ id: i % 2 ? 'GOC-A-003' : 'GOC-A-004', name: 'X', roleKey: 'finance' }, A('POST', '/api/students/GOC-0001/approve', {}), i, Date.now()));
+  for (var i = 1; i <= core.MANAGER_LOG_KEEP + 5; i++) list = core.addManagerAction(list, core.stampManagerAction({ id: i % 2 ? 'GOC-A-003' : 'GOC-A-004', name: 'X', roleKey: 'finance' }, A('PUT', '/api/students/GOC-0001/tier', { tier: 'open' }), i, Date.now()));
   ok('the newest 1,000 are kept and the oldest dropped', list.length === 1000 && list[0].id === 6 && list[999].id === 1005);
   var before = list.length; core.addManagerAction(list, list[0]);
   ok('adding never mutates the list passed in', list.length === before);
@@ -91,9 +92,11 @@ function waitForBoot(n) {
   var logAdd = await call('GET', '/api/audit/manager-actions', undefined, ftok);
   ok('adding a student is not a sensitive action, so it is not logged', logAdd.body.count === 2, logAdd.raw);
   var t1 = await call('PUT', '/api/students/' + sid + '/tier', { tier: 'open' }, tok['GOC-A-003']);
-  ok('the tier route is gone (404) and logs nothing', t1.status === 404 && (await call('GET', '/api/audit/manager-actions', undefined, ftok)).body.count === 2, t1.raw);
-  ok('nor one the role may not make (403)', (await call('PUT', '/api/students/' + sid + '/active', { active: false }, tok['GOC-A-004'])).status === 403 && (await call('GET', '/api/audit/manager-actions', undefined, ftok)).body.count === 2);
-  ok('nor one for a student who does not exist (404)', (await call('PUT', '/api/students/GOC-9999/active', { active: false }, tok['GOC-A-003'])).status === 404 && (await call('GET', '/api/audit/manager-actions', undefined, ftok)).body.count === 2);
+  ok('Finance restricts the student to Open', t1.status === 200, t1.raw);
+  var bad = await call('PUT', '/api/students/' + sid + '/tier', { tier: 'vip' }, tok['GOC-A-003']);
+  ok('a refused change (400) is not logged', bad.status === 400 && (await call('GET', '/api/audit/manager-actions', undefined, ftok)).body.count === 3);
+  ok('nor one the role may not make (403)', (await call('PUT', '/api/students/' + sid + '/tier', { tier: 'goc' }, tok['GOC-A-004'])).status === 403 && (await call('GET', '/api/audit/manager-actions', undefined, ftok)).body.count === 3);
+  ok('nor one for a student who does not exist (404)', (await call('PUT', '/api/students/GOC-9999/tier', { tier: 'goc' }, tok['GOC-A-003'])).status === 404 && (await call('GET', '/api/audit/manager-actions', undefined, ftok)).body.count === 3);
   var off = await call('PUT', '/api/students/' + sid + '/active', { active: false }, tok['GOC-A-003']);
   var rs = await call('POST', '/api/students/' + sid + '/reset', {}, tok['GOC-A-004']);
   ok('a deactivation and a password reset by Student Affairs', off.status === 200 && rs.status === 200, off.status + ' ' + rs.status + ' ' + rs.raw);
@@ -103,28 +106,28 @@ function waitForBoot(n) {
   head('who reads what');
   var all = await call('GET', '/api/audit/manager-actions', undefined, ftok);
   var acts = all.body.entries.map(function (e) { return e.action; });
-  ok('the Founder sees every entry, newest first', all.body.count === 6 && acts[0] === 'manager-password-reset' && acts.indexOf('student-tier') === -1 && acts.indexOf('student-active') > -1 && acts.indexOf('student-password-reset') > -1 && acts.indexOf('manager-active') > -1, acts.join(','));
-  var actRow = all.body.entries.filter(function (e) { return e.action === 'student-active'; })[0];
-  ok('the deactivation entry names who, whom, and the new state', actRow.by === 'GOC-A-003' && actRow.target === sid && actRow.detail === false && actRow.role === 'finance', JSON.stringify(actRow));
+  ok('the Founder sees every entry, newest first', all.body.count === 7 && acts[0] === 'manager-password-reset' && acts.indexOf('student-tier') > -1 && acts.indexOf('student-active') > -1 && acts.indexOf('student-password-reset') > -1 && acts.indexOf('manager-active') > -1, acts.join(','));
+  var tierRow = all.body.entries.filter(function (e) { return e.action === 'student-tier'; })[0];
+  ok('the tier entry names who, whom, and the new tier', tierRow.by === 'GOC-A-003' && tierRow.target === sid && tierRow.detail === 'open' && tierRow.role === 'finance', JSON.stringify(tierRow));
   ok('the Founder\'s own actions are logged too', all.body.entries.filter(function (e) { return e.by === 'GOC-A-001'; }).length === 2);
   var fin = await call('GET', '/api/audit/manager-actions', undefined, tok['GOC-A-003']);
-  ok('Finance sees only their own two', fin.status === 200 && fin.body.count === 2 && fin.body.entries.every(function (e) { return e.by === 'GOC-A-003'; }) && fin.body.entries.map(function (e) { return e.action; }).sort().join(',') === 'own-password-change,student-active', fin.raw);
+  ok('Finance sees only their own three', fin.status === 200 && fin.body.count === 3 && fin.body.entries.every(function (e) { return e.by === 'GOC-A-003'; }) && fin.body.entries.map(function (e) { return e.action; }).sort().join(',') === 'own-password-change,student-active,student-tier', fin.raw);
   var wide = await call('GET', '/api/audit/manager-actions?by=GOC-A-001&limit=500', undefined, tok['GOC-A-003']);
   ok('asking for someone else\'s entries still gives Finance only their own', wide.body.entries.every(function (e) { return e.by === 'GOC-A-003'; }), wide.raw);
-  var flt = await call('GET', '/api/audit/manager-actions?action=student-active', undefined, ftok);
-  ok('the Founder can filter by action', flt.body.count === 1 && flt.body.entries[0].action === 'student-active');
+  var flt = await call('GET', '/api/audit/manager-actions?action=student-tier', undefined, ftok);
+  ok('the Founder can filter by action', flt.body.count === 1 && flt.body.entries[0].action === 'student-tier');
   ok('no session is refused', (await call('GET', '/api/audit/manager-actions')).status === 401);
 
   head('no secrets in the log');
   var stored = fs.readFileSync(path.join(SANDBOX, 'server', 'data.json'), 'utf8');
   var logJson = JSON.stringify(JSON.parse(stored).managerLog);
   ok('no password or passcode, new or old, appears in a stored entry or in the reply', !/reset-pass5|70707|secret-pass77|starter123|4821/.test(logJson) && !/reset-pass5|70707|secret-pass77|starter123/.test(all.raw));
-  ok('the stored log holds the six entries and its counter', JSON.parse(stored).managerLog.length === 6 && JSON.parse(stored).settings.managerLogSeq === 6);
+  ok('the stored log holds the seven entries and its counter', JSON.parse(stored).managerLog.length === 7 && JSON.parse(stored).settings.managerLogSeq === 7);
 
   head('deleting a manager is logged, and survives the manager');
   var del = await call('DELETE', '/api/managers/GOC-A-003', undefined, ftok);
   var after = await call('GET', '/api/audit/manager-actions', undefined, ftok);
-  ok('the delete is recorded and the deleted manager\'s own entries stay', del.status === 200 && after.body.count === 7 && after.body.entries[0].action === 'manager-delete' && after.body.entries[0].target === 'GOC-A-003' && after.body.entries.filter(function (e) { return e.by === 'GOC-A-003'; }).length === 2, after.raw);
+  ok('the delete is recorded and the deleted manager\'s own entries stay', del.status === 200 && after.body.count === 8 && after.body.entries[0].action === 'manager-delete' && after.body.entries[0].target === 'GOC-A-003' && after.body.entries.filter(function (e) { return e.by === 'GOC-A-003'; }).length === 3, after.raw);
 
   stop();
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');

@@ -92,11 +92,11 @@ var run = {
 (function main() {
   waitForBoot(40).then(function () {
     head('Practice history — server-authoritative (Phase 1)');
-    var idA, tokenA, tokenB, pwA;
+    var idA, tokenA, tokenB;
 
     return activeStudent.signedUp(call, signup).then(function (r) {
       ok('a student can sign up with the academy code', r.status === 200 && r.body && r.body.token, r.status + ' ' + r.raw);
-      idA = r.body.session.id; tokenA = r.body.token; pwA = r.tempPassword;
+      idA = r.body.session.id; tokenA = r.body.token;
 
       return call('GET', '/api/me/practice', undefined, tokenA);
     }).then(function (r) {
@@ -119,7 +119,7 @@ var run = {
       ok('practice history needs a student session', r.status === 401 || r.status === 403);
 
       // The other phone: a fresh login for the same student.
-      return call('POST', '/api/auth/login', { id: idA, password: pwA });
+      return call('POST', '/api/auth/login', { id: idA, password: 'secret123' });
     }).then(function (r) {
       ok('the student can log in again (a second device)', r.status === 200 && r.body.token);
       tokenB = r.body.token;

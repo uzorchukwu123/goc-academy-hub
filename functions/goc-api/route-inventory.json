@@ -2,31 +2,31 @@
   "generatedBy": "functions/goc-api/tools/extract-routes.js",
   "source": "server/server.js",
   "note": "Generated from the OneBit route table. Do not hand-edit; re-run the extractor.",
-  "total": 262,
+  "total": 253,
   "counts": {
     "byAuthTier": {
-      "public": 24,
+      "public": 21,
       "student": 37,
       "staff-or-student": 4,
       "staff": 3,
-      "console": 151,
+      "console": 145,
       "tutor-setup": 2,
       "tutor": 27,
       "founder": 2,
       "free": 12
     },
     "byMethod": {
-      "GET": 116,
-      "POST": 85,
-      "PUT": 39,
+      "GET": 113,
+      "POST": 77,
+      "PUT": 41,
       "DELETE": 22
     },
     "byFamily": {
       "api/health": 1,
       "api/auth": 7,
       "api/me": 32,
-      "api/students": 7,
-      "api/admin": 21,
+      "api/students": 8,
+      "api/admin": 22,
       "api/staff": 3,
       "api/updates": 3,
       "api/affirmations": 2,
@@ -59,8 +59,7 @@
       "api/classes": 1,
       "api/scholarship": 8,
       "api/free2027": 54,
-      "api/analytics": 2,
-      "api/registrations": 11
+      "api/analytics": 2
     }
   },
   "capabilities": [
@@ -77,7 +76,6 @@
     "notices.manage",
     "overview.own",
     "questions.manage",
-    "registrations.codes",
     "resources.publish",
     "results.export",
     "results.view",
@@ -93,6 +91,7 @@
     "students.approve",
     "students.deactivate",
     "students.passwords",
+    "students.tier",
     "system.migrate",
     "theory.mark",
     "tutors.accounts",
@@ -324,34 +323,6 @@
       "serverLine": 3797
     },
     {
-      "method": "POST",
-      "path": "/api/registrations/validate-code$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/validate-code$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/validate-code",
-      "caseInsensitive": false,
-      "authTier": "public",
-      "capability": null,
-      "family": "api/registrations",
-      "serverLine": 3837
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations$",
-      "regex": {
-        "source": "^\\/api\\/registrations$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations",
-      "caseInsensitive": false,
-      "authTier": "public",
-      "capability": null,
-      "family": "api/registrations",
-      "serverLine": 3851
-    },
-    {
       "method": "GET",
       "path": "/api/admin/overview$",
       "regex": {
@@ -367,20 +338,6 @@
     },
     {
       "method": "POST",
-      "path": "/api/registrations/setup$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/setup$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/setup",
-      "caseInsensitive": false,
-      "authTier": "public",
-      "capability": null,
-      "family": "api/registrations",
-      "serverLine": 3896
-    },
-    {
-      "method": "POST",
       "path": "/api/admin/migrate-appwrite$",
       "regex": {
         "source": "^\\/api\\/admin\\/migrate-appwrite$",
@@ -392,48 +349,6 @@
       "capability": "system.migrate",
       "family": "api/admin",
       "serverLine": 3913
-    },
-    {
-      "method": "GET",
-      "path": "/api/registrations/codes$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/codes$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/codes",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "registrations.codes",
-      "family": "api/registrations",
-      "serverLine": 3935
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/codes$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/codes$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/codes",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "registrations.codes",
-      "family": "api/registrations",
-      "serverLine": 3943
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/codes/([A-Za-z0-9-]+)/revoke$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/codes\\/([A-Za-z0-9-]+)\\/revoke$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/codes/([A-Za-z0-9-]+)/revoke",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "registrations.codes",
-      "family": "api/registrations",
-      "serverLine": 3972
     },
     {
       "method": "GET",
@@ -464,20 +379,6 @@
       "serverLine": 3982
     },
     {
-      "method": "GET",
-      "path": "/api/registrations/applications$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/applications$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/applications",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.approve",
-      "family": "api/registrations",
-      "serverLine": 3985
-    },
-    {
       "method": "POST",
       "path": "/api/updates$",
       "regex": {
@@ -490,34 +391,6 @@
       "capability": "homepage.edit",
       "family": "api/updates",
       "serverLine": 3986
-    },
-    {
-      "method": "GET",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.approve",
-      "family": "api/registrations",
-      "serverLine": 3993
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/approve$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)\\/approve$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)/approve",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.approve",
-      "family": "api/registrations",
-      "serverLine": 4003
     },
     {
       "method": "DELETE",
@@ -548,20 +421,6 @@
       "serverLine": 4017
     },
     {
-      "method": "POST",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/reject$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)\\/reject$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)/reject",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.approve",
-      "family": "api/registrations",
-      "serverLine": 4026
-    },
-    {
       "method": "PUT",
       "path": "/api/affirmations$",
       "regex": {
@@ -588,20 +447,6 @@
       "capability": null,
       "family": "api/contact",
       "serverLine": 4048
-    },
-    {
-      "method": "POST",
-      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/resend-setup$",
-      "regex": {
-        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)\\/resend-setup$",
-        "flags": ""
-      },
-      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)/resend-setup",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.approve",
-      "family": "api/registrations",
-      "serverLine": 4053
     },
     {
       "method": "GET",
@@ -2845,6 +2690,20 @@
     },
     {
       "method": "PUT",
+      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier$",
+      "regex": {
+        "source": "^\\/api\\/admin\\/cohorts\\/([A-Za-z0-9._-]+)\\/tier$",
+        "flags": ""
+      },
+      "displayPath": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.tier",
+      "family": "api/admin",
+      "serverLine": 8712
+    },
+    {
+      "method": "PUT",
       "path": "/api/students/([A-Za-z0-9-]+)/cohort$",
       "regex": {
         "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/cohort$",
@@ -2856,6 +2715,20 @@
       "capability": "cohort.manage",
       "family": "api/students",
       "serverLine": 8751
+    },
+    {
+      "method": "PUT",
+      "path": "/api/students/([A-Za-z0-9-]+)/tier$",
+      "regex": {
+        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/tier$",
+        "flags": ""
+      },
+      "displayPath": "/api/students/([A-Za-z0-9-]+)/tier",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.tier",
+      "family": "api/students",
+      "serverLine": 8785
     },
     {
       "method": "GET",

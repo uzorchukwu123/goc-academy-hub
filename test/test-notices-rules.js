@@ -55,9 +55,9 @@ var goc = { id: 'S1', tier: 'goc', subjects: ['English Language', 'Chemistry', '
 var seen = core.noticesForStudent(list, goc);
 ok('a GOC student sees notices for the subjects they take, newest first', seen.map(function (n) { return n.id; }).join() === '7,5,8');
 ok('a GOC student NOT taking the subject does not see it', core.noticesForStudent(list, Object.assign({}, goc, { subjects: ['Physics'] })).map(function (n) { return n.id; }).join() === '8');
-ok('a stored tier value is ignored: the student sees their subjects\' notices', core.noticesForStudent(list, Object.assign({}, goc, { tier: 'open' })).length === 3);
-ok('a student with no tier stored sees their subjects\' notices', core.noticesForStudent(list, { id: 'S2', subjects: ['Chemistry'] }).length === 2);
-ok('an odd stored tier string such as "GOCX" is ignored too', core.noticesForStudent(list, Object.assign({}, goc, { tier: 'GOCX' })).length === 3);
+ok('an Open student sees none', core.noticesForStudent(list, Object.assign({}, goc, { tier: 'open' })).length === 0);
+ok('a student with no tier reads as Open and sees none', core.noticesForStudent(list, { id: 'S2', subjects: ['Chemistry'] }).length === 0);
+ok('an odd tier string such as "GOCX" sees none', core.noticesForStudent(list, Object.assign({}, goc, { tier: 'GOCX' })).length === 0);
 ok('no student record, no notices', core.noticesForStudent(list, null).length === 0);
 var pub = seen[0];
 ok('a student copy has no tutor ID or name, and says only who it is from', pub.addedBy === undefined && pub.addedByName === undefined && pub.from === 'Chemistry tutor' && JSON.stringify(pub).indexOf('Ada') === -1 && JSON.stringify(pub).indexOf('GOC-T') === -1);

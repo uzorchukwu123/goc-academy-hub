@@ -203,25 +203,38 @@
         </div>
       </div>
 
-      <!-- One student identity: every G.O.C student gets the full academy. -->
+      <!-- Phase 3B slice 5 — the same two tier cards as the sign-up screen's "Open or GOC?" panel.
+           The wording is kept identical to that panel (checked by test/test-tiers-signup.js).
+           No price here on purpose: GOC is "ask the academy". -->
       <div class="lp-sec" id="lpTiers">
-        <div class="lp-eyebrow">Programme</div>
-        <h2>One student identity: the GOC student</h2>
-        <p class="lead">Every enrolled student gets the full academy — no limited accounts.</p>
-        <div class="tier-compare landing-tiers">
+        <div class="lp-eyebrow">Two ways in</div>
+        <h2>Open or GOC? See what you get</h2>
+        <p class="lead">Start free today with an Open account. GOC students get the full academy.</p>
+        <div class="tier-compare landing-tiers" id="tierCompareLanding">
           <div class="tc-grid">
-            <div class="tc-card goc">
-              <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
-              <ul>
-                <li>Unlimited practice and past questions, every year</li>
-                <li>Objective and Theory Web Tests, plus the JAMB-oriented test</li>
-                <li>Every note, unlimited reviews and saved questions</li>
-                <li>Live classes, lesson videos and class replays</li>
-                <li>Read resources in the app, and earn streak freezes</li>
-                <li>Ask-a-tutor help and class notices</li>
-              </ul>
-            </div>
-          </div>
+                    <div class="tc-card open">
+                      <div class="tc-h"><b>Open</b><span>This sign-up</span></div>
+                      <ul>
+                        <li>Unlimited practice and past questions, every year</li>
+                        <li>The JAMB-oriented test, as often as you like</li>
+                        <li>The first 3 notes of each subject</li>
+                        <li>10 spaced reviews a day</li>
+                        <li>20 saved questions</li>
+                        <li>Resource downloads and the league</li>
+                      </ul>
+                    </div>
+                    <div class="tc-card goc">
+                      <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
+                      <ul>
+                        <li>Everything in Open, with no limits</li>
+                        <li>Objective and Theory Web Tests</li>
+                        <li>Every note, unlimited reviews and saved questions</li>
+                        <li>Live classes, lesson videos and class replays</li>
+                        <li>Read resources in the app, and earn streak freezes</li>
+                      </ul>
+                    </div>
+                  </div>
+          <p class="tc-note">Creating an account here gives you an <b>Open</b> account. GOC is for students the academy enrols — ask the academy about joining and your account will be upgraded.</p>
           <div class="tc-cta"><button class="btn btn-red" type="button" onclick="go('signup')">Create account</button></div>
         </div>
       </div>
@@ -711,13 +724,42 @@
         <div class="auth-formwrap">
           <div class="auth-card">
             <button class="auth-back" onclick="go('landing')">← Back to homepage</button>
-            <h1>Apply for your account</h1>
-            <p class="tagline">With your registration code. Takes less than a minute.</p>
+            <h1>Create your account</h1>
+            <p class="tagline">Free to start. Takes less than a minute.</p>
+            <!-- Open vs GOC: what this sign-up gives, and what a GOC student has on top.
+                 The figures match core.TIER_LIMITS / TIER_FEATURES (checked by test/test-tiers-signup.js). -->
+            <details class="tier-compare" id="tierCompare">
+              <summary>Open or GOC? See what you get</summary>
+              <div class="tc-grid">
+                <div class="tc-card open">
+                  <div class="tc-h"><b>Open</b><span>This sign-up</span></div>
+                  <ul>
+                    <li>Unlimited practice and past questions, every year</li>
+                    <li>The JAMB-oriented test, as often as you like</li>
+                    <li>The first 3 notes of each subject</li>
+                    <li>10 spaced reviews a day</li>
+                    <li>20 saved questions</li>
+                    <li>Resource downloads and the league</li>
+                  </ul>
+                </div>
+                <div class="tc-card goc">
+                  <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
+                  <ul>
+                    <li>Everything in Open, with no limits</li>
+                    <li>Objective and Theory Web Tests</li>
+                    <li>Every note, unlimited reviews and saved questions</li>
+                    <li>Live classes, lesson videos and class replays</li>
+                    <li>Read resources in the app, and earn streak freezes</li>
+                  </ul>
+                </div>
+              </div>
+              <p class="tc-note">Creating an account here gives you an <b>Open</b> account. GOC is for students the academy enrols — ask the academy about joining and your account will be upgraded.</p>
+            </details>
             <form onsubmit="signupSubmit();return false">
               <div class="field">
                 <label for="signName">Full name</label>
                 <input type="text" id="signName" placeholder="e.g. Ada Obi">
-                <p class="field-hint">Use the name your results should be recorded under. When your application is approved, you'll be issued a unique <b>Scholar ID</b> (GOC-S-…) to log in with.</p>
+                <p class="field-hint">You'll be issued a unique <b>Scholar ID</b> (GOC-S-…) to log in with. Use the name your results should be recorded under.</p>
               </div>
               <div class="auth-row">
                 <div class="field">
@@ -728,11 +770,6 @@
                   <label for="signPhone">Phone</label>
                   <input type="tel" id="signPhone" inputmode="tel" placeholder="0801 234 5678">
                 </div>
-              </div>
-              <div class="field">
-                <label for="signCode">Registration code</label>
-                <input type="text" id="signCode" placeholder="GOC-REG-______-______" autocomplete="off" style="text-transform:uppercase">
-                <p class="field-hint">The academy gives this code to approved applicants. Your application is reviewed before any account is created — submitting this form does not create an account yet.</p>
               </div>
               <div class="field">
                 <label for="signGoal">I'm preparing for</label>
@@ -780,7 +817,7 @@
                 <div class="field-hint">Use at least 8 characters with a number.</div>
               </div>
               <label class="check-lbl" style="margin-bottom:18px"><input type="checkbox" id="signConsent"> I have read and accept the <button type="button" class="inline-legal-btn" onclick="go('legal')">Terms &amp; Privacy Policy</button>. I understand my study data is used to run my account and track my progress.</label>
-              <button class="btn btn-red btn-block" type="submit" id="signupBtn">Submit application</button>
+              <button class="btn btn-red btn-block" type="submit" id="signupBtn">Create free account</button>
             </form>
             <p class="auth-legal">Your account is personal to you — one active session per scholar keeps your progress secure.</p>
             <div class="auth-swap">Already have an account? <button class="auth-link" onclick="go('login-v2')">Log in</button></div>
@@ -802,8 +839,13 @@
             <div style="font-size:3rem;margin-bottom:12px">🎉</div>
             <h1 style="margin-bottom:8px">Registration received!</h1>
             <p class="tagline" style="margin-bottom:24px">Welcome, <span id="pendingStudentName">Scholar</span>. Your application is in.</p>
-            <p style="margin-bottom:16px;line-height:1.6">The G.O.C Academy team will review your application. No account has been created yet — that happens only when your application is approved.</p>
-            <p style="margin-bottom:28px;font-size:.88rem;color:var(--text2,#666);line-height:1.6">When you are approved, we will email you your <b>Scholar ID</b> and a secure link to set your password. Setting your password through that link is the last step before you can log in.</p>
+            <div style="background:var(--surface2,#f5f5f5);border-radius:12px;padding:18px 20px;margin-bottom:24px;text-align:left">
+              <p style="margin:0 0 6px;font-size:.8rem;color:var(--text2,#666);text-transform:uppercase;letter-spacing:.06em">Your Scholar ID</p>
+              <code style="font-size:1.25rem;font-weight:700;color:var(--accent,#c0392b)" id="pendingScholarId">GOC-S-???</code>
+              <p style="margin:10px 0 0;font-size:.82rem;color:var(--text2,#666)">Keep this safe — you will use it to log in once your account is approved.</p>
+            </div>
+            <p style="margin-bottom:16px;line-height:1.6">The G.O.C Academy team will review your registration and activate your access shortly. You will be able to log in as soon as your account is approved.</p>
+            <p style="margin-bottom:28px;font-size:.88rem;color:var(--text2,#666);line-height:1.6">If you have any questions in the meantime, contact the academy directly and quote your Scholar ID above.</p>
             <button class="btn btn-red btn-block" onclick="go('login-v2')">Go to login</button>
             <div style="margin-top:14px">
               <button class="lp-link" style="font-size:.9rem" onclick="go('landing')">← Back to homepage</button>
@@ -1497,6 +1539,11 @@
 
         <div class="sec-head" style="margin-top:18px"><div class="section-t">Account</div><span class="chip">Verified</span></div>
         <div class="card wrap" style="padding:2px 16px">
+          <div class="set-row" id="tierRow" style="display:none">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></div>
+            <div class="lbl"><h4>Your access</h4><p id="tierNote">—</p></div>
+            <span class="chip" id="tierChip">—</span>
+          </div>
           <div class="set-row">
             <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
             <div class="lbl"><h4>Daily study window</h4><p>Set by academy · <b id="limitVal">90 min</b></p></div>

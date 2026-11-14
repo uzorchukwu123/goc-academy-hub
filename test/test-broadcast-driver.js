@@ -97,18 +97,18 @@ async function main() {
   var chemId = gocChem.student.id, bioId = gocBio.student.id, openId = openR.student.id;
 
   head('the offline driver: audience count and sending');
-  ok('the all-students audience counts every student', (await mock.broadcastAudience({ kind: 'goc' })).reached === 3);
+  ok('all GOC students counts only the GOC ones', (await mock.broadcastAudience({ kind: 'goc' })).reached === 2);
   var c = await mock.broadcastAudience({ kind: 'subject', subject: 'Chemistry' });
-  ok('one subject counts students taking it, with a label', c.reached === 2 && c.label === 'Chemistry students');
+  ok('one subject counts GOC students taking it, with a label', c.reached === 1 && c.label === 'Chemistry students');
   var p0 = await mock.sendBroadcast(Object.assign({ sentBy: 'forged', sentAt: 'forged', id: 9999, reached: 500 }, good));
   ok('the console sends a subject broadcast', p0.created === true && p0.broadcast.audienceLabel === 'Chemistry students');
-  ok('forged sender, time, id and reach are ignored', p0.broadcast.sentBy === 'Ernest Uzorchukwu' && p0.broadcast.sentAt !== 'forged' && p0.broadcast.id !== 9999 && p0.broadcast.reached === 2);
+  ok('forged sender, time, id and reach are ignored', p0.broadcast.sentBy === 'Ernest Uzorchukwu' && p0.broadcast.sentAt !== 'forged' && p0.broadcast.id !== 9999 && p0.broadcast.reached === 1);
   ok('the reminder is on by default', p0.broadcast.remind === true);
   var bid = p0.broadcast.id;
   var p1 = await mock.sendBroadcast({ audience: { kind: 'goc' }, title: 'Holiday notice', body: 'The academy is closed on Monday for the holiday.', remind: false });
-  ok('an all-students one reaches everyone, reminder off', p1.broadcast.reached === 3 && p1.broadcast.remind === false);
+  ok('an all-GOC one reaches both, reminder off', p1.broadcast.reached === 2 && p1.broadcast.remind === false);
   var list = await mock.listBroadcasts();
-  ok('the console lists both, newest first, with sender and reach', list.count === 2 && list.broadcasts[0].title === 'Holiday notice' && list.broadcasts[1].reached === 2 && list.broadcasts[1].sentBy === 'Ernest Uzorchukwu');
+  ok('the console lists both, newest first, with sender and reach', list.count === 2 && list.broadcasts[0].title === 'Holiday notice' && list.broadcasts[1].reached === 1 && list.broadcasts[1].sentBy === 'Ernest Uzorchukwu');
   await mock.logout();
 
   head('the offline driver: who reads it');
@@ -123,12 +123,13 @@ async function main() {
   await mock.logout();
   await mock.login(openId, 'secret123');
   var o1 = await mock.listMyBroadcasts();
-  ok('a self-registered student sees broadcasts like everyone (no tier gate)', o1.locked === false && o1.broadcasts.length === 2 && JSON.stringify(o1).indexOf('ZQXBROADCAST') > -1);
+  ok('an Open student sees nothing, locked, and no text', o1.locked === true && o1.broadcasts.length === 0 && JSON.stringify(o1).indexOf('ZQXBROADCAST') === -1);
   await mock.logout();
 
-  head('the offline driver: removing');
+  head('the offline driver: tier change and removing');
+  mock._setTier(openId, 'goc');
   await mock.login(openId, 'secret123');
-  ok('the self-registered student sees both messages', (await mock.listMyBroadcasts()).broadcasts.length === 2);
+  ok('Open made GOC now sees the messages for them', (await mock.listMyBroadcasts()).broadcasts.length === 2);
   await mock.logout();
   await mock.login('GOC-A-001', 'founder2027'); await mock.unlockConsole('2027');
   var d1 = await mock.deleteBroadcast(bid);

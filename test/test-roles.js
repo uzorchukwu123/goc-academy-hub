@@ -34,14 +34,13 @@ console.log('\nthe Academic Director loses all-sections access');
 ok('the Academic Director has fewer capabilities than the Founder', core.capabilitiesOf(AD).length < all.length);
 ok('cannot create cohorts, tutors or managers, or touch the firewall', !core.roleCan(AD, 'cohort.create') && !core.roleCan(AD, 'tutors.accounts') && !core.roleCan(AD, 'managers.accounts') && !core.roleCan(AD, 'firewall.manage'));
 ok('loses the sign-up limits', !core.roleCan(AD, 'signup.limits'));
-ok('cannot approve students or deactivate accounts (Finance does)', !core.roleCan(AD, 'students.approve') && !core.roleCan(AD, 'students.deactivate'));
+ok('cannot approve students, switch tiers or deactivate accounts (Finance does)', !core.roleCan(AD, 'students.approve') && !core.roleCan(AD, 'students.tier') && !core.roleCan(AD, 'students.deactivate'));
 ok('cannot see payment records', !core.roleCan(AD, 'payments.view'));
 
 console.log('\nfinance and student accounts');
-ok('approve, add, deactivate: Finance and the Founder only', ['students.approve', 'students.add', 'students.deactivate'].every(function (c) { return only(c, [FIN]); }));
-  ok('students.tier is not a capability any role holds', core.allCapabilities().indexOf('students.tier') === -1);
+ok('approve, add, switch tier, deactivate: Finance and the Founder only', ['students.approve', 'students.add', 'students.tier', 'students.deactivate'].every(function (c) { return only(c, [FIN]); }));
 ok('payment records: Finance and the Founder only', only('payments.view', [FIN]));
-ok('Student Affairs no longer approves or adds', !core.roleCan(SA, 'students.approve') && !core.roleCan(SA, 'students.add'));
+ok('Student Affairs no longer approves, adds or switches', !core.roleCan(SA, 'students.approve') && !core.roleCan(SA, 'students.add') && !core.roleCan(SA, 'students.tier'));
 ok('Student Affairs still resets passwords', core.roleCan(SA, 'students.passwords') && !core.roleCan(FIN, 'students.passwords'));
 
 console.log('\nteaching and content (Academic Director)');
@@ -86,7 +85,7 @@ console.log('\nsafe by default');
 ok('an unknown role is refused everything', !core.roleCan('Tutor', 'results.view') && !core.roleCan('', 'results.view') && !core.roleCan(null, 'results.view') && core.capabilitiesOf('Tutor').length === 0);
 ok('an unknown capability is refused, even for the Founder', !core.roleCan(F, 'made.up') && !core.roleCan(F, '') && !core.roleCan(F, undefined));
 ok('a prototype name is not a capability', !core.roleCan(F, 'constructor') && !core.roleCan(F, 'toString') && !core.roleCan(F, '__proto__'));
-ok('roleCanAny works and refuses a non-list', core.roleCanAny(FIN, ['results.view', 'students.approve']) && !core.roleCanAny(FIN, ['results.view']) && !core.roleCanAny(FIN, 'students.approve') && !core.roleCanAny(FIN, []));
+ok('roleCanAny works and refuses a non-list', core.roleCanAny(FIN, ['results.view', 'students.tier']) && !core.roleCanAny(FIN, ['results.view']) && !core.roleCanAny(FIN, 'students.tier') && !core.roleCanAny(FIN, []));
 ok('the lists handed out are fresh copies', (function () { var a = core.allCapabilities(), m = core.managerRoles(), c = core.capabilitiesOf(F); a.push('x'); m.push({}); c.push('y'); return core.allCapabilities().indexOf('x') === -1 && core.managerRoles().length === 4 && core.capabilitiesOf(F).indexOf('y') === -1; })());
 ok('every capability name is lower-case dotted', all.every(function (c) { return /^[a-z]+\.[a-z]+$/.test(c); }));
 ok('every non-Founder role holds at least one capability', MANAGERS.every(function (m) { return core.capabilitiesOf(m).length > 1; }));

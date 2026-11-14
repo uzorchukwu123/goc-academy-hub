@@ -35,7 +35,7 @@ ok('a real score of 0 is ranked, not skipped', z.tests.items.length === 1 && z.t
 
 console.log('\nwho counts');
 var w = core.tutorTopPerformers('Chemistry', [S('G'), S('O', { tier: 'open' }), S('D', { active: false }), S('PH', { subjects: ['Physics'] }), S('G', { name: 'Dup' }), S('NT', { tier: undefined })], { G: [run(20, 20)], O: [run(20, 20)], D: [run(20, 20)], PH: [run(20, 20)], NT: [run(20, 20)] }, [paper('G', 80), paper('G', 80), paper('O', 99), paper('O', 99), paper('D', 99), paper('D', 99)]);
-ok('students taking the subject, not deactivated, once each (stored tiers ignored)', ids(w.practice.items) === 'G,NT,O' && ids(w.tests.items) === 'O,G' && w.practice.items[0].name === 'Name G', JSON.stringify(w));
+ok('only GOC students taking the subject, not deactivated, once each', ids(w.practice.items) === 'G' && ids(w.tests.items) === 'G' && w.practice.items[0].name === 'Name G', JSON.stringify(w));
 ok('no email, phone or hash in a row', !/e@x|0803|password|hash/i.test(JSON.stringify(core.tutorTopPerformers('Chemistry', [S('E', { email: 'e@x.com', phone: '0803', passwordHash: 'h' })], { E: [run(20, 20)] }, [paper('E', 5), paper('E', 5)]))));
 var e = core.tutorTopPerformers('Chemistry', null, null, null);
 ok('empty input gives two empty lists', e.tests.items.length === 0 && e.practice.items.length === 0 && e.tests.hidden === 0);

@@ -82,15 +82,14 @@ head('sign-up is open, and slowed per address instead of gated by a code');
 var core = require(path.join(APP, 'js', 'goc-core.js'));
 var DEFCODE = 'GOC2027';
 function leaks(src) { return src.indexOf(DEFCODE) > -1; }
-var srvPost = srvSrc.slice(srvSrc.indexOf('POST\', path: /^\\/api\\/registrations$/'));
+var srvPost = srvSrc.slice(srvSrc.indexOf('POST\', path: /^\\/api\\/students$/'));
 srvPost = srvPost.slice(0, srvPost.indexOf('okJson'));
-var apiPost = apiSrc.slice(apiSrc.indexOf('submitRegistration: function (data)'));
+var apiPost = apiSrc.slice(apiSrc.indexOf('createStudent: function (data)'));
 apiPost = apiPost.slice(0, 900);
 
-ok('the sign-up form carries the registration-code field (Stage B) and no shared academy gate', html.indexOf('id="signCode"') > -1 && html.indexOf('signup-gate') < 0);
+ok('the sign-up form has no access-code field', html.indexOf('id="signCode"') < 0 && html.indexOf('signup-gate') < 0);
 ok('the tagline no longer tells people to have a code ready', !/access code/i.test(html.slice(html.indexOf('id="signup"'), html.indexOf('id="home"'))));
-ok('the screen no longer checks the old academy code; it submits the registration code with the application',
-   appSrc.indexOf('validateSignupCode') < 0 && /code:[^,]*/.test(appSrc.slice(appSrc.indexOf('function signupSubmit'), appSrc.indexOf('SUBJECT PERSONALIZATION'))));
+ok('the screen no longer checks or sends a code', appSrc.indexOf('validateSignupCode') < 0 && !/signupCode/.test(appSrc.slice(appSrc.indexOf('function signupSubmit'), appSrc.indexOf('SUBJECT PERSONALIZATION'))));
 ok('the server no longer checks a code', !/validateSignupCode|signupCodeMatches|signupCodeStored|signupCodeHash/.test(srvSrc));
 ok('the demo driver no longer checks a code', !/validateSignupCode|SIGNUP_CODE\b/.test(apiPost) && apiSrc.indexOf('setSignupCode') < 0);
 ok('the old code route is gone, the limits route is at the console tier',
@@ -98,11 +97,11 @@ ok('the old code route is gone, the limits route is at the console tier',
 ok('the demo driver agrees on that tier', /setSignupLimits: function \(body\) \{\s*var e = requireUnlocked\(\);/.test(apiSrc));
 ok('the console screen draws the limits control before the Founder-only cut-off, so the Director sees it',
    appSrc.indexOf('admSignupLimitsHTML(d)') < appSrc.indexOf('if(!d.isFounder){') && appSrc.indexOf('admSlSave') > 0);
-ok('the server checks the per-address limit before any other work, and records only successful submissions',
-   srvPost.indexOf('signupBlocked(ip, lim)') > -1 && srvPost.indexOf('signupBlocked') < srvPost.indexOf('validateRegistrationApplication(body') &&
+ok('the server checks the per-address limit before any other work, and records only successful sign-ups',
+   srvPost.indexOf('signupBlocked(ip, lim)') > -1 && srvPost.indexOf('signupBlocked') < srvPost.indexOf('clean(body.name') &&
    srvPost.indexOf('noteSignup(ip)') > srvPost.indexOf('writeData(db)'));
 ok('a refusal carries Retry-After', /setHeader\('Retry-After'/.test(srvPost));
-ok('every self-made account is stored with no access tier (one student category)', !/tier:/.test(srvPost));
+ok('every self-made account is stored as Open', /tier: 'open'/.test(srvPost));
 ok('the published code appears nowhere on the page or in the app layer', !leaks(html) && !leaks(appSrc));
 ok('the neither GOC_SIGNUP_CODE nor the code is needed to seed a fresh install', !/GOC_SIGNUP_CODE/.test(srvSrc));
 

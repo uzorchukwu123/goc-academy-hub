@@ -79,7 +79,7 @@ function registerStudent(name, pw) {
   return activeStudent.demo(DEMO, {
     signupCode: 'GOC-2027', name: name, password: pw,
     goal: 'JAMB / UTME 2027', subjects: SUBJECTS
-  }).then(function (r) { return r.student.id; });
+  }).then(function (r) { run('GOC.api._drivers.mock._setTier')(r.student.id, 'goc'); return r.student.id; });
 }
 
 var MPW = 'bello#88';
@@ -366,27 +366,20 @@ async function main() {
   ok('the panel shows them and who changed them',
      /30 an hour/.test(text('admAccess')) && /by GOC-A-001/.test(text('admAccess')), text('admAccess'));
 
-  head('8 — anyone can apply; there is no academy-wide code any more');
-  /* Stage B: application-first. A per-applicant registration code, minted by
-     Finance/the Founder, replaces the old shared code: submitting creates no
-     account and no session — approval does. */
-  var codeRes = await api('createRegistrationCode')({ label: 'p78 walk-in', maxUses: 10 });
-  var joined = await api('submitRegistration')({ code: codeRes.code, name: 'Ngozi Open', email: 'ngozi.open@example.com', phone: '08011112222', password: 'letmein9',
+  head('8 — anyone can sign up, with no code');
+  var joined = await api('createStudent')({ name: 'Ngozi Open', password: 'letmein9',
     privacyConsent: { accepted: true },
     goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] });
-  ok('the application is received with nothing but a registration code', joined.received === true, JSON.stringify(joined));
-  ok('and creates no account and no session yet', !joined.student && !joined.session, JSON.stringify(joined));
-  var apps8 = await api('listRegistrationApplications')();
-  ok('it waits in the pending queue for a decision', (apps8.applications || []).some(function (x) { return x.email === 'ngozi.open@example.com' && x.status === 'pending'; }), JSON.stringify(apps8).slice(0, 160));
-  var noCode = await refused(function () {
-    return api('submitRegistration')({ name: 'Ada Extra', email: 'ada.extra@example.com', phone: '08011113333', password: 'letmein9',
-      privacyConsent: { accepted: true }, goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] });
-  });
-  ok('without a registration code, the application is refused', /registration code is not valid/i.test(noCode), noCode);
+  ok('the account is created with no code', /^GOC-S-\d+$/.test((joined.student || {}).id || ''), (joined.student || {}).id);
+  ok('and waits for approval, with no session yet (sign-up no longer signs anyone in)', joined.pending === true && !joined.session, JSON.stringify(joined));
+  var oddCode = await api('createStudent')({ signupCode: 'ignored-now', name: 'Ada Extra', password: 'letmein9',
+    privacyConsent: { accepted: true },
+    goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] });
+  ok('a code sent anyway is simply ignored', /^GOC-S-\d+$/.test((oddCode.student || {}).id || ''));
   var utme = await refused(function () {
-    return api('submitRegistration')({ code: codeRes.code, name: 'X Y', email: 'xy@example.com', phone: '08011114444', password: 'letmein9', privacyConsent: { accepted: true }, goal: 'WAEC', subjects: [] });
+    return api('createStudent')({ name: 'X Y', password: 'letmein9', privacyConsent: { accepted: true }, goal: 'WAEC', subjects: [] });
   });
-  ok('the other application rules still apply (UTME only)', utme.indexOf('UTME') > -1, utme);
+  ok('the other sign-up rules still apply (UTME only)', utme.indexOf('UTME') > -1, utme);
 
   head('8 — the Academic Director may change the limits too');
   await api('login')(DIRECTOR, 'newdir2027');

@@ -28,7 +28,7 @@ class Databases{
     const lim=(qs.find(q=>q&&q.m==='limit')||{}).n; if(lim) docs=docs.slice(0,lim);
     return {total:docs.length,documents:docs}; }
 }
-class Users{ async create(id,email){ const u={$id:Math.random().toString(16).slice(2),email}; if(process.env.STUB_USERS_LOG){ try{ fs.appendFileSync(process.env.STUB_USERS_LOG, JSON.stringify({op:'create',id:u.$id,email:email})+'\n'); }catch(e){} } return u; } async delete(){} async updatePassword(id){ if(process.env.STUB_USERS_LOG){ try{ fs.appendFileSync(process.env.STUB_USERS_LOG, JSON.stringify({op:'updatePassword',id:id})+'\n'); }catch(e){} } } }
+class Users{ async create(id,email){ return {$id:Math.random().toString(16).slice(2),email}; } async delete(){} async updatePassword(){} }
 class Account{ constructor(){} async createEmailPasswordSession(){ return {$id:'sess'}; } }
 const ID={unique:()=>Math.random().toString(16).slice(2)};
 /* seed for the harness */
