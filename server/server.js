@@ -58,6 +58,9 @@ const reminders = require('./lib/reminders');
 const free2027Lib = require('./lib/free2027');
 const founderContact = require('./lib/founder-contact');
 const mailstatus = require('./lib/mailstatus');
+/* The temporary full-platform maintenance switch. Off unless
+   GOC_MAINTENANCE_MODE is set to a truthy value; see server/lib/maintenance.js. */
+const maintenance = require('./lib/maintenance');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -9955,6 +9958,9 @@ const TYPES = {
 /* Phase 3D slice 3: GOC_PUBLIC_DIR serves the built (minified) app from a folder such as
    dist/ made by `node build/build.js`. Unset, the readable source is served as before. */
 const PUBLIC_ROOT = process.env.GOC_PUBLIC_DIR ? path.resolve(ROOT, process.env.GOC_PUBLIC_DIR) : ROOT;
+/* Read once at boot, like the other deployment switches: changing it needs a
+   restart so a running process cannot half-enter or half-leave maintenance. */
+const MAINTENANCE_ON = maintenance.enabled(process.env);
 const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico']);
 
 function serveStatic(req, res, urlPath) {
@@ -10015,6 +10021,11 @@ const server = http.createServer(async (req, res) => {
   // fetch at a user's request must not tell them to stay out. Everyone else
   // (browsers, health checks, and the crawlers refused below) still gets it.
   if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
+
+  /* The maintenance gate runs before the tutor shell, the setup link, static
+     files, sessions and every API route. It answers the request itself and
+     returns true, so nothing below can serve the application while it is on. */
+  if (MAINTENANCE_ON && maintenance.intercept(req, res, urlPath)) return;
 
   if (urlPath === '/tutor') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
