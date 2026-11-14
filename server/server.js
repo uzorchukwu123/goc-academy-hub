@@ -57,6 +57,10 @@ const reminders = require('./lib/reminders');
    `free2027` block further down) leaves the original hub exactly as it was. */
 const free2027Lib = require('./lib/free2027');
 const founderContact = require('./lib/founder-contact');
+/* Workstream A — the temporary maintenance switch. One module owns the page,
+   the switch and the gate; see server/lib/maintenance.js and
+   MAINTENANCE-MODE.md. Turning the variable off restores the app unchanged. */
+const maintenance = require('./lib/maintenance');
 const mailstatus = require('./lib/mailstatus');
 
 function setEnvSecret(key, value) {
@@ -88,6 +92,11 @@ function setEnvSecret(key, value) {
   process.env[cleanKey] = cleanValue;
 }
 
+
+/* Read once, at boot, from the deployment environment (or .env via loadEnv).
+   Nothing else in the server caches it, so disabling it cannot leave a stale
+   half-on state: unset the variable and restart. */
+const MAINTENANCE_MODE = maintenance.enabled(process.env);
 
 const ROOT = path.resolve(__dirname, '..');          // the GOC-Web-App folder
 /* Where data.json (and its backups) physically live. Defaults to this same
@@ -2450,6 +2459,7 @@ const reminderService = reminders.createReminderService({
   log: m => console.warn(m)
 });
 function startReminderSchedule() {
+  if (MAINTENANCE_MODE) { console.log('[goc] study reminders paused: the platform is in maintenance mode.'); return; }
   if (process.env.GOC_REMINDERS === '0') { console.log('[goc] study reminders disabled (GOC_REMINDERS=0).'); return; }
   if (!reminderPublicUrl()) { console.log('[goc] study reminders idle: set GOC_PUBLIC_URL (the address students open the hub at) so every message can carry its opt-out link.'); return; }
   if (!reminderDelivery().email) { console.log('[goc] study reminders idle: SMTP is not configured (GOC_SMTP_HOST / GOC_SMTP_USER / GOC_SMTP_PASS).'); return; }
@@ -9865,6 +9875,13 @@ const server = http.createServer(async (req, res) => {
   // (browsers, health checks, and the crawlers refused below) still gets it.
   if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
 
+  /* MAINTENANCE GATE (Workstream A) — before the tutor shell, the password
+     setup link, static files, any session lookup and every API route. See
+     server/lib/maintenance.js for what stays open (health, robots, the
+     cache-clearing service worker) and why. Returning here means the
+     application below is untouched, not deleted. */
+  if (MAINTENANCE_MODE && maintenance.intercept(req, res, urlPath)) return;
+
   if (urlPath === '/tutor') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
     res.writeHead(200, {
@@ -10340,6 +10357,13 @@ function start() {
     console.log('  Open:  http://localhost:' + PORT);
     console.log('  Stop:  press Ctrl+C');
     console.log('');
+    if (MAINTENANCE_MODE) {
+      console.log('  ⚠  MAINTENANCE MODE IS ON (GOC_MAINTENANCE_MODE). The application is NOT reachable:');
+      console.log('     every page and every /api/ route answers with the maintenance announcement.');
+      console.log('     Only /api/health, /robots.txt and the cache-clearing /sw.js stay available.');
+      console.log('     Unset GOC_MAINTENANCE_MODE and restart to restore the full application.');
+      console.log('');
+    }
     if (HOST === '127.0.0.1') {
       console.log('  Bound to 127.0.0.1, so only this computer can reach it.');
     } else {
