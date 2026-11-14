@@ -77,7 +77,7 @@
     <!-- ============ LANDING (public homepage) ============ -->
     <section class="screen" id="landing">
       <nav class="lp-nav">
-        <button class="lp-burger" onclick="openDrawer()" aria-label="Open menu" aria-controls="lpDrawer" aria-expanded="false" id="lpBurger">
+        <button class="lp-burger" onclick="openDrawer()" aria-label="Open menu" aria-controls="lpDrawer" aria-expanded="false" aria-haspopup="dialog" id="lpBurger">
           <span></span><span></span><span></span>
         </button>
         <div class="lp-brand">
@@ -1212,14 +1212,15 @@
         <div class="cbt-side-count" id="cbtSideCount"></div>
       </aside>
       </div>
+      <!-- The same navigator powers the mobile Q-panel, and becomes the
+           persistent right-hand palette on desktop. -->
+      <div class="qnav" id="cbtNav" aria-label="Question navigator" style="display:none" role="navigation"></div>
       <div class="exam-bar">
         <button class="btn btn-ghost exam-nav-btn" onclick="cbtMove(-1)">Prev</button>
         <button class="btn exam-qnum-btn" onclick="qPanelOpen('cbt')"><span id="cbtPanelLabel">Q 1 / 40</span> <span class="exam-grid-icon">&#9783;</span></button>
         <button class="btn btn-outline exam-nav-btn" onclick="cbtMove(1)">Next</button>
         <button class="btn btn-red exam-nav-btn" onclick="submitCBT()">Submit</button>
       </div>
-      <!-- Hidden nav kept for JS compatibility -->
-      <div class="qnav" id="cbtNav" style="display:none"></div>
     </section>
 
     <!-- ============ WEB TEST — HUB (Priority 3) ============ -->
@@ -2097,8 +2098,8 @@
   <!-- ============ TABBAR ============ -->
   <!-- Mobile-only slide-out menu for the public homepage.
        Hidden entirely at >=900px, where the inline nav links are used. -->
-      <div class="lp-scrim" id="lpScrim" onclick="closeDrawer()"></div>
-      <aside class="lp-drawer" id="lpDrawer" aria-hidden="true">
+      <div class="lp-scrim" id="lpScrim" aria-hidden="true" onclick="closeDrawer()"></div>
+      <aside class="lp-drawer" id="lpDrawer" role="dialog" aria-modal="true" aria-label="Site menu" aria-hidden="true">
         <div class="dw-head">
           <div class="lp-brand">
             <span class="bm"><svg viewBox="0 0 100 100" style="width:20px;height:20px;color:#fff"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>

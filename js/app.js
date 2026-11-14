@@ -467,20 +467,75 @@ function loadAffirmations(){
 function drawerEls(){
   return { d: document.getElementById('lpDrawer'), s: document.getElementById('lpScrim'), b: document.getElementById('lpBurger') };
 }
+var drawerReturnFocus = null;
+function drawerFocusables(){
+  var d = document.getElementById('lpDrawer');
+  if(!d || !d.querySelectorAll) return [];
+  return Array.prototype.filter.call(
+    d.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+    function(el){ return el && el.getAttribute && el.getAttribute('aria-hidden') !== 'true'; }
+  );
+}
+function drawerScrollLock(on){
+  try{
+    if(document.documentElement && document.documentElement.classList)
+      document.documentElement.classList.toggle('drawer-open', !!on);
+  }catch(e){}
+}
 function openDrawer(){
   var e = drawerEls(); if(!e.d) return;
   e.d.style.transform = '';
-  e.d.classList.add('on'); e.s.classList.add('on');
+  if(e.s){ e.s.style.opacity = ''; e.s.classList.add('on'); }
+  e.d.classList.add('on');
   e.d.setAttribute('aria-hidden','false');
-  if(e.b) e.b.setAttribute('aria-expanded','true');
+  if(e.b){
+    e.b.setAttribute('aria-expanded','true');
+    e.b.setAttribute('aria-label','Close menu');
+    if(drawerReturnFocus === null) drawerReturnFocus = document.activeElement || e.b;
+  }
+  drawerScrollLock(true);
+  /* Move keyboard focus into the menu once the slide-in has begun. */
+  setTimeout(function(){
+    var f = drawerFocusables();
+    if(f.length && f[0].focus) f[0].focus();
+  }, 30);
 }
 function closeDrawer(){
   var e = drawerEls(); if(!e.d) return;
+  var wasOpen = e.d.classList.contains('on');
   e.d.style.transform = '';
-  e.d.classList.remove('on'); e.s.classList.remove('on');
+  e.d.classList.remove('on');
+  if(e.s){ e.s.classList.remove('on'); e.s.style.opacity = ''; }
   e.d.setAttribute('aria-hidden','true');
-  if(e.b) e.b.setAttribute('aria-expanded','false');
+  if(e.b){
+    e.b.setAttribute('aria-expanded','false');
+    e.b.setAttribute('aria-label','Open menu');
+  }
+  drawerScrollLock(false);
+  var back = drawerReturnFocus;
+  drawerReturnFocus = null;
+  if(wasOpen && back && back.focus){
+    try{ back.focus(); }catch(err){}
+  }
 }
+/* Keyboard support: Escape always closes the menu, and Tab stays inside it
+   while it is open instead of wandering into the page behind the scrim. */
+document.addEventListener('keydown', function(ev){
+  var e = drawerEls(); if(!e.d || !e.d.classList.contains('on')) return;
+  if(ev.key === 'Escape' || ev.keyCode === 27){
+    ev.preventDefault();
+    closeDrawer();
+    return;
+  }
+  if(ev.key !== 'Tab' && ev.keyCode !== 9) return;
+  var f = drawerFocusables(); if(!f.length) return;
+  var first = f[0], last = f[f.length - 1];
+  if(ev.shiftKey && (document.activeElement === first || !e.d.contains(document.activeElement))){
+    ev.preventDefault(); last.focus();
+  } else if(!ev.shiftKey && (document.activeElement === last || !e.d.contains(document.activeElement))){
+    ev.preventDefault(); first.focus();
+  }
+});
 function dwGo(id){ closeDrawer(); setTimeout(function(){ go(id); }, 180); }
 function dwGoTo(secId){
   closeDrawer();
@@ -521,6 +576,8 @@ function dwGoTo(secId){
     else { off = Math.min(0, -width + Math.max(0, dx)); }
     d.classList.add('on');
     d.setAttribute('aria-hidden','false');   // it is visible, so it must not be hidden from screen readers
+    var b = document.getElementById('lpBurger'); if(b) b.setAttribute('aria-expanded','true');
+    drawerScrollLock(true);
     d.style.transition = 'none';
     d.style.transform = 'translateX(' + off + 'px)';
     if(s){ s.classList.add('on'); s.style.opacity = String(1 - Math.abs(off)/width); }
