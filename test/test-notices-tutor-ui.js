@@ -29,7 +29,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   doc.getElementById = function (id) { return id === 'loginId' ? { focus: function () {} } : md.Doc.prototype.getElementById.call(doc, id); };
 
   var calls = [], notes = [], notices = [], nextError = null, confirmAnswer = true;
-  function reply(status, body) { return Promise.resolve({ ok: status < 400, status: status, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
+  function reply(status, body) { return Promise.resolve({ ok: status < 400, status: status, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
   function fetchStub(url, opts) {
     var method = (opts && opts.method) || 'GET', body = opts && opts.body ? JSON.parse(opts.body) : null;
     calls.push({ url: url, method: method, body: body, auth: opts && opts.headers && opts.headers.Authorization });

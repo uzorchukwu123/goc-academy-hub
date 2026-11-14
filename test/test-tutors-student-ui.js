@@ -29,7 +29,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   doc.getElementById = function (id) { return id === 'loginId' ? { focus: function () {} } : md.Doc.prototype.getElementById.call(doc, id); };
 
   var calls = [], failStudent = false, failContact = false, failAudit = false, auditEntries = [];
-  function reply(status, body) { return Promise.resolve({ ok: status < 400, status: status, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
+  function reply(status, body) { return Promise.resolve({ ok: status < 400, status: status, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
   var DETAIL = { id: 'GOC-S-011', name: 'Tunde <i>Bello</i>', active: false, subject: 'Chemistry', lastActiveAt: Date.UTC(2026, 9, 1, 10, 30), daysInactive: 8,
     tests: { papers: 2, average: 35, lastScore: 30 }, practice: { answers: 40, correct: 22, percent: 55 },
     recent: [{ kind: 'practice', at: Date.UTC(2026, 9, 1, 10, 30), answers: 10, correct: 6, percent: 60 }, { kind: 'test', at: Date.UTC(2026, 8, 28, 9, 0), section: 'objective', status: 'marked', percent: 30, score: 6, maxScore: 20 }, { kind: 'test', at: Date.UTC(2026, 8, 27, 9, 0), section: 'theory', status: 'awaiting-marking', percent: null, score: null, maxScore: 20 }],
