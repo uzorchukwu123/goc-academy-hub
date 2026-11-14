@@ -32,6 +32,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { loadEnv, createAppwriteClient, hasAppwriteConfig } = require('./lib/appwrite');
+const { createLedger, idFor: tutorLedgerId, COLLECTION: TUTOR_LEDGER_COLLECTION } = require('./lib/tutor-ledger');
 
 /* busboy is only needed by the two multipart file-upload endpoints below.
    Loading it lazily (on first actual upload) keeps the rest of the server
@@ -212,6 +213,8 @@ const APPWRITE_LIVECLASSES_COLLECTION_ID = 'liveclasses';
 const APPWRITE_COHORTS_COLLECTION_ID = 'cohorts';
 let appwriteResourcesStorage = null;
 let appwriteDatabases = null;
+const TUTOR_LEDGER_ENABLED = process.env.APPWRITE_TUTOR_LEDGER === '1';
+let tutorLedger = null;
 let appwriteUsers = null;
 let appwriteSaveChain = Promise.resolve();
 /* Set by hydrateBlobFromStorage() when the durable blob could not be READ
@@ -2072,6 +2075,10 @@ function practiceXpToday(s) {
    they agree. */
 async function practiceRunsOf(db, id) {
   const cap = core.studentLimits().practiceHistory;
+  if (tutorLedger) {
+    const docs = await tutorLedger.list('practice', id);
+    return core.capList(core.dropOldRuns(docs.map(d => d.payload).sort((a, b) => Number(b.ts) - Number(a.ts))), cap);
+  }
   const all = Array.isArray(db.practiceRuns && db.practiceRuns[id]) ? db.practiceRuns[id] : [];
   const kept = core.capList(core.dropOldRuns(all), cap);
   if (kept.length !== all.length) { db.practiceRuns[id] = kept; writeData(db); }
@@ -3438,6 +3445,65 @@ function tutorRow(t) {
    were actually given, and nothing but counts is stored: no ID, no name, no time. Changes
    `db` in place and writes it. Never allowed to break a submit: any failure is logged and
    the student's own result carries on. */
+/* The ledger stores immutable events, not read/modify/write counters. Web-test
+   events are counted only when their corresponding attempt actually exists. */
+async function saveTutorAnswerEvents(kind, paper, rows) {
+  if (!tutorLedger || paper.section === 'jamb') return;
+  const grouped = core.recordAnswerStats({}, paper.subject, rows);
+  for (const subject of Object.keys(grouped)) {
+    await tutorLedger.append(kind, String(paper.id) + ':' + subject, String(paper.id), subject, Number(paper.startedAt) || 0, grouped[subject]);
+  }
+}
+async function tutorRunsByStudent(db, students) {
+  const out = {};
+  if (tutorLedger) {
+    const allowed = new Set((students || []).filter(s => s && s.id).map(s => s.id));
+    const docs = await tutorLedger.list('practice');
+    for (const d of docs) if (allowed.has(d.owner)) (out[d.owner] || (out[d.owner] = [])).push(d.payload);
+    Object.keys(out).forEach(id => { out[id] = core.capList(core.dropOldRuns(out[id].sort((a, b) => Number(b.ts) - Number(a.ts))), core.studentLimits().practiceHistory); });
+  } else {
+    (students || []).forEach(st => {
+      if (!st || !st.id) return;
+      const runs = db.practiceRuns && db.practiceRuns[st.id];
+      if (Array.isArray(runs)) out[st.id] = core.dropOldRuns(runs);
+    });
+  }
+  return out;
+}
+async function tutorRecordedStats(db, subject, attempts) {
+  if (!tutorLedger) return (db.answerStats && db.answerStats[subject]) || {};
+  const result = { q: {}, t: {} };
+  const attemptIds = new Set((attempts || []).filter(a => a && a.section !== 'jamb').map(a => String(a.id)));
+  const groups = await Promise.all(['baseline', 'answer-study', 'answer-web'].map(kind => tutorLedger.list(kind, null, subject)));
+  function merge(bucket) {
+    for (const key of ['q', 't']) for (const id of Object.keys(bucket && bucket[key] || {})) {
+      if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue;
+      const v = bucket[key][id], n = Number(v && v.n), c = Number(v && v.c);
+      if (!Number.isFinite(n) || !Number.isFinite(c) || n < 0 || c < 0 || c > n) throw new Error('Invalid tutor answer counter');
+      if (!Object.prototype.hasOwnProperty.call(result[key], id)) result[key][id] = { n: 0, c: 0 };
+      result[key][id].n += n; result[key][id].c += c;
+    }
+  }
+  groups[0].concat(groups[1], groups[2].filter(d => attemptIds.has(String(d.owner)))).forEach(d => merge(d.payload));
+  return result;
+}
+async function appendTutorAudit(db, entry) {
+  if (tutorLedger) {
+    entry.id = 'AU-' + crypto.randomUUID();
+    await tutorLedger.append('audit', entry.id, entry.tutorId, '', entry.at, entry);
+  } else {
+    db.settings.auditSeq = (db.settings.auditSeq || 0) + 1;
+    entry.id = 'AU-' + db.settings.auditSeq;
+    db.tutorAudit = core.addTutorView(db.tutorAudit, entry, entry.at);
+    writeData(db);
+  }
+}
+async function readTutorAudit(db, tutorId) {
+  if (!tutorLedger) return db.tutorAudit;
+  const cutoff = Date.now() - core.AUDIT_KEEP_DAYS * 86400000;
+  return (await tutorLedger.list('audit', tutorId || null)).filter(d => d.at >= cutoff).map(d => d.payload);
+}
+
 function noteAnswerStats(db, stu, subject, rows) {
   try {
     if (!stu) return false;
@@ -3529,6 +3595,24 @@ function demoRateLimited(ip) {
   if (demoIpHits.size > 5000) { for (const [k, v] of demoIpHits) { if (now - v.first > 3600000) demoIpHits.delete(k); } }
   return rec.count > 30;
 }
+
+/* Fetch subject-specific papers and the combined Objective papers separately.
+   Projection to the tutor's subject happens in core; retired JAMB papers are
+   never included as a replacement for a removed CBT product. */
+async function tutorAttempts(subject, db) {
+  const results = await Promise.all([
+    listAttempts({ subject }, db),
+    listAttempts({ subject: core.OBJECTIVE_SUBJECT, section: 'objective' }, db)
+  ]);
+  const seen = new Set();
+  return results[0].concat(results[1]).filter(a => {
+    if (!a || a.section === 'jamb') return false;
+    if (a.id && seen.has(a.id)) return false;
+    if (a.id) seen.add(a.id);
+    return true;
+  });
+}
+
 
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
@@ -5035,29 +5119,24 @@ const ROUTES = [
 
   /* Slice 5, parts 2 and 3: the tutor dashboard's numbers for ONE subject. The subject goes
      through the same scope guard as every tutor route. The reply is counts, averages and
-     questions only: never a student's name, ID, email or phone. `snapshot` comes from
-     core.tutorSnapshot; `weakTopics` and `hardestQuestions` come from the per-question and
-     per-topic counters (10+ answers to be ranked). */
+     questions only: never a student's name, ID, email or phone. Weak topics and hardest
+     questions use objective/practice counters and marked theory answers. */
   { method: 'GET', path: /^\/api\/tutor\/analytics$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, new URL(req.url, 'http://x').searchParams.get('subject'));
       if (!subject) return;
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : (db.students || []);
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
-      });
-      const attempts = await listAttempts({ subject }, db);
+      const runsByStudent = await tutorRunsByStudent(db, students);
+      const attempts = await tutorAttempts(subject, db);
       const snapshot = core.tutorSnapshot(subject, students, runsByStudent, attempts, Date.now());
-      const mine = (db.answerStats && Object.prototype.hasOwnProperty.call(db.answerStats, subject)) ? db.answerStats[subject] : {};
+      const mine = await tutorRecordedStats(db, subject, attempts);
       const bank = await listQuestions({ subject }, db);
+      const stats = core.tutorTheoryStats(subject, mine, students, attempts);
       okJson(res, {
         subject, subjects: sess.tutor.subjects.slice(), snapshot,
         activity: core.tutorActivity(subject, students, runsByStudent, attempts, Date.now()),
-        weakTopics: core.rankWeakTopics(mine),
-        hardestQuestions: core.rankHardestQuestions(mine, subject, bank)
+        weakTopics: core.rankWeakTopics(stats),
+        hardestQuestions: core.rankHardestQuestions(stats, subject, bank)
       });
     } },
 
@@ -5076,14 +5155,7 @@ const ROUTES = [
         ? await listAppwriteStudents()
         : (db.students || []);
 
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) {
-          runsByStudent[st.id] = core.dropOldRuns(runs);
-        }
-      });
+      const runsByStudent = await tutorRunsByStudent(db, students);
 
       /* The subject list comes from the data-access layer, not the local blob:
          in Appwrite mode db.questions is a cache that can be empty on a fresh
@@ -5098,15 +5170,12 @@ const ROUTES = [
       const reports = [];
 
       for (const subject of subjects) {
-        const attempts = await listAttempts({ subject }, db);
+        const attempts = await tutorAttempts(subject, db);
         const snapshot = core.tutorSnapshot(
           subject, students, runsByStudent, attempts, Date.now()
         );
 
-        const stats = db.answerStats &&
-          Object.prototype.hasOwnProperty.call(db.answerStats, subject)
-          ? db.answerStats[subject]
-          : {};
+        const stats = await tutorRecordedStats(db, subject, attempts);
 
         reports.push({
           subject,
@@ -5114,7 +5183,7 @@ const ROUTES = [
           activity: core.tutorActivity(
             subject, students, runsByStudent, attempts, Date.now()
           ),
-          weakTopics: core.rankWeakTopics(stats)
+          weakTopics: core.rankWeakTopics(core.tutorTheoryStats(subject, stats, students, attempts))
         });
       }
 
@@ -5135,13 +5204,8 @@ const ROUTES = [
       const sort = q.get('sort') === 'score' ? 'score' : 'inactive';
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : (db.students || []);
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
-      });
-      const attempts = await listAttempts({ subject }, db);
+      const runsByStudent = await tutorRunsByStudent(db, students);
+      const attempts = await tutorAttempts(subject, db);
       const rows = core.sortAtRisk(core.tutorAtRisk(subject, students, runsByStudent, attempts, Date.now()), sort);
       okJson(res, {
         subject, subjects: sess.tutor.subjects.slice(), sort,
@@ -5151,8 +5215,7 @@ const ROUTES = [
     } },
 
   /* Phase 3C, top performers, slice 2: GET /api/tutor/top?subject=. The tutor's own subject only (same scope
-     guard as every tutor route). Two lists, never blended (core.tutorTopPerformers): Web Test average (2+ marked
-     papers) and Practice percent right (20+ answers), highest first, every ranked student returned so the screen
+     guard as every tutor route). Two lists, never blended (core.tutorTopPerformers): Web Test average and Practice percent right, highest first, every ranked student returned so the screen
      can show ten and offer Show all. Each row: Scholar ID, name and the figures; never an email, phone or hash.
      Practice runs are trimmed with core.dropOldRuns, as for the snapshot. */
   { method: 'GET', path: /^\/api\/tutor\/top$/, need: 'tutor', handler: async (req, res, body, sess) => {
@@ -5160,13 +5223,8 @@ const ROUTES = [
       if (!subject) return;
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : (db.students || []);
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
-      });
-      const attempts = await listAttempts({ subject }, db);
+      const runsByStudent = await tutorRunsByStudent(db, students);
+      const attempts = await tutorAttempts(subject, db);
       const top = core.tutorTopPerformers(subject, students, runsByStudent, attempts);
       okJson(res, { subject, subjects: sess.tutor.subjects.slice(), tests: top.tests, practice: top.practice });
     } },
@@ -5189,16 +5247,13 @@ const ROUTES = [
         let student = null;
         try { student = appwriteDatabases ? await getAppwriteStudent(sid) : (db.students || []).find(s => s && s.id === sid); } catch (_) { student = null; }
         if (!core.tutorMayOpenStudent(subject, student)) return errJson(res, 404, gone);
-        const runs = db.practiceRuns && Array.isArray(db.practiceRuns[sid]) ? core.dropOldRuns(db.practiceRuns[sid]) : [];
+        const runs = await practiceRunsOf(db, sid);
         const attempts = await attemptsFor(db, sid);
         const now = Date.now();
         const detail = core.tutorStudentDetail(subject, student, runs, Array.isArray(attempts) ? attempts : [], now);
         if (!detail) return errJson(res, 404, gone);
         const entry = core.makeTutorViewEntry(sess.tutor, student, subject, now);
-        db.settings.auditSeq = (db.settings.auditSeq || 0) + 1;
-        entry.id = 'AU-' + db.settings.auditSeq;
-        db.tutorAudit = core.addTutorView(db.tutorAudit, entry, now);
-        try { writeData(db); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The student page could not be opened right now.'); }
+        try { await appendTutorAudit(db, entry); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The student page could not be opened right now.'); }
         okJson(res, { subject, subjects: sess.tutor.subjects.slice(), student: detail });
       });
     } },
@@ -5220,17 +5275,14 @@ const ROUTES = [
         if (!contact) return errJson(res, 404, gone);
         const now = Date.now();
         const entry = core.makeTutorViewEntry(sess.tutor, student, subject, now, 'contact-view');
-        db.settings.auditSeq = (db.settings.auditSeq || 0) + 1;
-        entry.id = 'AU-' + db.settings.auditSeq;
-        db.tutorAudit = core.addTutorView(db.tutorAudit, entry, now);
-        try { writeData(db); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The contact details could not be shown right now.'); }
+        try { await appendTutorAudit(db, entry); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The contact details could not be shown right now.'); }
         okJson(res, { subject, contact });
       });
     } },
 
   /* A tutor reads ONLY their own entries (the tutor record comes from the session, never from the request). */
-  { method: 'GET', path: /^\/api\/tutor\/audit$/, need: 'tutor', handler: (req, res, body, sess) => {
-      const mine = core.tutorOwnViews(readData().tutorAudit, sess.tutor.id);
+  { method: 'GET', path: /^\/api\/tutor\/audit$/, need: 'tutor', handler: async (req, res, body, sess) => {
+      const mine = core.tutorOwnViews(await readTutorAudit(readData(), sess.tutor.id), sess.tutor.id);
       okJson(res, { keptDays: core.AUDIT_KEEP_DAYS, count: mine.length, entries: mine });
     } },
 
@@ -5245,9 +5297,9 @@ const ROUTES = [
       okJson(res, { count: entries.length, keep: core.MANAGER_LOG_KEEP, entries });
     } },
 
-  { method: 'GET', path: /^\/api\/audit\/tutor-views$/, need: 'console', cap: 'tutors.audit', handler: (req, res) => {
+  { method: 'GET', path: /^\/api\/audit\/tutor-views$/, need: 'console', cap: 'tutors.audit', handler: async (req, res) => {
       const q = new URL(req.url, 'http://x').searchParams;
-      const rows = core.auditViews(readData().tutorAudit, { tutorId: q.get('tutorId'), studentId: q.get('studentId'), kind: q.get('kind'), from: q.get('from'), to: q.get('to') });
+      const rows = core.auditViews(await readTutorAudit(readData()), { tutorId: q.get('tutorId'), studentId: q.get('studentId'), kind: q.get('kind'), from: q.get('from'), to: q.get('to') });
       okJson(res, { keptDays: core.AUDIT_KEEP_DAYS, count: rows.length, entries: rows });
     } },
 
@@ -6317,9 +6369,14 @@ const ROUTES = [
       const rec = sanitizePracticeRun(body);
       if (!rec) return errJson(res, 400, 'A practice run needs a review with at least one question.');
       const db = readData();
+      if (tutorLedger) {
+        const key = sess.data.id + ':' + crypto.createHash('sha256').update(JSON.stringify(rec)).digest('hex');
+        await tutorLedger.append('practice', key, sess.data.id, '', rec.ts, rec);
+        return okJson(res, { ok: true, saved: rec, runs: await practiceRunsOf(db, sess.data.id) });
+      }
       if (!db.practiceRuns || typeof db.practiceRuns !== 'object') db.practiceRuns = {};
       const list = Array.isArray(db.practiceRuns[sess.data.id]) ? db.practiceRuns[sess.data.id] : [];
-      list.unshift(rec);
+      if (!list.some(run => JSON.stringify(run) === JSON.stringify(rec))) list.unshift(rec);
       const keep = core.studentLimits().practiceHistory;
       db.practiceRuns[sess.data.id] = core.capList(core.dropOldRuns(list), keep);
       writeData(db);
@@ -6565,6 +6622,7 @@ const ROUTES = [
           percent: marked.percent, status: marked.status,
           answers: marked.answers, xpAwarded: 0
         };
+        if (tutorLedger) await saveTutorAnswerEvents('answer-web', paper, marked.answers);
         let stu;
         if (appwriteDatabases) {
           stu = await getAppwriteStudentOrNull(rec.scholarId);
@@ -6594,7 +6652,7 @@ const ROUTES = [
           }
         }
 
-        if (stu) {
+        if (stu && !tutorLedger && paper.section !== 'jamb') {
           if (!db.answerStats || typeof db.answerStats !== 'object') db.answerStats = {};
           core.recordAnswerStats(db.answerStats, paper.subject, marked.answers);
         }
@@ -6996,6 +7054,11 @@ const ROUTES = [
         } else {
           stu = db.students.find(x => x.id === sess.data.id);
         }
+        if (!stu) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+        if (tutorLedger) {
+          try { await saveTutorAnswerEvents('answer-study', paper, marked.answers); }
+          catch (err) { openStudy.set(String(paper.id), paper); throw err; }
+        }
 
         let gain = 0, left = 0, earned = 0, questBonus = 0, questClaimed = false, questDone = false;
         let weekAfter = null, weekDirty = false, weekReward = null, finalFreezes = null;
@@ -7189,7 +7252,7 @@ const ROUTES = [
             writeData(db);
           }
         }
-      noteAnswerStats(db, stu, paper.subject, marked.answers);
+      if (!tutorLedger) noteAnswerStats(db, stu, paper.subject, marked.answers);
       okJson(res, {
         mode, subject: paper.subject, assessed: false,
         total: marked.total, answered: marked.answered, unanswered: marked.unanswered,
@@ -10273,6 +10336,17 @@ async function initAppwrite() {
   appwriteResourcesStorage = storage;
   appwriteDatabases = databases;
   appwriteUsers = users;
+  if (TUTOR_LEDGER_ENABLED) {
+    const info = await databases.getCollection(APPWRITE_DATABASE_ID, TUTOR_LEDGER_COLLECTION);
+    if (!Array.isArray(info.$permissions) || info.$permissions.length || info.documentSecurity !== false) throw new Error('Tutor ledger is not private');
+    const snapshot = await databases.getDocument(APPWRITE_DATABASE_ID, TUTOR_LEDGER_COLLECTION, tutorLedgerId('migration', 'snapshot'));
+    const complete = await databases.getDocument(APPWRITE_DATABASE_ID, TUTOR_LEDGER_COLLECTION, tutorLedgerId('migration', 'complete'));
+    const snapshotHash = JSON.parse(snapshot.payload).hash;
+    const receipt = JSON.parse(complete.payload);
+    if (!/^[a-f0-9]{64}$/.test(snapshotHash) || receipt.hash !== snapshotHash || !Number.isSafeInteger(receipt.count) || receipt.count < 0) throw new Error('Tutor ledger migration is incomplete');
+    tutorLedger = createLedger(databases, appwriteQuery());
+    console.log('[goc] Private Appwrite tutor ledger enabled.');
+  }
 
   /* Accurate wording: this is client construction, not verified connectivity. */
   console.log('[goc] Appwrite SDK clients constructed; using local data.json for unmigrated data.');
@@ -10569,7 +10643,7 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
          seed()/start() below, so a bad key or an unreachable Appwrite can never
          degrade into a freshly seeded local academy. Only a non-secret status
          code / error type is reported, never the raw error or stack. */
-      if (isProductionRun()) {
+      if (isProductionRun() || TUTOR_LEDGER_ENABLED) {
         const awCode = err && (err.code != null ? err.code : err.status);
         const awType = err && typeof err.type === 'string' && /^[a-z0-9_]+$/i.test(err.type) ? err.type : '';
         failClosedAppwriteStartup('Appwrite initialization failed'
@@ -10591,6 +10665,7 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
       start();
     });
 } else {
+  if (TUTOR_LEDGER_ENABLED) failClosedAppwriteStartup('The tutor ledger is enabled but Appwrite is not configured.');
   /* Unconfigured is a legitimate local install, so the control flow is exactly
      as before. In production it is called out loudly rather than passed over in
      silence, because "no Appwrite" there is almost always a misconfiguration. */

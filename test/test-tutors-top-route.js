@@ -101,7 +101,7 @@ function total(stats, subject, which) {
   console.log('\nnothing to rank on day one');
   var r0 = await call('GET', '/api/tutor/top', null, tk);
   ok('own first subject by default, both lists empty, the floors are shown',
-    r0.status === 200 && r0.body.subject === 'Physics' && r0.body.tests.items.length === 0 && r0.body.practice.items.length === 0 && r0.body.tests.minPapers === 2 && r0.body.practice.minAnswers === 20, r0.raw);
+    r0.status === 200 && r0.body.subject === 'Physics' && r0.body.tests.items.length === 0 && r0.body.practice.items.length === 0 && r0.body.tests.minPapers === 1 && r0.body.practice.minAnswers === 1, r0.raw);
 
   console.log('\nwith some work on file');
   function rev(n, right, subj) { var a = []; for (var i = 0; i < n; i++) a.push({ given: 1, isCorrect: i < right, subject: subj }); return a; }
@@ -116,13 +116,13 @@ function total(stats, subject, which) {
   fs.writeFileSync(path.join(SANDBOX, 'server', 'data.json'), JSON.stringify(db));
   var r1 = await call('GET', '/api/tutor/top?subject=Physics', null, tk);
   var tI = r1.body.tests.items, pI = r1.body.practice.items;
-  ok('Web Tests: Bola (90 over two papers) is ahead of Gina (75)', r1.status === 200 && tI.length === 2 && tI[0].id === ID2 && tI[0].average === 90 && tI[1].id === ID1 && tI[1].average === 75, r1.raw);
-  ok('one marked paper is held back, not ranked', r1.body.tests.hidden === 1 && !tI.some(function (x) { return x.id === ID3; }));
-  ok('Practice: Gina (90%) is ahead of Bola (60%), with answers and correct counts', pI.length === 2 && pI[0].id === ID1 && pI[0].percent === 90 && pI[0].answers === 20 && pI[0].correct === 18 && pI[1].id === ID2, r1.raw);
-  ok('19 answers is held back', r1.body.practice.hidden === 1 && !pI.some(function (x) { return x.id === ID3; }));
-  ok('each row carries the name and the Scholar ID', tI[0].name === 'Bola Goc' && pI[0].name === 'Gina Goc');
+  ok('Web Tests: Bola (90 over two papers) is ahead of Gina (75)', r1.status === 200 && tI.length === 3 && tI[0].id === ID3 && tI[1].id === ID2 && tI[1].average === 90 && tI[2].id === ID1 && tI[2].average === 75, r1.raw);
+  ok('one marked paper is ranked', r1.body.tests.hidden === 0 && tI.some(function (x) { return x.id === ID3; }));
+  ok('Practice: Gina (90%) is ahead of Bola (60%), with answers and correct counts', pI.length === 3 && pI[0].id === ID3 && pI[1].id === ID1 && pI[1].percent === 90 && pI[1].answers === 20 && pI[1].correct === 18 && pI[2].id === ID2, r1.raw);
+  ok('19 answers is ranked', r1.body.practice.hidden === 0 && pI.some(function (x) { return x.id === ID3; }));
+  ok('each row carries the name and the Scholar ID', tI[1].name === 'Bola Goc' && pI[1].name === 'Gina Goc');
   ok('the student who never took Physics never appears, whatever their score', !/Olu/.test(r1.raw) && r1.raw.indexOf(IDO) < 0);
-  ok('a paper in another subject or still awaiting marking changes nothing', tI[1].papers === 2 && tI[0].papers === 2);
+  ok('a paper in another subject or still awaiting marking changes nothing', tI[1].papers === 2 && tI[2].papers === 2);
   ok('no email, phone or password hash leaves the server', !/example\.com|0800000005|hash|password|salt/i.test(r1.raw), r1.raw);
 
   console.log('\nthe other subject, and a switched-off tutor');

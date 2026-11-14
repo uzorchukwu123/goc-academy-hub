@@ -8797,26 +8797,64 @@ function writePracCache(list){
 /* Fetch the server's copy, fall back to the offline mirror if there is no
    signal or the call fails. Seeds the screen from the mirror first so it is
    never blank while the request is in flight. */
+/* Failed uploads stay in a per-student retry queue, separate from the visual
+   mirror. Reusing the same record makes retries idempotent on the server. */
+var pracSyncPromise = null, pracSyncOwner = '';
+function pracPendingKey(id){ return 'goc.practice.pending.' + id; }
+function pracPendingRead(id){
+  try { var rows = JSON.parse(localStorage.getItem(pracPendingKey(id)) || '[]'); return Array.isArray(rows) ? rows : []; }
+  catch(_) { return []; }
+}
+function pracPendingWrite(id, rows){
+  try { localStorage.setItem(pracPendingKey(id), JSON.stringify(rows)); return true; } catch(_) { return false; }
+}
+function syncPracPending(id){
+  if(!id || !GOC.api || typeof GOC.api.recordPractice !== 'function') return Promise.resolve();
+  if(pracSyncPromise && pracSyncOwner === id) return pracSyncPromise;
+  if(pracSyncPromise) return Promise.resolve();
+  pracSyncOwner = id;
+  function next(){
+    if(studentId !== id) return Promise.resolve();
+    var rows = pracPendingRead(id), rec = rows[0];
+    if(!rec) return Promise.resolve();
+    return GOC.api.recordPractice(rec).then(function(r){
+      var current = pracPendingRead(id), key = JSON.stringify(rec);
+      var index = current.findIndex(function(x){ return JSON.stringify(x) === key; });
+      if(index >= 0){ current.splice(index, 1); if(!pracPendingWrite(id, current)) throw new Error('Could not save retry queue'); }
+      if(studentId === id && r && Array.isArray(r.runs)){ pracHistCache = r.runs; writePracCache(pracHistCache); renderPracHistory(); }
+      return next();
+    });
+  }
+  pracSyncPromise = next().catch(function(){
+    if(studentId === id && typeof toast === 'function') toast('Practice history could not sync yet. It will retry when you reopen history.');
+  }).then(function(){ pracSyncPromise = null; pracSyncOwner = ''; });
+  return pracSyncPromise;
+}
 function refreshPracHistory(){
   if(!studentId){ pracHistCache = []; renderPracHistory(); return Promise.resolve(); }
+  var who = studentId;
   pracHistCache = loadPracHistory();
   renderPracHistory();
   if(!GOC.api || typeof GOC.api.listPractice !== 'function') return Promise.resolve();
-  return GOC.api.listPractice().then(function(r){
-    if(r && Array.isArray(r.runs)){ pracHistCache = r.runs; writePracCache(pracHistCache); renderPracHistory(); }
-  }).catch(function(){ /* offline — keep the mirror on screen */ });
+  return syncPracPending(who).then(function(){
+    if(studentId !== who) return;
+    return GOC.api.listPractice().then(function(r){
+      if(studentId === who && r && Array.isArray(r.runs)){ pracHistCache = pracPendingRead(who).concat(r.runs); writePracCache(pracHistCache); renderPracHistory(); }
+    }).catch(function(){ /* offline — keep the mirror on screen */ });
+  });
 }
 function savePracResult(res){
   if(!studentId || !res || !(res.review && res.review.length)) return Promise.resolve();
-  /* Optimistic: show it at once and mirror it, so the run is never lost even
-     offline. Then send it to the server and adopt the authoritative list. */
-  var rec = Object.assign({}, res, { ts: Date.now() });
+  var who = studentId, rec = Object.assign({}, res, { ts: Date.now() });
   pracHistCache.unshift(rec);
   writePracCache(pracHistCache);
-  if(!GOC.api || typeof GOC.api.recordPractice !== 'function') return Promise.resolve();
-  return GOC.api.recordPractice(rec).then(function(r){
-    if(r && Array.isArray(r.runs)){ pracHistCache = r.runs; writePracCache(pracHistCache); }
-  }).catch(function(){ /* offline — kept in the mirror, syncs are per-run so this one stays local */ });
+  var pending = pracPendingRead(who); pending.push(rec);
+  if(!pracPendingWrite(who, pending)) {
+    if(typeof toast === 'function') toast('Practice could not be queued on this device. Please check your connection.');
+    if(GOC.api && typeof GOC.api.recordPractice === 'function') return GOC.api.recordPractice(rec).catch(function(){});
+    return Promise.resolve();
+  }
+  return syncPracPending(who);
 }
 function renderPracHistory(){
   var host = document.getElementById('pracHist');

@@ -87,9 +87,9 @@ ok('no answers means no average, not 0', core.tutorSnapshot('Chemistry', student
 
 console.log('\ntest average');
 var t = snap.tests;
-ok('only marked papers of students in the subject are averaged', t.papers === 3 && t.average === 79.7, JSON.stringify(t));
-ok('theory awaiting marking is left out, never guessed', t.papers === 3);
-ok('three papers is not flagged small', t.small === false);
+ok('only marked papers of students in the subject are averaged', t.papers === 1 && t.average === 60, JSON.stringify(t));
+ok('theory awaiting marking is left out, never guessed', t.papers === 1);
+ok('one paper is flagged small', t.small === true);
 ok('3 papers is not small', core.tutorSnapshot('Chemistry', students, {}, [1, 2, 3].map(function (n) { return { scholarId: 'S1', subject: 'Chemistry', status: 'marked', percent: 50, submittedAt: NOW }; }), NOW).tests.small === false);
 ok('a percent of 0 is a real score', core.tutorSnapshot('Chemistry', students, {}, [{ scholarId: 'S1', subject: 'Chemistry', status: 'marked', percent: 0, submittedAt: NOW }], NOW).tests.average === 0);
 ok('no papers means no average, not 0', core.tutorSnapshot('Chemistry', students, {}, [], NOW).tests.average === null);

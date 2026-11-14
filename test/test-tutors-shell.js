@@ -179,9 +179,9 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('the snapshot card shows the class numbers', /Class snapshot/.test(text()) && /GOC students/.test(text()) && /14/.test(text()) && /65%/.test(text()) && /71\.5%/.test(text()) && /Active in the last 7 days/.test(text()), text());
   ok('no Open-student count exists any more (one student category)', !/Open students/.test(text()), text());
   ok('a small test sample carries a plain warning, the practice average (120 answers) does not', /only 2 marked papers/.test(text()) && !/Practice average rests on only/.test(text()), text());
-  ok('the Weak topics card lists topics weakest first with percent and answers', /Weak topics/.test(text()) && /Acids/.test(text()) && /10% right · 40 answers/.test(text()) && text().indexOf('Acids') < text().indexOf('Salts'), text());
-  ok('and says how many topics are held back for too few answers', /2 more topics have fewer than 10 answers/.test(text()), text());
-  ok('the Hardest questions card shows the question, its topic and the figures', /Hardest questions/.test(text()) && /Which unit/.test(text()) && /Electricity · 10% right · 40 answers/.test(text()), text());
+  ok('the Weak topics card lists topics weakest first with percent and answers', /Weak topics/.test(text()) && /Acids/.test(text()) && /10% average score · 40 answers/.test(text()) && text().indexOf('Acids') < text().indexOf('Salts'), text());
+  ok('the cards no longer require a minimum sample', !/fewer than 10 answers/.test(text()), text());
+  ok('the Hardest questions card shows the question, its topic and the figures', /Hardest questions/.test(text()) && /Which unit/.test(text()) && /Electricity · 10% average score · 40 answers/.test(text()), text());
   ok('question and topic text is escaped, never markup', root().__raw.indexOf('<script>') < 0 && root().__raw.indexOf('&lt;script&gt;') > -1 && root().__raw.indexOf('<i>') < 0, root().__raw.slice(0, 200));
 
   responses.push({ status: 200, body: { subject: 'Physics', subjects: ['Chemistry', 'Physics'], depth: { subject: 'Physics', objective: 7, theory: 2, jamb: 1, practice: 9, notes: 0 } } });
@@ -193,7 +193,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   analyticsQueue.push({ status: 200, body: { subject: 'Chemistry', subjects: [], snapshot: snapFor('Chemistry').snapshot, weakTopics: { items: [], hidden: 3, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } } });
   responses.push({ status: 200, body: { subject: 'Chemistry', subjects: ['Chemistry', 'Physics'], depth: { subject: 'Chemistry', objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } } });
   click(q('button[data-subject=Chemistry]')); await tick(20);
-  ok('with nothing ranked, each card says why instead of staying blank', (text().match(/Not enough answers yet/g) || []).length === 2 && /3 topics have some answers, but fewer than 10/.test(text()), text());
+  ok('with nothing ranked, each card says why instead of staying blank', (text().match(/No recorded marked answers for this/g) || []).length === 2 && !/fewer than 10/.test(text()), text());
   responses.push({ status: 200, body: { subject: 'Physics', subjects: ['Chemistry', 'Physics'], depth: { subject: 'Physics', objective: 7, theory: 2, jamb: 1, practice: 9, notes: 0 } } });
   click(q('button[data-subject=Physics]')); await tick(20);
 

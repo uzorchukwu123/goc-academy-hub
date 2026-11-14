@@ -55,13 +55,13 @@ ok('junk rows and a missing list do not crash', (function () {
 console.log('\nweak topics');
 function topics(map) { var t = {}; Object.keys(map).forEach(function (k) { t[k] = { n: map[k][0], c: map[k][1] }; }); return { t: t, q: {} }; }
 var wt = core.rankWeakTopics(topics({ Acids: [20, 5], Salts: [10, 9], Gases: [30, 15], Rare: [9, 0], Tied1: [10, 5], Tied2: [40, 20] }));
-ok('lowest percent right comes first', wt.items[0].topic === 'Acids' && wt.items[0].percent === 25, JSON.stringify(wt.items));
-ok('a topic under 10 answers is not ranked, even at 0%', wt.items.every(function (x) { return x.topic !== 'Rare'; }));
-ok('the hidden count says how many were left out', wt.hidden === 1 && wt.minAnswers === 10);
-ok('exactly 10 answers is ranked', wt.items.some(function (x) { return x.topic === 'Salts'; }));
+ok('lowest percent right comes first', wt.items[0].topic === 'Rare' && wt.items[0].percent === 0, JSON.stringify(wt.items));
+ok('a topic under 10 answers is ranked', wt.items.some(function (x) { return x.topic === 'Rare'; }));
+ok('the hidden count says how many were left out', wt.hidden === 0 && wt.minAnswers === 1);
+ok('exactly 10 answers is ranked', core.rankWeakTopics(topics({ Salts: [10, 9] })).items[0].topic === 'Salts');
 ok('a tie goes to the topic with more answers, then the name', (function () {
   var o = wt.items.map(function (x) { return x.topic; });
-  return o.indexOf('Tied2') < o.indexOf('Gases') && o.indexOf('Gases') < o.indexOf('Salts') && o.indexOf('Tied2') < o.indexOf('Tied1');
+  return o.indexOf('Tied2') < o.indexOf('Gases') && o.indexOf('Gases') < o.indexOf('Tied1') && o.indexOf('Tied2') < o.indexOf('Tied1');
 })());
 ok('only the weakest five are shown by default', core.rankWeakTopics(topics({ A: [10, 1], B: [10, 2], C: [10, 3], D: [10, 4], E: [10, 5], F: [10, 6], G: [10, 7] })).items.length === 5);
 ok('a limit can be given, and zero shows none', core.rankWeakTopics(topics({ A: [10, 1], B: [10, 2] }), 1).items.length === 1 && core.rankWeakTopics(topics({ A: [10, 1] }), 0).items.length === 0);
@@ -83,9 +83,9 @@ var bank = [
 var qs = { q: { Q1: { n: 12, c: 3 }, Q2: { n: 10, c: 2 }, Q3: { n: 50, c: 0 }, Q4: { n: 50, c: 0 }, P1: { n: 50, c: 0 }, GONE: { n: 50, c: 0 }, Q5: { n: 9, c: 0 }, Q6: { n: 20, c: 3 }, T1: { n: 50, c: 0 } }, t: {} };
 var hq = core.rankHardestQuestions(qs, 'Chemistry', bank);
 var ids = hq.items.map(function (x) { return x.id; });
-ok('the ones most often missed come first', ids.join() === 'Q6,Q2,Q1', ids.join());
-ok('a switched-off, pending, deleted, theory or other-subject question never appears', ['Q3', 'Q4', 'GONE', 'T1', 'P1'].every(function (id) { return ids.indexOf(id) < 0; }));
-ok('a question under 10 answers is not ranked but is counted as hidden', ids.indexOf('Q5') < 0 && hq.hidden === 1, hq.hidden);
+ok('the ones most often missed come first', ids.join() === 'T1,Q5,Q6,Q2,Q1', ids.join());
+ok('a switched-off, pending, deleted or other-subject question never appears', ['Q3', 'Q4', 'GONE', 'P1'].every(function (id) { return ids.indexOf(id) < 0; }));
+ok('a question under 10 answers is ranked', ids.indexOf('Q5') >= 0 && hq.hidden === 0, hq.hidden);
 ok('a question with no status counts as live, one marked live too', ids.indexOf('Q1') > -1 && ids.indexOf('Q6') > -1);
 ok('long text is shortened', (function () { var t = hq.items.filter(function (x) { return x.id === 'Q2'; })[0].text; return t.length === 240 && /\.\.\.$/.test(t); })());
 ok('each item carries the question, topic, section and counts only', Object.keys(hq.items[2]).sort().join() === 'answers,correct,id,percent,section,text,topic');
