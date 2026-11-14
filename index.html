@@ -928,6 +928,7 @@
           <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
           <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
           <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
+          <button class="dj" onclick="openMyNotes()"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>My Notes</b><s>Your private uploads</s></button>
           <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
         </div>
         <div class="spacer"></div>
@@ -1039,6 +1040,11 @@
           <button class="sg-cell" onclick="go('resources')">
             <div class="sg-icon" style="background:#E08600"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></div>
             <span class="sg-label">Resources</span>
+          </button>
+          <button class="sg-cell" onclick="openMyNotes()">
+            <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4.3.8.8-4.3z"/></svg></div>
+            <span class="sg-label">My Notes</span>
+            <span class="sg-badge gold-badge">Private</span>
           </button>
         </div>
 
@@ -1963,6 +1969,29 @@
         </div>
         <div id="resList"></div>
         <div class="rest" id="resEmpty" style="display:none">Nothing in this category yet.</div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ MY NOTES (Stage 3) ============
+         The student's own private library: uploaded study notes, organised by
+         subject and topic, read inside the app where the format allows.
+         Nothing here is shared: the list, the files and every action are
+         owner-checked on the server (/api/me/notes). Academy Resources is the
+         separate screen above; the two libraries never mix. -->
+    <section class="screen pad" id="mynotes">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">My Notes</div><div class="muted" style="font-size:12px">Your private study notes — only you can see these</div></div></div></div>
+      <div class="wrap">
+        <div class="card" style="margin-top:14px;padding:16px">
+          <div class="eyebrow">Add a note</div>
+          <div class="ad-field"><label for="myNoteTitle">Title</label><input id="myNoteTitle" type="text" maxlength="255" placeholder="e.g. Thermodynamics summary"></div>
+          <div class="ad-field"><label for="myNoteSubject">Subject</label><select id="myNoteSubject"></select></div>
+          <div class="ad-field"><label for="myNoteTopic">Topic (optional)</label><input id="myNoteTopic" type="text" maxlength="200" placeholder="e.g. Heat and temperature"></div>
+          <div class="ad-field"><label for="myNoteFile">File (PDF, text, Word or image, up to 25 MB)</label><input id="myNoteFile" type="file" accept=".pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg"></div>
+          <button type="button" class="btn btn-red btn-block" id="myNoteUploadBtn" onclick="myNoteUpload()">Upload note</button>
+        </div>
+        <div class="ad-field" style="margin-top:14px"><label for="myNoteSearch">Search your notes</label><input id="myNoteSearch" type="search" placeholder="Search title, subject or topic…" oninput="myNotesRender()"></div>
+        <div id="myNotesList"><div class="wt-none">Loading your notes…</div></div>
         <div class="spacer"></div>
       </div>
     </section>

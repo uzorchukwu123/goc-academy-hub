@@ -179,6 +179,11 @@ const APPWRITE_TUTORS_COLLECTION_ID = 'tutors';
 const APPWRITE_QUESTIONS_COLLECTION_ID = 'questions';
 const APPWRITE_ATTEMPTS_COLLECTION_ID = 'attempts';
 const APPWRITE_RESOURCES_COLLECTION_ID = 'resources';
+/* Stage 3: student-owned private notes. A SEPARATE collection from Academy
+   Resources on purpose — a student's notes are never published, never listed
+   for anyone else, and only ever served through the owner-checked routes
+   below. Provisioned by server/setup-appwrite.js (`studentnotes`). */
+const APPWRITE_STUDENT_NOTES_COLLECTION_ID = 'studentnotes';
 const APPWRITE_VIDEOS_COLLECTION_ID = 'videos';
 const APPWRITE_LIVECLASSES_COLLECTION_ID = 'liveclasses';
 const APPWRITE_COHORTS_COLLECTION_ID = 'cohorts';
@@ -2721,6 +2726,84 @@ async function handleResourceUpload(req, res) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch (_) {}
   }
+}
+
+/* ------------------------------------------------------- student notes */
+/* Stage 3 — My Notes. Student-owned study notes, stored exactly the way
+   Academy Resources are (Appwrite Storage file + Database record) but in
+   their own collection and behind owner checks on every route. When Appwrite
+   is not configured these routes answer 503: there is deliberately no local
+   fallback for a student's private files. */
+const NOTE_ALLOWED_EXT = new Set(['.pdf', '.txt', '.md', '.doc', '.docx', '.png', '.jpg', '.jpeg']);
+const NOTE_MAX_BYTES = 25 * 1024 * 1024;
+const NOTE_MIME = {
+  pdf: 'application/pdf', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg'
+};
+function noteOut(doc) {
+  return {
+    noteId: doc.noteId || doc.$id,
+    title: doc.title || '',
+    subject: doc.subject || '',
+    topic: doc.topic || '',
+    fileType: doc.fileType || '',
+    sizeBytes: Number(doc.sizeBytes) || 0,
+    createdAt: doc.$createdAt || null
+  };
+}
+async function getOwnedNote(noteId, ownerId) {
+  try {
+    const doc = await appwriteDatabases.getDocument(
+      APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, noteId);
+    if (!doc || doc.ownerId !== ownerId) return null;
+    return doc;
+  } catch (e) { return null; }
+}
+/* One multipart read for upload and replace. Resolves { fields, file } where
+   file = { path, dir, name, ext, bytes }; the caller always cleanup()s. */
+function readNoteMultipart(req) {
+  const os = require('os');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-note-'));
+  const state = { fields: {}, file: null, dir: tempDir, cleanup: function () {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
+  } };
+  return new Promise((resolve, reject) => {
+    let fileWrite = Promise.resolve();
+    let failed = false;
+    const fail = (e) => { if (!failed) { failed = true; reject(e); } };
+    const busboy = getBusboy()({ headers: req.headers,
+      limits: { files: 1, fileSize: NOTE_MAX_BYTES, fields: 10, fieldSize: 10 * 1024 } });
+    busboy.on('field', (name, value) => { state.fields[name] = String(value || '').trim(); });
+    busboy.on('file', (name, file, info) => {
+      const fileName = String(info.filename || 'note');
+      const ext = path.extname(fileName).toLowerCase();
+      if (!NOTE_ALLOWED_EXT.has(ext)) { file.resume(); return fail(new ClientError('That file type is not supported for notes. Use PDF, text, Word or an image.')); }
+      const filePath = path.join(tempDir, crypto.randomUUID() + ext);
+      const rec = { path: filePath, name: fileName, ext: ext, bytes: 0 };
+      state.file = rec;
+      const ws = fs.createWriteStream(filePath);
+      file.on('data', (chunk) => { rec.bytes += chunk.length; });
+      file.on('limit', () => fail(new ClientError('That note file is too large. Maximum size is 25 MB.')));
+      file.pipe(ws);
+      fileWrite = new Promise((res2, rej2) => { ws.on('finish', res2); ws.on('error', rej2); file.on('error', rej2); });
+    });
+    busboy.on('error', fail);
+    busboy.on('finish', async () => {
+      try { await fileWrite; if (!failed) resolve(state); }
+      catch (e) { fail(e); }
+    });
+    req.pipe(busboy);
+  });
+}
+async function storeNoteFile(state) {
+  const { InputFile } = require(
+    path.join(path.dirname(require.resolve('node-appwrite')), 'inputFile.js'));
+  const storageFileId = crypto.randomUUID();
+  await appwriteResourcesStorage.createFile(
+    APPWRITE_BUCKET_ID, storageFileId, InputFile.fromPath(state.file.path, state.file.name));
+  return storageFileId;
 }
 
 /* ------------------------------------------------------------------ videos */
@@ -7985,6 +8068,121 @@ const ROUTES = [
     } catch (err) {
       console.error('[goc] Resource file request failed:', err.message);
       return errJson(res, 404, 'Could not open that resource.');
+    }
+  } },
+
+  /* ---- My Notes (Stage 3): the student's own private library. Every route
+     is need:'student' AND owner-checked: a note is only ever listed, read,
+     replaced or deleted by the Scholar ID that uploaded it. Another
+     student's note answers 404, so its existence is never revealed. ---- */
+  { method: 'GET', path: /^\/api\/me\/mynotes$/, need: 'student', handler: async (req, res, body, sess) => {
+    if (!appwriteDatabases) return errJson(res, 503, 'Note storage is not available right now.');
+    try {
+      const { Query } = require('node-appwrite');
+      const result = await appwriteDatabases.listDocuments(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID,
+        [Query.equal('ownerId', sess.data.id), Query.limit(500)]);
+      const notes = result.documents.map(noteOut);
+      notes.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      return okJson(res, { notes });
+    } catch (err) {
+      console.error('[goc] Student notes list failed:', err.message);
+      return errJson(res, 500, 'Could not load your notes.');
+    }
+  } },
+
+  { method: 'POST', path: /^\/api\/me\/mynotes\/upload$/, need: 'student', multipart: true, handler: async (req, res, body, sess) => {
+    if (!appwriteDatabases || !appwriteResourcesStorage) return errJson(res, 503, 'Note storage is not available right now.');
+    let state = null;
+    try {
+      state = await readNoteMultipart(req);
+      if (!state.file) return errJson(res, 400, 'Please choose a note file to upload.');
+      if (!state.fields.title) return errJson(res, 400, 'Give your note a title.');
+      if (!state.fields.subject) return errJson(res, 400, 'Choose the subject this note belongs to.');
+      if (state.file.bytes <= 0) return errJson(res, 400, 'The uploaded file is empty.');
+      const storageFileId = await storeNoteFile(state);
+      const noteId = 'NOTE-' + crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+      const doc = {
+        noteId, ownerId: sess.data.id,
+        title: clean(state.fields.title, 255),
+        subject: clean(state.fields.subject, 100),
+        topic: clean(state.fields.topic, 200),
+        fileType: state.file.ext.replace('.', '').toUpperCase(),
+        storageFileId, sizeBytes: state.file.bytes
+      };
+      const created = await appwriteDatabases.createDocument(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, noteId, doc);
+      return okJson(res, { ok: true, note: noteOut(Object.assign({}, doc, created)) });
+    } catch (err) {
+      return errJson(res, 400, safeClientMessage(err, 'Note upload failed. Please try again.'));
+    } finally { if (state) state.cleanup(); }
+  } },
+
+  { method: 'GET', path: /^\/api\/me\/mynotes\/([A-Za-z0-9._-]+)\/file$/, need: 'student', handler: async (req, res, body, sess, params) => {
+    if (!appwriteDatabases || !appwriteResourcesStorage) return errJson(res, 503, 'Note storage is not available right now.');
+    const doc = await getOwnedNote(params[0], sess.data.id);
+    if (!doc || !doc.storageFileId) return errJson(res, 404, 'That note is not available.');
+    try {
+      const fileData = await appwriteResourcesStorage.getFileView(APPWRITE_BUCKET_ID, doc.storageFileId);
+      const ext = String(doc.fileType || '').toLowerCase();
+      const wantsDownload = new URL(req.url, 'http://localhost').searchParams.get('download') === '1';
+      res.writeHead(200, {
+        'Content-Type': NOTE_MIME[ext] || 'application/octet-stream',
+        'Content-Disposition': wantsDownload ? 'attachment' : 'inline',
+        /* A private note is never cached and never shared: owner route only. */
+        'Cache-Control': 'private, no-store'
+      });
+      return res.end(Buffer.from(fileData));
+    } catch (err) {
+      console.error('[goc] Student note file failed:', err.message);
+      return errJson(res, 404, 'Could not open that note.');
+    }
+  } },
+
+  { method: 'POST', path: /^\/api\/me\/mynotes\/([A-Za-z0-9._-]+)\/replace$/, need: 'student', multipart: true, handler: async (req, res, body, sess, params) => {
+    if (!appwriteDatabases || !appwriteResourcesStorage) return errJson(res, 503, 'Note storage is not available right now.');
+    const doc = await getOwnedNote(params[0], sess.data.id);
+    if (!doc) return errJson(res, 404, 'That note is not available.');
+    let state = null;
+    try {
+      state = await readNoteMultipart(req);
+      if (!state.file) return errJson(res, 400, 'Please choose the replacement file.');
+      if (state.file.bytes <= 0) return errJson(res, 400, 'The replacement file is empty.');
+      const oldStorage = doc.storageFileId;
+      const storageFileId = await storeNoteFile(state);
+      const patch = {
+        fileType: state.file.ext.replace('.', '').toUpperCase(),
+        storageFileId, sizeBytes: state.file.bytes
+      };
+      if (state.fields.title) patch.title = clean(state.fields.title, 255);
+      if (state.fields.subject) patch.subject = clean(state.fields.subject, 100);
+      if (state.fields.topic !== undefined && state.fields.topic !== '') patch.topic = clean(state.fields.topic, 200);
+      const updated = await appwriteDatabases.updateDocument(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, doc.noteId || doc.$id, patch);
+      /* The old bytes go only after the record points at the new file. */
+      if (oldStorage && oldStorage !== storageFileId) {
+        try { await appwriteResourcesStorage.deleteFile(APPWRITE_BUCKET_ID, oldStorage); } catch (_) {}
+      }
+      return okJson(res, { ok: true, note: noteOut(Object.assign({}, doc, updated)) });
+    } catch (err) {
+      return errJson(res, 400, safeClientMessage(err, 'That note could not be replaced. Please try again.'));
+    } finally { if (state) state.cleanup(); }
+  } },
+
+  { method: 'DELETE', path: /^\/api\/me\/mynotes\/([A-Za-z0-9._-]+)$/, need: 'student', handler: async (req, res, body, sess, params) => {
+    if (!appwriteDatabases) return errJson(res, 503, 'Note storage is not available right now.');
+    const doc = await getOwnedNote(params[0], sess.data.id);
+    if (!doc) return errJson(res, 404, 'That note is not available.');
+    try {
+      await appwriteDatabases.deleteDocument(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, doc.noteId || doc.$id);
+      if (doc.storageFileId && appwriteResourcesStorage) {
+        try { await appwriteResourcesStorage.deleteFile(APPWRITE_BUCKET_ID, doc.storageFileId); } catch (_) {}
+      }
+      return okJson(res, { ok: true });
+    } catch (err) {
+      console.error('[goc] Student note delete failed:', err.message);
+      return errJson(res, 500, 'That note could not be deleted.');
     }
   } },
 

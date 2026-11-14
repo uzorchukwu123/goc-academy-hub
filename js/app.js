@@ -11784,6 +11784,157 @@ function openResourceMediaViewer(blob, title, kind, ext){
   });
 }
 
+/* ================= MY NOTES (Stage 3) =================
+   The student's own private library. The server owner-checks every call;
+   this screen only ever sees the signed-in student's notes, and says so.
+   Academy Resources (above) is a different, shared library — the two are
+   never mixed. Reading reuses the app's own media viewer (PDF.js / image);
+   text notes open in a simple reader; anything else downloads honestly. */
+var myNotesCache = [];
+function openMyNotes(){ go('mynotes'); myNotesLoad(); }
+function myNotesLoad(){
+  var sel = document.getElementById('myNoteSubject');
+  if(sel && !sel.options.length){
+    mySubjectList().concat(['Other']).forEach(function(s){
+      var o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o);
+    });
+  }
+  if(!GOC.api.listMyNotes) return;
+  GOC.api.listMyNotes().then(function(r){
+    myNotesCache = (r && r.notes) || [];
+    myNotesRender();
+  }, function(err){
+    myNotesCache = [];
+    var host = document.getElementById('myNotesList');
+    if(host) host.innerHTML = '<div class="wt-none">' + esc((err && err.message) || 'Your notes are not available right now.') + '</div>';
+  });
+}
+function myNotesRender(){
+  var host = document.getElementById('myNotesList');
+  if(!host) return;
+  var qEl = document.getElementById('myNoteSearch');
+  var q = qEl ? String(qEl.value || '').trim().toLowerCase() : '';
+  var rows = myNotesCache.filter(function(n){
+    if(!q) return true;
+    return (String(n.title || '') + ' ' + String(n.subject || '') + ' ' + String(n.topic || '')).toLowerCase().indexOf(q) > -1;
+  });
+  host.innerHTML = '';
+  if(!rows.length){
+    host.innerHTML = '<div class="wt-none">' + (myNotesCache.length
+      ? 'No note matches that search.'
+      : 'You have not uploaded any notes yet. Add your first note above — it stays private to your account.') + '</div>';
+    return;
+  }
+  var bySubject = {};
+  rows.forEach(function(n){ (bySubject[n.subject || 'Other'] = bySubject[n.subject || 'Other'] || []).push(n); });
+  Object.keys(bySubject).sort().forEach(function(subj){
+    var h = document.createElement('div');
+    h.className = 'sec-head';
+    h.innerHTML = '<div class="section-t">' + esc(subj) + '</div>';
+    host.appendChild(h);
+    bySubject[subj].forEach(function(n){ host.appendChild(myNoteRow(n)); });
+  });
+}
+function myNoteRow(n){
+  var d = document.createElement('div');
+  d.className = 'card wrap dash-card';
+  var when = n.createdAt ? wtWhen(new Date(n.createdAt).getTime()) : '';
+  d.innerHTML = '<div class="wt-row"><div class="nm"><b>' + esc(n.title || 'Untitled note') + '</b><span>'
+    + esc(n.subject || '') + (n.topic ? ' · ' + esc(n.topic) : '') + ' · ' + esc(n.fileType || 'FILE')
+    + (when ? ' · ' + esc(when) : '') + '</span></div></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    + '<button type="button" class="btn btn-red" onclick="myNoteRead(\'' + esc(n.noteId) + '\')">Read</button>'
+    + '<button type="button" class="btn btn-outline" onclick="myNoteReplace(\'' + esc(n.noteId) + '\')">Replace</button>'
+    + '<button type="button" class="btn btn-outline" onclick="myNoteDelete(\'' + esc(n.noteId) + '\')">Delete</button>'
+    + '</div>';
+  return d;
+}
+function myNoteUpload(){
+  var title = String((document.getElementById('myNoteTitle') || {}).value || '').trim();
+  var subject = String((document.getElementById('myNoteSubject') || {}).value || '').trim();
+  var topic = String((document.getElementById('myNoteTopic') || {}).value || '').trim();
+  var fileEl = document.getElementById('myNoteFile');
+  var file = fileEl && fileEl.files && fileEl.files[0];
+  if(!title){ toast('Give your note a title.'); return; }
+  if(!subject){ toast('Choose the subject this note belongs to.'); return; }
+  if(!file){ toast('Choose a note file to upload.'); return; }
+  if(file.size > 25 * 1024 * 1024){ toast('That note file is too large. Maximum size is 25 MB.'); return; }
+  var fd = new FormData();
+  fd.append('title', title); fd.append('subject', subject); fd.append('topic', topic); fd.append('file', file);
+  var btn = document.getElementById('myNoteUploadBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Uploading…'; }
+  GOC.api.uploadMyNote(fd).then(function(){
+    if(btn){ btn.disabled = false; btn.textContent = 'Upload note'; }
+    document.getElementById('myNoteTitle').value = '';
+    document.getElementById('myNoteTopic').value = '';
+    if(fileEl) fileEl.value = '';
+    toast('Note saved to your private library.');
+    myNotesLoad();
+  }, function(err){
+    if(btn){ btn.disabled = false; btn.textContent = 'Upload note'; }
+    toast((err && err.message) || 'That note could not be uploaded.');
+  });
+}
+function myNoteRead(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  GOC.api.getMyNoteFile(id).then(function(blob){
+    var ext = String(n.fileType || '').toLowerCase();
+    if(ext === 'pdf') openResourceMediaViewer(blob, n.title, 'pdf', 'pdf');
+    else if(ext === 'png' || ext === 'jpg' || ext === 'jpeg') openResourceMediaViewer(blob, n.title, 'image', ext);
+    else if(ext === 'txt' || ext === 'md'){
+      blob.text().then(function(text){ myNoteShowText(n.title, text); },
+        function(){ downloadResourceBlob(blob, n.title, ext); });
+    }
+    else { downloadResourceBlob(blob, n.title, ext); toast('This format downloads to open on your device.'); }
+  }, function(err){ toast((err && err.message) || 'Could not open that note.'); });
+}
+function myNoteShowText(title, text){
+  var old = document.getElementById('gocNoteText');
+  if(old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'gocNoteText';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#111;display:flex;flex-direction:column;';
+  overlay.innerHTML = '<div style="height:58px;flex:0 0 58px;background:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #e5e7eb;">'
+    + '<button type="button" id="gocNoteTextClose" aria-label="Close reader" style="border:0;background:#f3f4f6;border-radius:10px;width:38px;height:38px;font-size:20px;cursor:pointer;">×</button>'
+    + '<div style="flex:1;min-width:0;font-size:14px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title || 'Note') + '</div></div>'
+    + '<pre style="flex:1;overflow:auto;margin:0;padding:18px;background:#FAF7F2;color:#20242C;font-size:14px;line-height:1.65;white-space:pre-wrap;">' + esc(text || '') + '</pre>';
+  document.body.appendChild(overlay);
+  document.getElementById('gocNoteTextClose').onclick = function(){ overlay.remove(); };
+}
+function myNoteReplace(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg';
+  input.onchange = function(){
+    var file = input.files && input.files[0];
+    if(!file) return;
+    if(file.size > 25 * 1024 * 1024){ toast('That note file is too large. Maximum size is 25 MB.'); return; }
+    if(typeof confirm === 'function' && !confirm('Replace "' + n.title + '" with "' + file.name + '"?\n\nThe current file will be removed. This cannot be undone.')) return;
+    var fd = new FormData();
+    fd.append('file', file);
+    GOC.api.replaceMyNote(id, fd).then(function(){
+      toast('Note replaced.');
+      myNotesLoad();
+    }, function(err){ toast((err && err.message) || 'That note could not be replaced.'); });
+  };
+  input.click();
+}
+function myNoteDelete(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  if(typeof confirm === 'function' && !confirm('Delete "' + n.title + '"?\n\nYour uploaded file will be removed from your private library. This cannot be undone.')) return;
+  GOC.api.deleteMyNote(id).then(function(){
+    toast('Note deleted.');
+    myNotesLoad();
+  }, function(err){ toast((err && err.message) || 'That note could not be deleted.'); });
+}
+
 function setResFilter(f){ resFilter = f; renderResources(); }
 
 /* Open students may download resources but not open them in the app (the server enforces it). */
