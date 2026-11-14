@@ -34,7 +34,7 @@
    Everything else — homepage, sign-up, login, dashboards, console, tutor
    shell, password-setup links, Free UTME 2027, practice, Web Test, CBT,
    resources, videos, classes, every /api/ route, any deep link — gets the
-   503 announcement page (or a 503 JSON refusal for /api/).
+   200 announcement page (or a 503 JSON refusal for /api/).
 
    The page is deliberately self-contained: inline CSS and inline SVG, no
    scripts, no fonts or images from the network, no navigation, no login or
@@ -43,7 +43,7 @@
    ========================================================================== */
 'use strict';
 
-const HEADLINE = 'G.O.C Academy Hub is Under Several Improvements';
+const HEADLINE = "We're Making Things Better!";
 const OPENING = 'We are working behind the scenes to improve G.O.C Academy Hub and make your learning experience even better.';
 const UNDERWAY = 'Several improvements are currently underway. We are preparing an enhanced platform and look forward to welcoming you back when everything is ready.';
 const THANKS = 'Thank you for your patience and understanding.';
@@ -378,7 +378,8 @@ function intercept(req, res, urlPath) {
   /* Every user-facing page: /, /index.html, /tutor, /setup/<token>, a
      /free2027 deep link, a static asset, or anything else typed in. */
   const headers = htmlHeaders();
-  res.writeHead(503, headers);
+  /* OneBit substitutes its own wake page for origin 503 responses. */
+  res.writeHead(200, headers);
   if (method === 'HEAD') res.end();
   else res.end(page());
   return true;
