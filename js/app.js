@@ -594,10 +594,7 @@ function go(id){
   if(id === 'study' && typeof refreshPracHistory === 'function') refreshPracHistory();
   if((id === 'study' || id === 'bookmarks') && typeof refreshBookmarks === 'function') refreshBookmarks();
   if((id === 'study' || id === 'mistakes') && typeof refreshMistakes === 'function') refreshMistakes();
-  if(id === 'study' && typeof refreshReview === 'function') refreshReview();
   if(id === 'review' && typeof rvOpen === 'function') rvOpen();
-  if(id === 'study' && typeof refreshQuest === 'function') refreshQuest();
-  if(id === 'study' && typeof refreshWeekly === 'function') refreshWeekly();
   if(id === 'study' && typeof refreshChallenge === 'function') refreshChallenge();
   // Install-state can change between visits (installed elsewhere, prompt
   // captured after the screen first loaded), so it's re-read on the way in.
@@ -705,7 +702,7 @@ function loginNow(raw, pw){
     go('home');
     ssStart();                          // Priority 9 — begin watching the clock
     swStart();                          // and begin the daily study-window heartbeat
-    setTimeout(openFlyer, 350);
+    setTimeout(function(){ deployFetch().then(function(){ maybeOpenFlyer(); }); }, 350);
   }).catch(function(err){
     busy(btn, false);
     toast(err.message || 'Could not log you in');
@@ -1431,6 +1428,79 @@ function renderClassFilters(){
   });
   host.innerHTML = html;
 }
+/* ---- Deployment identity, first-run notice, and affirmation gating ----
+/* /api/health reports the service-worker cache name (sw.js) as deployId.
+   The same id decides whether a completed tutorial belongs to this build and
+   whether the one-time redeployment notice has already been dismissed. */
+var GOC_DEPLOY_ID = null;
+var deployPromise = null;
+function deployFetch(){
+  if(deployPromise) return deployPromise;
+  deployPromise = new Promise(function(resolve){
+    var done = false;
+    function finish(id){ if(done) return; done = true; resolve(id || null); }
+    function miss(){ deployPromise = null; finish(null); }   /* let a later call retry */
+    var timer = setTimeout(miss, 4000);
+    try {
+      fetch('api/health', { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(j){
+        clearTimeout(timer);
+        var id = j && j.deployId ? String(j.deployId) : null;
+        if(!id){ miss(); return; }
+        GOC_DEPLOY_ID = id;
+        window.GOC_DEPLOY_ID = id;
+        finish(id);
+      }).catch(function(){ clearTimeout(timer); miss(); });
+    } catch(e){ clearTimeout(timer); miss(); }
+  });
+  return deployPromise;
+}
+function deployNoticeCheck(id){
+  if(!id) return;
+  var seen = null;
+  try { seen = localStorage.getItem('goc.deployNotice.v1'); } catch(e) {}
+  if(seen === id) return;
+  var box = document.getElementById('deployNotice');
+  if(!box) return;
+  var idEl = document.getElementById('deployNoticeId');
+  if(idEl) idEl.textContent = id;
+  box.hidden = false;
+  box.classList.add('show');
+}
+function closeDeployNotice(){
+  var box = document.getElementById('deployNotice');
+  if(box){ box.classList.remove('show'); box.hidden = true; }
+  try { if(GOC_DEPLOY_ID) localStorage.setItem('goc.deployNotice.v1', GOC_DEPLOY_ID); } catch(e) {}
+}
+function refreshDeployNotice(){
+  try { if(GOC_DEPLOY_ID) localStorage.setItem('goc.deployNotice.v1', GOC_DEPLOY_ID); } catch(e) {}
+  location.reload();
+}
+/* The flyer is unlocked only by a completed student tour on THIS deployment.
+   The onboarding state is versioned by deployId, so a new build makes the
+   old completion stale and the flyer waits for the new tour. */
+function affirmationUnlocked(){
+  if(role !== 'student' || !studentId) return false;
+  if(!GOC_DEPLOY_ID) return false;
+  if(!window.GOCOnboarding) return false;
+  var st = window.GOCOnboarding.state('student', studentId);
+  if(!st || st.status !== 'done') return false;
+  /* The completion must belong to THIS deployment. A missing id on the saved
+     state means the tour ran before the build was known, so it does not count. */
+  if(!st.deploy || st.deploy !== GOC_DEPLOY_ID) return false;
+  return true;
+}
+function maybeOpenFlyer(){
+  if(!affirmationUnlocked()) return;
+  openFlyer();
+}
+if(typeof window.addEventListener === 'function'){
+  window.addEventListener('goc:tour-done', function(e){
+    if(!e || !e.detail || e.detail.tour !== 'student') return;
+    /* Finish the tour at home, then show the affirmation it unlocked. */
+    setTimeout(function(){ try { go('home'); } catch(err) {} setTimeout(maybeOpenFlyer, 180); }, 80);
+  });
+}
+
 function openFlyer(){
   var d = new Date();
   var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -8059,17 +8129,6 @@ function openStudySet(mode, subject, past){
     live.forEach(function(e){ if(!pick && (!want || e.subject === want)) pick = e; });
     suSubj = (pick || live[0]).subject;
     suSelectAll(true);
-    /* Next Up's weakest-topic recommendation narrows the set-up to that one
-       topic when the subject really holds it; anything else keeps the
-       ordinary all-topics set-up. */
-    if(suMode === 'practice' && dashUpWeakPick){
-      if(canonSubject(dashUpWeakPick.subject) === suSubj
-         && suTopicList().some(function(t){ return t.topic === dashUpWeakPick.topic; })){
-        suPick = {};
-        suPick[dashUpWeakPick.topic] = true;
-      }
-      dashUpWeakPick = null;
-    }
     suResetYears();
     renderStudySet();
   }, function(err){
@@ -9025,62 +9084,6 @@ function rvPick(j){
 }
 function rvAdvance(){ rvIndex++; rvRender(); }
 
-/* Daily quest (Phase 2, daily quest slice 4): a read-only card at the top of
-   the Study hub. paintQuest draws the quest the server computed; refreshQuest
-   asks for it. With no quest (signed out, or an older server) the card stays
-   hidden. */
-function paintQuest(q){
-  var card = document.getElementById('questCard');
-  if(!card) return;
-  if(!q || !q.target){ card.style.display = 'none'; return; }
-  var text = document.getElementById('questText'), bar = document.getElementById('questBar'), note = document.getElementById('questNote');
-  var done = Math.min(Number(q.answered) || 0, q.target);
-  if(text) text.textContent = q.kind === 'weak' && q.topic
-    ? 'Answer ' + q.target + ' questions in ' + q.subject + ' · ' + q.topic
-    : 'Answer ' + q.target + ' questions today, in any topic';
-  if(bar) bar.style.width = Math.round(done / q.target * 100) + '%';
-  if(note) note.textContent = q.done
-    ? 'Done for today. Well done!'
-    : done + ' of ' + q.target + ' answered today' + (q.kind === 'weak' ? ' · your weakest topic so far' : '');
-  card.style.display = '';
-}
-function refreshQuest(){
-  if(!studentId){ paintQuest(null); return Promise.resolve(); }
-  if(!GOC.api || typeof GOC.api.getQuest !== 'function') return Promise.resolve();
-  return GOC.api.getQuest().then(function(r){
-    paintQuest(r && r.quest);
-  }).catch(function(){ /* offline — leave the card as it is */ });
-}
-
-/* Weekly quest (Phase 2, weekly quest slice 5): a read-only card under the Daily
-   quest on the Study hub. The week runs Monday to Sunday; finishing 5 daily
-   quests OR answering 100 practice questions, whichever comes first, earns one
-   streak freeze. The server keeps the counts and pays the freeze; this only
-   shows them. The bar follows whichever target is closer. */
-function paintWeekly(r){
-  var card = document.getElementById('weekCard');
-  if(!card) return;
-  var q = r && r.weeklyQuest;
-  if(!q || !q.targetDays){ card.style.display = 'none'; return; }
-  var text = document.getElementById('weekText'), bar = document.getElementById('weekBar'), note = document.getElementById('weekNote');
-  var days = Math.min(Number(q.days) || 0, q.targetDays), qs = Math.min(Number(q.questions) || 0, q.targetQuestions);
-  var pct = Math.round(Math.max(days / q.targetDays, qs / q.targetQuestions) * 100);
-  if(text) text.textContent = 'Finish ' + q.targetDays + ' daily quests or answer ' + q.targetQuestions + ' questions this week';
-  if(bar) bar.style.width = pct + '%';
-  if(note){
-    if(q.done && q.claimed) note.textContent = 'Done \u2014 your streak freeze for this week has been added.';
-    else if(q.done) note.textContent = 'Done \u2014 you already hold the most streak freezes. Yours is added after your next practice run once you have room.';
-    else note.textContent = days + ' of ' + q.targetDays + ' daily quests \u00B7 ' + qs + ' of ' + q.targetQuestions + ' questions \u00B7 week ends Sunday';
-  }
-  card.style.display = '';
-}
-function refreshWeekly(){
-  if(!studentId){ paintWeekly(null); return Promise.resolve(); }
-  if(!GOC.api || typeof GOC.api.getWeeklyQuest !== 'function') return Promise.resolve();
-  return GOC.api.getWeeklyQuest().then(function(r){
-    paintWeekly(r);
-  }).catch(function(){ /* offline \u2014 leave the card as it is */ });
-}
 /* Team challenge (Phase 4.C): a read-only card on the Study hub, filled from GET /api/me/challenge. */
 function paintChallenge(r){
   var card = document.getElementById('chalCard');
@@ -9147,13 +9150,17 @@ function questRow(res){
   return null;
 }
 
-function srShow(res, fromHistory){
+function srShow(res, fromHistory, opts){
+  opts = opts || {};
+  var demo = !!(opts.demo || res.mode === 'demo');
   srLast = res;
-  if(!fromHistory) savePracResult(res);
+  if(!fromHistory && !demo) savePracResult(res);
   var prac = res.mode === 'practice';
   var t = document.getElementById('srTitle'), sub = document.getElementById('srSub');
   if(t) t.textContent = res.correct + ' of ' + res.total + ' correct · ' + res.percent + '%';
-  if(sub) sub.textContent = res.subject + ' · ' + (prac ? 'practice · earns XP' : 'CBT set-up') + ' · not part of your record';
+  if(sub) sub.textContent = res.subject + ' · '
+    + (demo ? 'free preview · not part of your record'
+            : ((prac ? 'practice · earns XP' : 'CBT set-up') + ' · not part of your record'));
 
   var rows = [
     ['Questions', String(res.total)],
@@ -9166,6 +9173,9 @@ function srShow(res, fromHistory){
   /* Practice is unassessed but not unrewarded: the student sees the XP their
      work earned, and is told when a day's allowance has been reached rather
      than being left to wonder why the figure stopped moving. */
+  if(demo){
+    rows.push(['Question source', 'The academy\u2019s designated free practice set']);
+  }
   if(prac){
     rows.push(['XP earned', '+' + (Number(res.xpAwarded) || 0) + ' XP']);
     var qr = questRow(res);
@@ -9177,7 +9187,12 @@ function srShow(res, fromHistory){
     if(res.xpCapped) rows.push(['Daily XP allowance', 'Reached for today — keep practising for the marks']);
     else if(res.xpLeftToday != null) rows.push(['XP left today', res.xpLeftToday + ' XP']);
   }
-  rows.push(['On your record', 'No — study runs are not assessed']);
+  rows.push(['On your record', demo ? 'No — free previews are never recorded' : 'No — study runs are not assessed']);
+  var cta = document.getElementById('srDemoCta');
+  if(cta) cta.hidden = !demo;
+  var doneBtn = document.getElementById('srDoneBtn'), againBtn = document.getElementById('srAgainBtn');
+  if(doneBtn) doneBtn.textContent = demo ? 'Back to homepage' : 'Done';
+  if(againBtn) againBtn.textContent = demo ? 'Try again' : 'Another run \u2192';
   var stats = document.getElementById('srStats');
   if(stats){
     stats.innerHTML = rows.map(function(r){
@@ -9206,15 +9221,22 @@ function srShow(res, fromHistory){
              (r.explanation ? '<div class="ra"><em>Why</em>' + mth(r.explanation, {breaks:true}) + '</div>' : '') +
              '<span class="verdict ' + (r.isCorrect ? 'ok' : 'no') + '">' +
              (r.isCorrect ? 'Correct' : 'Incorrect') + '</span>' +
-             bmButton({ id: r.id, subject: r.subject || res.subject, topic: r.topic, text: r.text, options: r.options,
+             (demo ? '' : bmButton({ id: r.id, subject: r.subject || res.subject, topic: r.topic, text: r.text, options: r.options,
                         answer: r.answer, explanation: r.explanation }) +
-             askTutorButton({ id: r.id }) + '</div>';
+             askTutorButton({ id: r.id })) + '</div>';
     }).join('');
   }
   go('studyRes');
 }
 /* Straight back to the set-up screen for the mode just finished. */
-function srAgain(){ openStudySet(srLast && srLast.mode === 'practice' ? 'practice' : 'cbt', srLast && srLast.subject); }
+function srDone(){
+  if(srLast && srLast.mode === 'demo'){ go('landing'); return; }
+  go('study');
+}
+function srAgain(){
+  if(srLast && srLast.mode === 'demo'){ go('demo'); demoOpen(); return; }
+  openStudySet(srLast && srLast.mode === 'practice' ? 'practice' : 'cbt', srLast && srLast.subject);
+}
 
 /* ================= READING MODE =================
    Subject, then topic, then note. Every note is written and published by the
@@ -9358,22 +9380,18 @@ var wtSecs = 0, wtTimerId = null, wtBusy = false, wtArmed = false;
 var wtUntimed = false, wtOpenedAt = 0;
 var OPT_KEYS = ['A','B','C','D','E','F','G','H'];
 
-/* One entry per session, so the three sessions stay clearly separated. How a
-   paper is marked is the academy's business, not the student's: nothing here
-   says who or what awards the mark. A result simply arrives, or is honestly
-   shown as still awaited. The JAMB-oriented session is held back: it is shown
-   as coming soon rather than offered, because the objective sitting already
-   gives a full timed paper. */
+/* One entry per session the website offers. The JAMB-oriented session was
+   retired from the student site in Part Two; the server and the question bank
+   still hold it (no data is deleted), and a sitting saved before the change can
+   still be resumed and submitted, but no new one can be started here. How a
+   paper is marked is the academy's business, not the student's. */
 var WT_SECTIONS = [
   { key:'theory', title:'Theory session', colour:'#0E7490',
     note:'A written paper in each subject that has one, sat without a clock. Write your answers in full and submit when you are ready.',
     icon:'<path d="M4 20h16"/><path d="M6.2 16.4L16.9 5.7a2 2 0 112.8 2.8L9 19.2l-4.3.8.5-3.6z"/>' },
   { key:'objective', title:'Objective session', colour:'#DC2626',
     note:'One sitting of your whole combination, on a clock set by the academy. Move between your papers freely until you submit.',
-    icon:'<circle cx="6.5" cy="8" r="2.4"/><circle cx="6.5" cy="16" r="2.4"/><path d="M12 8h8M12 16h8"/>' },
-  { key:'jamb', title:'JAMB-oriented session', colour:'#141821',
-    note:'Full CBT mode — numbered questions, a navigation panel and a running clock.',
-    icon:'<rect x="3" y="4.5" width="18" height="11.5" rx="1.6"/><path d="M2 20h20"/>' }
+    icon:'<circle cx="6.5" cy="8" r="2.4"/><circle cx="6.5" cy="16" r="2.4"/><path d="M12 8h8M12 16h8"/>' }
 ];
 function wtSectionLabel(s){ return s === 'jamb' ? 'JAMB-oriented' : (s === 'theory' ? 'Theory' : (s === 'practice' ? 'Practice only' : 'Objective')); }
 /* There is one test. Every paper — and every record of one, however it was
@@ -10152,12 +10170,15 @@ function renderDash(){
      replays it. Delayed so the login flyer has settled first. */
   if(role === 'student' && window.GOCOnboarding){
     setTimeout(function(){
-      if(window.GOCOnboarding) window.GOCOnboarding.maybeAutoStart('student', studentId);
+      /* Resolve the deployment id first: a completion saved without one could
+         never be matched to the build it belongs to. */
+      deployFetch().then(function(id){
+        if(id && window.GOCOnboarding) window.GOCOnboarding.maybeAutoStart('student', studentId);
+      });
     }, 900);
   }
+
   dashPaintNext();
-  dashPaintUp();
-  dashPaintSubjects();
   dashPaintStanding();
   dashPaintLast();
   dashPaintBroadcasts();
@@ -10174,62 +10195,11 @@ function dashRow(title, sub, cta){
 function dashStat(k, v){
   return '<div class="wt-stat"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>';
 }
-/* The JAMB-oriented catalogue row from the dashboard's last catalogue read
-   (null when the sitting is not listed for this student). It is only ever a
-   mirror of what the server chose to list: dashPaintJamb never invents a
-   sitting, and starting goes through wtConfirmStart -> POST /api/me/tests/start,
-   which re-checks the bank-depth gate server-side before opening anything. */
-var dashJambTest = null;
-function dashPaintJamb(rows){
-  if(!document.getElementById('dashJamb')) return;
-  if(!rows){
-    dashJambTest = null;
-    dashSet('dashJamb', '<div class="wt-none">The JAMB-oriented sitting is not available right now.</div>');
-    return;
-  }
-  var j = null;
-  rows.forEach(function(t){ if(t.section === 'jamb') j = t; });
-  dashJambTest = j;
-  if(!j){
-    /* Not listed means the dedicated JAMB bank is not yet deep enough in every
-       one of this student's subjects (the server holds the sitting back until
-       it is). Say exactly that; never offer a Start the server would refuse. */
-    dashSet('dashJamb', '<div class="wt-none">The JAMB-oriented sitting opens once its question bank is ready in all of your subjects. Sit the Objective sitting meanwhile.</div>');
-    return;
-  }
-  var line = j.questions + ' question' + (j.questions !== 1 ? 's' : '')
-    + ' · ' + wtMinutes(j.durationSec) + ' · your whole combination';
-  if(j.papers && j.papers.length) line += ' · ' + wtPapersLine(j.papers);
-  var sat = Number(j.attempts) || 0;
-  if(j.repeatable && sat > 0) line += ' · sat ' + sat + ' time' + (sat !== 1 ? 's' : '') + ' — you can sit it again';
-  if(j.locked){
-    dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
-      + esc(line) + '</span></div>'
-      + '<button class="wt-start locked" disabled>Locked</button></div>');
-    return;
-  }
-  dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
-    + esc(line) + '</span></div>'
-    + '<button class="wt-start" onclick="dashJambSit(this)">' + (j.repeatable && sat > 0 ? 'Sit again' : 'Sit it') + '</button></div>');
-}
-/* Dashboard/Study JAMB entry: start the listed sitting through the very same
-   instructions + start route as the Web Test screen; when no sitting is
-   listed (or the catalogue has not been read yet), land on the Web Test
-   screen, which explains the readiness position itself. */
-function dashJambSit(btn){
-  if(dashJambTest && !dashJambTest.locked) wtConfirmStart(dashJambTest, btn);
-  else openWebTest();
-}
-function openJambTest(){
-  if(dashJambTest && !dashJambTest.locked){ wtConfirmStart(dashJambTest, null); return; }
-  openWebTest();
-}
 /* What is actually published for this student, in the order they would sit it. */
 function dashPaintNext(){
   if(!GOC.api.listMyTests) return;
   GOC.api.listMyTests().then(function(r){
     var rows = (r && r.tests) || [];
-    dashPaintJamb(rows);
     if(!rows.length){
       dashSet('dashNext', '<div class="wt-none">No paper has been published for your subjects yet. One will appear here the moment it is.</div>');
       return;
@@ -10254,7 +10224,6 @@ function dashPaintNext(){
     }
     dashSet('dashNext', h || '<div class="wt-none">No paper has been published for your subjects yet.</div>');
   }, function(){
-    dashPaintJamb(null);
     dashSet('dashNext', '<div class="wt-none">Your papers are not available right now.</div>');
   });
 }
@@ -10302,121 +10271,10 @@ function dashPaintLast(){
   });
 }
 
-/* ================= NEXT UP (Stage 5) =================
-   One recommended next step, chosen only from data the academy already
-   holds for this student, in a fixed priority: an unfinished available
-   exam paper first, then questions due for spaced review, then practice
-   on the weakest topic their own practice record shows. If a source
-   needed to rule out a higher priority cannot be read, the card says so
-   instead of guessing — it never invents a paper, a due count or a weak
-   topic. */
-var dashUpCurrent = null;
-var dashUpWeakPick = null;
-function dashUpFromTests(rows){
-  var rank = { objective: 0, jamb: 1, theory: 2 };
-  var open = (rows || []).filter(function(t){ return t && !t.completed && !t.locked; });
-  open.sort(function(a, b){ return (rank[a.section] != null ? rank[a.section] : 3) - (rank[b.section] != null ? rank[b.section] : 3); });
-  var t = open[0];
-  if(!t) return null;
-  var title = t.section === 'jamb' ? 'Sit your JAMB-oriented sitting'
-    : t.section === 'objective' ? 'Sit your Objective sitting'
-    : 'Sit your ' + (t.subject || '') + ' theory paper';
-  var sub = (Number(t.questions) || 0) + ' question' + (Number(t.questions) !== 1 ? 's' : '')
-    + (t.durationSec ? ' · ' + wtMinutes(t.durationSec) : ' · no time limit') + ' · waiting for you';
-  return { kind: 'paper', section: t.section, title: title, sub: sub, cta: 'Sit it' };
-}
-function dashUpFromReview(payload){
-  var q = (payload && payload.review) || payload || {};
-  var due = Number(q.dueCount) || 0;
-  if(!due) return null;
-  return { kind: 'review', title: 'Review what is due',
-           sub: due + ' question' + (due !== 1 ? 's are' : ' is') + ' due for another look, spaced so they stick', cta: 'Start review' };
-}
-function dashWeakTopic(runs){
-  var agg = {};
-  (runs || []).forEach(function(r){
-    (r.topics || []).forEach(function(t){
-      if(!t || !t.topic) return;
-      var key = (r.subject || '') + '|' + t.topic;
-      agg[key] = agg[key] || { subject: r.subject || '', topic: t.topic, sum: 0, runs: 0 };
-      agg[key].sum += Number(t.percent) || 0;
-      agg[key].runs++;
-    });
-  });
-  var best = null;
-  Object.keys(agg).forEach(function(k){
-    var a = agg[k];
-    a.percent = Math.round(a.sum / a.runs);
-    if(!best || a.percent < best.percent || (a.percent === best.percent && a.runs > best.runs)) best = a;
-  });
-  return best;
-}
-function dashUpPick(d){
-  var paper = dashUpFromTests(d.rows);
-  if(paper) return paper;
-  if(!d.testsOk) return { kind: 'unavailable' };
-  var review = dashUpFromReview(d.review);
-  if(review) return review;
-  if(!d.reviewOk) return { kind: 'unavailable' };
-  var weak = dashWeakTopic(d.runs);
-  if(weak) return { kind: 'practice', subject: weak.subject, topic: weak.topic, percent: weak.percent,
-    title: 'Practise ' + weak.topic,
-    sub: 'Your weakest topic in ' + (weak.subject || 'practice') + ' so far · ' + weak.percent + '% across ' + weak.runs + ' run' + (weak.runs !== 1 ? 's' : ''), cta: 'Practise it' };
-  if(!d.practiceOk) return { kind: 'unavailable' };
-  return { kind: 'start', title: 'Start with practice',
-           sub: 'No paper is waiting and nothing is due — build the habit one question at a time', cta: 'Open Practice' };
-}
-function dashUpFetch(fn){
-  try {
-    return Promise.resolve(fn()).then(function(v){ return { ok: true, value: v }; },
-                                      function(){ return { ok: false, value: null }; });
-  } catch(e){ return Promise.resolve({ ok: false, value: null }); }
-}
-function dashPaintUp(){
-  if(!document.getElementById('dashUp')) return;
-  if(!GOC.api) { dashSet('dashUp', '<div class="wt-none">Your next step is not available right now.</div>'); return; }
-  var tests = dashUpFetch(function(){ return GOC.api.listMyTests(); });
-  var review = dashUpFetch(function(){ return GOC.api.listReview(); });
-  var practice = dashUpFetch(function(){ return GOC.api.listPractice(); });
-  Promise.all([tests, review, practice]).then(function(rs){
-    var pick = dashUpPick({
-      testsOk: rs[0].ok, rows: (rs[0].value && rs[0].value.tests) || [],
-      reviewOk: rs[1].ok, review: rs[1].value,
-      practiceOk: rs[2].ok, runs: (rs[2].value && rs[2].value.runs) || []
-    });
-    dashUpCurrent = pick;
-    if(pick.kind === 'unavailable'){
-      dashSet('dashUp', '<div class="wt-none">Your next step is not available right now — your papers, review and practice below still work.</div>');
-      return;
-    }
-    dashSet('dashUp', '<div class="wt-row"><div class="nm"><b>' + esc(pick.title) + '</b><span>' + esc(pick.sub)
-      + '</span></div><button class="wt-start" onclick="dashUpGo()">' + esc(pick.cta) + '</button></div>');
-  });
-}
-function dashUpGo(){
-  var p = dashUpCurrent;
-  if(!p) return;
-  if(p.kind === 'paper'){ if(p.section === 'jamb') openJambTest(); else openWebTest(); return; }
-  if(p.kind === 'review'){ go('review'); return; }
-  if(p.kind === 'practice'){ dashUpWeakPick = { subject: p.subject, topic: p.topic }; openStudySet('practice', p.subject); return; }
-  openPractice();
-}
-function dashPaintSubjects(){
-  if(!document.getElementById('dashSubjects')) return;
-  var subs = mySubjects || [];
-  if(!subs.length){
-    dashSet('dashSubjects', '<div class="wt-none">Your subjects appear here once your combination is set on your account.</div>');
-    return;
-  }
-  dashSet('dashSubjects', subs.map(function(s){
-    return '<div class="wt-row"><div class="nm"><b>' + esc(s) + '</b><span>Your paper</span></div>'
-      + '<button class="wt-start" onclick="openStudySet(\'practice\',&quot;' + esc(s) + '&quot;)">Practise</button></div>';
-  }).join(''));
-}
-
 /* Help & tutorial (Stage 6): replay or resume the guided tour on demand. */
 function tourRestart(){
-  if(window.GOCOnboarding) window.GOCOnboarding.restart('student', studentId);
+  if(!window.GOCOnboarding) return;
+  deployFetch().then(function(){ window.GOCOnboarding.restart('student', studentId); });
 }
 function tourHelpPaint(){
   if(!window.GOCOnboarding) return;
@@ -10618,6 +10476,10 @@ var cbtN=40, cbtCur=0, cbtAns={}, cbtSecs=1798, cbtTimerId=null;
    differs is where the submission goes and whether it counts. */
 var cbtPaper = null;
 var cbtStudy = null;
+/* The anonymous Try G.O.C run. It reuses every part of this runner but has no
+   attempt id and files nothing: submitCBT sends it to /api/demo/submit and
+   shows the shared result screen. */
+var cbtDemo = null;
 /* The subject papers inside the sitting in progress, in served order — the
    same shape wtGroups uses for the objective/theory runner, so a candidate can
    move between English/Physics/Chemistry/Mathematics the way the real JAMB CBT
@@ -10631,17 +10493,33 @@ function cbtOpenStudy(p){
   jambModeOff();   // study runs are practice, never the examination room
   cbtPaper = null;
   cbtStudy = p;
+  cbtDemo = null;
   cbtCur = 0; cbtAns = {};
   cbtN = p.questions.length;
   cbtSecs = Number(p.durationSec) || 600;
   cbtBuildGroups();
   go('cbt'); paintCBTHead(); cbtPaintSubjects(); buildCBTNav(); renderCBTQ(); startTimer();
 }
+/* The anonymous preview: the real runner, fed the designated free set from
+   the Question Bank. No paperId, no account, no write. */
+function cbtOpenDemo(p){
+  jambModeOff();
+  cbtPaper = null;
+  cbtStudy = null;
+  cbtDemo = p;
+  cbtCur = 0; cbtAns = {};
+  cbtN = p.questions.length;
+  cbtSecs = Number(p.durationSec) || 600;
+  cbtBuildGroups();
+  go('cbt'); paintCBTHead(); cbtPaintSubjects(); buildCBTNav(); renderCBTQ(); startTimer();
+}
+
 /* The JAMB-oriented session: same screen, real questions, real clock, real
    marking. Answers were stripped by the backend before they reached us. */
 function cbtOpenPaper(p){
   cbtPaper = p;
   cbtStudy = null;
+  cbtDemo = null;
   cbtCur = 0; cbtAns = {};
   cbtN = p.questions.length;
   cbtSecs = Number(p.durationSec) || 1800;
@@ -10655,7 +10533,7 @@ function cbtOpenPaper(p){
    and the next begins. */
 function cbtBuildGroups(){
   cbtGroups = null;
-  var p = cbtPaper || cbtStudy;
+  var p = cbtPaper || cbtStudy || cbtDemo;
   if(!p || !p.papers || p.papers.length < 2) return;
   var total = p.questions.length, at = 0, g = [], bad = false;
   p.papers.forEach(function(row){
@@ -10710,7 +10588,11 @@ function cbtPaintSubjects(){
 }
 function paintCBTHead(){
   var t = document.getElementById('cbtTitle'), m = document.getElementById('cbtMeta');
-  if(cbtPaper){
+  if(cbtDemo){
+    if(t) t.textContent = 'Free practice · Question Bank preview';
+    if(m) m.textContent = cbtN + ' question' + (cbtN !== 1 ? 's' : '') + ' · ' + wtMinutes(cbtDemo.durationSec)
+      + ' · not recorded';
+  } else if(cbtPaper){
     if(t) t.textContent = cbtPaper.subject + ' · JAMB-oriented';
     if(m) m.textContent = wtPeriodLabel() + ' · ' + cbtN
       + ' question' + (cbtN !== 1 ? 's' : '') + ' · ' + wtMinutes(cbtPaper.durationSec);
@@ -10729,7 +10611,7 @@ function paintCBTHead(){
   if(el) el.textContent = mmss(cbtSecs);
 }
 function cbtQuestionAt(i){
-  var p = cbtPaper || cbtStudy;
+  var p = cbtPaper || cbtStudy || cbtDemo;
   return p ? p.questions[i] : null;
 }
 function startTimer(){
@@ -10797,6 +10679,8 @@ function cbtMove(d){
 function confirmExit(){
   if(jambMode){ jambClearSession(); jambModeOff(); }
   if(cbtTimerId){ clearInterval(cbtTimerId); cbtTimerId = null; }
+  /* The preview is abandoned cleanly: no token is spent and nothing is submitted. */
+  if(cbtDemo){ cbtDemo = null; cbtAns = {}; cbtGroups = null; go('demo'); demoOpen(); return; }
   if(cbtPaper){ cbtPaper = null; cbtAns = {}; cbtGroups = null; go('webtest'); toast('Paper closed — nothing was submitted'); return; }
   /* Leaving a study run submits nothing: it was never an attempt, so there is
      nothing to abandon. The set-up screen is where they came from. */
@@ -10805,6 +10689,19 @@ function confirmExit(){
 }
 function submitCBT(auto){
   if(cbtTimerId){ clearInterval(cbtTimerId); cbtTimerId = null; }
+  if(cbtDemo){
+    var preview = cbtDemo;
+    var answers = preview.questions.map(function(_, i){ return cbtAns[i] == null ? null : cbtAns[i]; });
+    var demoUsed = Math.max(0, (Number(preview.durationSec) || 600) - cbtSecs);
+    cbtDemo = null;
+    toast(auto ? 'Time up — marking your preview' : 'Marking your preview…');
+    fetch('api/demo/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: preview.token, answers: answers }) })
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'That preview could not be marked.'); return j; }); })
+      .then(function(res){ demoResult(res, demoUsed); },
+        function(err){ cbtDemo = preview; toast(err.message || 'Could not mark that preview'); });
+    return;
+  }
   if(!cbtPaper && cbtStudy){
     /* A study run is still marked properly by the backend — the student sees a
        real score and a full review — it just is not filed against the record. */
@@ -11460,26 +11357,26 @@ var videosLocked = false;
 function renderClasses(){
   var cs = document.getElementById('classFilters');
   if(cs){ cs.querySelectorAll('.fchip').forEach(function(ch){ var on = ch.getAttribute('data-f') === classFilter; ch.classList.toggle('on', on); ch.setAttribute('aria-pressed', String(on)); }); }
-  var live = document.getElementById('liveList'), les = document.getElementById('lessonList');
-  if(!live || !les) return;
-  live.innerHTML = ''; les.innerHTML = '';
-  var liveN = 0, lesN = 0;
+  var les = document.getElementById('lessonList');
+  if(!les) return;
+  les.innerHTML = '';
+  var lesN = 0;
   videos.forEach(function(v){
     var subj = canonSubject(v.subj);
     // A recording for a paper the student does not sit is not on their shelf.
     if(!studiesSubject(subj)) return;
     if(classFilter !== 'all' && subj !== canonSubject(classFilter)) return;
-    if(v.type === 'live'){ live.appendChild(videoCard(v)); liveN++; }
-    else { les.appendChild(videoCard(v)); lesN++; }
+    /* Recorded live-class replays were removed from the Classes screen with
+       the rest of the retired study features. The records are untouched; a
+       lesson video is the only kind this screen lists now. */
+    if(v.type !== 'live'){ les.appendChild(videoCard(v)); lesN++; }
   });
-  document.getElementById('liveEmpty').style.display = liveN ? 'none' : 'block';
   document.getElementById('lessonEmpty').style.display = lesN ? 'none' : 'block';
   /* Say which papers were looked in. An empty shelf is otherwise ambiguous: the
      student cannot tell whether nothing has been published for their
      combination or whether the app has forgotten what they sit. */
   var scope = classFilter === 'all' ? orderedSubjects().join(', ') : canonSubject(classFilter);
-  var le = document.getElementById('liveEmpty'), se = document.getElementById('lessonEmpty');
-  if(le) le.textContent = videosLocked ? 'Live class replays are not available right now.' : 'No live classes yet for ' + scope + '.';
+  var se = document.getElementById('lessonEmpty');
   if(se) se.textContent = videosLocked ? 'Lesson videos are not available right now.' : 'No lesson videos yet for ' + scope + '.';
 }
 function videoCard(v){
@@ -12276,114 +12173,74 @@ function notePracticeGenerate(){
 }
 
 
-/* ================= TRY G.O.C — ANONYMOUS PREVIEW (Stage 10) =================
-   A five-question taster for visitors with no account. The server holds
-   the answers until submission (see /api/demo/*), so this client only
-   ever carries questions and the visitor's picks. Nothing is stored:
-   no account, no attempt, no XP — leaving or refreshing simply ends it. */
-var demoQs = [], demoAns = [], demoI = 0, demoToken = null;
+/* ================= TRY G.O.C — ANONYMOUS PREVIEW =================
+   A five-question taster for visitors with no account. It is not a
+   separate exam interface: demoStart() opens the same #cbt runner the
+   signed-in Practice/CBT set-up uses, fed the academy's designated free
+   question set by /api/demo/questions. The server holds the answers until
+   submission, and /api/demo/submit writes nothing — no account, no attempt,
+   no XP. The result is the shared study-result screen with demo chrome. */
+var demoLoading = false;
 function demoOpen(){
   go('demo');
-  var play = document.getElementById('demoPlay'), res = document.getElementById('demoResult'), intro = document.getElementById('demoIntro');
-  if(play) play.hidden = true;
-  if(res) res.hidden = true;
-  if(intro) intro.hidden = false;
+  demoLoading = false;
+  var btn = document.getElementById('demoStartBtn');
+  if(btn){ btn.disabled = false; btn.textContent = 'Start free practice'; }
+  demoMsg('');
 }
 function demoMsg(text){
   var m = document.getElementById('demoMsg');
   if(m){ m.style.display = text ? '' : 'none'; m.textContent = text || ''; }
 }
 function demoStart(){
+  if(demoLoading) return;                    // one initialisation, even on a double tap
+  demoLoading = true;
   var btn = document.getElementById('demoStartBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'Setting up…'; }
   demoMsg('');
-  fetch('api/demo/questions').then(function(r){
+  fetch('api/demo/questions', { cache: 'no-store' }).then(function(r){
     return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'The preview is not available right now.'); return j; });
   }).then(function(j){
-    demoToken = j.token;
-    demoQs = j.questions || [];
-    demoAns = demoQs.map(function(){ return null; });
-    demoI = 0;
-    document.getElementById('demoIntro').hidden = true;
-    document.getElementById('demoResult').hidden = true;
-    document.getElementById('demoPlay').hidden = false;
-    demoRender();
+    var qs = (j.questions || []).map(function(q, i){
+      return { id: 'demo-' + (i + 1), n: q.n || (i + 1), subject: q.subject, topic: q.topic,
+               text: q.text, options: q.options || [] };
+    });
+    if(qs.length !== 5) throw new Error('The preview is not available right now.');
+    demoLoading = false;
+    cbtOpenDemo({ token: j.token, questions: qs, durationSec: Number(j.durationSec) || 600 });
   }).catch(function(e){
+    demoLoading = false;
+    if(btn){ btn.disabled = false; btn.textContent = 'Start free practice'; }
     demoMsg((e && e.message) || 'The preview is not available right now. Please try again shortly.');
-  }).then(function(){
-    if(btn){ btn.disabled = false; btn.textContent = 'Try a free practice session'; }
   });
 }
-function demoRender(){
-  var q = demoQs[demoI];
-  if(!q) return;
-  document.getElementById('demoNum').textContent = 'Question ' + (demoI + 1) + ' of ' + demoQs.length + ' · ' + q.subject + ' · ' + q.topic;
-  document.getElementById('demoQ').innerHTML = mth(q.text, { breaks: true });
-  var host = document.getElementById('demoOpts');
-  host.innerHTML = '';
-  (q.options || []).forEach(function(o, i){
-    var b = document.createElement('button');
-    b.className = 'opt' + (demoAns[demoI] === i ? ' sel' : '');
-    b.innerHTML = '<span class="key">' + OPT_KEYS[i] + '</span>' + mth(o);
-    b.onclick = function(){ demoAns[demoI] = i; demoRender(); };
-    host.appendChild(b);
+/* The result is deliberately the same screen a signed-in practice run uses,
+   so the preview shows the real product. The optional demo flag removes the
+   account-only actions and adds the invitation to register. */
+function demoResult(res, timeUsedSec){
+  var review = (res.review || []).map(function(r){
+    return { n: r.n, subject: r.subject, topic: r.topic, text: r.text, options: r.options || [],
+             answer: r.answer, given: r.given, isCorrect: !!r.isCorrect, explanation: r.explanation };
   });
-  var pal = document.getElementById('demoPalette');
-  pal.innerHTML = '';
-  demoQs.forEach(function(_, i){
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'prac-pal' + (demoAns[i] !== null ? ' ans' : '') + (i === demoI ? ' cur' : '');
-    b.textContent = i + 1;
-    b.setAttribute('aria-label', 'Question ' + (i + 1) + (demoAns[i] !== null ? ' (answered)' : ' (unanswered)'));
-    b.onclick = function(){ demoI = i; demoRender(); };
-    pal.appendChild(b);
+  var by = {}, topics = [];
+  review.forEach(function(r){
+    var t = r.topic || 'General';
+    if(!by[t]){ by[t] = { topic: t, right: 0, total: 0 }; topics.push(by[t]); }
+    by[t].total++;
+    if(r.isCorrect) by[t].right++;
   });
-  var answered = demoAns.filter(function(a){ return a !== null; }).length;
-  document.getElementById('demoCount').textContent = answered + ' of ' + demoQs.length + ' answered';
-  document.getElementById('demoPrevBtn').disabled = demoI <= 0;
-  document.getElementById('demoNextBtn').textContent = demoI < demoQs.length - 1 ? 'Next →' : 'Submit answers';
-}
-function demoPrev(){ if(demoI > 0){ demoI--; demoRender(); } }
-function demoNext(){
-  if(demoI < demoQs.length - 1){ demoI++; demoRender(); return; }
-  var unanswered = demoAns.filter(function(a){ return a === null; }).length;
-  if(unanswered && typeof confirm === 'function'
-     && !confirm('You still have ' + unanswered + ' unanswered question' + (unanswered === 1 ? '' : 's') + '. Submit anyway?')) return;
-  demoSubmit();
-}
-function demoSubmit(){
-  var btn = document.getElementById('demoNextBtn');
-  if(btn){ btn.disabled = true; btn.textContent = 'Marking…'; }
-  fetch('api/demo/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: demoToken, answers: demoAns }) })
-  .then(function(r){
-    return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'That preview could not be marked.'); return j; });
-  }).then(function(res){
-    demoToken = null;
-    document.getElementById('demoPlay').hidden = true;
-    var host = document.getElementById('demoResult');
-    host.hidden = false;
-    host.innerHTML = '<div class="q-card"><div class="q-num">Your result</div>'
-      + '<div class="q-text">' + res.score + ' of ' + res.total + ' correct · ' + res.percent + '%</div>'
-      + '<p class="muted" style="line-height:1.6">' + (res.score >= 4 ? 'Excellent — that is real UTME pace. ' : res.score >= 2 ? 'A solid start. ' : 'Everyone starts somewhere. ')
-      + 'In the full academy, every answer comes with tutoring, your mistakes come back for review until they stick, and assessed sittings track your real progress.</p>'
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-red" type="button" onclick="demoStart()">Try again</button>'
-      + '<button class="btn btn-outline" type="button" onclick="go(\'signup\')">Unlock the full G.O.C experience</button></div>'
-      + '<p class="muted" style="font-size:12.5px;margin-top:10px">Registration comes first; the academy then confirms your programme access. Nothing was recorded from this preview.</p></div>'
-      + res.review.map(function(r){
-          var mine = r.given === null ? 'Not answered' : r.options[r.given];
-          return '<div class="wt-rev"><div class="rq">Question ' + r.n + ' · ' + esc(r.subject) + ' · ' + esc(r.topic) + '</div>'
-            + '<div class="rt">' + mth(r.text, { breaks: true }) + '</div>'
-            + '<div class="ra"><em>Your answer</em>' + mth(mine) + '</div>'
-            + '<div class="ra"><em>Correct answer</em>' + mth(r.options[r.answer]) + '</div>'
-            + '<div class="ra"><em>Why</em>' + mth(r.explanation, { breaks: true }) + '</div>'
-            + '<span class="verdict ' + (r.isCorrect ? 'ok' : 'no') + '">' + (r.isCorrect ? 'Correct' : 'Incorrect') + '</span></div>';
-        }).join('');
-  }).catch(function(e){
-    if(btn){ btn.disabled = false; btn.textContent = 'Submit answers'; }
-    toast((e && e.message) || 'That preview could not be marked.');
+  topics.forEach(function(t){
+    t.percent = Math.round(t.right * 100 / t.total);
+    t.band = t.percent >= 75 ? 'strong' : (t.percent >= 50 ? 'developing' : 'weak');
   });
+  var answered = review.filter(function(r){ return r.given !== null && r.given !== undefined; }).length;
+  srShow({
+    mode: 'demo', subject: 'Free practice preview',
+    total: res.total, answered: answered, correct: res.score,
+    wrong: res.total - res.score, percent: res.percent,
+    timeUsedSec: timeUsedSec == null ? null : timeUsedSec,
+    topics: topics, review: review
+  }, false, { demo: true });
 }
 
 function setResFilter(f){ resFilter = f; renderResources(); }
@@ -12782,3 +12639,11 @@ function admTutAnalyticsLoad() {
       '</div>';
   });
 }
+
+
+/* Boot: resolve the deployment id once, show the one-time notice if this build
+   has not been seen on this device, and keep the promise for later checks.
+   None of this touches preferences, records or any stored academy data. */
+deployFetch().then(function(id){
+  if(id) deployNoticeCheck(id);
+});

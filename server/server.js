@@ -93,6 +93,18 @@ function setEnvSecret(key, value) {
 
 
 const ROOT = path.resolve(__dirname, '..');          // the GOC-Web-App folder
+/* The service-worker cache name is the deployment identifier this build
+   ships. It is bumped in sw.js on every release, so /api/health can tell a
+   browser which deployment it is actually talking to without any extra
+   environment variable. Read once at boot; a missing file fails safe to
+   'unknown' rather than inventing a fresh id every boot. */
+const DEPLOY_ID = (() => {
+  try {
+    const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+    const m = sw.match(/const CACHE = '([^']+)'/);
+    return m ? m[1] : 'unknown';
+  } catch (e) { return 'unknown'; }
+})();
 /* Where data.json (and its backups) physically live. Defaults to this same
    server/ folder exactly as before — nothing changes for an existing install
    that doesn't set this. GOC_DATA_DIR exists so a production deploy can point
@@ -3518,7 +3530,7 @@ const ROUTES = [
       const fed = db.free2027 || {};
       const fmode = fed.enabled === true ? entryFor(req) : FREE2027.MODE_ORIGINAL;
       okJson(res, {
-        service: 'goc-academy-hub', version: 1,
+        service: 'goc-academy-hub', version: 1, deployId: DEPLOY_ID,
         passcodeLength: Number(db.settings.consolePasscodeLength) || 4,
         free2027: {
           on: fed.enabled === true,
@@ -4429,28 +4441,40 @@ const ROUTES = [
       okJson(res, { ok: true });
     } },
 
-  /* ---- Try G.O.C: anonymous five-question preview (Stage 10) ----
-     Fully isolated from student operations: the questions come only from
-     server/lib/demo-questions.js (a dedicated sample pool connected to
-     no bank), attempts live in an in-memory token map for 30 minutes,
-     and a submission writes nothing — no student record, no attempt,
-     no XP, no leaderboard, no analytics. Answers and explanations are
-     held server-side until the token is redeemed exactly once. */
-  { method: 'GET', path: /^\/api\/demo\/questions$/, need: null, handler: (req, res) => {
+  /* ---- Try G.O.C: anonymous five-question preview ----
+     Fully isolated from student operations: the questions are drawn from the
+     real Question Bank through core.studyPool() (the same designated free set
+     on every attempt), attempts live in an in-memory token map for 30 minutes,
+     and a submission writes nothing — no student record, no attempt, no XP, no
+     leaderboard, no analytics. Answers and explanations are held server-side
+     until the token is redeemed exactly once. */
+  { method: 'GET', path: /^\/api\/demo\/questions$/, need: null, handler: async (req, res) => {
       const ip = getClientIp(req);
       if (demoRateLimited(ip)) return errJson(res, 429, 'Too many preview attempts from this connection. Please try again in a little while.');
-      const pool = require('./lib/demo-questions');
-      const shuffled = pool.slice();
-      for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-      const picked = shuffled.slice(0, 5).map(q => {
-        const order = q.options.map((_, i) => i);
-        for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = order[i]; order[i] = order[j]; order[j] = t; }
-        return { q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
-      });
+      /* Reuse the academy's real question bank, not a separate sample file.
+         The designated free set is the first five live, active, objective
+         practice questions in stable id order. It is the same five on every
+         attempt, so a visitor cannot keep refreshing for a different set, and
+         it is drawn through the same studyPool() the signed-in Practice
+         screen uses. No bank record is copied, changed or exposed. */
+      const db = readData();
+      const bank = await listQuestions({}, db);
+      const pool = core.studyPool(bank, null, null)
+        .filter(q => q && Array.isArray(q.options) && q.options.length === 4
+          && Number.isInteger(Number(q.answer)) && q.answer >= 0 && q.answer < 4)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+      if (pool.length < 5) {
+        return errJson(res, 503, 'The free practice set is not ready yet. Please try again shortly.');
+      }
+      const picked = pool.slice(0, 5).map(q => ({
+        q,
+        options: q.options.slice(),
+        answer: Number(q.answer)
+      }));
       const token = crypto.randomBytes(18).toString('hex');
       demoAttempts.set(token, { at: Date.now(), picked });
       if (demoAttempts.size > 5000) { for (const [k, v] of demoAttempts) { if (Date.now() - v.at > DEMO_TOKEN_MS) demoAttempts.delete(k); } }
-      okJson(res, { token, questions: picked.map((p, i) => ({
+      okJson(res, { token, durationSec: 600, questions: picked.map((p, i) => ({
         n: i + 1, subject: p.q.subject, topic: p.q.topic, text: p.q.text, options: p.options
       })) });
     } },

@@ -85,19 +85,16 @@
           <span class="bt">G.O.C Academy Hub</span>
         </div>
         <div class="lp-actions">
-          <!-- CBT Portal opens the Free UTME Tutorial landing page, where the
-               student chooses Register / Student log in / Enter the CBT Portal.
-               "Get started" is the original hub sign-up and is shown in every
-               mode. The hub's own Log in shortcut is still here for Original
-               Mode; in Free Tutorial Mode it stands down (css/free2027.css) so
-               a free-tutorial student is never sent to an account they never
-               created. Nothing is deleted and the hub login page still works. -->
+          <!-- The landing navigation is a menu of what the page holds. The two
+               account shortcuts that used to sit here (Log in and Get started)
+               and the Create account card below were removed in Part One: the
+               hero, the Try GOC section and the closing band carry the one
+               sign-up route, and the drawer links to the same sections. The hub
+               login screen itself is untouched and still reachable by URL. -->
           <button class="lp-link" onclick="dwGoTo('lpTiers')">Programmes</button>
           <button class="lp-link" onclick="go('updates')">Updates &amp; News</button>
           <button class="lp-link" onclick="dwGoTo('lpTry')">Try GOC free</button>
           <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
-          <button class="lp-link dw-original dw-hub-login" onclick="go('login-v2')">Log in</button>
-          <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
         </div>
       </nav>
 
@@ -222,7 +219,6 @@
               </ul>
             </div>
           </div>
-          <div class="tc-cta"><button class="btn btn-red" type="button" onclick="go('signup')">Create account</button></div>
         </div>
       </div>
 
@@ -321,8 +317,8 @@
       <div class="lp-sec" id="lpParents">
         <div class="lp-eyebrow">Parents, schools &amp; partners</div>
         <h2>See the learning, not just the promise</h2>
-        <p class="lead">Students learn with expert tutors, practise in a structured app, and sit assessed tests whose results are reviewed question by question. Parents can follow every important announcement above, try the free preview, and talk to the academy directly — no account needed for any of that.</p>
-        <div class="hero-btns"><button class="lp-btn-light" type="button" onclick="dwGoTo('lpTry')">Try the free preview</button><button class="lp-btn-ghost" type="button" onclick="scrollToContact()">Contact the academy</button></div>
+        <p class="lead">Students learn with expert tutors, practise in a structured app, and sit assessed tests whose results are reviewed question by question. Parents can follow every important announcement above and talk to the academy directly — no account needed for either.</p>
+        <div class="hero-btns"><button class="lp-btn-ghost" type="button" onclick="scrollToContact()">Contact the academy</button></div>
       </div>
       <div class="lp-sec lp-try" id="lpTry">
         <div class="lp-eyebrow">Try G.O.C</div>
@@ -330,6 +326,29 @@
         <p class="lead">Experience a JAMB-style practice session and discover how learning works at G.O.C Academy Hub. Five questions, real explanations — no account, no name, no email needed.</p>
         <button class="lp-cta lp-try-btn" type="button" onclick="demoOpen()">Try a free practice session</button>
         <p class="lp-try-note">Sample questions written for this preview. They are not official JAMB questions, and nothing you do here is recorded.</p>
+      </div>
+
+      <div class="lp-sec lp-news-intro" id="lpNewsIntro">
+        <div class="lp-news-intro-inner">
+          <div class="lp-news-intro-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="28" height="28"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          </div>
+          <div class="lp-news-intro-body">
+            <div class="lp-eyebrow">Stay informed</div>
+            <h2>Updates &amp; News</h2>
+            <p>Admission alerts, UTME timelines, scholarship notices and academy announcements — all in one place. Never miss what matters for your exams.</p>
+            <button class="lp-news-learn-more" onclick="go('updates')" type="button">
+              Learn more
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+            <div class="lp-news-list" id="lpNewsList"><p class="lp-news-empty">Loading the latest announcements…</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lp-band">
+        <h2>Ready to Study with Excellence</h2>
+        <button class="lp-btn-light" style="min-width:220px" onclick="go('signup')">Create your free account</button>
       </div>
 
       <div class="lp-sec alt" id="contact">
@@ -366,28 +385,6 @@
       </div>
 
       <!-- Updates & News intro — a calm teaser that invites visitors without blocking the page -->
-      <div class="lp-sec lp-news-intro" id="lpNewsIntro">
-        <div class="lp-news-intro-inner">
-          <div class="lp-news-intro-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="28" height="28"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-          </div>
-          <div class="lp-news-intro-body">
-            <div class="lp-eyebrow">Stay informed</div>
-            <h2>Updates &amp; News</h2>
-            <p>Admission alerts, UTME timelines, scholarship notices and academy announcements — all in one place. Never miss what matters for your exams.</p>
-            <button class="lp-news-learn-more" onclick="go('updates')" type="button">
-              Learn more
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </button>
-            <div class="lp-news-list" id="lpNewsList"><p class="lp-news-empty">Loading the latest announcements…</p></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="lp-band">
-        <h2>Ready to study with purpose?</h2>
-        <button class="lp-btn-light" style="min-width:220px" onclick="go('signup')">Create your free account</button>
-      </div>
 
       <footer class="lp-foot">
         <!-- Landing motion, part 3 — the footer constellation. Decorative, so hidden from screen
@@ -596,31 +593,26 @@
       </div>
     </section>
     <!-- ============ LOG IN ============ -->
-    <!-- ============ TRY G.O.C — ANONYMOUS PREVIEW (Stage 10) ============ -->
-    <section class="screen" id="demo">
-      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to homepage" onclick="go('landing')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">Try G.O.C — Free JAMB Practice Preview</div><div class="muted" style="font-size:12px">Five sample questions · no account needed · nothing is recorded</div></div></div></div>
-      <div class="scroll">
-        <div class="q-card" id="demoIntro">
-          <div class="q-text">Experience a JAMB-style practice session</div>
-          <p class="muted" style="line-height:1.6">Discover how learning works at G.O.C Academy Hub: five questions, the same look and navigation as real Practice, and an explanation for every answer at the end. These are sample questions written for this preview — not official JAMB questions.</p>
-          <button class="btn btn-red btn-block" type="button" id="demoStartBtn" onclick="demoStart()">Try a free practice session</button>
-          <div class="wt-none" id="demoMsg" style="display:none"></div>
-        </div>
-        <div id="demoPlay" hidden>
-          <div class="q-card">
-            <div class="q-num" id="demoNum">Question 1 of 5</div>
-            <div class="q-text" id="demoQ"></div>
-            <div id="demoOpts"></div>
+    <!-- ============ TRY G.O.C — ANONYMOUS PREVIEW ============
+         One fixed, non-scrolling screen before the run starts. The questions
+         and the timed runner themselves are the signed-in Practice/CBT
+         components, opened by demoStart() through the same CBT engine. -->
+    <section class="screen demo-screen" id="demo">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to homepage" onclick="go('landing')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">Try G.O.C — Free Practice Preview</div><div class="muted" style="font-size:12px">Five questions from the Question Bank · no account needed</div></div></div></div>
+      <div class="demo-pre" id="demoIntro">
+        <div class="q-card demo-card">
+          <div class="q-num">JAMB-style CBT · 10 minutes</div>
+          <div class="q-text">Experience a real practice session</div>
+          <p class="muted" style="line-height:1.55;margin-top:8px">The same questions, timer and navigation the academy uses for Practice and its JAMB-style CBT. Answer five questions, submit once, and see every answer explained.</p>
+          <div class="demo-points">
+            <span>Same Question Bank as Practice</span>
+            <span>Real CBT timer and navigation</span>
+            <span>Full review after you submit</span>
           </div>
-          <div class="prac-pal-wrap">
-            <div class="prac-pal-head"><span>Questions</span><span id="demoCount">0 of 5 answered</span></div>
-            <div class="prac-pal-grid" id="demoPalette"></div>
-            <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
-          </div>
-          <div class="bottom-bar"><button class="btn btn-outline" id="demoPrevBtn" type="button" onclick="demoPrev()">← Prev</button><button class="btn btn-red btn-block" id="demoNextBtn" type="button" onclick="demoNext()">Next →</button></div>
+          <button class="btn btn-red btn-block demo-start" type="button" id="demoStartBtn" onclick="demoStart()">Start free practice</button>
+          <p class="muted" style="font-size:12px;margin-top:10px;line-height:1.5">Nothing you answer here is recorded, and no account is needed. A free account unlocks your own subjects, saved questions and full results.</p>
+          <div class="wt-none" id="demoMsg" style="display:none;margin-top:10px"></div>
         </div>
-        <div id="demoResult" hidden></div>
-        <div class="spacer"></div>
       </div>
     </section>
 
@@ -910,20 +902,8 @@
           <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
         </div>
 
-        <div class="sec-head"><div class="section-t">Next Up</div></div>
-        <div class="card wrap dash-card"><div id="dashUp"><div class="wt-none">Working out your next step…</div></div></div>
-
         <div class="sec-head" id="tut-webtest"><div class="section-t">Waiting for you</div><button class="ss-link" onclick="openWebTest()">Open Web Test</button></div>
         <div class="card wrap dash-card"><div id="dashNext"><div class="wt-none">Checking your papers…</div></div></div>
-
-        <!-- JAMB / UTME: painted by dashPaintJamb() in js/app.js from the same
-             Web Test catalogue the server builds for this student. The sitting
-             appears here only when the server lists it (its dedicated bank is
-             deep enough in every one of the student's subjects); otherwise the
-             card says so honestly. The button starts through the exact same
-             instructions + start route as the Web Test screen. -->
-        <div class="sec-head"><div class="section-t">JAMB / UTME</div><button class="ss-link" onclick="openJambTest()">JAMB CBT</button></div>
-        <div class="card wrap dash-card"><div id="dashJamb"><div class="wt-none">Checking the JAMB-oriented sitting…</div></div></div>
 
         <div class="sec-head" id="tut-league"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
         <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
@@ -931,16 +911,11 @@
         <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
         <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
 
-                <div class="sec-head"><div class="section-t">Your subjects</div><button class="ss-link" onclick="go('study')">Study</button></div>
-        <div class="card wrap dash-card"><div id="dashSubjects"><div class="wt-none">Loading your subjects…</div></div></div>
-
         <div class="sec-head"><div class="section-t">Carry on</div></div>
         <div class="dash-jump" id="tut-jump">
           <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
           <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
-          <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
-          <button class="dj" onclick="openMyNotes()"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>My Notes</b><s>Your private uploads</s></button>
-          <button class="dj" onclick="openCBT()"><span class="dj-i" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>Study CBT</b><s>Timed, marked at the end</s></button>
+          <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lesson videos</s></button>
           <button class="dj" onclick="go('resources')"><span class="dj-i" style="background:#475467"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg></span><b>Resources</b><s>Academy library</s></button>
           <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
         </div>
@@ -997,40 +972,17 @@
         <div class="h-title">Learn, practise, test</div>
       </div>
       <div class="wrap">
-        <!-- Quest / review nudge cards — hidden until filled by JS -->
-        <div class="card" id="questCard" style="display:none;margin-bottom:12px;padding:13px 15px">
-          <div class="eyebrow">Daily quest</div>
-          <div id="questText" style="font-weight:600;margin-top:4px"></div>
-          <div style="height:6px;border-radius:3px;background:rgba(127,127,127,.22);margin-top:9px;overflow:hidden"><div id="questBar" style="height:100%;width:0;background:#15803D"></div></div>
-          <div id="questNote" style="font-size:12px;opacity:.75;margin-top:5px"></div>
-        </div>
-        <div class="card" id="weekCard" style="display:none;margin-bottom:12px;padding:13px 15px">
-          <div class="eyebrow">Weekly quest · earns a streak freeze</div>
-          <div id="weekText" style="font-weight:600;margin-top:4px"></div>
-          <div style="height:6px;border-radius:3px;background:rgba(127,127,127,.22);margin-top:9px;overflow:hidden"><div id="weekBar" style="height:100%;width:0;background:#0E7490"></div></div>
-          <div id="weekNote" style="font-size:12px;opacity:.75;margin-top:5px"></div>
-        </div>
         <div class="card" id="chalCard" style="display:none;margin-bottom:12px;padding:13px 15px">
           <div class="eyebrow">Team challenge · earns a streak freeze</div>
           <div id="chalText" style="font-weight:600;margin-top:4px"></div>
           <div style="height:6px;border-radius:3px;background:rgba(127,127,127,.22);margin-top:9px;overflow:hidden"><div id="chalBar" style="height:100%;width:0;background:#7C3AED"></div></div>
           <div id="chalNote" style="font-size:12px;opacity:.75;margin-top:5px"></div>
         </div>
-        <div class="card" id="rvCard" style="display:none;margin-bottom:12px;padding:13px 15px">
-          <div class="eyebrow">Review due</div>
-          <div id="rvCardText" style="font-weight:600;margin-top:4px"></div>
-          <div id="rvCardNote" style="font-size:12px;opacity:.75;margin-top:5px"></div>
-          <button type="button" class="btn btn-red btn-block" id="rvCardBtn" style="display:none;margin-top:10px" onclick="go('review')">Start review</button>
-        </div>
 
         <!-- PRIMARY ACTIONS — 2-col icon grid -->
         <div class="sec-head" style="margin-top:4px"><div class="section-t">Study tools</div></div>
         <div class="study-grid">
-          <button class="sg-cell" id="sg-reading" onclick="openReading()">
-            <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg></div>
-            <span class="sg-label">Read / Learn</span>
-          </button>
-          <button class="sg-cell" id="sg-practice" onclick="openPractice()">
+                    <button class="sg-cell" id="sg-practice" onclick="openPractice()">
             <div class="sg-icon" style="background:#DC2626"><svg class="icon" viewBox="0 0 24 24" fill="#fff"><rect x="2.5" y="9" width="3.5" height="6" rx="1.2"/><rect x="18" y="9" width="3.5" height="6" rx="1.2"/><rect x="6" y="10.6" width="12" height="2.8"/></svg></div>
             <span class="sg-label">Practice</span>
             <span class="sg-badge gold-badge">+XP</span>
@@ -1039,11 +991,6 @@
             <div class="sg-icon" style="background:#141821"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/></svg></div>
             <span class="sg-label">Web Test</span>
             <span class="sg-badge red-badge">Assessed</span>
-          </button>
-          <button class="sg-cell" id="sg-jamb" onclick="openJambTest()">
-            <div class="sg-icon" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="4.5" width="18" height="11.5" rx="1.6"/><path d="M2 20h20"/></svg></div>
-            <span class="sg-label">JAMB CBT</span>
-            <span class="sg-badge red-badge">UTME</span>
           </button>
 
           <button class="sg-cell" id="sg-results" onclick="openResults()">
@@ -1054,12 +1001,7 @@
             <div class="sg-icon" style="background:#E08600"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></div>
             <span class="sg-label">Resources</span>
           </button>
-          <button class="sg-cell" id="sg-mynotes" onclick="openMyNotes()">
-            <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4.3.8.8-4.3z"/></svg></div>
-            <span class="sg-label">My Notes</span>
-            <span class="sg-badge gold-badge">Private</span>
-          </button>
-        </div>
+                  </div>
 
         <!-- REVIEW TOOLS — compact row -->
         <div class="sec-head" style="margin-top:20px"><div class="section-t">Review &amp; saves</div></div>
@@ -1071,6 +1013,10 @@
           <button class="rv-chip" id="sg-mistakes" onclick="go('mistakes')">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             <span>Mistakes</span><em id="mkCount"></em>
+          </button>
+          <button class="rv-chip" id="sg-review" onclick="go('review')">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            <span>Review</span>
           </button>
           <button class="rv-chip" onclick="atMyOpen()">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#0EA5E9" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -1195,6 +1141,11 @@
         </div>
       </div>
       <div class="wrap">
+        <div class="card wrap" id="srDemoCta" style="padding:14px 16px;margin-bottom:10px" hidden>
+          <div style="font-weight:800;font-size:15px">That was the free preview</div>
+          <p class="muted" style="font-size:13px;line-height:1.55;margin-top:4px">Create a free account to keep your own subjects, save questions, review every answer and track your progress.</p>
+          <button class="btn btn-red btn-block" type="button" style="margin-top:10px" onclick="go('signup')">Create a free account</button>
+        </div>
         <div class="card wrap" style="padding:6px 16px"><div id="srStats"></div></div>
         <div class="sec-head"><div class="section-t">By topic</div></div>
         <div class="card wrap" style="padding:6px 16px"><div id="srBrk"></div></div>
@@ -1203,8 +1154,8 @@
         <div class="spacer"></div>
       </div>
       <div class="bottom-bar">
-        <button class="btn btn-ghost" onclick="go('study')" style="flex:0 0 auto">Done</button>
-        <button class="btn btn-red btn-block" onclick="srAgain()">Another run →</button>
+        <button class="btn btn-ghost" id="srDoneBtn" onclick="srDone()" style="flex:0 0 auto">Done</button>
+        <button class="btn btn-red btn-block" id="srAgainBtn" onclick="srAgain()">Another run →</button>
       </div>
     </section>
 
@@ -1954,11 +1905,6 @@
           <button class="fchip on" data-f="all" onclick="setClassFilter('all')" aria-pressed="true">All</button>
         </div>
 
-        <div class="sec-head" style="margin-top:6px"><div class="section-t">🔴 Recorded live classes</div></div>
-        <div class="sub-lead">Full replays of your tutor's live sessions — watch what you missed.</div>
-        <div id="liveList"></div>
-        <div class="rest" id="liveEmpty" style="display:none">No live classes for this subject yet.</div>
-
         <div class="sec-head" style="margin-top:18px"><div class="section-t">🎬 Lesson videos</div></div>
         <div class="sub-lead">Short topic walk-throughs you can watch any time.</div>
         <div id="lessonList"></div>
@@ -2387,6 +2333,24 @@ window.__gocBootTimer = setTimeout(function() {
 <script src="js/goc-core.js"></script>
 <script src="js/goc-free-2027.js"></script>
 <script src="js/note-questions.js"></script>
+  <!-- ============ ONE-TIME REDEPLOYMENT NOTICE ============
+       Shown once per deployment id (the service-worker cache name reported by
+       /api/health). Dismissing records that id in localStorage, so a refresh
+       does not show it again; a later deployment has a different id and arms
+       it once more. It never resets preferences or stored data. -->
+  <div class="deploy-notice" id="deployNotice" role="status" aria-live="polite" hidden>
+    <div class="dn-card">
+      <div class="dn-eyebrow">G.O.C Academy Hub updated</div>
+      <div class="dn-title">Changes have been made</div>
+      <p class="dn-body">Refresh to load the latest version, then check your settings. Your account, saved questions, reminders and progress are unchanged.</p>
+      <div class="dn-actions">
+        <button class="btn btn-red" type="button" onclick="refreshDeployNotice()">Refresh now</button>
+        <button class="btn btn-ghost" type="button" onclick="closeDeployNotice()">Dismiss</button>
+      </div>
+      <div class="dn-id">Deployment <span id="deployNoticeId"></span></div>
+    </div>
+  </div>
+
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
 <script src="js/onboarding.js"></script>
