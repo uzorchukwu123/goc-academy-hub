@@ -9750,7 +9750,128 @@ const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\
    from GET /api/tutor/app with the session token and runs it. The tutor
    screens therefore never appear in a public file or an unauthenticated
    response; server/tutor/ stays outside the static root throughout. */
-const TUTOR_SHELL = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Tutor sign-in · G.O.C Academy Hub</title>\n<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}</style>\n</head>\n<body>\n<main class="card" id="tutorGate">\n<h1>G.O.C Tutor</h1>\n<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>\n<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">\n<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">\n<div class="err" id="tutorErr"></div>\n<button type="button" id="tutorGo">Sign in</button>\n</main>\n<script src="js/onboarding.js"></script>\n<script>\n(function(){\n  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");\n  function fail(m){ err.textContent = m; btn.disabled = false; btn.textContent = "Sign in"; }\n  btn.addEventListener("click", function(){\n    var id = document.getElementById("tutorId").value.trim(), pw = document.getElementById("tutorPw").value;\n    if(!id || !pw){ fail("Enter your tutor ID and password."); return; }\n    btn.disabled = true; btn.textContent = "Signing in\u2026"; err.textContent = "";\n    fetch("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, password: pw }) })\n    .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "Sign-in failed."); return j; }); })\n    .then(function(j){\n      return fetch("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })\n      .then(function(r){ if(!r.ok) throw new Error("The tutor screens could not be loaded."); return r.text(); })\n      .then(function(code){\n        window.__zxSession = { token: j.token, user: j.user };\n        var s = document.createElement("script");\n        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));\n        document.body.appendChild(s);\n        document.getElementById("tutorGate").style.display = "none";\n        if(window.GOCOnboarding && window.GOCTours){\n          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);\n          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);\n        }\n      });\n    })\n    .catch(function(e){ fail(e.message || "Sign-in failed."); });\n  });\n})();\n</script>\n</body>\n</html>';
+const TUTOR_SHELL = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutor sign-in · G.O.C Academy Hub</title>
+<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}[hidden]{display:none}</style>
+</head>
+<body>
+<main class="card" id="tutorGate">
+<div id="tutorForm">
+<h1>G.O.C Tutor</h1>
+<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>
+<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">
+<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">
+<div class="err" id="tutorErr" role="alert"></div>
+<button type="button" id="tutorGo">Sign in</button>
+</div>
+<div id="tutorUnavailable" role="status" hidden>
+<h1 id="tutorUnavailableHeading"></h1>
+<p id="tutorUnavailableMessage"></p>
+<button type="button" id="tutorRetry">Retry Connection</button>
+</div>
+</main>
+<script src="js/onboarding.js"></script>
+<script>
+(function(){
+  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");
+  var idInput = document.getElementById("tutorId"), pwInput = document.getElementById("tutorPw");
+  var form = document.getElementById("tutorForm"), unavailable = document.getElementById("tutorUnavailable");
+  var heading = document.getElementById("tutorUnavailableHeading"), message = document.getElementById("tutorUnavailableMessage");
+  var retry = document.getElementById("tutorRetry"), busy = false;
+  function problem(kind, text, status){ var e = new Error(text); e.kind = kind; e.status = status; return e; }
+  function network(){ return problem("network", "Cannot reach the server. Check your connection and try again."); }
+  function unexpected(){ return problem("unexpected", "The service returned an unexpected response. Please try again later."); }
+  function request(url, options){
+    return fetch(url, options).catch(function(){ throw network(); });
+  }
+  function jsonResponse(r){
+    var type = r.headers.get("content-type") || "";
+    var isJson = /^application\\/(?:[a-z0-9.+-]*\\+)?json(?:\\s*;|\\s*$)/i.test(type);
+    if (!isJson) {
+      if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
+      throw unexpected();
+    }
+    return r.text().then(function(text){
+      var data;
+      try { data = JSON.parse(text); } catch (e) {
+        if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
+        throw unexpected();
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw unexpected();
+      if (data.maintenance === true) throw problem("maintenance", typeof data.error === "string" ? data.error : "G.O.C Academy Hub is temporarily under maintenance. Please check back later.");
+      if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
+      if (!r.ok) {
+        if (typeof data.error !== "string" || !data.error) throw unexpected();
+        throw problem("api", data.error, r.status);
+      }
+      return data;
+    }, function(){ throw network(); });
+  }
+  function showProblem(e){
+    pwInput.value = "";
+    if (e.kind === "api") { form.hidden = false; unavailable.hidden = true; err.textContent = e.message; return; }
+    form.hidden = true; unavailable.hidden = false; err.textContent = "";
+    if (e.kind === "waking") {
+      heading.textContent = "G.O.C is waking up";
+      message.textContent = "Our server is temporarily starting up after a period of inactivity. Your tutor account is safe. Please wait a little and try again.";
+    } else if (e.kind === "maintenance") {
+      heading.textContent = "G.O.C is under maintenance"; message.textContent = e.message;
+    } else if (e.kind === "network") {
+      heading.textContent = "Connection problem"; message.textContent = "Cannot reach the server. Check your connection and try again.";
+    } else {
+      heading.textContent = "Temporary service error"; message.textContent = "The service returned an unexpected response. Please try again later.";
+    }
+  }
+  function finish(){ busy = false; btn.disabled = false; btn.textContent = "Sign in"; retry.disabled = false; retry.textContent = "Retry Connection"; }
+  btn.addEventListener("click", function(){
+    if (busy) return;
+    var id = idInput.value.trim(), pw = pwInput.value;
+    if (!id || !pw) { err.textContent = "Enter your tutor ID and password."; return; }
+    busy = true; btn.disabled = true; btn.textContent = "Signing in…"; err.textContent = "";
+    pwInput.value = "";
+    var body = JSON.stringify({ id: id, password: pw }); pw = "";
+    request("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: body })
+    .then(jsonResponse).then(function(j){
+      if (typeof j.token !== "string" || !j.token || !j.user || j.user.role !== "tutor" || !j.user.id) throw unexpected();
+      return request("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })
+      .then(function(r){
+        var type = r.headers.get("content-type") || "";
+        if (!r.ok || !/^(?:text|application)\\/javascript(?:\\s*;|\\s*$)/i.test(type)) {
+          if (r.status === 502 || r.status === 503 || r.status === 504 || /json/i.test(type)) return jsonResponse(r).then(function(){ throw unexpected(); });
+          throw unexpected();
+        }
+        return r.text().catch(function(){ throw network(); });
+      })
+      .then(function(code){
+        window.__zxSession = { token: j.token, user: j.user };
+        var s = document.createElement("script");
+        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+        document.body.appendChild(s);
+        document.getElementById("tutorGate").style.display = "none";
+        if(window.GOCOnboarding && window.GOCTours){
+          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);
+          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);
+        }
+      });
+    }).catch(function(e){ showProblem(e); }).then(finish);
+  });
+  retry.addEventListener("click", function(){
+    if (busy) return;
+    busy = true; retry.disabled = true; retry.textContent = "Checking…";
+    request("api/health", { headers: { "Accept": "application/json" }, cache: "no-store" })
+      .then(jsonResponse).then(function(data){
+        if (data.service !== "goc-academy-hub") throw unexpected();
+        unavailable.hidden = true; form.hidden = false; err.textContent = "Connection restored. Please sign in again.";
+      }).catch(function(e){ showProblem(e); }).then(finish);
+  });
+})();
+</script>
+</body>
+</html>`;
 
 /* Turn barred crawlers away. The politeness layer above only binds crawlers
    that obey it; this refuses the ones that announce themselves. Generic

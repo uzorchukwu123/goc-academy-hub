@@ -88,43 +88,43 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   /* Slice 6.2: the questions list has its own route too (covered in test-tutor-questions-ui.js). */
   function fetchStub(url, opts) {
     if (/^api\/tutor\/questions/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, pending: 0, returned: 0 }, questions: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, pending: 0, returned: 0 }, questions: [] })); } });
     }
     if (/^api\/tutor\/notes/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, held: 0 }, notes: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, held: 0 }, notes: [] })); } });
     }
     /* Slice 7: the class notices list has its own route too (covered in test-notices-tutor-ui.js). */
     if (/^api\/tutor\/notices/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', count: 0, notices: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', count: 0, notices: [] })); } });
     }
     /* At-risk list, slice 3: its own route too (covered in test-tutors-atrisk-ui.js). */
     if (/^api\/tutor\/atrisk/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', sort: 'inactive', limits: { inactiveDays: 7, lowAverage: 40 }, count: 0, students: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', sort: 'inactive', limits: { inactiveDays: 7, lowAverage: 40 }, count: 0, students: [] })); } });
     }
     /* Student page and My views: their own routes too (covered in test-tutors-student-ui.js). */
     if (/^api\/tutor\/audit/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ keptDays: 365, count: 0, entries: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ keptDays: 365, count: 0, entries: [] })); } });
     }
     /* Top performers, slice 3: its own route too (covered in test-tutors-top-ui.js). */
     if (/^api\/tutor\/top/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', subjects: [], tests: { items: [], hidden: 0, minPapers: 2 }, practice: { items: [], hidden: 0, minAnswers: 20 } })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', subjects: [], tests: { items: [], hidden: 0, minPapers: 2 }, practice: { items: [], hidden: 0, minAnswers: 20 } })); } });
     }
     /* Phase 4.A slice 6: the question flags list has its own route too (covered in test-flags-route.js). */
     if (/^api\/tutor\/flags/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subjects: [], count: 0, flags: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subjects: [], count: 0, flags: [] })); } });
     }
     /* Slice 6.6: the theory scripts list has its own route too (covered in test-tutor-marking-ui.js). */
     if (/^api\/tutor\/scripts/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { waiting: 0, marked: 0 }, scripts: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { waiting: 0, marked: 0 }, scripts: [] })); } });
     }
     if (/^api\/tutor\/analytics/.test(url)) {
       analyticsCalls.push({ url: url, auth: opts && opts.headers && opts.headers.Authorization });
       var ar = analyticsQueue.shift() || { status: 200, body: snapFor(decodeURIComponent((url.split('subject=')[1] || ''))) };
-      return Promise.resolve({ ok: ar.status < 400, status: ar.status, text: function () { return Promise.resolve(JSON.stringify(ar.body)); } });
+      return Promise.resolve({ ok: ar.status < 400, status: ar.status, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify(ar.body)); } });
     }
     calls.push({ url: url, method: (opts && opts.method) || 'GET', auth: opts && opts.headers && opts.headers.Authorization, body: opts && opts.body ? JSON.parse(opts.body) : null });
     var r = responses.shift() || { status: 200, body: {} };
-    return Promise.resolve({ ok: r.status < 400, status: r.status, text: function () { return Promise.resolve(JSON.stringify(r.body)); } });
+    return Promise.resolve({ ok: r.status < 400, status: r.status, headers: { get: function () { return r.type || 'application/json'; } }, text: function () { return Promise.resolve(r.raw == null ? JSON.stringify(r.body) : r.raw); } });
   }
   var win = { };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String });
@@ -152,21 +152,30 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('no token is sent before sign-in', !calls[0].auth);
   ok('the ID the tutor typed is kept for the next try', /value="GOC-T-001"/.test(root().innerHTML), root().innerHTML.slice(0, 600));
 
+  responses.push({ status: 503, type: 'text/html', raw: '<html>Starting your app</html>' });
+  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'secret'; click(btn('signin')); await tick();
+  ok('the in-app sign-in also shows a waking screen without the password', /G.O.C is waking up/.test(text()) && !!btn('retry') && !q('#zxPw'));
+  var beforeRetry = calls.length;
+  responses.push({ status: 200, body: { service: 'goc-academy-hub', version: 1 } });
+  click(btn('retry')); await tick();
+  ok('retry uses health without credentials and restores the ID-only form', calls.length === beforeRetry + 1 && calls[beforeRetry].url === 'api/health' && !calls[beforeRetry].body && !!q('#zxId') && /value="GOC-T-001"/.test(root().innerHTML) && q('#zxPw').value === '');
+
   responses.push({ status: 200, body: { token: 'tok-1', user: { id: 'GOC-T-001', name: 'Mrs <b>Ada</b> Obi', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: true } } });
+  var beforeSuccess = calls.length;
   q('#zxPw').value = 'start-pass-1';
   key(q('#zxPw'), 'Enter'); await tick();
-  ok('Enter signs in', calls.length === 2 && calls[1].body.password === 'start-pass-1');
+  ok('Enter signs in', calls.length === beforeSuccess + 1 && calls[beforeSuccess].body.password === 'start-pass-1');
   ok('a first sign-in goes to the password screen, not the dashboard', !!q('#zxCur') && !!q('#zxNew') && !q('button[data-act=subject]'), text());
   ok('the password screen explains why', /first sign-in/.test(text()));
 
   click(btn('setpw'));
-  ok('empty boxes on the password screen are caught', calls.length === 2 && /Fill in all three/.test(text()));
+  ok('empty boxes on the password screen are caught', calls.length === beforeSuccess + 1 && /Fill in all three/.test(text()));
   q('#zxCur').value = 'start-pass-1'; q('#zxNew').value = 'short'; q('#zxNew2').value = 'short';
   click(btn('setpw'));
-  ok('a short new password is caught on the page', calls.length === 2 && /at least 8/.test(text()));
+  ok('a short new password is caught on the page', calls.length === beforeSuccess + 1 && /at least 8/.test(text()));
   q('#zxCur').value = 'start-pass-1'; q('#zxNew').value = 'a-better-pass'; q('#zxNew2').value = 'a-different-one';
   click(btn('setpw'));
-  ok('two different new passwords are caught', calls.length === 2 && /do not match/.test(text()));
+  ok('two different new passwords are caught', calls.length === beforeSuccess + 1 && /do not match/.test(text()));
 
   responses.push({ status: 400, body: { error: 'Your current password is not right.' } });
   q('#zxCur').value = 'nope'; q('#zxNew').value = 'a-better-pass'; q('#zxNew2').value = 'a-better-pass';
