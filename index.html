@@ -609,6 +609,34 @@
       </div>
     </section>
     <!-- ============ LOG IN ============ -->
+    <!-- ============ TRY G.O.C — ANONYMOUS PREVIEW (Stage 10) ============ -->
+    <section class="screen" id="demo">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to homepage" onclick="go('landing')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">Try G.O.C — Free JAMB Practice Preview</div><div class="muted" style="font-size:12px">Five sample questions · no account needed · nothing is recorded</div></div></div></div>
+      <div class="scroll">
+        <div class="q-card" id="demoIntro">
+          <div class="q-text">Experience a JAMB-style practice session</div>
+          <p class="muted" style="line-height:1.6">Discover how learning works at G.O.C Academy Hub: five questions, the same look and navigation as real Practice, and an explanation for every answer at the end. These are sample questions written for this preview — not official JAMB questions.</p>
+          <button class="btn btn-red btn-block" type="button" id="demoStartBtn" onclick="demoStart()">Try a free practice session</button>
+          <div class="wt-none" id="demoMsg" style="display:none"></div>
+        </div>
+        <div id="demoPlay" hidden>
+          <div class="q-card">
+            <div class="q-num" id="demoNum">Question 1 of 5</div>
+            <div class="q-text" id="demoQ"></div>
+            <div id="demoOpts"></div>
+          </div>
+          <div class="prac-pal-wrap">
+            <div class="prac-pal-head"><span>Questions</span><span id="demoCount">0 of 5 answered</span></div>
+            <div class="prac-pal-grid" id="demoPalette"></div>
+            <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+          </div>
+          <div class="bottom-bar"><button class="btn btn-outline" id="demoPrevBtn" type="button" onclick="demoPrev()">← Prev</button><button class="btn btn-red btn-block" id="demoNextBtn" type="button" onclick="demoNext()">Next →</button></div>
+        </div>
+        <div id="demoResult" hidden></div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
     <section class="screen auth" id="login-v2">
       <div class="auth-aura" aria-hidden="true"><span class="au a"></span><span class="au b"></span><span class="au c"></span></div>
       <div class="auth-brandbar">

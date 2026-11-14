@@ -3330,6 +3330,21 @@ async function markTheoryScript(attemptId, marks, marker, guard) {
   });
 }
 
+/* Public preview attempts (Stage 10): in-memory only, single-use,
+   30-minute tokens, and a per-IP draw limit. Nothing here is ever
+   written to data.json or Appwrite. */
+const DEMO_TOKEN_MS = 30 * 60 * 1000;
+const demoAttempts = new Map();
+const demoIpHits = new Map();
+function demoRateLimited(ip) {
+  const now = Date.now();
+  const rec = demoIpHits.get(ip);
+  if (!rec || now - rec.first > 3600000) { demoIpHits.set(ip, { count: 1, first: now }); return false; }
+  rec.count++;
+  if (demoIpHits.size > 5000) { for (const [k, v] of demoIpHits) { if (now - v.first > 3600000) demoIpHits.delete(k); } }
+  return rec.count > 30;
+}
+
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
       const db = readData();
@@ -4104,6 +4119,56 @@ const ROUTES = [
       if (db.updates.length === before) return errJson(res, 404, 'That update no longer exists.');
       writeData(db);
       okJson(res, { ok: true });
+    } },
+
+  /* ---- Try G.O.C: anonymous five-question preview (Stage 10) ----
+     Fully isolated from student operations: the questions come only from
+     server/lib/demo-questions.js (a dedicated sample pool connected to
+     no bank), attempts live in an in-memory token map for 30 minutes,
+     and a submission writes nothing — no student record, no attempt,
+     no XP, no leaderboard, no analytics. Answers and explanations are
+     held server-side until the token is redeemed exactly once. */
+  { method: 'GET', path: /^\/api\/demo\/questions$/, need: null, handler: (req, res) => {
+      const ip = getClientIp(req);
+      if (demoRateLimited(ip)) return errJson(res, 429, 'Too many preview attempts from this connection. Please try again in a little while.');
+      const pool = require('./lib/demo-questions');
+      const shuffled = pool.slice();
+      for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+      const picked = shuffled.slice(0, 5).map(q => {
+        const order = q.options.map((_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = order[i]; order[i] = order[j]; order[j] = t; }
+        return { q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
+      });
+      const token = crypto.randomBytes(18).toString('hex');
+      demoAttempts.set(token, { at: Date.now(), picked });
+      if (demoAttempts.size > 5000) { for (const [k, v] of demoAttempts) { if (Date.now() - v.at > DEMO_TOKEN_MS) demoAttempts.delete(k); } }
+      okJson(res, { token, questions: picked.map((p, i) => ({
+        n: i + 1, subject: p.q.subject, topic: p.q.topic, text: p.q.text, options: p.options
+      })) });
+    } },
+
+  { method: 'POST', path: /^\/api\/demo\/submit$/, need: null, handler: (req, res, body) => {
+      const token = String((body && body.token) || '');
+      const attempt = demoAttempts.get(token);
+      if (!attempt || Date.now() - attempt.at > DEMO_TOKEN_MS) {
+        if (attempt) demoAttempts.delete(token);
+        return errJson(res, 410, 'That preview has expired. Start a fresh one.');
+      }
+      demoAttempts.delete(token);   /* single use, whatever happens next */
+      const answers = Array.isArray(body && body.answers) ? body.answers : null;
+      if (!answers || answers.length !== attempt.picked.length) return errJson(res, 400, 'Send one answer per question.');
+      for (const a of answers) {
+        if (a !== null && (!Number.isInteger(a) || a < 0 || a > 3)) return errJson(res, 400, 'Each answer must be one of the four options.');
+      }
+      let score = 0;
+      const review = attempt.picked.map((p, i) => {
+        const given = answers[i];
+        const isCorrect = given === p.answer;
+        if (isCorrect) score++;
+        return { n: i + 1, subject: p.q.subject, topic: p.q.topic, text: p.q.text, options: p.options,
+                 answer: p.answer, given, isCorrect, explanation: p.q.explanation };
+      });
+      okJson(res, { score, total: attempt.picked.length, percent: Math.round(score * 100 / attempt.picked.length), review });
     } },
 
   /* The daily affirmation flyer is public (a student sees it before doing

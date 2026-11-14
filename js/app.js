@@ -12256,6 +12256,117 @@ function notePracticeGenerate(){
   });
 }
 
+
+/* ================= TRY G.O.C — ANONYMOUS PREVIEW (Stage 10) =================
+   A five-question taster for visitors with no account. The server holds
+   the answers until submission (see /api/demo/*), so this client only
+   ever carries questions and the visitor's picks. Nothing is stored:
+   no account, no attempt, no XP — leaving or refreshing simply ends it. */
+var demoQs = [], demoAns = [], demoI = 0, demoToken = null;
+function demoOpen(){
+  go('demo');
+  var play = document.getElementById('demoPlay'), res = document.getElementById('demoResult'), intro = document.getElementById('demoIntro');
+  if(play) play.hidden = true;
+  if(res) res.hidden = true;
+  if(intro) intro.hidden = false;
+}
+function demoMsg(text){
+  var m = document.getElementById('demoMsg');
+  if(m){ m.style.display = text ? '' : 'none'; m.textContent = text || ''; }
+}
+function demoStart(){
+  var btn = document.getElementById('demoStartBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Setting up…'; }
+  demoMsg('');
+  fetch('api/demo/questions').then(function(r){
+    return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'The preview is not available right now.'); return j; });
+  }).then(function(j){
+    demoToken = j.token;
+    demoQs = j.questions || [];
+    demoAns = demoQs.map(function(){ return null; });
+    demoI = 0;
+    document.getElementById('demoIntro').hidden = true;
+    document.getElementById('demoResult').hidden = true;
+    document.getElementById('demoPlay').hidden = false;
+    demoRender();
+  }).catch(function(e){
+    demoMsg((e && e.message) || 'The preview is not available right now. Please try again shortly.');
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.textContent = 'Try a free practice session'; }
+  });
+}
+function demoRender(){
+  var q = demoQs[demoI];
+  if(!q) return;
+  document.getElementById('demoNum').textContent = 'Question ' + (demoI + 1) + ' of ' + demoQs.length + ' · ' + q.subject + ' · ' + q.topic;
+  document.getElementById('demoQ').innerHTML = mth(q.text, { breaks: true });
+  var host = document.getElementById('demoOpts');
+  host.innerHTML = '';
+  (q.options || []).forEach(function(o, i){
+    var b = document.createElement('button');
+    b.className = 'opt' + (demoAns[demoI] === i ? ' sel' : '');
+    b.innerHTML = '<span class="key">' + OPT_KEYS[i] + '</span>' + mth(o);
+    b.onclick = function(){ demoAns[demoI] = i; demoRender(); };
+    host.appendChild(b);
+  });
+  var pal = document.getElementById('demoPalette');
+  pal.innerHTML = '';
+  demoQs.forEach(function(_, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'prac-pal' + (demoAns[i] !== null ? ' ans' : '') + (i === demoI ? ' cur' : '');
+    b.textContent = i + 1;
+    b.setAttribute('aria-label', 'Question ' + (i + 1) + (demoAns[i] !== null ? ' (answered)' : ' (unanswered)'));
+    b.onclick = function(){ demoI = i; demoRender(); };
+    pal.appendChild(b);
+  });
+  var answered = demoAns.filter(function(a){ return a !== null; }).length;
+  document.getElementById('demoCount').textContent = answered + ' of ' + demoQs.length + ' answered';
+  document.getElementById('demoPrevBtn').disabled = demoI <= 0;
+  document.getElementById('demoNextBtn').textContent = demoI < demoQs.length - 1 ? 'Next →' : 'Submit answers';
+}
+function demoPrev(){ if(demoI > 0){ demoI--; demoRender(); } }
+function demoNext(){
+  if(demoI < demoQs.length - 1){ demoI++; demoRender(); return; }
+  var unanswered = demoAns.filter(function(a){ return a === null; }).length;
+  if(unanswered && typeof confirm === 'function'
+     && !confirm('You still have ' + unanswered + ' unanswered question' + (unanswered === 1 ? '' : 's') + '. Submit anyway?')) return;
+  demoSubmit();
+}
+function demoSubmit(){
+  var btn = document.getElementById('demoNextBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Marking…'; }
+  fetch('api/demo/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: demoToken, answers: demoAns }) })
+  .then(function(r){
+    return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'That preview could not be marked.'); return j; });
+  }).then(function(res){
+    demoToken = null;
+    document.getElementById('demoPlay').hidden = true;
+    var host = document.getElementById('demoResult');
+    host.hidden = false;
+    host.innerHTML = '<div class="q-card"><div class="q-num">Your result</div>'
+      + '<div class="q-text">' + res.score + ' of ' + res.total + ' correct · ' + res.percent + '%</div>'
+      + '<p class="muted" style="line-height:1.6">' + (res.score >= 4 ? 'Excellent — that is real UTME pace. ' : res.score >= 2 ? 'A solid start. ' : 'Everyone starts somewhere. ')
+      + 'In the full academy, every answer comes with tutoring, your mistakes come back for review until they stick, and assessed sittings track your real progress.</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-red" type="button" onclick="demoStart()">Try again</button>'
+      + '<button class="btn btn-outline" type="button" onclick="go(\'signup\')">Unlock the full G.O.C experience</button></div>'
+      + '<p class="muted" style="font-size:12.5px;margin-top:10px">Registration comes first; the academy then confirms your programme access. Nothing was recorded from this preview.</p></div>'
+      + res.review.map(function(r){
+          var mine = r.given === null ? 'Not answered' : r.options[r.given];
+          return '<div class="wt-rev"><div class="rq">Question ' + r.n + ' · ' + esc(r.subject) + ' · ' + esc(r.topic) + '</div>'
+            + '<div class="rt">' + mth(r.text, { breaks: true }) + '</div>'
+            + '<div class="ra"><em>Your answer</em>' + mth(mine) + '</div>'
+            + '<div class="ra"><em>Correct answer</em>' + mth(r.options[r.answer]) + '</div>'
+            + '<div class="ra"><em>Why</em>' + mth(r.explanation, { breaks: true }) + '</div>'
+            + '<span class="verdict ' + (r.isCorrect ? 'ok' : 'no') + '">' + (r.isCorrect ? 'Correct' : 'Incorrect') + '</span></div>';
+        }).join('');
+  }).catch(function(e){
+    if(btn){ btn.disabled = false; btn.textContent = 'Submit answers'; }
+    toast((e && e.message) || 'That preview could not be marked.');
+  });
+}
+
 function setResFilter(f){ resFilter = f; renderResources(); }
 
 /* Open students may download resources but not open them in the app (the server enforces it). */

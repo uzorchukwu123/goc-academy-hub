@@ -171,8 +171,10 @@ ok('the CBT screen, its palette and its Submit are unchanged',
   /id="cbtSide"/.test(index) && /onclick="submitCBT\(\)"/.test(index) && /id="cbtOpts"/.test(index));
 ok('no practice navigation code references the CBT screen',
   !/cbt/.test(grab('pracGo') + grab('pracPaintChrome') + grab('renderPrac')));
-ok('the practice palette styles are scoped to #practice only',
-  /#practice \.prac-pal\{/.test(css) && !/\.prac-pal\{/.test(css.replace(/#practice \.prac-pal/g, '')));
+// The palette stays scoped: #practice, plus the deliberate #demo mirror added
+// for the anonymous Try G.O.C session (never a global/unscoped rule).
+ok('the practice palette styles are scoped to #practice (and its #demo mirror) only',
+  /#practice \.prac-pal\{/.test(css) && !/\.prac-pal\{/.test(css.replace(/#practice \.prac-pal/g, '').replace(/#demo \.prac-pal/g, '')));
 
 console.log('\n' + (fails ? fails + ' check(s) FAILED' : 'practice navigation: all checks passed'));
 process.exit(fails ? 1 : 0);

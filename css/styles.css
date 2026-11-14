@@ -3477,3 +3477,17 @@ a.cv:hover{color:var(--red)}
 .lp-try-btn{ margin-top:14px; }
 .lp-try-note{ font-size:12.5px; color:#9CA3AF; margin-top:10px; line-height:1.5; }
 @media (min-width:720px){ .lp-news-list{ grid-template-columns:repeat(3,1fr); } }
+
+/* ============ TRY G.O.C DEMO (Stage 10): real Practice components, second home ============ */
+#demo .prac-pal-wrap{margin:14px 18px 18px;padding:14px;background:#fff;border:1.5px solid var(--line);border-radius:16px}
+#demo .prac-pal-head{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:13px;color:var(--ink);margin-bottom:10px}
+#demo .prac-pal-grid{display:flex;flex-wrap:wrap;gap:8px}
+#demo .prac-pal{min-width:44px;height:44px;padding:0 8px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-family:var(--font);font-weight:800;font-size:14px;color:var(--slate);cursor:pointer}
+#demo .prac-pal.ans{background:#EAF6EF;border-color:var(--green);color:var(--green)}
+#demo .prac-pal.cur{border-color:var(--red);color:var(--red);box-shadow:0 0 0 2px rgba(220,38,38,.25)}
+#demo .prac-pal-legend{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--gray);margin-top:10px}
+#demo .prac-pal-legend .lg{width:12px;height:12px;border-radius:4px;border:1.5px solid var(--line);display:inline-block;margin-left:8px}
+#demo .prac-pal-legend .lg.ans{background:#EAF6EF;border-color:var(--green)}
+#demo .prac-pal-legend .lg.cur{border-color:var(--red)}
+#demo .opt.sel{border-color:var(--red);background:#FDECEC}
+#demo .opt.sel .key{background:var(--red);color:#fff}
