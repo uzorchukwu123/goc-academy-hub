@@ -14,6 +14,8 @@
     stu: null, stuError: '', stuId: '', stuContact: null, stuContactError: '', stuContactBusy: false,
     audit: null, auditError: '' };
   var root = null;
+  var refreshTimer = null;
+  var loadVersions = { stats: 0, ar: 0, top: 0, audit: 0 };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -179,23 +181,16 @@
       '</div>';
   }
 
-  /* Slice 5.4: the Weak topics and Hardest questions cards. The server has already applied the
-     10-answer floor; here we only draw what it sent, and say plainly when there is not enough yet.
-     Everything from the server is written escaped. */
+  /* Objective, practice and marked theory answers contribute to these rankings. */
   function rankedCard(title, what, list, rowHTML) {
     if (st.statsError) return '<div class="zx-card"><h3>' + esc(title) + '</h3><p>' + esc(st.statsError) + '</p></div>';
     if (!list) return '<div class="zx-card zx-soon"><h3>' + esc(title) + '</h3><p>Loading…</p></div>';
-    var items = list.items || [], min = list.minAnswers || 10, hidden = list.hidden || 0, out = '<div class="zx-card"><h3>' + esc(title) + '</h3>';
-    if (!items.length) {
-      out += '<p>Not enough answers yet. A ' + what + ' appears here once it has at least ' + esc(min) + ' answers from your GOC students.</p>';
-    } else {
-      out += '<ol class="zx-rank">' + items.map(rowHTML).join('') + '</ol>';
-    }
-    if (hidden && items.length) out += '<p class="zx-warn">' + esc(hidden) + ' more ' + what + (hidden === 1 ? ' has' : 's have') + ' fewer than ' + esc(min) + ' answers, so ' + (hidden === 1 ? 'it is' : 'they are') + ' not ranked yet.</p>';
-    else if (hidden) out += '<p class="zx-warn">' + esc(hidden) + ' ' + what + (hidden === 1 ? ' has' : 's have') + ' some answers, but fewer than ' + esc(min) + '.</p>';
+    var items = list.items || [], out = '<div class="zx-card"><h3>' + esc(title) + '</h3><p>Average score per recorded answer, including marked theory. Older objective counters may include retired test answers.</p>';
+    if (!items.length) out += '<p>No recorded marked answers for this ' + esc(what) + ' yet.</p>';
+    else out += '<ol class="zx-rank">' + items.map(rowHTML).join('') + '</ol>';
     return out + '</div>';
   }
-  function pctLine(x) { return esc(x.percent) + '% right · ' + esc(x.answers) + ' answers'; }
+  function pctLine(x) { return esc(x.percent) + '% average score · ' + esc(x.answers) + ' answers'; }
   function weakCard() {
     return rankedCard('Weak topics', 'topic', st.stats && st.stats.weakTopics, function (x) {
       return '<li><b>' + esc(x.topic) + '</b><span>' + pctLine(x) + '</span></li>';
@@ -244,22 +239,24 @@
     return out + '</div>';
   }
   function loadAtRisk() {
+    var version = ++loadVersions.ar, token = st.token;
     var want = st.subject, sort = st.arSort;
     st.ar = null; st.arError = '';
     return call('GET', '/tutor/atrisk?subject=' + encodeURIComponent(want) + '&sort=' + encodeURIComponent(sort)).then(function (r) {
+      if (version !== loadVersions.ar || token !== st.token || !root) return;
       if (st.subject !== want || st.arSort !== sort) return;
-      st.ar = r; draw();
+      st.ar = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.ar || token !== st.token || !root) return;
       if (st.subject !== want) return;
       if (sessionProblem(e)) return;
-      st.arError = (e && e.message) || 'The at-risk list could not be loaded.'; draw();
+      st.arError = (e && e.message) || 'The at-risk list could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
   /* Top performers, slice 3: one card, two tabs (Web Tests / Practice), never blended. The server ranks and drops
-     students under the evidence floor (GET /tutor/top); here we only draw it. Only the top three rows carry a rank
-     number. Ten rows show at first, the rest sit behind Show all. Students held back for too little evidence are
-     shown as a count only. Everything from the server is written escaped. */
+     students with recorded evidence (GET /tutor/top); here we only draw it. Only the top three rows carry a rank
+     number. Ten rows show at first, the rest sit behind Show all. Everything from the server is written escaped. */
   var TOP_SHOW = 10;
   function topCard() {
     var title = 'Top performers';
@@ -289,15 +286,18 @@
     return out + '</div>';
   }
   function loadTop() {
+    var version = ++loadVersions.top, token = st.token;
     var want = st.subject;
-    st.top = null; st.topError = ''; st.topAll = false;
+    st.top = null; st.topError = '';
     return call('GET', '/tutor/top?subject=' + encodeURIComponent(want)).then(function (r) {
+      if (version !== loadVersions.top || token !== st.token || !root) return;
       if (st.subject !== want) return;
-      st.top = r; draw();
+      st.top = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.top || token !== st.token || !root) return;
       if (st.subject !== want) return;
       if (sessionProblem(e)) return;
-      st.topError = (e && e.message) || 'The top performers could not be loaded.'; draw();
+      st.topError = (e && e.message) || 'The top performers could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
@@ -313,7 +313,7 @@
     if (!x) {
       body = '<div class="zx-card"><p>' + esc(st.stuError || 'Loading…') + '</p></div>';
     } else {
-      var t = x.tests || {}, p = x.practice || {}, w = x.weakTopics || { items: [], hidden: 0, minAnswers: 3 };
+      var t = x.tests || {}, p = x.practice || {}, w = x.weakTopics || { items: [], hidden: 0, minAnswers: 1 };
       var contact;
       if (st.stuContact) contact = '<div class="zx-kv"><span>Email</span><span>' + esc(st.stuContact.email || 'None on file') + '</span></div><div class="zx-kv"><span>Phone</span><span>' + esc(st.stuContact.phone || 'None on file') + '</span></div><p>Showing these was recorded in your views.</p>';
       else contact = (st.stuContactError ? '<p class="zx-warn">' + esc(st.stuContactError) + '</p>' : '') + '<p>Email and phone are hidden. Showing them is recorded in your views.</p><button type="button" class="zx-btn zx-ghost zx-sm" data-act="stucontact"' + (st.stuContactBusy ? ' disabled' : '') + '>' + (st.stuContactBusy ? 'Loading…' : 'Show contact') + '</button>';
@@ -328,11 +328,11 @@
         '<div class="zx-card"><h3>Recent attempts</h3>' + ((x.recent || []).length ? '<ul class="zx-ar">' + x.recent.map(function (r) {
           return '<li><b>' + (r.kind === 'test' ? 'Test' + (r.section ? ' (' + esc(r.section) + ')' : '') : 'Practice') + '</b> <span class="zx-arid">' + esc(whenText(r.at)) + '</span><span class="zx-topfig">' +
             (r.kind === 'practice' ? esc(r.percent) + '% right over ' + esc(r.answers) + ' answer' + (r.answers === 1 ? '' : 's') :
-              (r.percent === null ? 'Waiting for a mark' : esc(r.percent) + '%' + (r.score !== null && r.maxScore !== null ? ' (' + esc(r.score) + '/' + esc(r.maxScore) + ')' : ''))) + '</span></li>';
+              (r.percent === null ? (r.status === 'marked' ? 'Score unavailable' : 'Waiting for a mark') : esc(r.percent) + '%' + (r.score !== null && r.maxScore !== null ? ' (' + esc(r.score) + '/' + esc(r.maxScore) + ')' : ''))) + '</span></li>';
         }).join('') + '</ul>' : '<p>No attempts yet in this subject.</p>') + '</div>' +
         '<div class="zx-card"><h3>Weak topics</h3>' + (w.items.length ? '<ul class="zx-ar">' + w.items.map(function (r) {
-          return '<li><b>' + esc(r.topic) + '</b><span class="zx-topfig">' + esc(r.percent) + '% right over ' + esc(r.answers) + ' answers</span></li>';
-        }).join('') + '</ul>' : '<p>No topic has ' + esc(w.minAnswers) + '+ answers from this student yet.</p>') +
+          return '<li><b>' + esc(r.topic) + '</b><span class="zx-topfig">' + esc(r.percent) + '% average score over ' + esc(r.answers) + ' answers</span></li>';
+        }).join('') + '</ul>' : '<p>No recorded practice or marked test answers by topic from this student yet.</p>') +
         (w.hidden > 0 ? '<p>' + esc(w.hidden) + ' topic' + (w.hidden === 1 ? ' has' : 's have') + ' too few answers to show.</p>' : '') + '</div>';
     }
     return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Student<b>' + esc(st.subject) + '</b></div>' +
@@ -376,7 +376,7 @@
     if (st.auditError) return '<div class="zx-card"><h3>' + title + '</h3><p>' + esc(st.auditError) + '</p></div>';
     if (!st.audit) return '<div class="zx-card zx-soon"><h3>' + title + '</h3><p>Loading…</p></div>';
     var rows = st.audit.entries || [];
-    var out = '<div class="zx-card"><h3>' + title + '</h3><p>Every time you open a student\'s page or show their contact details, the academy keeps a record for ' + esc(Math.round((st.audit.keptDays || 365) / 365 * 12)) + ' months. Only you and the academy can see yours.</p>';
+    var out = '<div class="zx-card"><h3>' + title + '</h3><p>Every time you open a student\'s page or show their contact details, the record is available here for ' + esc(Math.round((st.audit.keptDays || 365) / 365 * 12)) + ' months. Only you and the academy can see yours.</p>';
     if (!rows.length) return out + '<p class="zx-ok">You have not opened a student yet.</p></div>';
     out += '<p>Your last ' + esc(Math.min(rows.length, AUDIT_SHOWN)) + (rows.length > AUDIT_SHOWN ? ' of ' + esc(rows.length) : '') + ':</p><ul class="zx-ar">' + rows.slice(0, AUDIT_SHOWN).map(function (r) {
       return '<li><b>' + esc(r.studentName || r.studentId) + '</b> <span class="zx-arid">' + esc(r.studentId) + ' · ' + esc(r.subject) + '</span><span class="zx-topfig">' +
@@ -385,12 +385,15 @@
     return out + '</div>';
   }
   function loadAudit() {
+    var version = ++loadVersions.audit, token = st.token;
     st.audit = null; st.auditError = '';
     return call('GET', '/tutor/audit').then(function (r) {
-      st.audit = r; draw();
+      if (version !== loadVersions.audit || token !== st.token || !root) return;
+      st.audit = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.audit || token !== st.token || !root) return;
       if (sessionProblem(e)) return;
-      st.auditError = (e && e.message) || 'Your views could not be loaded.'; draw();
+      st.auditError = (e && e.message) || 'Your views could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
@@ -892,6 +895,7 @@
       '<div class="zx-body">' + noteHTML() + errHTML() +
       '<h2 class="zx-h">' + esc(st.subject || 'Dashboard') + '</h2>' +
       '<p class="zx-p">' + (subs.length > 1 ? 'Pick a subject. Each one has its own dashboard.' : 'Your subject dashboard.') + '</p>' +
+      '<p class="zx-p">Dashboard updates every minute while visible. <button type="button" class="zx-btn zx-ghost zx-sm" data-act="refresh">Refresh now</button></p>' +
       chips + depthCard() +
       questionsCard() +
       notesCard() +
@@ -911,7 +915,9 @@
     if (!root) return;
     root.className = 'zx-wrap zx-in';
     var views = { password: passwordHTML, questions: questionsHTML, qform: formHTML, qimport: importHTML, notes: notesHTML, nform: noteFormHTML, notices: noticesHTML, ntform: noticeFormHTML, scripts: scriptsHTML, script: scriptHTML, student: studentHTML };
+    var oldView = root.querySelector('.zx-full'), scroll = oldView ? oldView.scrollTop : 0;
     root.innerHTML = (views[st.view] || dashHTML)();
+    var newView = root.querySelector('.zx-full'); if (newView) newView.scrollTop = scroll;
   }
 
   function val(id) { var e = root && root.querySelector('#' + id); return e ? e.value : ''; }
@@ -921,15 +927,18 @@
   /* Slice 5.2: the numbers for the open subject. A late answer for a subject the tutor has
      since left is thrown away, and a failure here shows on the snapshot card only. */
   function loadStats() {
+    var version = ++loadVersions.stats, token = st.token;
     var want = st.subject;
     st.stats = null; st.statsError = '';
     return call('GET', '/tutor/analytics?subject=' + encodeURIComponent(want)).then(function (r) {
+      if (version !== loadVersions.stats || token !== st.token || !root) return;
       if (st.subject !== want) return;
-      st.stats = r; draw();
+      st.stats = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.stats || token !== st.token || !root) return;
       if (st.subject !== want) return;
       if (sessionProblem(e)) return;
-      st.statsError = (e && e.message) || 'The numbers could not be loaded.'; draw();
+      st.statsError = (e && e.message) || 'The numbers could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
@@ -947,6 +956,11 @@
     });
   }
 
+  function refreshDashboard() {
+    if (!root || !st.token || st.view !== 'dash' || !st.subject) return;
+    loadStats(); loadAtRisk(); loadTop(); loadAudit(); draw();
+  }
+
   function loadSubject(back, keepError) {
     st.info = null;
     draw();
@@ -956,6 +970,9 @@
       loadAtRisk();
       loadTop();
       loadAudit();
+      if (!refreshTimer && typeof window.setInterval === 'function') refreshTimer = window.setInterval(function () {
+        if (!document.hidden) refreshDashboard();
+      }, 60000);
       loadQuestions();
       loadNotes();
       loadNotices();
@@ -1008,6 +1025,7 @@
   }
 
   function close() {
+    if (refreshTimer) { window.clearInterval(refreshTimer); refreshTimer = null; }
     if (root && root.parentNode) root.parentNode.removeChild(root);
     root = null;
     var f = document.getElementById('loginId'); if (f && f.focus) f.focus();
@@ -1029,6 +1047,7 @@
     var a = act.getAttribute('data-act');
     if (a === 'setpw') setpw();
     else if (a === 'signout') signout();
+    else if (a === 'refresh') refreshDashboard();
     else if (a === 'arsort') { var so = act.getAttribute('data-sort') === 'score' ? 'score' : 'inactive'; if (so !== st.arSort || !st.ar) { st.arSort = so; loadAtRisk(); draw(); } }
     else if (a === 'arall') { st.arAll = !st.arAll; draw(); }
     else if (a === 'toptab') { var tb = act.getAttribute('data-tab') === 'practice' ? 'practice' : 'tests'; if (tb !== st.topTab) { st.topTab = tb; st.topAll = false; draw(); } }

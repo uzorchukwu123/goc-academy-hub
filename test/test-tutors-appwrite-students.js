@@ -24,6 +24,8 @@ var path = require('path');
 var fs = require('fs');
 var os = require('os');
 var crypto = require('crypto');
+var ledgerId = require('../server/lib/tutor-ledger').idFor;
+var LEDGER = process.env.GOC_TEST_LEDGER === '1';
 var spawn = require('child_process').spawn;
 
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
@@ -53,7 +55,7 @@ function student(id, name, createdAt) {
   var d = {
     $id: id, scholarId: id, name: name, email: id.toLowerCase() + '@example.com',
     phone: '08000000000', exam: 'JAMB / UTME 2027', subjects: JSON.stringify(SUBS),
-    active: true, xp: 0, streak: 0, goal: 'JAMB / UTME 2027',
+    active: true, xp: 0, streak: 0, goal: 'JAMB / UTME 2027', appwriteUserId: 'fixture-auth-user',
     $createdAt: new Date(createdAt).toISOString()
   };
   return { col: 'students', data: d };
@@ -63,7 +65,8 @@ function attempt(scholarId, percent) {
   attemptSeq++;
   return { col: 'attempts', data: {
     $id: 'ATT-' + attemptSeq, scholarId: scholarId, studentName: '',
-    period: 'test', section: 'objective', subject: 'Physics',
+    period: 'test', section: 'objective', subject: 'All subjects',
+    answers: JSON.stringify(Array.from({ length: 20 }, function (_, i) { return { subject: 'Physics', kind: 'objective', given: 0, markAwarded: i < percent / 5 ? 1 : 0, maxMark: 1 }; }).concat([{ subject: 'Chemistry', kind: 'objective', given: 0, markAwarded: 0, maxMark: 1 }])),
     startedAt: NOW - 3600000, submittedAt: NOW - 1800000,
     total: 10, answered: 10, correct: Math.round(percent / 10),
     score: percent, maxScore: 100, percent: percent, status: 'marked'
@@ -74,13 +77,25 @@ var seed = { files: [], docs: [
   student('GOC-S-001', 'Gina Low', NOW - 86400000),
   student('GOC-S-002', 'Bola High', NOW - 86400000),
   student('GOC-S-003', 'Ope Strong', NOW - 86400000),
-  /* Gina: two marked Physics papers at 30% -> low average (at-risk) and ranked. */
-  attempt('GOC-S-001', 30), attempt('GOC-S-001', 30),
+  { col: 'questions', data: { $id: '9001', legacyId: 9001, subject: 'Physics', topic: 'Forces', kind: 'theory', section: 'theory', text: 'Explain force', active: true } },
+  { col: 'attempts', data: { $id: 'THEORY1', scholarId: 'GOC-S-001', section: 'theory', subject: 'Physics', submittedAt: NOW - 1800000, status: 'marked', score: 3, maxScore: 10, percent: 30, answers: JSON.stringify([{ questionId: 9001, subject: 'Physics', topic: 'Forces', kind: 'theory', given: 'An answer', markAwarded: 3, maxMark: 10 }]) } },
+  /* Gina: marked Objective and Theory at 30%. */
+  attempt('GOC-S-001', 30),
   /* Bola: two marked Physics papers at 90% -> tops the class, not at-risk. */
-  attempt('GOC-S-002', 90), attempt('GOC-S-002', 90),
+  attempt('GOC-S-002', 90),
   /* Ope: the strongest papers of the three. */
-  attempt('GOC-S-003', 95), attempt('GOC-S-003', 95)
+  attempt('GOC-S-003', 95)
 ] };
+if (LEDGER) {
+  function doc(kind, key, owner, subject, at, payload) {
+    return { col: 'tutorledger', data: { $id: ledgerId(kind, key), kind: kind, owner: owner, subject: subject, at: at, payload: JSON.stringify(payload) } };
+  }
+  seed.docs.push({ col: 'questions', data: { $id: '9002', legacyId: 9002, subject: 'Physics', topic: 'Ledger Motion', kind: 'objective', section: 'practice', text: 'A sample question', options: ['A', 'B'], answer: 0, active: true } });
+  seed.docs.push(doc('migration', 'snapshot', '', '', 0, { hash: 'a'.repeat(64) }));
+  seed.docs.push(doc('migration', 'complete', '', '', 0, { hash: 'a'.repeat(64), count: 3 }));
+  seed.docs.push(doc('baseline', 'legacy:Physics', '', 'Physics', 0, { q: {}, t: { Legacy: { n: 1, c: 0 } } }));
+  seed.docs.push(doc('practice', 'legacy:S1:0', 'GOC-S-001', '', NOW, { ts: NOW, subject: 'Physics', review: [{ subject: 'Physics', topic: 'Motion', given: 1, isCorrect: true }] }));
+}
 var SEED = path.join(TMP, 'seed.json'); fs.writeFileSync(SEED, JSON.stringify(seed));
 
 /* The local cache is deliberately EMPTY: the fresh-deploy state. If the routes
@@ -101,7 +116,10 @@ function boot() {
       PORT: String(PORT), GOC_DATA_DIR: DATA_DIR, STUB_SEED: SEED,
       APPWRITE_ENDPOINT: 'http://stub.invalid/v1', APPWRITE_PROJECT_ID: 'stub', APPWRITE_API_KEY: 'stubkey',
       GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027',
-      NODE_OPTIONS: '-r ' + path.join(__dirname, 'appwrite-stub', 'hook.js')
+      NODE_OPTIONS: '-r ' + path.join(__dirname, 'appwrite-stub', 'hook.js'),
+      APPWRITE_TUTOR_LEDGER: LEDGER ? '1' : '', STUB_LEDGER_TEST: LEDGER ? '1' : '',
+      STUB_LEDGER_FILE: LEDGER ? path.join(TMP, 'ledger.json') : '',
+      STUB_LEDGER_FAIL: LEDGER ? path.join(TMP, 'fail-ledger') : ''
     }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -164,6 +182,48 @@ function call(method, url, body, token) {
     testIds.length === 3 && testIds[0] === 'GOC-S-003' && testIds[1] === 'GOC-S-002' && testIds[2] === 'GOC-S-001' &&
     tests[0].name === 'Ope Strong' && tests[0].average === 95 && tests[1].name === 'Bola High' && tests[1].average === 90 && tests[2].name === 'Gina Low' && tests[2].average === 30,
     JSON.stringify(tests));
+
+  var analytics = await call('GET', '/api/tutor/analytics?subject=Physics', undefined, tt);
+  ok('snapshot and activity include combined Objective papers scoped to Physics', analytics.status === 200 && analytics.body.snapshot.tests.papers === 4 && analytics.body.snapshot.tests.average === 61.3 && analytics.body.activity.total.tests === 4, analytics.raw);
+  ok('marked Theory feeds weak topics and hardest questions from Appwrite', analytics.body.weakTopics.items.some(function (x) { return x.topic === 'Forces' && x.percent === 30 && x.answers === 1; }) && analytics.body.hardestQuestions.items.some(function (x) { return x.id === '9001' && x.percent === 30; }), analytics.raw);
+  var detail = await call('GET', '/api/tutor/student?subject=Physics&id=GOC-S-002', undefined, tt);
+  ok('student detail exposes only Physics marks, not whole-paper or Chemistry marks', detail.status === 200 && detail.body.student.tests.average === 90 && detail.body.student.recent[0].score === 18 && detail.body.student.recent[0].maxScore === 20 && !/Chemistry/.test(detail.raw), detail.raw);
+  var audit = await call('GET', '/api/tutor/audit', undefined, tt);
+  ok('My views includes the student detail open', audit.status === 200 && audit.body.entries.some(function (x) { return x.studentId === 'GOC-S-002'; }), audit.raw);
+  if (LEDGER) {
+    ok('practice history comes from Appwrite, not the empty local file', top.body.practice.items.some(function (x) { return x.id === 'GOC-S-001' && x.answers === 1; }), top.raw);
+    ok('migrated answer counters are read from Appwrite', analytics.body.weakTopics.items.some(function (x) { return x.topic === 'Legacy' && x.answers === 1; }), analytics.raw);
+    var sl = await call('POST', '/api/auth/login', { id: 'GOC-S-001', password: 'testpass' });
+    ok('the student signs in through Appwrite Auth', sl.status === 200 && sl.body.token, sl.raw);
+    var st = sl.body.token;
+    var run = { mode: 'practice', subject: 'Physics', ts: NOW + 1000, total: 1, answered: 1, correct: 1, percent: 100, review: [{ id: 9002, subject: 'Physics', topic: 'Ledger Motion', given: 0, answer: 0, isCorrect: true, text: 'A sample question', options: ['A', 'B'] }] };
+    var saved = await call('POST', '/api/me/practice', run, st);
+    var retried = await call('POST', '/api/me/practice', run, st);
+    ok('practice writes to Appwrite and retries are idempotent', saved.status === 200 && retried.status === 200 && retried.body.runs.length === 2, retried.raw);
+    var start = await call('POST', '/api/me/study/start', { mode: 'practice', subject: 'Physics', count: 1 }, st);
+    ok('student starts a server-marked practice', start.status === 200 && start.body.paperId, start.raw);
+    var response = {}; response[start.body.questions[0].id] = 0;
+    var submission = await call('POST', '/api/me/study/submit', { paperId: start.body.paperId, responses: response }, st);
+    ok('server-marked answers are written to Appwrite', submission.status === 200, submission.raw);
+    var statsAfter = await call('GET', '/api/tutor/analytics?subject=Physics', undefined, tt);
+    ok('the new answer event updates weak topics', statsAfter.body.weakTopics.items.some(function (x) { return x.topic === 'Ledger Motion' && x.answers === 1; }), statsAfter.raw);
+    fs.writeFileSync(path.join(TMP, 'fail-ledger'), 'fail');
+    var blocked = await call('GET', '/api/tutor/student/contact?subject=Physics&id=GOC-S-002', undefined, tt);
+    ok('contact is withheld when the durable audit write fails', blocked.status === 500 && !/example.com|08000000000/.test(blocked.raw), blocked.raw);
+    fs.unlinkSync(path.join(TMP, 'fail-ledger'));
+    await halt(); await boot();
+    var againLogin = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: TPW });
+    var again = await call('GET', '/api/tutor/audit', undefined, againLogin.body.token);
+    ok('My views survives a server restart via Appwrite', again.status === 200 && again.body.entries.some(function (x) { return x.studentId === 'GOC-S-002'; }), again.raw);
+    var studentAgain = await call('POST', '/api/auth/login', { id: 'GOC-S-001', password: 'testpass' });
+    var historyAgain = await call('GET', '/api/me/practice', undefined, studentAgain.body.token);
+    ok('new practice history survives a server restart', historyAgain.status === 200 && historyAgain.body.runs.length === 2, historyAgain.raw);
+    var statsAgain = await call('GET', '/api/tutor/analytics?subject=Physics', undefined, againLogin.body.token);
+    ok('new answer counters survive a server restart', statsAgain.status === 200 && statsAgain.body.weakTopics.items.some(function (x) { return x.topic === 'Ledger Motion' && x.answers === 1; }), statsAgain.raw);
+    tt = againLogin.body.token;
+  }
+  var forbidden = await call('GET', '/api/tutor/analytics?subject=Chemistry', undefined, tt);
+  ok('another subject remains forbidden', forbidden.status === 403, forbidden.raw);
 
   await halt();
   console.log('\n' + passes + ' passed, ' + fails + ' failed');

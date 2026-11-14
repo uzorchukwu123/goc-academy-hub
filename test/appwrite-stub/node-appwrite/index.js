@@ -6,8 +6,8 @@ const cols=new Map();           // "db/col" -> Map(id -> doc)
 const calls={get:{}};
 const names=new Map();
 function col(db,c){ const k=db+'/'+c; if(!cols.has(k)) cols.set(k,new Map()); return cols.get(k); }
-const Query={ equal:(a,v)=>({m:'equal',a,v}), limit:n=>({m:'limit',n}), orderAsc:a=>({m:'o'}), orderDesc:a=>({m:'o'}),
-  notEqual:(a,v)=>({m:'ne',a,v}), search:()=>({m:'o'}), select:()=>({m:'o'}), offset:()=>({m:'o'}), greaterThan:()=>({m:'o'}), lessThan:()=>({m:'o'}) };
+const Query={ equal:(a,v)=>({m:'equal',a,v}), limit:n=>({m:'limit',n}), orderAsc:a=>({m:'asc',a}), orderDesc:a=>({m:'o'}),
+  notEqual:(a,v)=>({m:'ne',a,v}), search:()=>({m:'o'}), select:()=>({m:'o'}), offset:n=>({m:'offset',n}), cursorAfter:id=>({m:'cursorAfter',id}), greaterThan:()=>({m:'o'}), lessThan:()=>({m:'o'}) };
 class Client{ setEndpoint(){return this;} setProject(){return this;} setKey(){return this;} }
 class Storage{
   constructor(){}
@@ -18,14 +18,17 @@ class Storage{
   async deleteFile(b,id){ if(!files.delete(b+'/'+id)) throw new Error('File not found'); }
 }
 class Databases{
-  async createDocument(db,c,id,data){ const d=Object.assign({$id:id,$createdAt:new Date().toISOString(),$updatedAt:new Date().toISOString()},data); col(db,c).set(id,d); return d; }
+  async getCollection(db,c){ return { $id:c, $permissions:[], documentSecurity:false }; }
+  async createDocument(db,c,id,data){ if(process.env.STUB_LEDGER_TEST && c==='tutorledger' && col(db,c).has(id)){ const e=new Error('Document exists'); e.code=409; throw e; } if(process.env.STUB_LEDGER_FAIL && c==='tutorledger' && fs.existsSync(process.env.STUB_LEDGER_FAIL)) throw new Error('simulated ledger failure'); const d=Object.assign({$id:id,$createdAt:new Date().toISOString(),$updatedAt:new Date().toISOString()},data); col(db,c).set(id,d); if(process.env.STUB_LEDGER_FILE && c==='tutorledger') fs.writeFileSync(process.env.STUB_LEDGER_FILE, JSON.stringify([...col(db,c).values()])); return d; }
   async getDocument(db,c,id){ const d=col(db,c).get(id); if(!d){ const e=new Error('Document not found'); e.code=404; throw e; } return d; }
   async updateDocument(db,c,id,data){ if(process.env.STUB_FAIL_TIER_AUDIT && data && 'tierChangedBy' in data) throw new Error('Invalid document structure: Unknown attribute: "tierChangedBy"'); if(process.env.STUB_FAIL_TIER && data && 'tier' in data) throw new Error('Invalid document structure: Unknown attribute: "tier"'); const d=await this.getDocument(db,c,id); Object.assign(d,data,{$updatedAt:new Date().toISOString()}); return d; }
   async upsertDocument(db,c,id,data){ if(process.env.STUB_GOC_PREFIX && c==='students' && data && String(data.name||'').startsWith(process.env.STUB_GOC_PREFIX)) data=Object.assign({},data,{tier:'goc'}); const m=col(db,c); const d=Object.assign(m.get(id)||{$id:id,$createdAt:new Date().toISOString()},data,{$updatedAt:new Date().toISOString()}); m.set(id,d); return d; }
   async deleteDocument(db,c,id){ col(db,c).delete(id); return {}; }
   async listDocuments(db,c,qs=[]){ let docs=[...col(db,c).values()];
     qs.forEach(q=>{ if(q&&q.m==='equal') docs=docs.filter(d=>Array.isArray(q.v)?q.v.includes(d[q.a]):d[q.a]===q.v); });
-    const lim=(qs.find(q=>q&&q.m==='limit')||{}).n; if(lim) docs=docs.slice(0,lim);
+    const order=qs.find(q=>q&&q.m==='asc'); if(order && order.a==='$id') docs.sort((a,b)=>String(a.$id).localeCompare(String(b.$id)));
+    const cursor=qs.find(q=>q&&q.m==='cursorAfter'); if(cursor) docs=docs.filter(d=>String(d.$id)>cursor.id);
+    const off=(qs.find(q=>q&&q.m==='offset')||{}).n || 0; const lim=(qs.find(q=>q&&q.m==='limit')||{}).n; if(off || lim) docs=docs.slice(off,lim ? off+lim : undefined);
     return {total:docs.length,documents:docs}; }
 }
 class Users{ async create(id,email){ const u={$id:Math.random().toString(16).slice(2),email}; if(process.env.STUB_USERS_LOG){ try{ fs.appendFileSync(process.env.STUB_USERS_LOG, JSON.stringify({op:'create',id:u.$id,email:email})+'\n'); }catch(e){} } return u; } async delete(){} async updatePassword(id){ if(process.env.STUB_USERS_LOG){ try{ fs.appendFileSync(process.env.STUB_USERS_LOG, JSON.stringify({op:'updatePassword',id:id})+'\n'); }catch(e){} } } }
@@ -37,6 +40,7 @@ if(process.env.STUB_SEED){
   seed.files.forEach(f=>{ files.set('goc-data/'+f.id, fs.readFileSync(f.path)); names.set('goc-data/'+f.id, path.basename(f.path)); });
   seed.docs.forEach(d=>col('goc_academy',d.col).set(d.data.$id,Object.assign({$createdAt:new Date().toISOString(),$updatedAt:new Date().toISOString()},d.data)));
 }
+if(process.env.STUB_LEDGER_FILE && fs.existsSync(process.env.STUB_LEDGER_FILE)) { for(const doc of JSON.parse(fs.readFileSync(process.env.STUB_LEDGER_FILE,'utf8'))) col('goc_academy','tutorledger').set(doc.$id,doc); }
 /* introspection endpoint for the harness */
 global.__stubCalls=calls;
 module.exports={Client,Storage,Databases,Users,Account,Query,ID,__calls:calls};

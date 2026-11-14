@@ -47,8 +47,8 @@ ok('nothing from another subject (the Chemistry run and paper are left out)', JS
 ok('last active is the newest real work (a skipped-only run does not count)', d.lastActiveAt === NOW - 2 * DAY && d.daysInactive === 2, d.lastActiveAt + ' ' + d.daysInactive);
 ok('recent attempts: newest first, a draft and a skipped run left out', d.recent.length === 4 && d.recent[0].kind === 'practice' && d.recent[1].kind === 'test' && d.recent[1].percent === 50 && d.recent[2].status === 'awaiting-marking' && d.recent[2].percent === null, JSON.stringify(d.recent));
 ok('a test row carries section, score and maximum', d.recent[1].section === 'objective' && d.recent[1].score === 10 && d.recent[1].maxScore === 20);
-ok('weak topics need 3+ answers, weakest first: Optics (25%) then Motion (100%)', d.weakTopics.items.length === 2 && d.weakTopics.items[0].topic === 'Optics' && d.weakTopics.items[0].percent === 25 && d.weakTopics.items[1].topic === 'Motion', JSON.stringify(d.weakTopics));
-ok('a thin topic (Heat, 2 answers) is counted, never ranked', d.weakTopics.hidden === 1 && !d.weakTopics.items.some(function (x) { return x.topic === 'Heat'; }) && d.weakTopics.minAnswers === 3);
+ok('weak topics include small samples, weakest first', d.weakTopics.items.length === 3 && d.weakTopics.items[0].topic === 'Heat' && d.weakTopics.items[1].topic === 'Optics' && d.weakTopics.items[1].percent === 25 && d.weakTopics.items[2].topic === 'Motion', JSON.stringify(d.weakTopics));
+ok('a thin topic (Heat, 2 answers) is ranked', d.weakTopics.hidden === 0 && d.weakTopics.items.some(function (x) { return x.topic === 'Heat'; }) && d.weakTopics.minAnswers === 1);
 ok('no password hash or tier field leaves the rule', !/hash|salt|password|tier/i.test(JSON.stringify(d)));
 
 head('a new student, and a long history');

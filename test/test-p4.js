@@ -1098,11 +1098,8 @@ async function main() {
                                                  function (e) { return e.message; });
   ok('nor a file of notes', stuNt.indexOf('Management accounts only') > -1, stuNt);
   head('what the student is served, now that the notes are real');
-  var tile = read('index.html').split('openReading()')[1] || '';
-  ok('Read / Learn is a live tile, not a promise', tile.indexOf('Read / Learn') > -1);
-  ok('and no longer advertises itself as coming soon',
-     tile.slice(0, 400).indexOf('Coming soon') < 0 &&
-     read('index.html').indexOf("comingSoon('Read / Learn')") < 0);
+  ok('the retired Read / Learn tile is gone from the Study hub',
+     read('index.html').indexOf('id="sg-reading"') < 0 && read('index.html').indexOf('onclick="openReading()"') < 0);
   ok('the console offers both new sections',
      read('index.html').indexOf('<option value="notes">') > -1 &&
      read('index.html').indexOf('<option value="import">') > -1);

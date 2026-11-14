@@ -213,7 +213,7 @@ function total(stats, subject, which) {
 
   console.log('\nwiring');
   var srv = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
-  ok('the route uses the scope guard, the core rules and writes the log before answering', /api\\\/tutor\\\/student/.test(srv) && /core\.tutorMayOpenStudent\(subject/.test(srv) && /core\.tutorStudentDetail\(subject/.test(srv) && srv.indexOf('writeData(db); } catch (e) { console.error(\'[goc] Audit log not written') > -1);
+  ok('the route uses the scope guard, the core rules and writes the log before answering', /api\\\/tutor\\\/student/.test(srv) && /core\.tutorMayOpenStudent\(subject/.test(srv) && /core\.tutorStudentDetail\(subject/.test(srv) && srv.indexOf('await appendTutorAudit(db, entry); } catch (e)') > -1);
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');
   stop(); process.exit(fails ? 1 : 0);
 })().catch(function (e) { console.log('  FAIL  crashed: ' + (e && e.stack || e)); console.log(serverLog.slice(-800)); stop(); process.exit(1); });

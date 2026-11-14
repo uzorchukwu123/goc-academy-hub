@@ -92,7 +92,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   ok('last activity in days', /Last practised or sat a test 8 days ago/.test(text()));
   ok('scores: test average with papers, last test, practice', /35% over 2 papers/.test(text()) && /30%/.test(text()) && /55% right over 40 answers/.test(text()), text().slice(0, 600));
   ok('recent attempts: practice, a marked test with score, a test waiting for a mark', /Practice/.test(text()) && /60% right over 10 answers/.test(text()) && /Test \(objective\)/.test(text()) && /30% \(6\/20\)/.test(text()) && /Waiting for a mark/.test(text()));
-  ok('weak topics with percent and answers, plus the held-back count', /25% right over 12 answers/.test(text()) && /2 topics have too few answers to show\./.test(text()));
+  ok('weak topics with percent and answers, plus the held-back count', /25% average score over 12 answers/.test(text()) && /2 topics have too few answers to show\./.test(text()));
   ok('names and topics are written escaped, never as markup', /Tunde &lt;i&gt;Bello&lt;\/i&gt;/.test(raw()) && /Acids &lt;b&gt;x&lt;\/b&gt;/.test(raw()) && !/<i>Bello<\/i>/.test(raw()) && !/<b>x<\/b>/.test(raw()));
   ok('email and phone are hidden and the page says so', !/tunde@example\.com|08011112222/.test(text()) && /Email and phone are hidden\./.test(text()) && !!q('button[data-act=stucontact]'));
 

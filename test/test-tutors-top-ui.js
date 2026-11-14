@@ -48,7 +48,8 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   }
   var tutorSession = { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } };
   var navigated = '', lastToast = '';
-  var win = { go: function (where) { navigated = where; }, toast: function (msg) { lastToast = msg; } };
+  var timerFn, cleared = false;
+  var win = { setInterval: function (fn, ms) { timerFn = fn; return 12; }, clearInterval: function () { cleared = true; }, go: function (where) { navigated = where; }, toast: function (msg) { lastToast = msg; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String, Number: Number, Object: Object, Array: Array });
   bctx.window.confirm = function () { return true; };
   vm.runInContext(bundle, bctx);
@@ -83,6 +84,15 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   ok('held-back students are a count only', /4 students need more work to be ranked\./.test(text()));
   ok('the card sits right after At-risk students and before Weak topics', raw().indexOf('At-risk students') < raw().indexOf('Top performers') && raw().indexOf('Top performers') < raw().indexOf('Weak topics'));
 
+  var refreshCount = topCalls().length;
+  click(q('button[data-act=refresh]')); await tick(30);
+  ok('manual refresh reloads live rankings', topCalls().length === refreshCount + 1);
+  refreshCount = topCalls().length;
+  timerFn(); await tick(30);
+  ok('automatic refresh reloads live rankings while the dashboard is open', topCalls().length === refreshCount + 1);
+  doc.hidden = true; refreshCount = topCalls().length; timerFn(); await tick(30);
+  ok('automatic refresh skips hidden tabs', topCalls().length === refreshCount); doc.hidden = false;
+
   console.log('\nthe tabs');
   var n0 = topCalls().length;
   click(q('button[data-tab=practice]'));
@@ -100,6 +110,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
 
   console.log('\nempty, failed, and signing out');
   click(q('button[data-act=signout]')); await tick(30);
+  ok('sign out clears the refresh timer', cleared);
   ok('sign out clears the card from the page', !/Top performers/.test(text()) && !/Chidi/.test(text()));
   failNext = true;
   await signIn();

@@ -40,14 +40,31 @@
     function storageSet(k, v) { try { if (storage) storage.setItem(k, v); } catch (e) {} }
 
     function key(name, userId) { return KEY_PREFIX + name + '.' + String(userId || 'anon'); }
+    /* The deployment id comes from the same service-worker cache name that
+       /api/health reports. A completed tour belongs to the deployment it was
+       completed on: when the id changes, the saved state is stale, so the tour
+       runs again for the new build and the Daily Affirmation waits for that
+       completion. A missing id (offline, or health not answered yet) never
+       discards a saved tour. */
+    function deployId() {
+      try { return env.deployId ? (typeof env.deployId === 'function' ? env.deployId() : env.deployId) : (root.GOC_DEPLOY_ID || null); }
+      catch (e) { return null; }
+    }
     function loadState(name, userId) {
       var raw = storageGet(key(name, userId));
-      if (raw) { try { var s = JSON.parse(raw); if (s && s.status) return s; } catch (e) {} }
-      if (name === 'student' && storageGet(LEGACY_STUDENT_KEY)) return { status: 'done', step: 0, legacy: true };
+      if (raw) { try {
+        var s = JSON.parse(raw);
+        if (s && s.status) {
+          var d = deployId();
+          if (s.deploy && d && s.deploy !== d) return null;
+          return s;
+        }
+      } catch (e) {} }
+      if (name === 'student' && storageGet(LEGACY_STUDENT_KEY)) return { status: 'done', step: 0, legacy: true, deploy: deployId() };
       return null;
     }
     function saveState(name, userId, status, step) {
-      storageSet(key(name, userId), JSON.stringify({ status: status, step: step, at: Date.now() }));
+      storageSet(key(name, userId), JSON.stringify({ status: status, step: step, at: Date.now(), deploy: deployId() }));
     }
 
     function getEl(id) {
@@ -228,6 +245,15 @@
       var wasActive = active;
       active = null;
       teardown();
+      /* One small event for the rest of the page: the Daily Affirmation is
+         unlocked only by a completed student tour, so app.js listens for
+         this rather than guessing from a timer. */
+      if (status === 'done' && wasActive && wasActive.name === 'student') {
+        try {
+          var ev = new root.CustomEvent('goc:tour-done', { detail: { tour: 'student', userId: wasActive.userId } });
+          (root.dispatchEvent ? root : doc).dispatchEvent(ev);
+        } catch (e) { /* very old browsers: the login check still applies */ }
+      }
       return wasActive;
     }
 
@@ -237,6 +263,7 @@
       hasTour: function (name) { return !!tours[name]; },
       steps: function (name) { return tours[name] ? tours[name].steps.slice() : []; },
       state: function (name, userId) { return loadState(name, userId); },
+      deployId: deployId,
       current: function () {
         if (!active) return null;
         return { tour: active.name, index: active.index, skipped: active.skipped.slice(),
@@ -297,42 +324,38 @@
   /* ---- Student tour: only features a student actually has, ending each
      exam-related step at its set-up/catalogue — never inside a run. ---- */
   var STUDENT_STEPS = [
-    { go: 'home', target: 'dashUp', title: 'Welcome to your dashboard',
-      body: 'This is home. At the top you\u2019ll always see what matters most: your level, XP and streak — and Next Up (right here) tells you the single best thing to do next, worked out from your own record.' },
-    { go: 'home', target: 'dashJamb', title: 'Your JAMB / UTME sitting',
-      body: 'This card shows your JAMB-oriented sitting when its question bank is ready in all your subjects. If it isn\u2019t ready yet, the card says so honestly — the Objective sitting is always there meanwhile.' },
+    { go: 'home', target: 'dashHello', title: 'Welcome to your dashboard',
+      body: 'This is home: your level, XP and streak at the top, then the papers waiting for you and where you stand in the league. Everything here comes from your own record.' },
     { go: 'home', target: 'jnPath', title: 'Your learning journey',
       body: 'Your level path. Every practice answer earns XP and moves you along; tap Goc the owl any time for a hint about what to do next.' },
+    { go: 'home', target: 'tut-webtest', title: 'What is waiting for you',
+      body: 'An assessed paper the academy has published for your subjects appears here. Open it when you are ready — the tour never starts it for you.' },
+    { go: 'home', target: 'tut-league', title: 'Where you stand',
+      body: 'Your league position is decided on assessed performance first; practice XP only separates scholars on the same performance.' },
     { go: 'home', target: 'tut-jump', title: 'Quick shortcuts',
-      body: 'One-tap jumps to Practice, your private My Notes, timed Study CBT, the academy Resources library and your Profile. Everything in the app is at most two taps from here.' },
+      body: 'One-tap jumps to Practice, your weekly Timetable, Classes, the academy Resources library and your Profile. Everything is at most two taps from here.' },
     { go: 'study', target: 'sg-practice', title: 'The Study hub',
-      body: 'This is your workshop. Practice is untimed and marks each answer as you go; Web Test is the assessed sitting; JAMB CBT rehearses the real exam format. Let\u2019s look at each.' },
+      body: 'This is your workshop. Practice is untimed and marks each answer as you go; Web Test is the assessed sitting. Let\u2019s look at each.' },
     { call: 'openPractice', target: 'suStart', title: 'Setting up practice',
       body: 'Practise any of your subjects, on the topics you choose, for as many questions as you like. Nothing here is timed or assessed — it\u2019s how you learn. We\u2019ll stop at set-up; starting is always your tap.' },
-    { call: 'openCBT', target: 'suStart', title: 'Formal CBT set-up',
-      body: 'Timed practice, marked only at the end — the closest rehearsal for exam day before the real sittings. Same set-up screen, but with a clock. Again, we won\u2019t start anything.' },
-    { go: 'study', target: 'sg-jamb', title: 'JAMB CBT',
-      body: 'The JAMB tile opens the UTME-format sitting for your whole subject combination. The tour never starts it for you — when you\u2019re ready, the tile explains the rules before anything begins.' },
-    { go: 'study', target: 'sg-reading', title: 'Read / Learn',
-      body: 'Lessons and reading notes for your papers live here, written by the academy for your combination. Read first, then practise — that rhythm is what the league leaders use.' },
+    { go: 'study', target: 'sg-webtest', title: 'The assessed Web Test',
+      body: 'Your academy papers live here: the Objective sitting and your written Theory papers. This is the work that counts on your record and moves the league.' },
+    { go: 'study', target: 'sg-results', title: 'Your results',
+      body: 'Every released result, with a full review of your answers and the correct ones. What is marked here is what counts.' },
     { go: 'study', target: 'sg-resources', title: 'Academy Resources',
-      body: 'The shared library: past questions, notes and materials the academy publishes for everyone. Separate from your own private notes, which are next.' },
-    { call: 'openMyNotes', target: 'myNoteUploadBtn', title: 'My Notes — your private library',
-      body: 'Upload your own notes (PDF, text, Word, images) with a subject and topic. Only you can ever see them — they never appear in the academy library.' },
-    { go: 'mynotes', target: 'myNotesList', title: 'Practise This Note',
-      body: 'Every note you upload gets a “Practise this note” button: the app builds questions only from that note\u2019s own words, shows you the sentence each answer came from, and keeps them out of every official bank. Scanned PDFs without text get an honest explanation instead.' },
-    { go: 'study', target: 'sg-mistakes', title: 'Mistakes & review',
-      body: 'Questions you get wrong wait under Mistakes, and anything due for spaced review finds you here and on Next Up. Re-answering them just before you\u2019d forget is how they stick.' },
+      body: 'The shared library: past questions, notes, formula sheets and syllabus materials the academy publishes for your subjects.' },
+    { go: 'study', target: 'sg-mistakes', title: 'Mistakes review',
+      body: 'Questions you get wrong in practice wait under Mistakes, so you can redo them and read why the right answer is right.' },
     { go: 'study', target: 'sg-bookmarks', title: 'Saved questions',
-      body: 'Tap “Save question” on any practice question and it waits here for a second look. Handy for the ones you want to ask a tutor about.' },
-    { go: 'results', target: 'results', title: 'Your results',
+      body: 'Tap \u201cSave question\u201d on any practice question and it waits here for a second look. Handy for the ones you want to ask a tutor about.' },
+    { go: 'results', target: 'results', title: 'Your results record',
       body: 'Every assessed result and its full review — your answers, the correct ones, and why. What\u2019s marked here is what counts on your record.' },
     { go: 'league', target: 'league', title: 'The Scholar League',
       body: 'Where you stand against other scholars, ranked on assessed performance first. Practice XP separates equals — results lead.' },
-    { go: 'classes', target: 'classes', title: 'Classes & timetable',
-      body: 'Live classes, recordings and your weekly timetable (on the Home tab bar) keep the academy\u2019s schedule in one place.' },
+    { go: 'classes', target: 'classFilters', title: 'Classes',
+      body: 'Lesson videos from your tutors, filtered to the subjects you actually sit. Your weekly timetable is on the Home tab bar.' },
     { go: 'profile', target: 'tourHelpRow', title: 'Profile, settings & this tour',
-      body: 'Your Scholar ID, preferences and account live in Profile. This row — Help & tutorial — brings this tour back whenever you want it: after you finish, it will say “Watch the tour again”.' }
+      body: 'Your Scholar ID, preferences and account live in Profile. This row — Help & tutorial — brings this tour back whenever you want it: after you finish, it will say \u201cWatch the tour again\u201d.' }
   ];
 
   /* ---- Management Console tour (Stage 7). One copy map for all 26 real
