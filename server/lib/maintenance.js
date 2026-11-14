@@ -25,7 +25,7 @@
                             It reveals only the service name and that
                             maintenance is on — no passcode length, no
                             programme state, no version detail.
-     GET/HEAD /robots.txt   disallow everything.
+     GET/HEAD /robots.txt   allow everything (the site is crawling-open).
      GET/HEAD /sw.js        a self-destroying service worker that clears the
                             app's caches and unregisters itself, so a
                             previously cached copy of the app cannot be
@@ -130,7 +130,6 @@ function page() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#B91C1C">
 <meta name="description" content="G.O.C Academy Hub is temporarily under maintenance while several improvements are completed.">
 <title>Under improvements · G.O.C Academy Hub</title>
@@ -296,7 +295,6 @@ function htmlHeaders() {
     'Content-Length': Buffer.byteLength(page()),
     'Cache-Control': 'no-store, max-age=0',
     'Retry-After': '3600',
-    'X-Robots-Tag': 'noindex, nofollow',
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
   };
@@ -343,7 +341,7 @@ function intercept(req, res, urlPath) {
 
   if (urlPath === '/robots.txt') {
     if (!readOnly) { res.writeHead(405); res.end(); return true; }
-    const body = 'User-agent: *\nDisallow: /\n';
+    const body = 'User-agent: *\nAllow: /\n';
     res.writeHead(200, {
       'Content-Type': 'text/plain; charset=utf-8',
       'Content-Length': Buffer.byteLength(body),
