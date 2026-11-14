@@ -569,3 +569,80 @@ body.f27-pending > :not(#f27Veil) { visibility: hidden; }
   font: 700 15px var(--font, system-ui, sans-serif); letter-spacing: .01em;
 }
 body.f27-pending #f27Veil { display: flex; }
+
+/* ============================================================================
+   COMPETITION CBT — DESKTOP EXAMINATION DESK (min-width: 1024px only)
+   ----------------------------------------------------------------------------
+   Everything above this block is the existing interface, untouched. Below
+   1024px — every phone and small tablet — not one rule in this block
+   applies, so the mobile competition experience is byte-for-byte the CSS
+   it has always had; the palette host below is display:none there.
+   On wide screens a competition paper becomes a JAMB-style desk: a
+   full-width examination header, the question card on the left and the
+   persistent question palette (answered / unanswered / current) on the
+   right. Weekly Assessments never carry the competition class and never
+   see any of this.
+   ============================================================================ */
+body.f27-mode #freeExamSide { display: none; }
+
+@media (min-width: 1024px) {
+  /* Use the desktop width for this screen only. The hub-wide 980px reading
+     cap in styles.css is untouched; these selectors out-specify it here. */
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-header,
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-body,
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-bar {
+    max-width: 1400px; width: 100%; margin-left: auto; margin-right: auto;
+  }
+
+  /* The desk: subjects across the top, question left, palette right. */
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 308px;
+    grid-template-areas: "subjects subjects" "card side";
+    column-gap: 22px; row-gap: 14px; align-content: start;
+    padding: 18px 22px;
+  }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-subjects {
+    grid-area: subjects; position: static; flex-wrap: wrap; overflow: visible;
+    margin: 0; padding: 0;
+  }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-card {
+    grid-area: card; align-self: start; padding: 26px 28px;
+  }
+  body.f27-mode #free-exam.f27-exam-competition #freeExamSide {
+    grid-area: side; display: flex; flex-direction: column; gap: 12px;
+    align-self: start; position: sticky; top: 0;
+    background: #fff; border: 1px solid #E4E7EC; border-radius: 18px; padding: 16px;
+    box-shadow: 0 1px 2px rgba(16,24,40,.05);
+  }
+  .f27-cbt-side-head { font-size: 14px; font-weight: 900; color: #141821; }
+  body.f27-mode #free-exam.f27-exam-competition #freeExamSide .f27-cbt-legend { margin: 0; }
+  body.f27-mode #free-exam.f27-exam-competition #freeExamSide .f27-cbt-navgrid {
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    max-height: 46vh; overflow-y: auto; padding: 2px;
+  }
+  .f27-cbt-side-count { font-size: 12.5px; font-weight: 800; color: #475467; }
+
+  /* The header as an examination bar: title left, timer prominent right. */
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-header { padding: 16px 22px 12px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-title-wrap h1 { font-size: 20px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-meta { font-size: 12.5px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-timer { font-size: 16px; padding: 10px 14px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-progress { font-size: 13px; }
+
+  /* Question and options at desktop scale, in the existing two columns. */
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-passage { font-size: 15px; line-height: 1.65; padding: 14px 16px; margin-bottom: 16px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-question { font-size: 18px; line-height: 1.6; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 22px;
+  }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-option {
+    padding: 16px; min-height: 60px; border-radius: 14px; gap: 12px;
+  }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-letter { min-width: 44px; height: 32px; font-size: 13px; border-radius: 10px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-text { font-size: 16px; line-height: 1.55; }
+
+  /* The control bar spans the desk; its buttons gain desktop presence. */
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-bar { padding: 12px 22px; }
+  body.f27-mode #free-exam.f27-exam-competition .f27-cbt-btn { min-height: 50px; font-size: 14px; padding: 12px 22px; }
+}
