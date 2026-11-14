@@ -4,8 +4,8 @@
    Real HTTP against a disposable server, twice against the same data folder:
 
      MODE ON   · the homepage, every deep link, static assets, the tutor shell,
-                 a password-setup link and every /api/ route answer 503 with
-                 the announcement; health stays minimal; the service worker
+                 and a password-setup link serve the announcement with 200;
+                 API routes answer 503; health stays minimal; the service worker
                  clears the app cache; a different Host header, a POST and an
                  existing bearer token change nothing; the data file is intact.
      MODE OFF  · the real homepage, real health payload and real service worker
@@ -110,7 +110,7 @@ function stopServer(child) {
 }
 
 function looksLikeMaintenancePage(r) {
-  return r.status === 503 &&
+  return r.status === 200 &&
     /text\/html/.test(r.headers['content-type'] || '') &&
     r.raw.indexOf(M.HEADLINE) > -1 &&
     r.raw.indexOf(M.OPENING) > -1 &&
@@ -135,7 +135,7 @@ var child = null;
 
   head('the announcement replaces the whole public application');
   var home = await request('GET', '/');
-  ok('GET / answers 503', home.status === 503, home.status);
+  ok('GET / answers 200', home.status === 200, home.status);
   ok('it is the announcement page', looksLikeMaintenancePage(home), home.status + ' ' + (home.headers['content-type'] || ''));
   ok('the exact headline is present', home.raw.indexOf('<h1 id="maintenanceTitle">' + M.HEADLINE + '</h1>') > -1);
   ok('the exact closing line is present', home.raw.indexOf('<p class="closing">' + M.CLOSING + '</p>') > -1);
@@ -162,7 +162,7 @@ var child = null;
   var otherHost = await request('GET', '/', { headers: { Host: 'another-host.example' } });
   ok('another Host header gets the same gate', looksLikeMaintenancePage(otherHost), otherHost.status);
   var headRes = await request('HEAD', '/');
-  ok('HEAD / answers 503 with no body', headRes.status === 503 && headRes.raw === '', headRes.status + ' bytes=' + headRes.raw.length);
+  ok('HEAD / answers 200 with no body', headRes.status === 200 && headRes.raw === '', headRes.status + ' bytes=' + headRes.raw.length);
   var postPage = await request('POST', '/');
   ok('POST to a page URL is refused, not served the app', postPage.status === 503 && postPage.body && postPage.body.maintenance === true, postPage.status);
 
