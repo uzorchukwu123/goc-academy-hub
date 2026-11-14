@@ -1685,6 +1685,21 @@
           <div class="f27-cbt-question" id="freeExamQ"></div>
           <div class="f27-cbt-options" id="freeExamOpts" role="group" aria-label="Answer options"></div>
         </article>
+        <!-- Desktop only (css/free2027.css, min-width:1024px): the persistent
+             question palette beside the paper, filled by paintExam() for
+             competition papers from the same state the Question Navigator
+             modal uses. Hidden — and never displayed — below that width and
+             for Weekly Assessments, whose layout is unchanged. -->
+        <aside class="f27-cbt-side" id="freeExamSide" hidden aria-label="Question palette">
+          <div class="f27-cbt-side-head">Question palette</div>
+          <div class="f27-cbt-legend">
+            <span><i class="f27-cbt-dot answered"></i> Answered</span>
+            <span><i class="f27-cbt-dot unanswered"></i> Unanswered</span>
+            <span><i class="f27-cbt-dot current"></i> Current</span>
+          </div>
+          <div class="f27-cbt-navgrid" id="freeExamSideGrid"></div>
+          <div class="f27-cbt-side-count" id="freeExamSideCount"></div>
+        </aside>
       </main>
       <nav class="f27-cbt-bar" aria-label="Question navigation">
         <button type="button" class="f27-cbt-btn" id="freeExamPrev" onclick="freeExamMove(-1)">Previous</button>

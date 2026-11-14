@@ -945,6 +945,32 @@
           '<span class="f27-cbt-text">' + fmt(o) + '</span></button>';
       }).join('');
     }
+    /* Desktop competition palette (css/free2027.css shows #freeExamSide only
+       at min-width:1024px and only for competitions; below that width and
+       for Weekly Assessments it stays hidden and this is inert). It is a
+       second view of the very state the Question Navigator modal renders —
+       same buttons, same freeExamJump() — never a second navigation path. */
+    var side = $('freeExamSide');
+    if (side) {
+      var comp = F.exam.kind === rules.KIND_COMPETITION;
+      side.hidden = !comp;
+      if (comp) {
+        var sideGrid = $('freeExamSideGrid');
+        if (sideGrid) {
+          sideGrid.innerHTML = F.exam.questions.map(function (q2, i) {
+            var answered = F.exam.answers[q2.id] != null;
+            var cls = 'f27-cbt-navq' + (i === F.exam.index ? ' current' : '') + (answered ? ' answered' : ' unanswered');
+            return '<button type="button" class="' + cls + '" aria-label="Question ' + (i + 1) + (answered ? ', answered' : ', unanswered') + '" onclick="freeExamJump(' + i + ')">' + (i + 1) + '</button>';
+          }).join('');
+        }
+        var sideCount = $('freeExamSideCount');
+        if (sideCount) {
+          var done = 0;
+          F.exam.questions.forEach(function (q3) { if (F.exam.answers[q3.id] != null) done++; });
+          sideCount.textContent = done + ' of ' + n + ' answered';
+        }
+      }
+    }
     paintSubjectNav();
   }
 
