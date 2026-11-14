@@ -9,7 +9,7 @@
   if (window.__zxOpen) { window.__zxOpen(); return; }
 
   var PW_MIN = 8;
-  var st = { view: 'signin', token: null, user: null, subject: '', info: null, stats: null, statsError: '', busy: false, error: '', note: '', idDraft: '', shown: false,
+  var st = { view: 'signin', token: null, user: null, subject: '', info: null, stats: null, statsError: '', busy: false, error: '', note: '', idDraft: '', shown: false, connectionProblem: null,
     qs: null, qError: '', qFilter: 'all', form: null, imp: null,
     ns: null, nError: '', nForm: null,
     sc: null, scError: '', scFilter: 'awaiting-marking', script: null, scriptError: '',
@@ -26,22 +26,36 @@
   }
 
   /* ------------------------------------------------------------ server calls */
+  function connectionError(kind, message) {
+    var e = new Error(message); e.kind = kind; return e;
+  }
   function call(method, path, body) {
     var opts = { method: method, headers: { 'Accept': 'application/json' } };
     if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     if (st.token) opts.headers.Authorization = 'Bearer ' + st.token;
     return fetch('api' + path, opts).then(function (r) {
+      var type = r.headers ? (r.headers.get('content-type') || '') : '';
+      var isJson = /^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|\s*$)/i.test(type);
+      var unavailable = r.status === 502 || r.status === 503 || r.status === 504;
+      function badResponse() {
+        return connectionError(unavailable ? 'waking' : 'unexpected', unavailable ? 'G.O.C is waking up. Please wait a little and try again.' : 'The service returned an unexpected response. Please try again later.');
+      }
+      if (!isJson) throw badResponse();
       return r.text().then(function (txt) {
-        var data = null;
-        try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
+        var data;
+        try { data = JSON.parse(txt); } catch (e) { throw badResponse(); }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw badResponse();
+        if (data.maintenance === true) throw connectionError('maintenance', typeof data.error === 'string' ? data.error : 'G.O.C Academy Hub is temporarily under maintenance. Please check back later.');
+        if (unavailable) throw badResponse();
         if (!r.ok) {
-          var err = new Error((data && data.error) || 'The server could not complete that (' + r.status + ').');
+          if (typeof data.error !== 'string' || !data.error) throw badResponse();
+          var err = new Error(data.error);
           err.status = r.status;
           throw err;
         }
         return data;
-      });
-    }, function () { throw new Error('Cannot reach the server. Check your connection.'); });
+      }, function () { throw connectionError('network', 'Cannot reach the server. Check your connection.'); });
+    }, function () { throw connectionError('network', 'Cannot reach the server. Check your connection.'); });
   }
 
   /* ------------------------------------------------------------------ styles */
@@ -97,6 +111,15 @@
   function noteHTML() { return st.note ? '<div class="zx-note" role="status">' + esc(st.note) + '</div>' : ''; }
 
   function signinHTML() {
+    if (st.connectionProblem) {
+      var e = st.connectionProblem;
+      var title = e.kind === 'waking' ? 'G.O.C is waking up' : e.kind === 'maintenance' ? 'G.O.C is under maintenance' : e.kind === 'network' ? 'Connection problem' : 'Temporary service error';
+      var message = e.kind === 'waking' ? 'Our server is temporarily starting up after a period of inactivity. Your tutor account is safe. Please wait a little and try again.' : e.message;
+      return '<div class="zx-back" data-act="close"></div><div class="zx-sheet" role="dialog" aria-modal="true" aria-label="Connection status">' +
+        '<h2 class="zx-h">' + esc(title) + '</h2><p class="zx-p" role="status">' + esc(message) + '</p>' +
+        '<button type="button" class="zx-btn" data-act="retry"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Checking…' : 'Retry Connection') + '</button>' +
+        '<button type="button" class="zx-btn zx-ghost" style="margin-top:8px" data-act="close">Cancel</button></div>';
+    }
     return '<div class="zx-back" data-act="close"></div>' +
       '<div class="zx-sheet" role="dialog" aria-modal="true" aria-label="Sign in">' +
       '<h2 class="zx-h">Sign in</h2><p class="zx-p">Enter your ID and password.</p>' +
@@ -1002,13 +1025,25 @@
   }
 
   function signin() {
+    if (st.busy || st.connectionProblem) return;
     var id = val('zxId').trim(), pw = val('zxPw');
     st.idDraft = id;
     if (!id || !pw) { setError('Enter your ID and password.'); draw(); return; }
     st.busy = true; setError(''); draw();
     call('POST', '/tutor/login', { id: id, password: pw }).then(function (r) {
       st.busy = false; st.token = r.token; st.idDraft = ''; enter(r.user);
-    }).catch(function (e) { st.busy = false; setError(e.message); draw(); });
+    }).catch(function (e) { st.busy = false; if (e.kind) st.connectionProblem = e; else setError(e.message); draw(); });
+  }
+
+  /* A user-initiated, credential-free probe; never repeat the login POST. */
+  function retryConnection() {
+    if (st.busy) return;
+    st.busy = true; draw();
+    call('GET', '/health').then(function (data) {
+      if (data.service !== 'goc-academy-hub') throw connectionError('unexpected', 'The service returned an unexpected response. Please try again later.');
+      st.connectionProblem = null; setError('Connection restored. Please sign in again.');
+    }).catch(function (e) { st.connectionProblem = e.kind ? e : connectionError('unexpected', 'The service returned an unexpected response. Please try again later.'); })
+      .then(function () { st.busy = false; draw(); });
   }
 
   function setpw() {
@@ -1045,6 +1080,7 @@
     var a = act.getAttribute('data-act');
     if (a === 'close') close();
     else if (a === 'signin') signin();
+    else if (a === 'retry') retryConnection();
     else if (a === 'setpw') setpw();
     else if (a === 'signout') signout();
     else if (a === 'arsort') { var so = act.getAttribute('data-sort') === 'score' ? 'score' : 'inactive'; if (so !== st.arSort || !st.ar) { st.arSort = so; loadAtRisk(); draw(); } }
