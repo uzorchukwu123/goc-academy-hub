@@ -8315,11 +8315,89 @@ function pracOpen(p){
   renderPrac();
 }
 function pracQ(){ return (pracPaper && pracPaper.questions[pracI]) || null; }
+/* JAMB-style navigation state (Stage 2). Marks are held per question index,
+   so moving around a run can never lose, duplicate or re-mark an answer:
+   pracMarks[i] exists exactly when question i has been answered, and
+   answerPrac refuses a second marking. Formal CBT is a different screen and
+   none of this touches it. */
+function pracAnsweredCount(){
+  var n = 0;
+  for(var i = 0; i < pracMarks.length; i++) if(pracMarks[i]) n++;
+  return n;
+}
+function pracAllAnswered(){
+  return !!pracPaper && pracAnsweredCount() >= pracPaper.questions.length;
+}
+function pracFirstUnanswered(){
+  for(var i = 0; i < (pracPaper ? pracPaper.questions.length : 0); i++) if(!pracMarks[i]) return i;
+  return -1;
+}
+function pracFbHtml(d, right){
+  return '<div class="feedback ' + (right ? 'ok' : 'no') + '"><h4>' + (right ? 'Correct' : 'Not quite') + '</h4>' +
+    '<p>' + mth(d.explanation || 'Read the note on this topic in Read / Learn.', {breaks:true}) + '</p>' +
+    bmButton({ id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: d.options,
+               answer: d.answer, explanation: d.explanation }) +
+    askTutorButton({ id: d.id }) + '</div>';
+}
+/* Progress segments, question palette, answered count and the Prev/Next bar,
+   painted from the same marks every time — after an answer and after every
+   move — so the three can never disagree about where the student stands. */
+function pracPaintChrome(total){
+  var prog = document.getElementById('pracProg');
+  if(prog){
+    prog.innerHTML = '';
+    for(var i = 0; i < total; i++){
+      var s = document.createElement('span');
+      s.className = ((pracMarks[i] ? 'on' : '') + (i === pracI ? ' cur' : '')).trim();
+      prog.appendChild(s);
+    }
+  }
+  var pal = document.getElementById('pracPalette');
+  if(pal){
+    pal.innerHTML = '';
+    for(var p = 0; p < total; p++){
+      (function(idx){
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'prac-pal' + (pracMarks[idx] ? ' ans' : '') + (idx === pracI ? ' cur' : '');
+        b.textContent = idx + 1;
+        b.setAttribute('aria-label', 'Question ' + (idx + 1)
+          + (pracMarks[idx] ? ' (answered)' : ' (unanswered)') + (idx === pracI ? ' (current)' : ''));
+        if(idx === pracI) b.setAttribute('aria-current', 'true');
+        b.onclick = function(){ pracGo(idx); };
+        pal.appendChild(b);
+      })(p);
+    }
+  }
+  var cnt = document.getElementById('pracNavCount');
+  if(cnt) cnt.textContent = pracAnsweredCount() + ' of ' + total + ' answered';
+  var prev = document.getElementById('pracPrevBtn');
+  if(prev) prev.disabled = pracI <= 0;
+  var btn = document.getElementById('pracBtn');
+  if(btn){
+    if(!pracAnswered){ btn.disabled = true; btn.textContent = 'Select an answer'; }
+    else {
+      btn.disabled = false;
+      btn.textContent = pracI < total - 1 ? 'Next question →'
+        : (pracAllAnswered() ? 'See your review' : 'Next unanswered →');
+    }
+  }
+}
+function pracGo(i){
+  if(!pracPaper) return;
+  if(i < 0 || i >= pracPaper.questions.length) return;
+  pracI = i;
+  renderPrac();
+}
+function pracPrev(){ pracGo(pracI - 1); }
 function renderPrac(){
-  pracAnswered = false;
   var d = pracQ();
   if(!d) return;
   var total = pracPaper.questions.length;
+  /* Returning to an answered question restores it exactly as it was left:
+     the chosen option, the correct one, the feedback and the locks. */
+  var mark = pracMarks[pracI] || null;
+  pracAnswered = !!mark;
   var sub = document.getElementById('pracSub');
   if(sub){
     /* The header states what the run is worth, from the figures the data layer
@@ -8339,18 +8417,15 @@ function renderPrac(){
     b.className = 'opt';
     b.innerHTML = '<span class="key">' + OPT_KEYS[i] + '</span>' + mth(o);
     b.onclick = function(){ answerPrac(i, b); };
+    if(mark){
+      b.disabled = true;
+      if(i === mark.given) b.classList.add(mark.isCorrect ? 'correct' : 'wrong');
+      if(i === d.answer) b.classList.add('correct');
+    }
     host.appendChild(b);
   });
-  document.getElementById('pracFb').innerHTML = '';
-  var btn = document.getElementById('pracBtn');
-  btn.disabled = true; btn.textContent = 'Select an answer';
-  var prog = document.getElementById('pracProg');
-  prog.innerHTML = '';
-  for(var i = 0; i < total; i++){
-    var s = document.createElement('span');
-    if(i < pracI) s.className = 'on'; else if(i === pracI) s.className = 'cur';
-    prog.appendChild(s);
-  }
+  document.getElementById('pracFb').innerHTML = mark ? pracFbHtml(d, mark.isCorrect) : '';
+  pracPaintChrome(total);
 }
 function answerPrac(i, btn){
   if(pracAnswered) return;
@@ -8361,17 +8436,13 @@ function answerPrac(i, btn){
   var right = i === d.answer;
   btn.classList.add(right ? 'correct' : 'wrong');
   if(!right && opts[d.answer]) opts[d.answer].classList.add('correct');
-  document.getElementById('pracFb').innerHTML =
-    '<div class="feedback ' + (right ? 'ok' : 'no') + '"><h4>' + (right ? 'Correct' : 'Not quite') + '</h4>' +
-    '<p>' + mth(d.explanation || 'Read the note on this topic in Read / Learn.', {breaks:true}) + '</p>' +
-    bmButton({ id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: d.options,
-               answer: d.answer, explanation: d.explanation }) +
-    askTutorButton({ id: d.id }) + '</div>';
-  pracMarks.push({ n: pracI + 1, id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: (d.options || []).slice(),
-                   answer: d.answer, given: i, isCorrect: right, explanation: d.explanation || '' });
-  var b = document.getElementById('pracBtn');
-  b.disabled = false;
-  b.textContent = pracI < pracPaper.questions.length - 1 ? 'Next question →' : 'See your review';
+  document.getElementById('pracFb').innerHTML = pracFbHtml(d, right);
+  /* One mark per question, stored at its own index: navigation can revisit
+     this question but can never push a second mark (or a second XP claim)
+     for it — pracAnswered above is the lock, this is the record. */
+  pracMarks[pracI] = { n: pracI + 1, id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: (d.options || []).slice(),
+                   answer: d.answer, given: i, isCorrect: right, explanation: d.explanation || '' };
+  pracPaintChrome(pracPaper.questions.length);
 }
 /* Finishing a practice run: the page has already marked every question for the
    student, but the run is sent back all the same. The data layer marks it again
@@ -8381,6 +8452,13 @@ function answerPrac(i, btn){
 function pracNext(){
   if(!pracAnswered) return;
   if(pracI < pracPaper.questions.length - 1){ pracI++; renderPrac(); return; }
+  /* On the last question with earlier ones still open, Next takes the student
+     to the first unanswered question rather than ending the run early; the
+     review opens only once every question has been answered. */
+  if(!pracAllAnswered()){ pracGo(pracFirstUnanswered()); return; }
+  pracFinish();
+}
+function pracFinish(){
   var paper = pracPaper;
   var local = pracLocalResult(paper);
   pracPaper = null;
@@ -8392,7 +8470,7 @@ function pracNext(){
   });
   GOC.api.submitStudy({ paperId: paper.paperId, responses: responses, timeUsedSec: 0 })
     .then(function(res){
-      res.review = pracMarks;          /* keep the order the student answered in */
+      res.review = pracMarks;          /* one mark per question, in question order */
       res.mode = 'practice';
       srShow(res);
       refreshMe();                     /* the XP has moved, so the header must too */
@@ -8408,10 +8486,11 @@ function pracNext(){
 function pracLocalResult(paper){
   var correct = pracMarks.filter(function(m){ return m.isCorrect; }).length;
   var total = paper.questions.length;
+  var answered = pracAnsweredCount();
   return {
     mode: 'practice', subject: paper.subject, assessed: false,
-    total: total, answered: pracMarks.length, unanswered: total - pracMarks.length,
-    correct: correct, wrong: pracMarks.length - correct,
+    total: total, answered: answered, unanswered: total - answered,
+    correct: correct, wrong: answered - correct,
     percent: total ? Math.round(correct * 100 / total) : 0,
     timeUsedSec: null, xpAwarded: 0, review: pracMarks, topics: pracTopicBands()
   };

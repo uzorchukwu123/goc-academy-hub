@@ -1214,8 +1214,18 @@
           <div id="pracOpts"></div>
           <div id="pracFb"></div>
         </div>
+        <!-- JAMB-style question palette (Stage 2): numbered navigation with
+             answered / unanswered / current states, painted by
+             pracPaintChrome() in js/app.js from the run's own marks.
+             Revisiting an answered question shows it as it was left —
+             answers are never lost or re-marked by moving around. -->
+        <div class="prac-pal-wrap">
+          <div class="prac-pal-head"><span>Questions</span><span id="pracNavCount">0 of 0 answered</span></div>
+          <div class="prac-pal-grid" id="pracPalette"></div>
+          <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+        </div>
       </div>
-      <div class="bottom-bar"><button class="btn btn-red btn-block" id="pracBtn" onclick="pracNext()" disabled>Select an answer</button></div>
+      <div class="bottom-bar"><button class="btn btn-outline" id="pracPrevBtn" onclick="pracPrev()" disabled>← Prev</button><button class="btn btn-red btn-block" id="pracBtn" onclick="pracNext()" disabled>Select an answer</button></div>
     </section>
 
     <!-- ============ CBT ============ -->
