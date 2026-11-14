@@ -38,12 +38,10 @@ function createHealthRoute(deps) {
       free2027: {
         on: fed.enabled === true,
         mode,
-        /* Honest about where this deployment keeps records. The OneBit server
-           reports 'local-json' and a filesystem path; the Function reports the
-           Appwrite Storage blob it actually reads. */
-        storage: 'appwrite-storage',
-        storageFile: deps.cfg ? deps.cfg.bucketId + '/' + deps.cfg.backupFileId : '',
-        archiveDir: deps.cfg ? deps.cfg.bucketId + '/free2027-archives' : ''
+        /* The storage MODEL only. No bucket/file identifier or filesystem
+           path is reported: this endpoint is public, and where records
+           physically live is deployment detail. */
+        storage: 'appwrite-storage'
       }
     };
   };

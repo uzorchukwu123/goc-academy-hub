@@ -155,7 +155,7 @@ function adminLogin(id, password, passcode) {
     ok('the server is up', h.status === 200, h.raw + ' ' + log.slice(-300));
     ok('the edition is on', h.body && h.body.free2027 && h.body.free2027.on === true, h.raw);
     ok('health says where the edition keeps its records', h.body.free2027.storage === 'local-json', JSON.stringify(h.body.free2027));
-    ok('and names the local file it uses', h.body.free2027.storageFile === DATA_FILE, h.body.free2027.storageFile);
+    ok('and the public health answer names no local file or path', h.body.free2027.storageFile === undefined && h.body.free2027.archiveDir === undefined && h.raw.indexOf(DATA_FILE) < 0, h.raw);
     ok('the boot log says the edition is local, not Appwrite', /2027 Free Tutorial: ON — records in .*data\.json \(no Appwrite Database\)/.test(log), log.slice(-400));
 
     /* from here on, only requests made BY the free tutorial count */

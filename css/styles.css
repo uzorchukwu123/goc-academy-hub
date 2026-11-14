@@ -29,7 +29,13 @@ body{
   box-shadow:var(--sh-lg), 0 0 0 10px #1b1c20, 0 0 0 12px #34363d;
 }
 .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:150px;height:26px;background:#1b1c20;border-radius:0 0 16px 16px;z-index:60;pointer-events:none}
-@media (max-width:480px){
+/* Full-bleed on every viewport below the desktop layout (<900px): the app
+   fills the real browser viewport, with no simulated device frame around it.
+   This used to stop at 480px, which left landscape phones, large phones and
+   small tablets (481–899px) showing the site inside a phone mockup. The
+   declarations are exactly the former portrait-phone ones, widened to 899px;
+   the >=900px desktop layout above is untouched. */
+@media (max-width:899px){
   body{background:var(--bg)}
   .phone{width:100vw;height:100dvh;border-radius:0;box-shadow:none}
   .notch{display:none}

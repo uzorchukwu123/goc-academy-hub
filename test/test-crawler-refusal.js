@@ -1,12 +1,17 @@
-/* test-crawler-refusal.js — Phase 3D slice 2: turn crawlers away.
+/* test-crawler-refusal.js — Phase 3D slice 2, revised: turn TRAINING crawlers
+   away, let interactive AI assistants in.
 
    Real server on a spare port, throwaway copy of the app. Proves that:
-     1. a request naming a known AI crawler / search bot / scraper gets 403
-        (pages, scripts and the API alike), with nothing of the app in the body
+     1. a request naming a known AI training crawler / search bot / scraper
+        gets 403 (pages, scripts and the API alike), with nothing of the app
+        in the body
      2. robots.txt stays readable to them, so a polite crawler can obey it
-     3. ordinary browsers and a client with no User-Agent are untouched
+     3. interactive AI assistants (ChatGPT-User, Claude-Web, Perplexity-User)
+        get the public app like any browser — but private files still 404 and
+        protected APIs still demand authorization
+     4. ordinary browsers and a client with no User-Agent are untouched
         (including the Go-http-client that hosting health checks use)
-     4. static files are rate-limited per IP (429 + Retry-After), while the API
+     5. static files are rate-limited per IP (429 + Retry-After), while the API
         and robots.txt stay reachable
    No dependencies.  Run:  node test/test-crawler-refusal.js  */
 'use strict';
@@ -102,6 +107,12 @@ var HUMANS = [
   ['Go-http-client/2.0', 'a hosting health check (Go-http-client)'],
   [null, 'a client with no User-Agent']
 ];
+var INTERACTIVE = [
+  ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ChatGPT-User/1.0; +https://openai.com/bot)', 'ChatGPT-User'],
+  ['Mozilla/5.0 (compatible; Claude-Web/1.0; +claude-web@anthropic.com)', 'Claude-Web'],
+  ['Mozilla/5.0 (compatible; Claude-User/1.0; +claude-user@anthropic.com)', 'Claude-User'],
+  ['Mozilla/5.0 (compatible; Perplexity-User/1.0; +https://perplexity.ai)', 'Perplexity-User']
+];
 
 waitForBoot(100).then(function () {
   head('known crawlers are refused');
@@ -130,6 +141,23 @@ waitForBoot(100).then(function () {
   return seq(HUMANS, function (h) {
     return call('GET', '/', h[0]).then(function (r) {
       ok(h[1] + ' still gets the app', r.status === 200 && r.raw.indexOf('<html') >= 0, r.status);
+    });
+  });
+}).then(function () {
+  head('interactive AI assistants are let in — to the public interface only');
+  return seq(INTERACTIVE, function (h) {
+    return call('GET', '/', h[0]).then(function (r) {
+      ok(h[1] + ' gets the public app', r.status === 200 && r.raw.indexOf('<html') >= 0, r.status);
+      ok('  and is not told noindex', !/noindex/.test(r.headers['x-robots-tag'] || ''), r.headers['x-robots-tag']);
+      return call('GET', '/css/styles.css', h[0]);
+    }).then(function (r) {
+      ok('  ' + h[1] + ' can read the public styles', r.status === 200, r.status);
+      return call('GET', '/server/data.json', h[0]);
+    }).then(function (r) {
+      ok('  but ' + h[1] + ' cannot reach the database file', r.status === 404, r.status);
+      return call('GET', '/api/me', h[0]);
+    }).then(function (r) {
+      ok('  and ' + h[1] + ' gets no private API data without signing in', r.status === 401, r.status);
     });
   });
 }).then(function () {
