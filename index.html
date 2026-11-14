@@ -1021,35 +1021,35 @@
         <!-- PRIMARY ACTIONS — 2-col icon grid -->
         <div class="sec-head" style="margin-top:4px"><div class="section-t">Study tools</div></div>
         <div class="study-grid">
-          <button class="sg-cell" onclick="openReading()">
+          <button class="sg-cell" id="sg-reading" onclick="openReading()">
             <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg></div>
             <span class="sg-label">Read / Learn</span>
           </button>
-          <button class="sg-cell" onclick="openPractice()">
+          <button class="sg-cell" id="sg-practice" onclick="openPractice()">
             <div class="sg-icon" style="background:#DC2626"><svg class="icon" viewBox="0 0 24 24" fill="#fff"><rect x="2.5" y="9" width="3.5" height="6" rx="1.2"/><rect x="18" y="9" width="3.5" height="6" rx="1.2"/><rect x="6" y="10.6" width="12" height="2.8"/></svg></div>
             <span class="sg-label">Practice</span>
             <span class="sg-badge gold-badge">+XP</span>
           </button>
-          <button class="sg-cell" onclick="openWebTest()">
+          <button class="sg-cell" id="sg-webtest" onclick="openWebTest()">
             <div class="sg-icon" style="background:#141821"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/></svg></div>
             <span class="sg-label">Web Test</span>
             <span class="sg-badge red-badge">Assessed</span>
           </button>
-          <button class="sg-cell" onclick="openJambTest()">
+          <button class="sg-cell" id="sg-jamb" onclick="openJambTest()">
             <div class="sg-icon" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="4.5" width="18" height="11.5" rx="1.6"/><path d="M2 20h20"/></svg></div>
             <span class="sg-label">JAMB CBT</span>
             <span class="sg-badge red-badge">UTME</span>
           </button>
 
-          <button class="sg-cell" onclick="openResults()">
+          <button class="sg-cell" id="sg-results" onclick="openResults()">
             <div class="sg-icon" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 4v16h16"/><path d="M7 15l3-4 3 2 5-7"/></svg></div>
             <span class="sg-label">Results</span>
           </button>
-          <button class="sg-cell" onclick="go('resources')">
+          <button class="sg-cell" id="sg-resources" onclick="go('resources')">
             <div class="sg-icon" style="background:#E08600"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></div>
             <span class="sg-label">Resources</span>
           </button>
-          <button class="sg-cell" onclick="openMyNotes()">
+          <button class="sg-cell" id="sg-mynotes" onclick="openMyNotes()">
             <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4.3.8.8-4.3z"/></svg></div>
             <span class="sg-label">My Notes</span>
             <span class="sg-badge gold-badge">Private</span>
@@ -1059,11 +1059,11 @@
         <!-- REVIEW TOOLS — compact row -->
         <div class="sec-head" style="margin-top:20px"><div class="section-t">Review &amp; saves</div></div>
         <div class="review-row">
-          <button class="rv-chip" onclick="go('bookmarks')">
+          <button class="rv-chip" id="sg-bookmarks" onclick="go('bookmarks')">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
             <span>Saved</span><em id="bmCount"></em>
           </button>
-          <button class="rv-chip" onclick="go('mistakes')">
+          <button class="rv-chip" id="sg-mistakes" onclick="go('mistakes')">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             <span>Mistakes</span><em id="mkCount"></em>
           </button>
@@ -1473,6 +1473,11 @@
             <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 18h6"/></svg></div>
             <div class="lbl"><h4>Install app</h4><p>Add to home screen for one-tap access</p></div>
             <span id="installAction"></span>
+          </div>
+          <div class="set-row" id="tourHelpRow">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3A2.6 2.6 0 1 1 12 12.5V13"/><path d="M12 16.8h.01"/></svg></div>
+            <div class="lbl"><h4>Help &amp; tutorial</h4><p id="tourHelpNote">A guided walk around your hub</p></div>
+            <button class="mini-link" id="tourHelpBtn" type="button" onclick="tourRestart()">Take the tour</button>
           </div>
         </div>
         <div class="ios-install-help" id="iosInstallHelp" style="display:none">
@@ -2160,24 +2165,6 @@
 
   </div><!-- /screens -->
 
-  <!-- ============ DASHBOARD TUTORIAL OVERLAY ============
-       Direct child of .phone (not inside .screens) so it is not clipped
-       by the screens overflow and renders correctly on mobile.
-       Uses position:absolute relative to .phone. -->
-  <div id="tutOverlay" class="tut-overlay" aria-modal="true" role="dialog" aria-label="Dashboard tour" style="display:none">
-    <div id="tutBackdrop" class="tut-backdrop"></div>
-    <div id="tutCard" class="tut-card" role="document">
-      <div class="tut-step-pip" id="tutPips"></div>
-      <div class="tut-ico" id="tutIco"></div>
-      <div class="tut-title" id="tutTitle"></div>
-      <div class="tut-body" id="tutBody"></div>
-      <div class="tut-actions">
-        <button class="tut-skip" id="tutSkip" onclick="tutSkip()">Skip tour</button>
-        <button class="tut-next" id="tutNext" onclick="tutNext()">Next →</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ============ TABBAR ============ -->
   <!-- Mobile-only slide-out menu for the public homepage.
        Hidden entirely at >=900px, where the inline nav links are used. -->
@@ -2397,331 +2384,10 @@ window.__gocBootTimer = setTimeout(function() {
 <script src="js/note-questions.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/onboarding.js"></script>
 <script src="js/free2027-api.js"></script>
 <script src="js/free2027-ui.js"></script>
 <script src="js/free2027-admin.js"></script>
 <script src="js/pwa.js"></script>
-<!-- ============ TUTORIAL STYLES ============ -->
-<style>
-/* Overlay backdrop */
-.tut-overlay{
-  /* position:absolute so it sits inside .phone and is never clipped.
-     .phone is position:relative, so inset:0 covers it exactly. */
-  position:absolute;inset:0;z-index:9900;
-  pointer-events:all;
-}
-.tut-backdrop{
-  position:absolute;inset:0;
-  background:rgba(10,12,18,.72);
-  transition:clip-path .4s cubic-bezier(.4,0,.2,1);
-}
-/* Highlight ring around the target element */
-.tut-ring{
-  /* Also absolute within .tut-overlay / .phone */
-  position:absolute;
-  border-radius:16px;
-  box-shadow:0 0 0 4px rgba(220,38,38,.85), 0 0 0 8px rgba(220,38,38,.2);
-  pointer-events:none;
-  z-index:9901;
-  transition:left .35s cubic-bezier(.4,0,.2,1),top .35s cubic-bezier(.4,0,.2,1),width .35s,height .35s;
-  animation:tutPulse 2s ease-in-out infinite;
-}
-@keyframes tutPulse{
-  0%,100%{box-shadow:0 0 0 4px rgba(220,38,38,.85),0 0 0 8px rgba(220,38,38,.18)}
-  50%{box-shadow:0 0 0 4px rgba(220,38,38,1),0 0 0 14px rgba(220,38,38,.08)}
-}
-/* Tooltip card */
-.tut-card{
-  position:absolute;
-  left:50%;transform:translateX(-50%);
-  width:min(320px, calc(100% - 32px));
-  background:#fff;
-  border-radius:20px;
-  padding:20px 20px 16px;
-  box-shadow:0 16px 48px rgba(10,12,18,.28), 0 2px 8px rgba(10,12,18,.12);
-  z-index:9910;
-  transition:top .4s cubic-bezier(.4,0,.2,1), bottom .4s cubic-bezier(.4,0,.2,1);
-  animation:tutCardIn .3s cubic-bezier(.2,1.3,.4,1) both;
-}
-@keyframes tutCardIn{from{opacity:0;transform:translateX(-50%) scale(.93)}to{opacity:1;transform:translateX(-50%) scale(1)}}
-/* Step pips */
-.tut-step-pip{display:flex;gap:5px;margin-bottom:14px;justify-content:center}
-.tut-pip{width:6px;height:6px;border-radius:50%;background:#E5E7EB;transition:background .2s,width .2s}
-.tut-pip.on{background:#DC2626;width:18px;border-radius:3px}
-/* Icon */
-.tut-ico{
-  width:48px;height:48px;border-radius:14px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;margin-bottom:12px;
-  flex-shrink:0;
-}
-/* Text */
-.tut-title{font-size:16px;font-weight:900;color:#111827;margin-bottom:6px;line-height:1.25}
-.tut-body{font-size:13.5px;color:#4B5563;line-height:1.55;margin-bottom:16px}
-/* Actions */
-.tut-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.tut-skip{font-size:13px;font-weight:600;color:#9CA3AF;background:none;border:none;cursor:pointer;padding:0;font-family:inherit}
-.tut-skip:hover{color:#DC2626}
-.tut-next{
-  background:#DC2626;color:#fff;
-  border:none;border-radius:12px;
-  padding:11px 22px;font-size:14px;font-weight:800;
-  cursor:pointer;font-family:inherit;
-  transition:background .15s,transform .1s;
-}
-.tut-next:active{transform:scale(.96)}
-.tut-next:hover{background:#B91C1C}
-/* "Done" finish state */
-.tut-next.done{background:#15803D}
-/* Celebration flash */
-@keyframes tutDone{
-  0%{background:#15803D}50%{background:#166534;transform:translateX(-50%) scale(1.04)}100%{background:#15803D;transform:translateX(-50%) scale(1)}
-}
-.tut-card.finishing{animation:tutDone .5s ease both}
-</style>
-
-<!-- ============ TUTORIAL SCRIPT ============ -->
-<script>
-(function(){
-  /* ── Tutorial step definitions ── */
-  var STEPS = [
-    {
-      anchor: 'tut-hero',
-      ico: '👋', icoBg: '#DC2626',
-      title: 'Welcome to your Dashboard',
-      body: 'This is your G.O.C Academy Hub home. Your scholar level, XP, streak, and exam details all live up here at a glance.',
-      pos: 'below', scrollTo: 0
-    },
-    {
-      anchor: 'tut-focus',
-      ico: '⏱️', icoBg: '#0E7490',
-      title: 'Daily Study Window',
-      body: 'Your academy sets a daily study limit. The ring shows how much time remains today — use it wisely. Every minute counts towards JAMB/UTME success.',
-      pos: 'below', scrollTo: 0
-    },
-    {
-      anchor: 'dashJourney',
-      ico: '🗺️', icoBg: '#7C3AED',
-      title: 'Your Learning Journey',
-      body: 'This path tracks your progress topic by topic. Complete lessons and practice sessions to unlock the next stage. Tap Goc the owl to get a hint!',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-webtest',
-      ico: '📝', icoBg: '#141821',
-      title: 'Web Test',
-      body: 'Your Web Test is the official assessed paper set by your academy — it counts towards your record. Check here regularly for new papers and deadlines.',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-league',
-      ico: '🏆', icoBg: '#F59E0B',
-      title: 'League & Rankings',
-      body: 'See how you rank against other scholars. Practice and Web Tests earn you XP which moves you up the league. Compete, improve, and top the board!',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-jump',
-      ico: '⚡', icoBg: '#15803D',
-      title: 'Quick Access Shortcuts',
-      body: 'Jump straight into Practice, your Timetable, live Classes, or your Profile from here — one tap and you\'re in.',
-      pos: 'above', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-nav-home',
-      ico: '🔖', icoBg: '#4F46E5',
-      title: 'Bottom Navigation',
-      body: 'Use the tabs at the bottom to move between Home, Classes, Study, League and Profile. The Study tab is where Practice, Web Test and past questions live.',
-      pos: 'above', scrollTo: 'auto',
-      last: true
-    }
-  ];
-
-  var TUT_KEY = 'goc_tut_done_v1';
-  var cur = 0;
-  var ring = null;
-
-  /* ── Public entry point called after login ── */
-  window.tutorialInit = function(){
-    try{ if(localStorage.getItem(TUT_KEY)) return; } catch(_){}
-    /* FIX: Close the affirmation flyer if it is open so it doesn't block the tour */
-    var flyer = document.getElementById('flyerOverlay');
-    if(flyer && flyer.classList.contains('show')) flyer.classList.remove('show');
-    cur = 0;
-    /* FIX: Lock home screen scroll so targets don't move while the tour is active */
-    var homeEl = document.getElementById('home');
-    if(homeEl) homeEl.style.overflowY = 'hidden';
-    show();
-  };
-
-  function getHomeEl(){ return document.getElementById('home'); }
-
-  function show(){
-    var overlay = document.getElementById('tutOverlay');
-    if(!overlay) return;
-    overlay.style.display = 'block';
-    renderStep(cur);
-  }
-
-  function renderStep(i){
-    var step = STEPS[i];
-    if(!step){ finish(); return; }
-
-    /* Pips */
-    var pips = '';
-    for(var p=0;p<STEPS.length;p++) pips += '<span class="tut-pip'+(p===i?' on':'')+'"></span>';
-    document.getElementById('tutPips').innerHTML = pips;
-
-    /* Icon */
-    var ico = document.getElementById('tutIco');
-    ico.textContent = step.ico;
-    ico.style.background = (step.icoBg || '#DC2626') + '22';
-
-    /* Text */
-    document.getElementById('tutTitle').textContent = step.title;
-    document.getElementById('tutBody').textContent = step.body;
-
-    /* Next button label */
-    var nxt = document.getElementById('tutNext');
-    if(step.last){ nxt.textContent = 'Done ✓'; nxt.className = 'tut-next done'; }
-    else { nxt.textContent = 'Next →'; nxt.className = 'tut-next'; }
-
-    /* Position highlight ring and card */
-    positionStep(step);
-  }
-
-  function positionStep(step){
-    var target = document.getElementById(step.anchor);
-    /* Remove old ring */
-    if(ring && ring.parentNode) ring.parentNode.removeChild(ring);
-    ring = null;
-
-    var card = document.getElementById('tutCard');
-    var PAD = 8;
-
-    if(target){
-      /* FIX: Scroll the home container (not the whole page) to bring the
-         target into view, then wait for scroll to fully settle before
-         measuring — prevents ring drift as the content moves. */
-      var homeEl = getHomeEl();
-      if(step.scrollTo === 0){
-        /* First steps: scroll home screen to top */
-        if(homeEl) homeEl.scrollTop = 0;
-      } else if(step.scrollTo === 'auto' && homeEl){
-        /* Later steps: scroll so the target is visible in the home container */
-        var containerRect = homeEl.getBoundingClientRect();
-        var targetRect    = target.getBoundingClientRect();
-        var targetRelTop  = targetRect.top - containerRect.top + homeEl.scrollTop;
-        var idealScroll   = targetRelTop - (homeEl.clientHeight / 2) + (targetRect.height / 2);
-        homeEl.scrollTop  = Math.max(0, idealScroll);
-      }
-
-      /* Wait for scroll to settle, then measure positions relative to .phone
-         (the overlay is absolute within .phone, not fixed to the viewport) */
-      setTimeout(function(){
-        var phoneEl = document.getElementById('phone');
-        var phoneRect = phoneEl ? phoneEl.getBoundingClientRect() : {left:0, top:0};
-        var r = target.getBoundingClientRect();
-
-        /* Translate viewport-relative rect into .phone-relative coords */
-        var relLeft = r.left - phoneRect.left;
-        var relTop  = r.top  - phoneRect.top;
-
-        /* Draw ring */
-        ring = document.createElement('div');
-        ring.className = 'tut-ring';
-        ring.style.cssText =
-          'left:'+(relLeft - PAD)+'px;'+
-          'top:'+(relTop - PAD)+'px;'+
-          'width:'+(r.width + PAD*2)+'px;'+
-          'height:'+(r.height + PAD*2)+'px;'+
-          'border-radius:'+(step.anchor==='tut-nav-home'?'12':'16')+'px;';
-        document.getElementById('tutOverlay').appendChild(ring);
-
-        /* Position card above or below — using .phone height as the container */
-        var containerH = phoneEl ? phoneEl.clientHeight : window.innerHeight;
-        var CARD_H = 240;
-        var MARGIN = 14;
-
-        card.style.removeProperty('top');
-        card.style.removeProperty('bottom');
-        card.style.transform = 'translateX(-50%)';
-
-        if(step.pos === 'above'){
-          var spaceAbove = relTop - PAD - MARGIN;
-          if(spaceAbove >= CARD_H){
-            var fromBottom = containerH - relTop + PAD + MARGIN;
-            card.style.bottom = fromBottom + 'px';
-          } else {
-            var fromTop = relTop + r.height + PAD + MARGIN;
-            if(fromTop < 8) fromTop = 8;
-            card.style.top = fromTop + 'px';
-          }
-        } else {
-          var fromTop2 = relTop + r.height + PAD + MARGIN;
-          var spaceBelow = containerH - fromTop2;
-          if(spaceBelow >= CARD_H){
-            card.style.top = fromTop2 + 'px';
-          } else {
-            var aboveTop = relTop - PAD - MARGIN - CARD_H;
-            if(aboveTop < 8) aboveTop = 8;
-            card.style.top = aboveTop + 'px';
-          }
-        }
-      }, 200);
-
-    } else {
-      /* No target — centre card vertically within .phone */
-      var phoneEl2 = document.getElementById('phone');
-      var ph = phoneEl2 ? phoneEl2.clientHeight : 600;
-      card.style.top = Math.max(8, (ph - 280) / 2) + 'px';
-      card.style.transform = 'translateX(-50%)';
-    }
-  }
-
-  window.tutNext = function(){
-    cur++;
-    if(cur >= STEPS.length){ finish(); return; }
-    /* Re-animate card */
-    var card = document.getElementById('tutCard');
-    card.style.animation = 'none';
-    void card.offsetWidth;
-    card.style.animation = '';
-    renderStep(cur);
-  };
-
-  window.tutSkip = function(){ finish(); };
-
-  function finish(){
-    try{ localStorage.setItem(TUT_KEY, '1'); } catch(_){}
-    /* FIX: Restore home screen scrolling */
-    var homeEl = getHomeEl();
-    if(homeEl){ homeEl.style.overflowY = ''; homeEl.scrollTop = 0; }
-    if(ring && ring.parentNode) ring.parentNode.removeChild(ring);
-    ring = null;
-    var overlay = document.getElementById('tutOverlay');
-    if(overlay){
-      var card = document.getElementById('tutCard');
-      card.classList.add('finishing');
-      setTimeout(function(){ overlay.style.display = 'none'; card.classList.remove('finishing'); }, 400);
-    }
-  }
-
-  /* ── Hook into go('home') so tour fires after first login ──
-     We patch renderDash: the original is called first, then we check.
-     FIX: Delay increased to 1200ms so the affirmation flyer has time to
-     appear and be dismissed naturally OR the tutorial waits and then
-     closes it itself. */
-  var _origRenderDash = window.renderDash;
-  window.renderDash = function(){
-    if(typeof _origRenderDash === 'function') _origRenderDash.apply(this, arguments);
-    setTimeout(function(){
-      if(typeof window.tutorialInit === 'function') window.tutorialInit();
-    }, 1200);
-  };
-
-})();
-</script>
-
 </body>
 </html>

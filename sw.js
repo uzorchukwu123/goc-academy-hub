@@ -1,7 +1,7 @@
 /* G.O.C Academy Hub — service worker.
    Caches the app shell so the hub opens offline. Bump CACHE on every release,
    otherwise returning students keep the old files. */
-const CACHE = 'goc-v215';
+const CACHE = 'goc-v216';
 const ASSETS = [
   './index.html',
   './css/styles.css',
@@ -11,6 +11,7 @@ const ASSETS = [
   './js/note-questions.js',
   './js/api.js',
   './js/app.js',
+  './js/onboarding.js',
   './js/free2027-api.js',
   './js/free2027-ui.js',
   './js/free2027-admin.js',

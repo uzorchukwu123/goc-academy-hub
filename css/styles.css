@@ -3440,3 +3440,27 @@ a.cv:hover{color:var(--red)}
 .jt-resume-t b { font-size: 14.5px; color: #9A3412; }
 .jt-resume-t span { font-size: 12.5px; color: #7C2D12; }
 .jt-resume-b { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ============ GUIDED TOUR (js/onboarding.js, Stage 6) ============
+   The spotlight ring marks the real element (fixed to the viewport, so
+   it is correct full-bleed on mobile and on desktop); the card floats
+   beside it and never traps the page — the overlay itself ignores
+   pointer events except on the card. */
+.goc-tour-overlay{ position:fixed; inset:0; z-index:99990; pointer-events:none; display:none; }
+.goc-tour-ring{ position:fixed; border:3px solid #DC2626; border-radius:14px;
+  box-shadow:0 0 0 9999px rgba(10,12,18,.45); pointer-events:none; transition:all .25s ease; }
+.goc-tour-card{ position:fixed; background:#fff; border-radius:16px; padding:18px 18px 14px;
+  box-shadow:0 16px 48px rgba(10,12,18,.28); pointer-events:auto; box-sizing:border-box; }
+.goc-tour-pips{ display:flex; gap:5px; margin-bottom:10px; }
+.goc-tour-pip{ width:6px; height:6px; border-radius:50%; background:#E5E7EB; }
+.goc-tour-pip.on{ background:#DC2626; width:18px; border-radius:3px; }
+.goc-tour-count{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#9CA3AF; margin-bottom:4px; }
+.goc-tour-title{ font-size:16px; font-weight:900; color:#111827; margin-bottom:6px; line-height:1.25; }
+.goc-tour-body{ font-size:13.5px; color:#4B5563; line-height:1.55; margin-bottom:14px; }
+.goc-tour-actions{ display:flex; align-items:center; gap:10px; }
+.goc-tour-back{ font-size:13px; font-weight:700; color:#374151; background:#F3F4F6; border:0; border-radius:10px; padding:10px 14px; cursor:pointer; font-family:inherit; }
+.goc-tour-back:disabled{ opacity:.4; cursor:default; }
+.goc-tour-skip{ font-size:13px; font-weight:600; color:#9CA3AF; background:none; border:0; cursor:pointer; padding:0; margin-left:auto; font-family:inherit; }
+.goc-tour-next{ background:#DC2626; color:#fff; border:0; border-radius:12px; padding:11px 20px; font-size:14px; font-weight:800; cursor:pointer; font-family:inherit; }
+.goc-tour-next:hover{ background:#B91C1C; }
+@media (max-width:480px){ .goc-tour-card{ padding:16px 16px 12px; } }

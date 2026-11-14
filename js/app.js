@@ -634,7 +634,7 @@ function go(id){
   if(id === 'study' && typeof refreshChallenge === 'function') refreshChallenge();
   // Install-state can change between visits (installed elsewhere, prompt
   // captured after the screen first loaded), so it's re-read on the way in.
-  if(id === 'profile'){ renderInstallRow(); renderProfileBadges(); }
+  if(id === 'profile'){ renderInstallRow(); renderProfileBadges(); if(typeof tourHelpPaint === 'function') tourHelpPaint(); }
   /* Priority 2 — the nav height is only measurable once the screen is visible,
      so the filter row's sticky offset is set on the way in. */
   if(id === 'updates' && typeof upFiltersInit === 'function') upFiltersInit();
@@ -10088,6 +10088,15 @@ function renderDash(){
   if(role !== 'student' && !previewing) return;
   var helloEl = document.getElementById('dashHello');
   if(helloEl && role === 'student') helloEl.textContent = greetingWord();
+  /* First-visit guided tour (Stage 6): auto-starts exactly once for a
+     student with no saved tour state; a finished, skipped or interrupted
+     tour never auto-repeats — Help & tutorial in Profile resumes or
+     replays it. Delayed so the login flyer has settled first. */
+  if(role === 'student' && window.GOCOnboarding){
+    setTimeout(function(){
+      if(window.GOCOnboarding) window.GOCOnboarding.maybeAutoStart('student', studentId);
+    }, 900);
+  }
   dashPaintNext();
   dashPaintUp();
   dashPaintSubjects();
@@ -10345,6 +10354,21 @@ function dashPaintSubjects(){
     return '<div class="wt-row"><div class="nm"><b>' + esc(s) + '</b><span>Your paper</span></div>'
       + '<button class="wt-start" onclick="openStudySet(\'practice\',&quot;' + esc(s) + '&quot;)">Practise</button></div>';
   }).join(''));
+}
+
+/* Help & tutorial (Stage 6): replay or resume the guided tour on demand. */
+function tourRestart(){
+  if(window.GOCOnboarding) window.GOCOnboarding.restart('student', studentId);
+}
+function tourHelpPaint(){
+  if(!window.GOCOnboarding) return;
+  var label = window.GOCOnboarding.helpLabel('student', studentId);
+  var btn = document.getElementById('tourHelpBtn');
+  if(btn) btn.textContent = label.replace(/ · step.*$/, '');
+  var note = document.getElementById('tourHelpNote');
+  if(note) note.textContent = label === 'Watch the tour again' ? 'See the guided walk again, any time'
+    : label.indexOf('Resume') === 0 ? label.replace('Resume the tour · ', 'Paused at ') + ' — tap to continue'
+    : 'A guided walk around your hub';
 }
 
 /* ================= THE SCHOLAR LEAGUE (Priorities 10, 11, 12) =================
