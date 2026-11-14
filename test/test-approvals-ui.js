@@ -28,7 +28,7 @@ function grab(name) {
 console.log('\nthe section is on the console');
 ok('the selector offers Awaiting approval', /<option value="approvals">Awaiting approval<\/option>/.test(html));
 ok('opening it loads the queue', /if\(section === 'approvals'\) admApLoad\(\);/.test(app));
-ok('opening the console reads the badge', /if\(id === 'admin'\)\{ admOpen\('overview'\); admKpiLoad\(\); if\(typeof admApBadge === 'function'\) admApBadge\(\); \}/.test(app));
+ok('opening the console reads the badge', /if\(id === 'admin'\)\{ admOpen\('overview'\); admKpiLoad\(\); if\(typeof admApBadge === 'function'\) admApBadge\(\); if\(typeof tourConsoleAuto === 'function'\) tourConsoleAuto\(\); \}/.test(app));
 ok('the panel is in the section map', /approvals: function\(\)\{ return \(/.test(app));
 ok('the three drivers carry the four approval methods', ['listApprovals', 'approveQuestion', 'returnQuestion', 'approveBatch'].every(function (m) { return (apiSrc.split(m + ':').length - 1) >= 3; }));
 

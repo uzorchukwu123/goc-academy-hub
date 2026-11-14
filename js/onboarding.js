@@ -229,6 +229,7 @@
 
     var api = {
       register: function (name, steps) { tours[name] = { steps: steps || [] }; return api; },
+      consoleSteps: function (allowed) { return consoleSteps(allowed); },
       hasTour: function (name) { return !!tours[name]; },
       steps: function (name) { return tours[name] ? tours[name].steps.slice() : []; },
       state: function (name, userId) { return loadState(name, userId); },
@@ -330,6 +331,59 @@
       body: 'Your Scholar ID, preferences and account live in Profile. This row — Help & tutorial — brings this tour back whenever you want it: after you finish, it will say “Watch the tour again”.' }
   ];
 
+  /* ---- Management Console tour (Stage 7). One copy map for all 26 real
+     sections; the tour for a signed-in manager is GENERATED from the
+     sections consoleSectionAllowed() says that role may open, so a
+     section outside the role is never in its tour — the same rule that
+     builds the tile menu and guards admOpen(). Each step really opens
+     its section (admOpen) and spotlights the opened panel. ---- */
+  var CONSOLE_ORDER = ['overview', 'students', 'approvals', 'cohorts', 'questions', 'import', 'notes', 'passages',
+    'resources', 'videos', 'classes', 'broadcast', 'homepage', 'affirmations', 'results', 'theorymark', 'league',
+    'objective', 'jamb', 'window', 'tutors', 'managers', 'flags', 'challenges', 'access', 'siteanalytics', 'scholarship'];
+  var CONSOLE_COPY = {
+    overview: ['Overview', 'Your whole academy at a glance: enrolment, today\u2019s activity, average mock score and what needs attention. Start here each morning.'],
+    students: ['Students', 'The roster: approve sign-ups, manage tiers, reset passwords and switch accounts on or off — every action is limited to what your role allows.'],
+    approvals: ['Approvals', 'Work waiting for a decision: tutor questions and submissions to review before they reach students.'],
+    cohorts: ['Cohorts', 'Group students into cohorts with their own limits and tiers, so a whole class can be managed at once.'],
+    questions: ['Question bank', 'Every question, by subject and section. The JAMB section is held apart here — it only reaches students when the readiness rule says the bank is deep enough.'],
+    import: ['Import', 'Bring questions in by CSV instead of typing them one by one. The importer validates and reports before anything is saved.'],
+    notes: ['Reading notes', 'The lessons students read under Read / Learn, written and published per subject and topic.'],
+    passages: ['Passages', 'Comprehension passages that questions attach to, so a passage and its questions stay together.'],
+    resources: ['Resources', 'The shared academy library — past questions and materials every entitled student can open.'],
+    videos: ['Videos', 'Published lesson videos and recordings for the library and classes.'],
+    classes: ['Live classes', 'Schedule and manage live classes and their recordings.'],
+    broadcast: ['Broadcast', 'One message to every student\u2019s dashboard. Broadcasts appear on Home the moment they are sent.'],
+    homepage: ['Homepage', 'The public face: landing text and updates that visitors and pitching audiences see first.'],
+    affirmations: ['Daily affirmations', 'The motivation card students see at sign-in — kept fresh from here.'],
+    results: ['Results', 'Assessed outcomes across the academy: who sat what, and how they did.'],
+    theorymark: ['Mark theory', 'Written scripts waiting for marks. Marking here releases the result to the student.'],
+    league: ['Leaderboard', 'The Scholar League table and its controls — ranked on assessed performance first.'],
+    objective: ['Objective sitting', 'Configure the Objective Web Test: how many questions per subject and how long it runs.'],
+    jamb: ['JAMB sitting', 'The JAMB-oriented sitting and its readiness: how deep the dedicated bank is in each subject before the sitting is offered.'],
+    window: ['Study window', 'The daily study minutes every student gets. Changes here reach every dashboard at once.'],
+    tutors: ['Tutors', 'Tutor accounts and subject assignments. Tutors only ever see their own subjects — and their sign-in address lives here.'],
+    managers: ['Managers', 'Management accounts and roles. Only the Founder issues these; each role sees only its own sections — including in its tour.'],
+    flags: ['Question flags', 'Questions students flagged as wrong or unclear through Ask a tutor. Reply or close each one here.'],
+    challenges: ['Team challenges', 'Cohort-versus-cohort challenges that keep whole classes competing together.'],
+    access: ['Access & firewall', 'Security posture: passcode, access controls and the firewall. Founder territory — handle with care.'],
+    siteanalytics: ['Site Analytics', 'Visits and usage of the public site, for programme and publicity decisions.'],
+    scholarship: ['Scholarship', 'Scholarship applications and their decisions, exports and records.']
+  };
+  function consoleSteps(allowed) {
+    var allow = {};
+    (allowed || []).forEach(function (s) { allow[s] = true; });
+    var steps = [{ go: 'admin', target: 'admTileNav', title: 'Welcome to the Management Console',
+      body: 'These tiles are your sections — and they are already filtered to your role: you only ever see what you may open. This tour walks through each of yours, opening it for real as we go.' }];
+    CONSOLE_ORDER.forEach(function (section) {
+      if (!allow[section] || !CONSOLE_COPY[section]) return;
+      steps.push({ go: 'admin', adm: section, target: 'admSheetBody',
+        title: CONSOLE_COPY[section][0], body: CONSOLE_COPY[section][1] });
+    });
+    steps.push({ go: 'admin', target: 'admTileNav', title: 'That\u2019s your console',
+      body: 'You can replay this tour any time from the Tour button at the top of the console. Sections outside your role stay out of the tour, exactly as they stay out of your menu.' });
+    return steps;
+  }
+
   var api = null;
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     api = create({
@@ -343,6 +397,6 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { create: create, STUDENT_STEPS: STUDENT_STEPS };
+    module.exports = { create: create, STUDENT_STEPS: STUDENT_STEPS, consoleSteps: consoleSteps, CONSOLE_COPY: CONSOLE_COPY, CONSOLE_ORDER: CONSOLE_ORDER };
   }
 })(typeof window !== 'undefined' ? window : globalThis);

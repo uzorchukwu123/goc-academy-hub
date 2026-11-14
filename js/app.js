@@ -614,7 +614,7 @@ function go(id){
   /* B#2 slice 7 — show/hide the scholarship banner depending on current status. */
   if(id === 'landing') scholBannerInit();
   if(id === 'admin' && typeof admMenuApply === 'function') admMenuApply();
-  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof admApBadge === 'function') admApBadge(); }
+  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof admApBadge === 'function') admApBadge(); if(typeof tourConsoleAuto === 'function') tourConsoleAuto(); }
   /* Priority 12 — the standings are re-read on the way in, so they are current
      whenever the student looks rather than only just after logging in. */
   if(id === 'league' && typeof renderLeague === 'function') renderLeague();
@@ -10369,6 +10369,28 @@ function tourHelpPaint(){
   if(note) note.textContent = label === 'Watch the tour again' ? 'See the guided walk again, any time'
     : label.indexOf('Resume') === 0 ? label.replace('Resume the tour · ', 'Paused at ') + ' — tap to continue'
     : 'A guided walk around your hub';
+}
+
+/* Console tour (Stage 7): the tour is generated from the sections the
+   signed-in role may open (consoleSectionAllowed via GOC.core), so a
+   Founder tours all 26 sections while each manager tours only their
+   own. First entry auto-starts it once per manager; the Tour button in
+   the console header replays it. */
+function tourConsoleSetup(){
+  if(!window.GOCOnboarding || !window.GOC || !GOC.core || !admMe.id) return null;
+  var allowed = GOC.core.consoleSectionsFor(admMe.id, admMe.roleKey);
+  window.GOCOnboarding.register('console', window.GOCOnboarding.consoleSteps(allowed));
+  return allowed;
+}
+function tourConsoleAuto(){
+  if(!tourConsoleSetup()) return;
+  setTimeout(function(){
+    if(window.GOCOnboarding && admMe.id) window.GOCOnboarding.maybeAutoStart('console', admMe.id);
+  }, 900);
+}
+function tourConsoleStart(){
+  if(!tourConsoleSetup()){ toast('The tour is not available right now.'); return; }
+  window.GOCOnboarding.restart('console', admMe.id || 'staff');
 }
 
 /* ================= THE SCHOLAR LEAGUE (Priorities 10, 11, 12) =================

@@ -104,7 +104,7 @@ ok('a failed request never imposes a mode: boot falls back, then asks again',
    && /No answer is not an answer/.test(uiSrc));
 ok('the landing fallback cannot force the original page over Free mode',
    /if \(document\.body\.classList\.contains\('f27-mode'\)\) return;/.test(html));
-ok('the service worker serves the new shell', /const CACHE = 'goc-v216';/.test(read('sw.js')));
+ok('the service worker serves the new shell', /const CACHE = 'goc-v217';/.test(read('sw.js')));
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
