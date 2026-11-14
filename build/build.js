@@ -16,17 +16,34 @@ var path = require('path');
 var ROOT = path.resolve(__dirname, '..');
 var OUT = path.resolve(ROOT, process.argv[2] || 'dist');
 
+// Never build into the source or a folder that holds it.
+if (OUT === ROOT || ROOT.startsWith(OUT + path.sep) || OUT === path.join(ROOT, 'js') || OUT === path.join(ROOT, 'css')) {
+  console.error('Refusing to build into ' + OUT); process.exit(1);
+}
+
+/* Workstream A — a maintenance build for STATIC hosting (Appwrite Sites,
+   where there is no Node process to gate requests). GOC_MAINTENANCE_MODE=1
+   emits ONLY the announcement page and the cache-clearing service worker;
+   the source tree is untouched and unsetting the variable rebuilds the full
+   application exactly as before. No esbuild needed for this path. */
+var maintenance = require(path.join(ROOT, 'server', 'lib', 'maintenance.js'));
+if (maintenance.enabled(process.env)) {
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'index.html'), maintenance.page());
+  fs.writeFileSync(path.join(OUT, 'sw.js'), maintenance.serviceWorker());
+  console.log('Maintenance build: ' + path.relative(ROOT, OUT) + '/index.html and sw.js only.');
+  console.log('GOC_MAINTENANCE_MODE is on — no application asset was copied.');
+  console.log('Unset GOC_MAINTENANCE_MODE and rebuild to restore the full app.');
+  process.exit(0);
+}
+
 var esbuild;
 try { esbuild = require('esbuild'); } catch (e) {
   try { esbuild = require(path.join(ROOT, 'node_modules', 'esbuild')); } catch (e2) {
     console.error('esbuild is not installed. Run:  npm install --save-dev esbuild');
     process.exit(1);
   }
-}
-
-// Never build into the source or a folder that holds it.
-if (OUT === ROOT || ROOT.startsWith(OUT + path.sep) || OUT === path.join(ROOT, 'js') || OUT === path.join(ROOT, 'css')) {
-  console.error('Refusing to build into ' + OUT); process.exit(1);
 }
 
 var TEST_HOOKS = ['_setJambReadyMin', '_grantXp', '_setupTokenFor'];
