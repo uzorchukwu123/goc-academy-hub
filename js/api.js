@@ -87,6 +87,13 @@
        the account has been closed by management but its history is kept. */
     var students = [];
 
+    /* Stage B: registration codes and applications (demo mirror). In-memory
+       only, like everything in this driver; codes' plaintext and setup
+       tokens live in this closure and are never returned after creation. */
+    var registrationCodes = [];
+    var registrationApplications = [];
+    var regSeq = 0;
+
     /* Homepage "talk to us" form. No server in this mode, so a submission
        just lives here for the length of the tab — sendContact() (below,
        driver-independent) still tries the real mail relay first; this is
@@ -238,12 +245,11 @@
     var bookmarks = {};
     /* Spaced-repetition schedule per Scholar ID (Phase 2) — in-memory, like the above. */
     var reviewState = {};
-    /* Access tiers (Phase 3B), mirroring server.js: spaced reviews answered per
-       student per Lagos day, { day, count }. In memory like the rest of demo mode. */
+    /* Spaced reviews answered per student per Lagos day, { day, count }.
+       In memory like the rest of demo mode. */
     var reviewCount = {};
-    /* A student's kept practice runs: their tier's count limit (null = none) and the maximum age. */
-    function demoRuns(id, list) { return core.capList(core.dropOldRuns(list), core.tierLimits(tierOf(id)).practiceHistory); }
-    function tierOf(id) { var st = find(students, id); return core.cleanTier(st && st.tier); }
+    /* A student's kept practice runs: the maximum age only (no count limit). */
+    function demoRuns(id, list) { return core.capList(core.dropOldRuns(list), core.studentLimits().practiceHistory); }
     function reviewsUsedToday(id) {
       var r = reviewCount[id];
       return r && r.day === core.lagosDay() ? Math.max(0, Math.floor(Number(r.count) || 0)) : 0;
@@ -322,9 +328,6 @@
         active: s.active !== false, xp: s.xp || 0, streak: s.streak || 0,
         level: core.levelFor(s.xp || 0), subjects: (s.subjects || []).slice(),
         exam: core.EXAM, performance: perfFor(s.id).overall,
-        tier: core.cleanTier(s.tier),   /* as the server's console view of a student */
-        tierChangedBy: s.tierChangedBy || null,
-        tierChangedAt: s.tierChangedAt || null
       };
     }
     function find(arr, id) {
@@ -444,6 +447,30 @@
       return true;
     }
 
+    function findRegCode(clean) {
+      if (!clean) return null;
+      for (var i = 0; i < registrationCodes.length; i++) if (registrationCodes[i].plain === clean) return registrationCodes[i];
+      return null;
+    }
+    function findRegApplication(id) {
+      for (var i = 0; i < registrationApplications.length; i++) if (registrationApplications[i].id === String(id)) return registrationApplications[i];
+      return null;
+    }
+    function demoPublicApplication(a) {
+      /* The demo stores its setup token in the clear (closure only); the
+         shared public view never carries it (nor the stored password). */
+      return core.publicRegistrationApplication(a);
+    }
+    function newDemoRegistrationCode() {
+      var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', out = 'GOC-REG-';
+      for (var g = 0; g < 2; g++) {
+        for (var i = 0; i < 6; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+        if (g === 0) out += '-';
+      }
+      return out;
+    }
+    function sub0(list) { return Array.isArray(list) ? list.slice() : []; }
+
     return {
       name: 'demo',
 
@@ -454,6 +481,11 @@
         var isStudent = /^GOC-S-\d+$/.test(id);
         if (!isStaff && !isStudent) return fail('That does not look like a G.O.C ID.');
         var acct = isStaff ? find(staff, id) : find(students, id);
+        /* Stage B: an approved registration account cannot sign in until the
+           student sets their password through the setup link. */
+        if (!isStaff && acct && acct.setupPending) {
+          return fail('Your account is approved. Set your password using the link we emailed you, then sign in with your Scholar ID (' + acct.id + ').');
+        }
         // Same message for "no such ID" and "wrong password", so the login
         // screen never confirms which IDs exist.
         if (!acct || String(password) !== acct.pw) return fail('That ID and password do not match.');
@@ -538,50 +570,187 @@
         return ok(staff.map(function (a) { return { id: a.id, name: a.name, title: a.title }; }));
       },
 
-      /* Sign-up is open to the public: no session and no access code. Every self-made
-         account is Open. */
-      createStudent: function (data) {
-        /* Explicit privacy-policy acceptance, mirroring POST /api/students:
-           no acceptance, no account — however the call arrives. */
-        var consent = data && data.privacyConsent;
-        if (!consent || consent.accepted !== true) {
-          return fail('Please read and accept the Privacy Policy to create your account.');
-        }
-        var name = String((data && data.name) || '').trim();
-        var pw = String((data && data.password) || '');
-        if (name.length < 2) return fail('Enter your full name.');
-        if (pw.length < 6) return fail('Choose a password of at least 6 characters.');
-        /* This academy registers UTME candidates only. */
-        var ex = core.requireExam(data && data.goal);
-        if (!ex.ok) return fail(ex.error);
-        /* Use of English plus exactly three sciences — checked here, not only
-           in the form, so the rule holds however the call arrives. */
-        var sub = core.validateSubjects((data && data.subjects) || []);
-        if (!sub.ok) return fail(sub.error);
-        var max = 0;
-        students.forEach(function (s) {
-          var n = parseInt(String(s.id).replace('GOC-S-', ''), 10);
-          if (!isNaN(n) && n > max) max = n;
-        });
-        var rec = {
-          id: 'GOC-S-' + pad3(max + 1), name: name, pw: pw,
-          /* Kept like the server keeps them, so the Profile reminders row can
-             tell whether there is an address to write to. */
-          email: String((data && data.email) || '').trim(),
-          phone: String((data && data.phone) || '').trim(),
-          /* Admin-approval flow: account starts inactive, pending approval. */
-          last: 'Awaiting approval', tag: 'a', tl: 'Pending',
-          xp: 0, streak: 0, active: false, pendingApproval: true,
-          subjects: sub.subjects,
-          tier: 'open',  /* self-registered accounts are Open, as on the server */
-          /* The acceptance, stamped with the server-side policy version rule:
-             the demo keeps the same shape the real server stores. */
-          privacyConsent: { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION }
-        };
-        students.push(rec);
-        /* No session is issued — the student must wait for approval. */
-        return ok({ pending: true, student: { id: rec.id, name: rec.name } });
+            /* Stage B — registration (mirrors POST /api/registrations*): an
+         application is not an account. The offline demo keeps the same
+         shapes and state machine in memory; unlike the server it cannot hash
+         (no sync crypto in the browser), so the generated code and the setup
+         token sit in this closure only — never persisted, never listed. */
+      validateRegistrationCode: function (data) {
+        var c = findRegCode(core.cleanRegistrationCode(data && data.code));
+        return ok({ ok: !!c && core.registrationCodeStatus(c, Date.now()) === 'active' });
       },
+      submitRegistration: function (data) {
+        var v = core.validateRegistrationApplication(data || {});
+        if (v.error) return fail(v.error);
+        var c = findRegCode(core.cleanRegistrationCode(data && data.code));
+        if (!c || core.registrationCodeStatus(c, Date.now()) !== 'active') {
+          return fail('That registration code is not valid. Check it and try again.');
+        }
+        var block = core.registrationEmailBlock(registrationApplications, students, v.rec.email);
+        if (block) return fail(block);
+        regSeq += 1;
+        var app = {
+          id: 'REGAPP-' + ('000' + regSeq).slice(-4),
+          codeId: c.id, codeLabel: c.label || '',
+          name: v.rec.name, email: v.rec.email, phone: v.rec.phone,
+          goal: v.rec.goal, subjects: sub0(v.rec.subjects),
+          pw: String((data && data.password) || ''),
+          consentVersion: core.PRIVACY_POLICY_VERSION,
+          status: 'pending', createdAt: new Date().toISOString(),
+          decidedBy: null, decidedAt: null, rejectReason: null,
+          scholarId: null, provisionStep: null, provisionError: null, setup: null,
+          history: [{ at: new Date().toISOString(), by: null, action: 'submitted', detail: 'Application received' }]
+        };
+        c.uses.push({ applicationId: app.id, state: 'held', at: app.createdAt });
+        registrationApplications.push(app);
+        return ok({ received: true });
+      },
+      completePasswordSetup: function (data) {
+        var token = String((data && data.token) || '');
+        var app = null;
+        registrationApplications.forEach(function (a) { if (a.setup && a.setup.token === token) app = a; });
+        if (!app || !app.scholarId) return fail('This password-setup link is not valid. Ask the academy to send you a new one.');
+        if (app.setup.usedAt) return fail('This password-setup link has already been used. Sign in with your Scholar ID and the password you set.');
+        if (Date.parse(app.setup.expiresAt) <= Date.now()) return fail('This password-setup link has expired. Ask the academy to send you a new one.');
+        var pw = String((data && data.password) || '');
+        if (pw.length < 8) return fail('Choose a password of at least 8 characters.');
+        var stu = find(students, app.scholarId);
+        if (!stu) return fail('Your account is not ready yet. Contact the academy.');
+        stu.pw = pw;
+        stu.setupPending = false;
+        app.setup.usedAt = new Date().toISOString();
+        app.setupCompletedAt = new Date().toISOString();
+        app.history.push({ at: new Date().toISOString(), by: null, action: 'password-setup-completed', detail: 'Password set by the student' });
+        return ok({ ok: true, scholarId: app.scholarId });
+      },
+      listRegistrationCodes: function () {
+        var e = requireUnlocked(); if (e) return e;
+        return ok({ codes: registrationCodes.map(function (c) { return core.publicRegistrationCode(c, Date.now()); }),
+                    counts: core.registrationCounts(registrationApplications, registrationCodes, Date.now()) });
+      },
+      createRegistrationCode: function (data) {
+        var e = requireUnlocked(); if (e) return e;
+        var label = String((data && data.label) || '').trim().slice(0, 60);
+        var maxUses = Math.floor(Number(data && data.maxUses));
+        if (!label) return fail('Give the code a label (for example, the school or group it is for).');
+        if (!(maxUses >= 1 && maxUses <= 10000)) return fail('Uses must be between 1 and 10,000.');
+        var expiresAt = null;
+        var days = Math.floor(Number(data && data.expiresInDays));
+        if (data && data.expiresInDays != null && data.expiresInDays !== '') {
+          if (!(days >= 1 && days <= 3650)) return fail('Expiry must be between 1 and 3,650 days, or left blank.');
+          expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        }
+        var plain = newDemoRegistrationCode();
+        regSeq += 1;
+        var c = { id: 'REGCODE-DEMO' + regSeq, label: label, plain: plain, hint: plain.slice(-4),
+                  maxUses: maxUses, uses: [], expiresAt: expiresAt, revokedAt: null, revokedBy: null,
+                  createdBy: session.id, createdAt: new Date().toISOString() };
+        registrationCodes.push(c);
+        /* The plaintext is returned once, here — the listing shows a hint. */
+        return ok({ code: plain, registrationCode: core.publicRegistrationCode(c, Date.now()) });
+      },
+      revokeRegistrationCode: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var c = null;
+        registrationCodes.forEach(function (x) { if (x.id === String(id)) c = x; });
+        if (!c) return fail('No such registration code.');
+        if (c.revokedAt) return fail('That code is already revoked.');
+        c.revokedAt = new Date().toISOString();
+        c.revokedBy = session.id;
+        return ok({ registrationCode: core.publicRegistrationCode(c, Date.now()) });
+      },
+      listRegistrationApplications: function () {
+        var e = requireUnlocked(); if (e) return e;
+        return ok({ applications: registrationApplications.map(function (a) { return demoPublicApplication(a); }),
+                    counts: core.registrationCounts(registrationApplications, registrationCodes, Date.now()) });
+      },
+      getRegistrationApplication: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        return ok({ application: demoPublicApplication(a) });
+      },
+      approveRegistrationApplication: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        if (a.status === 'approved') return fail('This application has already been approved.');
+        if (a.status === 'rejected') return fail('This application was rejected. Ask the applicant to apply again.');
+        var c = null;
+        registrationCodes.forEach(function (x) { if (x.id === a.codeId) c = x; });
+        /* Revalidate at approval, exactly like the server: a code revoked or
+           expired since submission blocks approval, recoverably. */
+        if (!c || c.revokedAt || (c.expiresAt && Date.parse(c.expiresAt) <= Date.now())) {
+          a.status = 'provisioning-failed'; a.provisionStep = 'validate-code';
+          a.provisionError = !c ? 'The registration code no longer exists.' : (c.revokedAt ? 'The registration code was revoked after this application was submitted.' : 'The registration code has expired.');
+          a.history.push({ at: new Date().toISOString(), by: session.id, action: 'provisioning-failed', detail: a.provisionError });
+          return fail('Provisioning stopped at validate-code: ' + a.provisionError + ' Use Resume to continue.');
+        }
+        if (!a.scholarId) {
+          var max = 0;
+          students.forEach(function (s) {
+            var n = parseInt(String(s.id).replace('GOC-S-', ''), 10);
+            if (!isNaN(n) && n > max) max = n;
+          });
+          a.scholarId = 'GOC-S-' + pad3(max + 1);
+        }
+        /* The account exists from now, but access waits for password setup:
+           the password on the record is a placeholder nobody knows. */
+        if (!find(students, a.scholarId)) {
+          students.push({
+            id: a.scholarId, name: a.name, email: a.email, phone: a.phone,
+            pw: 'setup-pending-' + Math.random().toString(36).slice(2),
+            last: 'Approved', tag: 'g', tl: 'New',
+            xp: 0, streak: 0, active: true, pendingApproval: false, setupPending: true,
+            subjects: sub0(a.subjects),
+            approvedBy: session.name || session.id, approvedAt: new Date().toISOString()
+          });
+        }
+        var use = null;
+        (c.uses || []).forEach(function (u) { if (u.applicationId === a.id) use = u; });
+        if (use && use.state === 'held') { use.state = 'finalised'; use.finalisedAt = new Date().toISOString(); }
+        delete a.pw; /* the application's stored password is discarded, like the server's hash */
+        a.setup = { token: 'demo-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+                    expiresAt: new Date(Date.now() + core.SETUP_TOKEN_TTL_MS).toISOString(),
+                    sentAt: new Date().toISOString(), usedAt: null, delivery: 'not-configured' };
+        a.status = 'approved'; a.provisionStep = 'done'; a.provisionError = null;
+        a.decidedBy = session.id; a.decidedAt = new Date().toISOString();
+        a.history.push({ at: new Date().toISOString(), by: session.id, action: 'approved', detail: 'Scholar ID ' + a.scholarId + ' created; setup email not-configured' });
+        return ok({ application: demoPublicApplication(a), setupDelivery: 'not-configured' });
+      },
+      rejectRegistrationApplication: function (id, reason) {
+        var e = requireUnlocked(); if (e) return e;
+        var why = String(reason || '').trim();
+        if (!why) return fail('Give a reason for the rejection — it is recorded with the decision.');
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        if (a.status === 'approved') return fail('This application has already been approved and cannot be rejected.');
+        if (a.status === 'rejected') return fail('This application has already been rejected.');
+        var c = null;
+        registrationCodes.forEach(function (x) { if (x.id === a.codeId) c = x; });
+        if (c) (c.uses || []).forEach(function (u) { if (u.applicationId === a.id && u.state === 'held') { u.state = 'released'; u.releasedAt = new Date().toISOString(); } });
+        a.status = 'rejected'; a.rejectReason = why;
+        a.decidedBy = session.id; a.decidedAt = new Date().toISOString();
+        delete a.pw;
+        a.history.push({ at: new Date().toISOString(), by: session.id, action: 'rejected', detail: why });
+        return ok({ application: demoPublicApplication(a) });
+      },
+      resendRegistrationSetup: function (id) {
+        var e = requireUnlocked(); if (e) return e;
+        var a = findRegApplication(id);
+        if (!a) return fail('No such application.');
+        if (a.status !== 'approved' || !a.scholarId) return fail('Only an approved application can be sent a setup link.');
+        if (a.setup && a.setup.usedAt) return fail('This student has already set their password.');
+        a.setup = { token: 'demo-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+                    expiresAt: new Date(Date.now() + core.SETUP_TOKEN_TTL_MS).toISOString(),
+                    sentAt: new Date().toISOString(), usedAt: null, delivery: 'not-configured' };
+        a.history.push({ at: new Date().toISOString(), by: session.id, action: 'setup-link-resent', detail: 'Delivery: not-configured' });
+        return ok({ setupDelivery: 'not-configured' });
+      },
+      /* Test-only (stripped from the production build): the demo sends no
+         email, so a suite playing the applicant reads the current setup
+         token here — the same thing the emailed link would carry. */
+      _setupTokenFor: function (applicationId) { var a = findRegApplication(applicationId); return a && a.setup ? a.setup.token : null; },
 
       /* Admin: enrol a student in person. Same validation as the public
          sign-up above, but no access code (staff are already unlocked) and
@@ -596,8 +765,6 @@
         if (!ex.ok) return fail(ex.error);
         var sub = core.validateSubjects((data && data.subjects) || []);
         if (!sub.ok) return fail(sub.error);
-        var newTier = core.newStudentTier(data && data.tier);
-        if (!newTier.ok) return fail(newTier.error);
         var max = 0;
         students.forEach(function (s) {
           var n = parseInt(String(s.id).replace('GOC-S-', ''), 10);
@@ -610,8 +777,7 @@
           phone: String((data && data.phone) || '').trim(),
           last: 'Just registered', tag: 'g', tl: 'New',
           xp: 0, streak: 0, active: true, subjects: sub.subjects,
-          mustChangePassword: true,
-          tier: newTier.tier   /* GOC unless the console chose Open */
+          mustChangePassword: true
         };
         students.push(rec);
         return ok({ student: publicStudent(rec), temporaryPassword: t });
@@ -803,7 +969,6 @@
          without signing in as management. */
       _setJambReadyMin: function (min) { settings.jambReadyMin = core.clampJambReadyMin(min); },
       /* Test-only: a public sign-up is Open, so a suite that sits Web Tests promotes its student, as the console would. */
-      _setTier: function (id, tier) { var st = find(students, id); if (st) st.tier = core.cleanTier(tier); },
       /* Test-only (stripped from the production build like the two above):
          grants an XP balance so a suite can test an XP purchase (e.g. a 500-XP
          streak freeze) without grinding past the daily practice XP cap. */
@@ -863,13 +1028,12 @@
           xpPerLevel: core.xpPerLevel(),
           performance: p.overall, performanceDetail: p,
           active: s.active !== false,
-          tier: core.cleanTier(s.tier),
-          features: core.tierFeatures(s.tier),
-          limits: core.tierLimits(s.tier),
+          features: core.studentFeatures(),
+          limits: core.studentLimits(),
           today: {
             day: core.lagosDay(),
-            practice: core.dailyAllowance(0, s.tier),
-            reviews: core.reviewAllowance(reviewsUsedToday(s.id), s.tier)
+            practice: core.dailyAllowance(0),
+            reviews: core.reviewAllowance(reviewsUsedToday(s.id))
           }
         });
       },
@@ -910,8 +1074,6 @@
                       papers: jbp.map(function (r) { return { subject: r.subject, questions: r.serving }; }) },
                       sitStatus(s.id, 'jamb', core.OBJECTIVE_SUBJECT)));
         }
-        /* Open students still see the papers, marked locked; startTest is the real gate. */
-        rows.forEach(function (r) { if (!core.webTestAllowed(r.section, s.tier)) r.locked = true; });
         return ok({ subjects: subs, tests: rows,
                     objectiveMinutes: core.clampObjectiveMinutes(settings.objectiveMinutes),
                     jambMinutes: core.clampJambMinutes(settings.jambMinutes) });
@@ -929,10 +1091,6 @@
         var section = String((d && d.section) || '');
         var subject = String((d && d.subject) || '');
         if (core.SECTIONS.indexOf(section) === -1) return fail('Choose a test section.');
-        /* ACCESS TIER: same gate as the server, before anything is opened or recorded. */
-        if (core.WEB_TEST_SECTIONS.indexOf(section) > -1 && !core.webTestAllowed(section, s.tier)) {
-          return fail(core.webTestLockMessage(section));
-        }
         var pool, dur, subs = (s.subjects || []).slice(), papers = null;
         /* A question whose passage cannot be shown is held back, as on the server. */
         var bank = core.servablePool(questions, passages);
@@ -1119,14 +1277,7 @@
           if (f.topic && n.topic !== f.topic) return false;
           return true;
         });
-        /* Access tiers: an Open student reads the first few notes of each subject
-           (by note id among the subject's active notes, so the topic filter does not
-           move the line); the rest are listed but locked, with no body. */
-        var tier = core.cleanTier(s.tier), place = {}, seenIn = {};
-        notes.filter(function (n) { return n.active && (s.subjects || []).indexOf(n.subject) !== -1; })
-          .sort(function (a, b) { return Number(a.id) - Number(b.id); })
-          .forEach(function (n) { seenIn[n.subject] = seenIn[n.subject] || 0; place[n.id] = seenIn[n.subject]++; });
-        return ok({ notes: clone(rows).map(function (n) { return core.noteVisible(place[n.id], tier) ? n : core.lockedNote(n); }) });
+        return ok({ notes: clone(rows) });
       },
 
       startStudy: function (d) {
@@ -1486,7 +1637,7 @@
       listReview: function () {
         var e = requireStudent(); if (e) return e;
         return ok({ review: core.srQueue(demoMistakes(session.id), reviewState[session.id] || {}, Date.now()),
-                    today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsUsedToday(session.id), tierOf(session.id)) } });
+                    today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsUsedToday(session.id)) } });
       },
       answerReview: function (key, given) {
         var e = requireStudent(); if (e) return e;
@@ -1497,10 +1648,8 @@
         var m = mistakes.filter(function (x) { return x.key === key; })[0];
         if (!m) return fail('That question is not in your mistakes.');
         if (!Array.isArray(m.options) || given >= m.options.length) return fail('Pick one of the answer options.');
-        /* Access tiers: checked after the question is found, so a bad request is never charged. */
-        var usedBefore = reviewsUsedToday(session.id), tier = tierOf(session.id);
-        var allowance = core.reviewAllowance(usedBefore, tier);
-        if (!allowance.allowed) return fail(core.reviewLimitMessage(allowance.limit));
+        var usedBefore = reviewsUsedToday(session.id);
+        var allowance = core.reviewAllowance(usedBefore);
         reviewCount[session.id] = { day: core.lagosDay(), count: usedBefore + 1 };
         var now = Date.now(), state = reviewState[session.id] || {};
         var correct = given === Number(m.answer);
@@ -1508,7 +1657,7 @@
         reviewState[session.id] = core.srStore(state, key, entry);
         var q = core.srQueue(mistakes, reviewState[session.id], now);
         return ok({
-          ok: true, today: { day: core.lagosDay(), reviews: core.reviewAllowance(usedBefore + 1, tier) },
+          ok: true, today: { day: core.lagosDay(), reviews: core.reviewAllowance(usedBefore + 1) },
           correct: correct, answer: m.answer, explanation: m.explanation || '',
           box: entry.box, mastered: entry.mastered, nextDue: entry.due,
           dueCount: q.dueCount, upcoming: q.upcoming, masteredCount: q.mastered
@@ -1558,7 +1707,7 @@
       buyStreakFreeze: function () {
         var e = requireStudent(); if (e) return e;
         var stu = find(students, session.id);
-        if (!core.canUse('streakFreezes', stu.tier)) {
+        if (!core.canUse('streakFreezes')) {
           return fail('Buying streak freezes is for GOC students. Ask the academy about joining.');
         }
         var r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
@@ -1576,21 +1725,19 @@
       /* Bookmarks (Phase 1, part 2), mirroring the http driver. */
       listBookmarks: function () {
         var e = requireStudent(); if (e) return e;
-        var cap = core.tierLimits(tierOf(session.id)).bookmarks;
+        var cap = core.studentLimits().bookmarks;
         return ok({ bookmarks: core.capList(bookmarks[session.id], cap), limit: cap });
       },
       addBookmark: function (b) {
         var e = requireStudent(); if (e) return e;
         var rec = core.sanitizeBookmark(b);
         if (!rec) return fail('A bookmark needs the question text and at least two options.');
-        var cap = core.tierLimits(tierOf(session.id)).bookmarks;
+        var cap = core.studentLimits().bookmarks;
         var list = Array.isArray(bookmarks[session.id]) ? core.capList(bookmarks[session.id], cap) : [];
         bookmarks[session.id] = list;
         var existing = null;
         list.forEach(function (x) { if (x.key === rec.key) existing = x; });
         if (existing) return ok({ ok: true, saved: existing, already: true, bookmarks: list });
-        /* Full: refuse and say how to make room. Nothing is dropped silently. */
-        if (cap != null && list.length >= cap) return fail(core.bookmarkLimitMessage(cap));
         rec.ts = Date.now();
         list.unshift(rec);
         bookmarks[session.id] = core.capList(list, cap);
@@ -1956,24 +2103,6 @@
         return ok(publicStudent(s));
       },
 
-      /* Move a student between Open and GOC, as PUT /api/students/:id/tier does on the
-         server: same refusal wording, no change (and nothing recorded) when the student
-         already has that tier, otherwise who and when are stamped on the student. */
-      setStudentTier: function (id, tier) {
-        var e = requireUnlocked(); if (e) return e;
-        if (!core.adminMayUse(session.id, core.adminRoleKey(session.title), 'students.tier')) return fail('Your role does not include this.');
-        var want = core.parseTierChange(tier);
-        if (!want.ok) return fail(want.error);
-        var s = find(students, id);
-        if (!s) return fail('That Scholar ID is not on the roster.');
-        if (core.cleanTier(s.tier) !== want.tier) {
-          s.tier = want.tier;
-          s.tierChangedBy = session.name || session.id;
-          s.tierChangedAt = new Date().toISOString();
-        }
-        return ok(publicStudent(s));
-      },
-
       /* Admin-approval flow: approve a pending self-registered account. */
       approveStudent: function (id) {
         var e = requireUnlocked(); if (e) return e;
@@ -2133,10 +2262,10 @@
         return fail('Approvals need a server connection.');
       },
       /* Class notices come from tutors, and the offline demo has no tutors: nothing to show. A student's
-         answer still follows the tier rule, so an Open student reads as locked here too. */
+         answer follows the same student-access rule here too. */
       listMyNotices: function () {
         var e = requireStudent(); if (e) return e;
-        var locked = !core.canUse('classNotices', tierOf(session.id));
+        var locked = !core.canUse('classNotices');
         return ok({ locked: locked, notices: [] });
       },
       listNotices: function () {
@@ -2183,20 +2312,20 @@
       },
       listMyBroadcasts: function () {
         var e = requireStudent(); if (e) return e;
-        var locked = !core.canUse('classNotices', tierOf(session.id));
+        var locked = !core.canUse('classNotices');
         return ok({ locked: locked, broadcasts: locked ? [] : core.broadcastsForStudent(broadcasts, find(students, session.id)) });
       },
       /* Ask a tutor (Phase 4.A): the student side, offline, with the same core rules as the server. */
       listMyFlags: function () {
         var e = requireStudent(); if (e) return e;
         var s = find(students, session.id);
-        var locked = !core.canUse('askTutor', tierOf(session.id));
+        var locked = !core.canUse('askTutor');
         return ok({ locked: locked, flags: locked ? [] : core.flagsForStudent(flags, s) });
       },
       askTutor: function (d) {
         var e = requireStudent(); if (e) return e;
         var s = find(students, session.id);
-        if (!core.canUse('askTutor', tierOf(session.id))) return fail('Asking a tutor is for GOC students. Ask the academy about joining.');
+        if (!core.canUse('askTutor')) return fail('Asking a tutor is not available.');
         var qid = String((d && d.questionId) != null ? d.questionId : '').trim();
         var q = null;
         for (var qi = 0; qi < questions.length; qi++) { if (String(questions[qi].id) === qid) { q = questions[qi]; break; } }
@@ -2524,12 +2653,6 @@
         var e = requireUnlocked(); if (e) return e;
         return ok({ cohorts: [] });
       },
-      setCohortTier: function (id, tier) {
-        var e = requireUnlocked(); if (e) return e;
-        var want = core.parseTierChange(tier);
-        if (!want.ok) return fail(want.error);
-        return fail('Moving a whole cohort needs a server connection.');
-      },
       createCohort: function (d) {
         var e = requireUnlocked(); if (e) return e;
         var b = d || {};
@@ -2644,6 +2767,48 @@
       });
     }
 
+    /* Tutor entry shares /auth/login but never falls back to demo credentials.
+       Classify host wake pages and malformed responses without trusting HTML. */
+    function tutorProblem(kind, message) {
+      var e = new Error(message); e.kind = kind; return e;
+    }
+    function tutorResponse(r) {
+      var type = r.headers.get('content-type') || '';
+      var unavailable = r.status === 502 || r.status === 503 || r.status === 504;
+      if (!/^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|\s*$)/i.test(type)) {
+        throw tutorProblem(unavailable ? 'waking' : 'unexpected', 'The service is temporarily unavailable.');
+      }
+      return r.text().then(function (txt) {
+        var d;
+        try { d = JSON.parse(txt); } catch (e) { throw tutorProblem(unavailable ? 'waking' : 'unexpected', 'The service is temporarily unavailable.'); }
+        if (!d || typeof d !== 'object' || Array.isArray(d)) throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+        if (d.maintenance === true) throw tutorProblem('maintenance', typeof d.error === 'string' ? d.error : 'G.O.C Academy Hub is temporarily under maintenance.');
+        if (unavailable) throw tutorProblem('waking', 'The server is starting up.');
+        if (!r.ok) {
+          if (typeof d.error !== 'string' || !d.error) throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+          throw tutorProblem('api', d.error);
+        }
+        return d;
+      }, function () { throw tutorProblem('network', 'Cannot reach the server. Check your connection.'); });
+    }
+    function tutorFetch(url, opts) {
+      return fetch(url, opts).catch(function () { throw tutorProblem('network', 'Cannot reach the server. Check your connection.'); });
+    }
+    function tutorLogin(id, password) {
+      return tutorFetch(base + '/auth/login', { method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: norm(id), password: String(password) }) })
+        .then(tutorResponse).then(function (d) {
+          if (typeof d.token !== 'string' || !d.token || !d.user || d.user.role !== 'tutor' || !d.user.id) throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+          token = d.token;
+          writeStoredStudentToken(null);
+          return d.user;
+        });
+    }
+    function tutorHealth() {
+      return tutorFetch(base + '/health', { headers: { 'Accept': 'application/json' }, cache: 'no-store' }).then(tutorResponse).then(function (d) {
+        if (d.service !== 'goc-academy-hub') throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+        return d;
+      });
+    }
     function uploadReq(uploadPath, formData) {
     var opts = {
       method: 'POST',
@@ -2685,6 +2850,8 @@
       _setPasscodeLength: function (n) { passLen = Number(n) || 4; },
       /* Read-only view of the token this driver holds in memory. */
       _token: function () { return token; },
+      _tutorLogin: tutorLogin,
+      _tutorHealth: tutorHealth,
 
       login: function (id, password) {
         return req('POST', '/auth/login', { id: norm(id), password: String(password) })
@@ -2697,9 +2864,11 @@
           });
       },
       logout: function () {
-        var t = token; token = null;
+        // Build the request while the bearer token is still available.
+        var pending = token ? req('POST', '/auth/logout').catch(function () { return true; }) : ok(true);
+        token = null;
         writeStoredStudentToken(null);
-        return t ? req('POST', '/auth/logout').catch(function () { return true; }) : ok(true);
+        return pending;
       },
       session: function () {
         // No in-memory token yet on this load — before giving up, check for
@@ -2727,7 +2896,9 @@
 
       listStudents:   function ()      { return req('GET', '/students'); },
       listStaff:      function ()      { return req('GET', '/staff'); },
-      createStudent:  function (d)     { return req('POST', '/students', d).then(function (r) { if (r.token) { token = r.token; writeStoredStudentToken(r.token); } return r; }); },
+      submitRegistration: function (d) { return req('POST', '/registrations', d); },
+      validateRegistrationCode: function (d) { return req('POST', '/registrations/validate-code', d); },
+      completePasswordSetup: function (d) { return req('POST', '/registrations/setup', d); },
       addStudent:     function (d)     { return req('POST', '/admin/students', d); },
       revealPassword: function ()      { return fail('Passwords are stored hashed and cannot be shown. Use "Reset password" instead.'); },
       resetPassword:  function (id)    { return req('POST', '/students/' + encodeURIComponent(norm(id)) + '/reset'); },
@@ -2867,8 +3038,15 @@
       listOverview:   function ()      { return req('GET', '/admin/overview'); },
       markTheory:     function (id, m) { return req('POST', '/results/' + encodeURIComponent(id) + '/mark', { marks: m || {} }); },
 
+      listRegistrationCodes: function () { return req('GET', '/registrations/codes'); },
+      createRegistrationCode: function (d) { return req('POST', '/registrations/codes', d); },
+      revokeRegistrationCode: function (id) { return req('POST', '/registrations/codes/' + encodeURIComponent(norm(id)) + '/revoke', {}); },
+      listRegistrationApplications: function () { return req('GET', '/registrations/applications'); },
+      getRegistrationApplication: function (id) { return req('GET', '/registrations/applications/' + encodeURIComponent(norm(id))); },
+      approveRegistrationApplication: function (id) { return req('POST', '/registrations/applications/' + encodeURIComponent(norm(id)) + '/approve', {}); },
+      rejectRegistrationApplication: function (id, reason) { return req('POST', '/registrations/applications/' + encodeURIComponent(norm(id)) + '/reject', { reason: reason }); },
+      resendRegistrationSetup: function (id) { return req('POST', '/registrations/applications/' + encodeURIComponent(norm(id)) + '/resend-setup', {}); },
       setStudentActive: function (id, on) { return req('PUT', '/students/' + encodeURIComponent(norm(id)) + '/active', { active: !!on }); },
-      setStudentTier:   function (id, tier) { return req('PUT', '/students/' + encodeURIComponent(norm(id)) + '/tier', { tier: String(tier) }); },
       approveStudent:   function (id) { return req('POST', '/students/' + encodeURIComponent(norm(id)) + '/approve', {}); },
       rejectStudent:    function (id) { return req('DELETE', '/students/' + encodeURIComponent(norm(id)) + '/approve', {}); },
 
@@ -3121,9 +3299,6 @@ listPublishedVideos: function () {
     listCohorts: function () {
       return req('GET', '/admin/cohorts');
     },
-    setCohortTier: function (id, tier) {
-      return req('PUT', '/admin/cohorts/' + encodeURIComponent(String(id)) + '/tier', { tier: String(tier) });
-    },
     createCohort: function (d) {
       return req('POST', '/admin/cohorts', d || {});
     },
@@ -3157,7 +3332,15 @@ listPublishedVideos: function () {
     mode: function () { return active.name; },
     isDemo: function () { return active === mock; },
 
-    login:          function (id, pw) { return active.login(id, pw); },
+    login: function (id, pw) {
+      // A sleeping server must never silently turn a tutor login into a demo login.
+      if (/^GOC-T-/i.test(norm(id)) && global.location && /^https?:/.test(String(global.location.protocol)) && typeof fetch === 'function') {
+        return http._tutorLogin(id, pw).then(function (user) { active = http; return user; });
+      }
+      return active.login(id, pw);
+    },
+    tutorHealth: function () { return http._tutorHealth().then(function (d) { active = http; return d; }); },
+    tutorToken: function () { return active === http ? http._token() : null; },
     logout:         function ()       { return active.logout(); },
     session:        function ()       { return active.session(); },
     /* Synchronous, no network: lets the boot sequence decide — before it
@@ -3172,7 +3355,9 @@ listPublishedVideos: function () {
 
     listStudents:   function ()       { return active.listStudents(); },
     listStaff:      function ()       { return active.listStaff(); },
-    createStudent:  function (d)      { return active.createStudent(d); },
+    submitRegistration: function (d) { return active.submitRegistration(d); },
+    validateRegistrationCode: function (d) { return active.validateRegistrationCode(d); },
+    completePasswordSetup: function (d) { return active.completePasswordSetup(d); },
     addStudent:     function (d)      { return active.addStudent(d); },
     revealPassword: function (id)     { return active.revealPassword(id); },
     resetPassword:  function (id)     { return active.resetPassword(id); },
@@ -3288,8 +3473,15 @@ listPublishedVideos: function () {
     markTheory:     function (id, m)  { return active.markTheory(id, m); },
 
     /* Priority 7 / 8 — account activation and founder-only credentials. */
+    listRegistrationCodes: function () { return active.listRegistrationCodes(); },
+    createRegistrationCode: function (d) { return active.createRegistrationCode(d); },
+    revokeRegistrationCode: function (id) { return active.revokeRegistrationCode(id); },
+    listRegistrationApplications: function () { return active.listRegistrationApplications(); },
+    getRegistrationApplication: function (id) { return active.getRegistrationApplication(id); },
+    approveRegistrationApplication: function (id) { return active.approveRegistrationApplication(id); },
+    rejectRegistrationApplication: function (id, reason) { return active.rejectRegistrationApplication(id, reason); },
+    resendRegistrationSetup: function (id) { return active.resendRegistrationSetup(id); },
     setStudentActive: function (id, on) { return active.setStudentActive(id, on); },
-    setStudentTier: function (id, tier) { return active.setStudentTier(id, tier); },
     approveStudent:  function (id)      { return active.approveStudent(id); },
     rejectStudent:   function (id)      { return active.rejectStudent(id); },
     staffAccess:    function ()       { return active.staffAccess(); },
@@ -3353,7 +3545,6 @@ listPublishedVideos: function () {
     listAlerts: function () { return active.listAlerts(); },
     seenAlert: function (id) { return active.seenAlert(id); },
     listCohorts: function () { return active.listCohorts(); },
-    setCohortTier: function (id, tier) { return active.setCohortTier(id, tier); },
     createCohort: function (d) { return active.createCohort(d); },
     updateCohort: function (id, d) { return active.updateCohort(id, d); },
     deleteCohort: function (id) { return active.deleteCohort(id); },

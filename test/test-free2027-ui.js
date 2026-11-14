@@ -1248,7 +1248,7 @@ settle(load(w1)).then(function () {
     ok('a guest sees the activity pool without being told they must sit all five subjects',
       /Activity pool: <b>50<\/b> questions/.test(html) && /registered subject combination/.test(html) &&
       !/Your paper: <b>40<\/b> questions/.test(html), html);
-    ok('the service-worker cache is bumped to goc-v220', /const CACHE = 'goc-v220';/.test(sw), (sw.match(/const CACHE = '[^']+'/) || [''])[0]);
+    ok('the service-worker cache is bumped to goc-v223', /const CACHE = 'goc-v223';/.test(sw), (sw.match(/const CACHE = '[^']+'/) || [''])[0]);
     ok('the old cache name is gone', sw.indexOf('goc-v205') < 0);
     ok('the install, activation and cache-first strategy remain present',
       /caches\.open\(CACHE\)\.then\(c => c\.addAll\(ASSETS\)\)\.then\(\(\) => self\.skipWaiting\(\)\)/.test(sw) &&

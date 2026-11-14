@@ -223,7 +223,7 @@ var child = null;
   var sw2 = await request('GET', '/sw.js');
   ok('the real service worker is back', sw2.status === 200 && /goc-v\d+/.test(sw2.raw) && !/registration\.unregister/.test(sw2.raw));
   var tutor = await request('GET', '/tutor');
-  ok('the tutor shell is served again', tutor.status === 200 && /Tutor sign-in/.test(tutor.raw), tutor.status);
+  ok('the retired separate tutor page stays unavailable', tutor.status === 404, tutor.status);
   var appJs = await request('GET', '/js/app.js');
   ok('application scripts are served again', appJs.status === 200 && /javascript/.test(appJs.headers['content-type'] || ''), appJs.status);
   var badLogin = await request('POST', '/api/auth/login', { body: { id: 'GOC-S-000000', password: 'wrong-password' } });

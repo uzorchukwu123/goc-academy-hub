@@ -61,7 +61,7 @@ console.log('\nwho counts');
 var w = core.tutorAtRisk('Chemistry',
   [S('G'), S('O', { tier: 'open' }), S('D', { active: false }), S('PH', { subjects: ['Physics'] }), S('G', { name: 'Dup' })],
   {}, [], NOW);
-ok('only GOC students taking the subject, not deactivated, once each', w.length === 1 && w[0].id === 'G' && w[0].name === 'Name G', JSON.stringify(w));
+ok('students taking the subject, not deactivated, once each (stored tiers ignored)', w.length === 2 && w[0].id === 'G' && w[1].id === 'O', JSON.stringify(w));
 ok('no email, phone or hash in a row', (function () { var x = core.tutorAtRisk('Chemistry', [S('E', { email: 'e@x.com', phone: '0803', passwordHash: 'h' })], {}, [], NOW); return x.length === 1 && !/e@x|0803|"h"|password/i.test(JSON.stringify(x)); })());
 ok('empty input gives an empty list', core.tutorAtRisk('Chemistry', null, null, null, NOW).length === 0);
 ok('the two limits are exposed', core.ATRISK_INACTIVE_DAYS === 7 && core.ATRISK_LOW_AVERAGE === 40);

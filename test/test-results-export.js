@@ -263,6 +263,11 @@ function waitForBoot(srv, n) {
     await waitForBoot(srv, 100);
     var f = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
     var ftok = f.body && f.body.token;
+    /* Prove the locked-console refusal first: enrolment (activeStudent) needs
+       an unlocked console, so this check has to run while ftok is locked. */
+    var lockedEarly = await call('GET', '/api/results/export?term=1&year=2026', null, ftok);
+    ok('even the founder is refused until the console is unlocked', lockedEarly.status === 403, lockedEarly.status + ' ' + lockedEarly.raw);
+    await call('POST', '/api/auth/unlock', { passcode: '2027' }, ftok);
     var stu = await activeStudent(call, { name: 'Ada Test', password: 'secret123', email: 'ada@example.com', phone: '08000000071', goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'] }, ftok);
     ok('a student exists to own the results', !!stu.id, JSON.stringify(stu.signup && stu.signup.body));
     var dbPath = path.join(srv.sandbox, 'server', 'data.json');
@@ -277,10 +282,6 @@ function waitForBoot(srv, n) {
     ok('no sign-in is refused', none.status === 401, none.status);
     var stud = await call('GET', '/api/results/export?term=1&year=2026', null, stu.token);
     ok('a student is refused', stud.status === 401 || stud.status === 403, stud.status);
-    var locked = await call('GET', '/api/results/export?term=1&year=2026', null, ftok);
-    ok('even the founder is refused until the console is unlocked', locked.status === 403, locked.status + ' ' + locked.raw);
-    await call('POST', '/api/auth/unlock', { passcode: '2027' }, ftok);
-
     var t1 = await call('GET', '/api/results/export?term=1&year=2026', null, ftok);
     ok('Term 1 2026/27: the marked rows, with the label, the days and the awaiting count', t1.status === 200 && t1.body.count === 4 && t1.body.rows.length === 4 && t1.body.awaiting === 1 && t1.body.from === '2026-09-01' && t1.body.to === '2026-12-31' && t1.body.label === 'First term 2026/27', t1.raw.slice(0, 200));
     ok('the rows are sorted by Scholar ID then time and carry the cohort', t1.body.rows[0].scholarId === 'GOC-S-001' || t1.body.rows[0].scholarId === stu.id);

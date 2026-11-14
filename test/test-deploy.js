@@ -30,7 +30,7 @@ head('what is refused');
  'reminders-outbox.jsonl', 'server/question-images/QIMG-1.png', 'server.log', 'key.pem'].forEach(function (p) {
   ok(p + ' is refused', D.refusal(p) !== '', D.refusal(p));
 });
-['server/server.js', 'server/lib/reminders.js', 'js/goc-core.js', 'package.json', 'public/js/app.js', 'server/tutor/tutor-app.js'].forEach(function (p) {
+['server/server.js', 'server/lib/reminders.js', 'js/goc-core.js', 'package.json', 'public/js/app.js', 'js/tutor-app.js'].forEach(function (p) {
   ok(p + ' is allowed', D.refusal(p) === '');
 });
 
@@ -40,7 +40,7 @@ function project(extra) {
   var files = {
     'package.json': '{}', 'package-lock.json': '{}', 'js/goc-core.js': 'x', 'js/goc-free-2027.js': 'x', 'js/app.js': 'app',
     'server/server.js': 's', 'server/setup-appwrite.js': 's', 'server/verify-media.js': 's', 'server/export-questions.js': 's',
-    'server/lib/appwrite.js': 'l', 'server/lib/reminders.js': 'l', 'server/tutor/tutor-app.js': 't',
+    'server/lib/appwrite.js': 'l', 'server/lib/reminders.js': 'l', 'js/tutor-app.js': 't',
     'test/run.js': 'tests', 'DEPLOYMENT.md': 'docs', 'index.html': '<html>'
   };
   Object.keys(extra || {}).forEach(function (k) { files[k] = extra[k]; });
@@ -49,7 +49,7 @@ function project(extra) {
   });
   return root;
 }
-function fakeBuild(dir) { fs.mkdirSync(path.join(dir, 'js'), { recursive: true }); fs.writeFileSync(path.join(dir, 'index.html'), '<min>'); fs.writeFileSync(path.join(dir, 'js', 'app.js'), 'm'); }
+function fakeBuild(dir) { fs.mkdirSync(path.join(dir, 'js'), { recursive: true }); fs.writeFileSync(path.join(dir, 'index.html'), '<min>'); fs.writeFileSync(path.join(dir, 'js', 'app.js'), 'm'); fs.writeFileSync(path.join(dir, 'js', 'tutor-app.js'), 't'); }
 function list(dir, base, out) {
   fs.readdirSync(dir, { withFileTypes: true }).forEach(function (e) {
     var rel = base ? base + '/' + e.name : e.name;
@@ -63,8 +63,8 @@ var root = project(), out = path.join(os.tmpdir(), 'goc-deploy-out-' + process.p
 var r = D.assemble({ root: root, out: out, build: fakeBuild });
 var got = list(out, '', []);
 ok('reports the file count', r.files === got.length && r.bytes > 0, r.files + ' vs ' + got.length);
-ok('holds the server, its libraries and the core', ['server/server.js', 'server/lib/appwrite.js', 'server/lib/reminders.js', 'server/tutor/tutor-app.js', 'js/goc-core.js', 'package.json', 'package-lock.json'].every(function (f) { return got.indexOf(f) > -1; }));
-ok('holds the built public/ folder', got.indexOf('public/index.html') > -1 && got.indexOf('public/js/app.js') > -1);
+ok('holds the server, its libraries and the core', ['server/server.js', 'server/lib/appwrite.js', 'server/lib/reminders.js', 'js/goc-core.js', 'package.json', 'package-lock.json'].every(function (f) { return got.indexOf(f) > -1; }));
+ok('holds the built public/ folder', got.indexOf('public/index.html') > -1 && got.indexOf('public/js/app.js') > -1 && got.indexOf('public/js/tutor-app.js') > -1);
 ok('has no tests, docs or readable page source', !got.some(function (f) { return /^test\//.test(f) || f === 'DEPLOYMENT.md' || f === 'index.html' || f === 'js/app.js'; }), got.join(','));
 ok('every file is on the allow-list or in public/', got.every(function (f) {
   return f === 'DEPLOY-NOTES.txt' || /^public\//.test(f) || D.ALLOW_FILES.indexOf(f) > -1 || D.ALLOW_DIRS.some(function (d) { return f.indexOf(d + '/') === 0; });

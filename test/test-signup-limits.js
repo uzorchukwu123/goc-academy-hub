@@ -1,5 +1,5 @@
-/* test-signup-limits.js — Phase 3B slice 5: sign-up is open (no access code) and one address can only
-   create so many accounts: the rules in js/goc-core.js, then the real server over HTTP.
+/* test-signup-limits.js — Phase 3B slice 5 rules, Stage B endpoint: one address can only
+   submit so many registration applications: the rules in js/goc-core.js, then the real server over HTTP.
    node test/test-signup-limits.js */
 'use strict';
 var http = require('http');
@@ -67,28 +67,33 @@ function waitForBoot(n) {
     return new Promise(function (x) { setTimeout(x, 100); }).then(function () { return waitForBoot(n - 1); });
   });
 }
-var seq = 0;
+var seq = 0, CODE = null;
 function signup(extra) {
   seq++;
-  return call('POST', '/api/students', Object.assign({ name: 'Open Person ' + seq, password: 'secret123', email: 'o' + seq + '@example.com',
+  return call('POST', '/api/registrations', Object.assign({ code: CODE, name: 'Open Person ' + seq, password: 'secret123', email: 'o' + seq + '@example.com', phone: '08030000000',
     goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Biology'],
     privacyConsent: { accepted: true } }, extra || {}));
 }
 
 (async function () {
   await waitForBoot(100);
-  head('anyone can sign up, with no code, and the account is Open');
-  var r = await signup();
-  ok('accepted with no code at all', r.status === 200 && r.body && r.body.student, r.status + ' ' + r.raw);
-  /* the sign-up reply is only "pending" now, so read the stored record the way the console does */
+  head('with a valid registration code, applications are accepted — and stored as applications, not accounts');
   var fl = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
   var ftok = fl.body && fl.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, ftok);
+  CODE = (await call('POST', '/api/registrations/codes', { label: 'Limits cohort', maxUses: 1000 }, ftok)).body.code;
+  ok('setup: the founder minted a code', /^GOC-REG-/.test(CODE || ''));
+  ok('without a code the application is refused', (await signup({ code: '' })).status === 400);
+  seq--; /* the refused attempt above is not a successful submission */
+  var r = await signup();
+  ok('accepted with a valid code', r.status === 200 && r.body && r.body.received === true, r.status + ' ' + r.raw);
+  /* the reply only says "received", so read the stored records the way the console does */
+  var appsList = await call('GET', '/api/registrations/applications', undefined, ftok);
+  var mine = ((appsList.body && appsList.body.applications) || []).filter(function (x) { return x.email === 'o1@example.com'; })[0];
   var roster = await call('GET', '/api/students', undefined, ftok);
-  var mine = ((roster.body && (roster.body.students || roster.body)) || []).filter(function (x) { return r.body && r.body.student && x.id === r.body.student.id; })[0];
-  ok('stored as Open, waiting for approval', r.body && r.body.pending === true && !!mine && mine.tier === 'open' && mine.pendingApproval === true, JSON.stringify(mine) + ' ' + r.raw);
+  ok('stored as a pending application with no tier and NO student account', !!mine && mine.status === 'pending' && mine.scholarId === null && !('tier' in mine) && Array.isArray(roster.body) && roster.body.length === 0, JSON.stringify(mine) + ' ' + r.raw);
   r = await signup({ signupCode: 'whatever' });
-  ok('a stale code field is ignored', r.status === 200, r.status + ' ' + r.raw);
+  ok('a stale code field is ignored (the real code field is what counts)', r.status === 200, r.status + ' ' + r.raw);
 
   head('the 6th sign-up in an hour from one address is refused');
   for (var i = 0; i < 3; i++) await signup();

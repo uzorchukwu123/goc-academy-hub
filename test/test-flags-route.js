@@ -55,13 +55,14 @@ waitForBoot(20).then(async function (h) {
   var lin = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
   adm = lin.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
-  var reg = await call('POST', '/api/students', { name: 'Tobi Flag', password: 'secret123',
-    email: 'tobi.flag@example.com', phone: '08011110000', goal: 'JAMB / UTME 2027', subjects: COMBO,
-    privacyConsent: { accepted: true } });
+  /* Stage B: enrolled through the console route — registration itself is
+     application-first now (covered by the registration suites), and every
+     approved student is a full G.O.C student, so no approval/tier step is
+     needed to stand one up here. */
+  var reg = await call('POST', '/api/admin/students', { name: 'Tobi Flag',
+    email: 'tobi.flag@example.com', phone: '08011110000', goal: 'JAMB / UTME 2027', subjects: COMBO }, adm);
   stuId = reg.body.student.id;
-  await call('POST', '/api/students/' + stuId + '/approve', {}, adm);
-  await call('PUT', '/api/students/' + stuId + '/tier', { tier: 'goc' }, adm);
-  stuTok = (await call('POST', '/api/auth/login', { id: stuId, password: 'secret123' })).body.token;
+  stuTok = (await call('POST', '/api/auth/login', { id: stuId, password: reg.body.temporaryPassword })).body.token;
   var qs = await call('GET', '/api/questions?subject=Chemistry&activeOnly=true', undefined, adm);
   var liveQ = ((qs.body && qs.body.questions) || []).filter(function (q) { return q.active && (q.status === undefined || q.status === 'live'); });
   qid = liveQ.length ? liveQ[0].id : null;
@@ -85,12 +86,12 @@ waitForBoot(20).then(async function (h) {
   head('a Chemistry tutor replies; a Physics tutor cannot');
   await call('POST', '/api/tutors', { name: 'Ada Chem', subjects: ['Chemistry'], password: 'start-pass-1' }, adm);
   await call('POST', '/api/tutors', { name: 'Eze Phys', subjects: ['Physics'], password: 'start-pass-2' }, adm);
-  var tl = await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' });
+  var tl = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' });
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'brand-new-pass' }, tl.body.token);
-  chemTok = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).body.token;
-  var pl = await call('POST', '/api/tutor/login', { id: 'GOC-T-002', password: 'start-pass-2' });
+  chemTok = (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).body.token;
+  var pl = await call('POST', '/api/auth/login', { id: 'GOC-T-002', password: 'start-pass-2' });
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-2', newPassword: 'brand-new-pass2' }, pl.body.token);
-  var physTok = (await call('POST', '/api/tutor/login', { id: 'GOC-T-002', password: 'brand-new-pass2' })).body.token;
+  var physTok = (await call('POST', '/api/auth/login', { id: 'GOC-T-002', password: 'brand-new-pass2' })).body.token;
   var tChem = await call('GET', '/api/tutor/flags?subject=Chemistry', undefined, chemTok);
   ok('the Chemistry tutor sees the Chemistry flag', tChem.status === 200 && tChem.body.flags.some(function (f) { return f.id === flagId; }), tChem.raw.slice(0, 200));
   var tPhys = await call('GET', '/api/tutor/flags', undefined, physTok);
@@ -105,14 +106,13 @@ waitForBoot(20).then(async function (h) {
      && f0.reply && f0.reply.from === 'Chemistry tutor' && /lone pair/.test(f0.reply.text)
      && mine2.raw.indexOf('Ada Chem') === -1 && mine2.raw.indexOf('GOC-T-001') === -1, JSON.stringify(f0).slice(0, 220));
 
-  head('closing, and the Open gate');
+  head('closing, and no tier gate');
   var close = await call('POST', '/api/flags/' + flagId + '/close', {}, adm);
   ok('the console closes the flag', close.status === 200 && close.body.flag.status === 'closed', close.status + ' ' + close.raw.slice(0, 120));
   ok('after closing, the student may ask again', (await call('POST', '/api/me/flags', { questionId: qid, reason: 'unclear', note: 'one more thing' }, stuTok)).status === 200, '');
-  await call('PUT', '/api/students/' + stuId + '/tier', { tier: 'open' }, adm);
-  var openAsk = await call('POST', '/api/me/flags', { questionId: qid, reason: 'typo', note: 'x' }, stuTok);
-  ok('an Open student cannot ask (403) and reads no flags', openAsk.status === 403
-     && (await call('GET', '/api/me/flags', undefined, stuTok)).body.locked === true, openAsk.status + ' ' + openAsk.raw);
+  var tierGone = await call('PUT', '/api/students/' + stuId + '/tier', { tier: 'open' }, adm);
+  ok('the old tier-switch route is gone (404)', tierGone.status === 404, tierGone.status + ' ' + tierGone.raw.slice(0, 80));
+  ok('no tier gate remains: the student reads flags unlocked', (await call('GET', '/api/me/flags', undefined, stuTok)).body.locked === false, '');
 
   demoParity();
 }).catch(function (e) {
@@ -134,7 +134,7 @@ function demoParity() {
   var mock = vm.runInContext('GOC.api._drivers', ctx).mock;
   var dflag = null;
   activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Demo Flag', password: 'secret123', goal: 'JAMB / UTME 2027', subjects: COMBO }).then(function (r) {
-    vm.runInContext('GOC.api._drivers.mock._setTier', ctx)(r.student.id, 'goc');
+
     var all = vm.runInContext('GOC.core.seedQuestions()', ctx);
     var q = all.filter(function (x) { return x.subject === 'Chemistry' && x.active !== false; })[0];
     return mock.askTutor({ questionId: q && q.id, reason: 'wrong-answer', note: 'demo note here' });

@@ -42,7 +42,7 @@ login, registration, navigation or reopening date.
 | `GET/HEAD /sw.js` | A self-destroying service worker | Clears the app's offline cache and unregisters itself so a cached copy of the app cannot be navigated into while the platform is down. |
 
 Everything else — homepage, sign-up, login, dashboards, Management Console,
-Founder/staff screens, `/tutor`, password-setup links (`/setup/<token>`), Free
+Founder/staff and tutor screens, password-setup links (`/setup/<token>`), Free
 UTME 2027, JAMB practice, Web Tests, formal CBT, resources, videos, recorded
 and live classes, every other `/api/` route, bookmarks and deep links typed by
 hand — answers `503` (the page, or `{"error":…,"maintenance":true}` for `/api/`).
@@ -157,7 +157,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://YOUR-HOST/api/auth/logi
 ```
 
 Then, in a browser: open the homepage → sign in with a real Scholar ID → open
-the dashboard and one study screen → open `/tutor` → (if used) enter the Free
+the dashboard and one study screen → sign in as a tutor through the normal login → (if used) enter the Free
 UTME 2027 portal. On Appwrite, repeat step 2–4 against the Function origin and
 open the Site in a private window.
 

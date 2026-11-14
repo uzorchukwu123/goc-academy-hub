@@ -100,10 +100,10 @@ console passcode. The gate word is independent of the Founder password and the
 console passcode, and it is not stored or emailed. The old Science Subjects card
 and tutor secret-word entrances have been removed.
 
-## Open sign-up (there is no access code)
+## Sign-up (there is no access code)
 
-**Anyone can create an account.** Every self-made account is **Open**; only the
-console makes someone a **GOC student** (*Console → Students*). The old academy access
+**Anyone can create an account.** Every account is a **GOC student** — there is
+one student category, with the full academy entitlement set. The old academy access
 code is gone, so `GOC_SIGNUP_CODE` and `GOC-2027` no longer do anything.
 
 What stops one person making account after account is a limit on **successful sign-ups

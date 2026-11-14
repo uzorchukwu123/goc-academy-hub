@@ -7,7 +7,7 @@ var path = require('path');
 var vm = require('vm');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var md = require('./minidom.js');
-var bundle = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var bundle = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
@@ -33,7 +33,6 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   function fetchStub(url, opts) {
     var method = (opts && opts.method) || 'GET';
     calls.push({ url: url, method: method, auth: opts && opts.headers && opts.headers.Authorization });
-    if (/^api\/tutor\/login/.test(url)) return reply(200, { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } });
     if (/^api\/tutor\/subject/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } });
     if (/^api\/tutor\/atrisk/.test(url)) {
       if (failNext) { failNext = false; return reply(500, { error: 'The at-risk list is not available.' }); }
@@ -47,7 +46,9 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     if (/^api\/tutor\/scripts/.test(url)) return reply(200, { subject: 'Chemistry', counts: { waiting: 0, marked: 0 }, scripts: [] });
     return reply(200, {});
   }
-  var win = {};
+  var tutorSession = { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } };
+  var navigated = '', lastToast = '';
+  var win = { go: function (where) { navigated = where; }, toast: function (msg) { lastToast = msg; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String, Number: Number, Object: Object, Array: Array });
   bctx.window.confirm = function () { return true; };
   vm.runInContext(bundle, bctx);
@@ -66,8 +67,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     row('GOC-S-012', 'Amina Yusuf', 1, false, null, 0, null, ['inactive'])
   ];
   rowsScore = [rowsInactive[1], rowsInactive[0], rowsInactive[2]];
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(q('button[data-act=signin]')); await tick(60);
+  win.__zxOpen(tutorSession); await tick(60);
 
   console.log('\nthe card');
   ok('the list is asked for with the subject, the default order and the token', arCalls()[0] && arCalls()[0].url === 'api/tutor/atrisk?subject=Chemistry&sort=inactive' && arCalls()[0].auth === 'Bearer tok-9', JSON.stringify(arCalls()[0]));
@@ -108,15 +108,11 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   click(q('button[data-act=signout]')); await tick(30);
   ok('sign out clears the list from the page', !/At-risk students/.test(text()) && !/Student 1/.test(text()));
   failNext = true;
-  bctx.window.__zxOpen(); await tick(30);
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(q('button[data-act=signin]')); await tick(60);
+  win.__zxOpen(tutorSession); await tick(60);
   ok('a failed load is explained on this card only', /The at-risk list is not available\./.test(text()) && /Class snapshot/.test(text()) && !q('.zx-ar'), text().slice(0, 300));
   click(q('button[data-act=signout]')); await tick(30);
   rowsInactive = []; rowsScore = [];
-  bctx.window.__zxOpen(); await tick(30);
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(q('button[data-act=signin]')); await tick(60);
+  win.__zxOpen(tutorSession); await tick(60);
   ok('with nobody at risk the card says so and offers no order switch', /Nobody is at risk right now\./.test(text()) && !q('button[data-act=arsort]') && !q('.zx-ar'));
   click(q('button[data-act=signout]')); await tick(30);
   ok('the next sign-in starts again on the default order', (function () { var c0 = arCalls().length; return c0 > 0 && /sort=inactive/.test(arCalls().slice(-1)[0].url); })());

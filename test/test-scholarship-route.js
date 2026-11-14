@@ -225,7 +225,7 @@ start().then(function () {
   ok('approvedAt is set',                           r.body && r.body.application && !!r.body.application.approvedAt, r.raw);
   ok('tempPassword in response',                    r.body && r.body.application && !!r.body.application.tempPassword, r.raw);
   ok('a new student was created in data.json',      readDb().students.some(function (s) { return s.scholarshipId === appId; }));
-  ok('the new student is GOC tier',                 (function () { var db = readDb(); var s = db.students.find(function(x){return x.scholarshipId===appId;}); return s && s.tier === 'GOC'; })());
+  ok('the new student carries no stored tier',       (function () { var db = readDb(); var s = db.students.find(function(x){return x.scholarshipId===appId;}); return s && !('tier' in s); })());
 
   /* Academic Director cannot approve */
   return call('POST', '/api/scholarship/applications/' + app2Id + '/decide',

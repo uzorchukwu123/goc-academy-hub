@@ -2,33 +2,35 @@
   "generatedBy": "functions/goc-api/tools/extract-routes.js",
   "source": "server/server.js",
   "note": "Generated from the OneBit route table. Do not hand-edit; re-run the extractor.",
-  "total": 253,
+  "total": 266,
   "counts": {
     "byAuthTier": {
-      "public": 21,
-      "student": 37,
+      "public": 24,
+      "student": 42,
       "staff-or-student": 4,
       "staff": 3,
-      "console": 145,
+      "console": 150,
       "tutor-setup": 2,
       "tutor": 27,
       "founder": 2,
       "free": 12
     },
     "byMethod": {
-      "GET": 113,
-      "POST": 77,
-      "PUT": 41,
-      "DELETE": 22
+      "GET": 119,
+      "POST": 86,
+      "PUT": 38,
+      "DELETE": 23
     },
     "byFamily": {
       "api/health": 1,
       "api/auth": 7,
-      "api/me": 32,
-      "api/students": 8,
-      "api/admin": 22,
+      "api/me": 37,
+      "api/students": 6,
+      "api/registrations": 11,
+      "api/admin": 21,
       "api/staff": 3,
       "api/updates": 3,
+      "api/demo": 2,
       "api/affirmations": 2,
       "api/contact": 1,
       "api/unsubscribe": 1,
@@ -37,7 +39,7 @@
       "api/jamb": 1,
       "api/rounds": 3,
       "api/challenges": 3,
-      "api/tutor": 30,
+      "api/tutor": 29,
       "api/audit": 2,
       "api/notices": 2,
       "api/flags": 2,
@@ -58,7 +60,7 @@
       "api/videos": 2,
       "api/classes": 1,
       "api/scholarship": 8,
-      "api/free2027": 54,
+      "api/free2027": 53,
       "api/analytics": 2
     }
   },
@@ -76,6 +78,7 @@
     "notices.manage",
     "overview.own",
     "questions.manage",
+    "registrations.codes",
     "resources.publish",
     "results.export",
     "results.view",
@@ -91,7 +94,6 @@
     "students.approve",
     "students.deactivate",
     "students.passwords",
-    "students.tier",
     "system.migrate",
     "theory.mark",
     "tutors.accounts",
@@ -110,7 +112,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/health",
-      "serverLine": 3237
+      "serverLine": 3522
     },
     {
       "method": "POST",
@@ -124,7 +126,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/auth",
-      "serverLine": 3261
+      "serverLine": 3544
     },
     {
       "method": "POST",
@@ -138,7 +140,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/auth",
-      "serverLine": 3381
+      "serverLine": 3721
     },
     {
       "method": "POST",
@@ -152,7 +154,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 3386
+      "serverLine": 3726
     },
     {
       "method": "GET",
@@ -166,7 +168,7 @@
       "authTier": "staff-or-student",
       "capability": null,
       "family": "api/auth",
-      "serverLine": 3429
+      "serverLine": 3769
     },
     {
       "method": "GET",
@@ -180,7 +182,7 @@
       "authTier": "staff-or-student",
       "capability": null,
       "family": "api/auth",
-      "serverLine": 3441
+      "serverLine": 3781
     },
     {
       "method": "POST",
@@ -194,7 +196,7 @@
       "authTier": "staff",
       "capability": null,
       "family": "api/auth",
-      "serverLine": 3462
+      "serverLine": 3802
     },
     {
       "method": "POST",
@@ -208,7 +210,7 @@
       "authTier": "staff",
       "capability": null,
       "family": "api/auth",
-      "serverLine": 3486
+      "serverLine": 3826
     },
     {
       "method": "POST",
@@ -222,7 +224,7 @@
       "authTier": "staff",
       "capability": "roster.view",
       "family": "api/auth",
-      "serverLine": 3532
+      "serverLine": 3872
     },
     {
       "method": "GET",
@@ -236,21 +238,161 @@
       "authTier": "console",
       "capability": "roster.view",
       "family": "api/students",
-      "serverLine": 3537
+      "serverLine": 3877
     },
     {
       "method": "POST",
-      "path": "/api/students$",
+      "path": "/api/registrations/validate-code$",
       "regex": {
-        "source": "^\\/api\\/students$",
+        "source": "^\\/api\\/registrations\\/validate-code$",
         "flags": ""
       },
-      "displayPath": "/api/students",
+      "displayPath": "/api/registrations/validate-code",
       "caseInsensitive": false,
       "authTier": "public",
       "capability": null,
-      "family": "api/students",
-      "serverLine": 3550
+      "family": "api/registrations",
+      "serverLine": 3895
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations$",
+      "regex": {
+        "source": "^\\/api\\/registrations$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/registrations",
+      "serverLine": 3909
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/setup$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/setup$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/setup",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/registrations",
+      "serverLine": 3954
+    },
+    {
+      "method": "GET",
+      "path": "/api/registrations/codes$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/codes$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/codes",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "registrations.codes",
+      "family": "api/registrations",
+      "serverLine": 3993
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/codes$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/codes$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/codes",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "registrations.codes",
+      "family": "api/registrations",
+      "serverLine": 4001
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/codes/([A-Za-z0-9-]+)/revoke$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/codes\\/([A-Za-z0-9-]+)\\/revoke$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/codes/([A-Za-z0-9-]+)/revoke",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "registrations.codes",
+      "family": "api/registrations",
+      "serverLine": 4030
+    },
+    {
+      "method": "GET",
+      "path": "/api/registrations/applications$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/applications$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/applications",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/registrations",
+      "serverLine": 4043
+    },
+    {
+      "method": "GET",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/registrations",
+      "serverLine": 4051
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/approve$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)\\/approve$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)/approve",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/registrations",
+      "serverLine": 4061
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/reject$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)\\/reject$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)/reject",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/registrations",
+      "serverLine": 4084
+    },
+    {
+      "method": "POST",
+      "path": "/api/registrations/applications/([A-Za-z0-9-]+)/resend-setup$",
+      "regex": {
+        "source": "^\\/api\\/registrations\\/applications\\/([A-Za-z0-9-]+)\\/resend-setup$",
+        "flags": ""
+      },
+      "displayPath": "/api/registrations/applications/([A-Za-z0-9-]+)/resend-setup",
+      "caseInsensitive": false,
+      "authTier": "console",
+      "capability": "students.approve",
+      "family": "api/registrations",
+      "serverLine": 4111
     },
     {
       "method": "PUT",
@@ -264,7 +406,7 @@
       "authTier": "console",
       "capability": "students.deactivate",
       "family": "api/students",
-      "serverLine": 3644
+      "serverLine": 4124
     },
     {
       "method": "POST",
@@ -278,7 +420,7 @@
       "authTier": "console",
       "capability": "students.approve",
       "family": "api/students",
-      "serverLine": 3693
+      "serverLine": 4173
     },
     {
       "method": "DELETE",
@@ -292,7 +434,7 @@
       "authTier": "console",
       "capability": "students.approve",
       "family": "api/students",
-      "serverLine": 3723
+      "serverLine": 4203
     },
     {
       "method": "POST",
@@ -306,7 +448,7 @@
       "authTier": "console",
       "capability": "students.passwords",
       "family": "api/students",
-      "serverLine": 3746
+      "serverLine": 4226
     },
     {
       "method": "POST",
@@ -320,7 +462,7 @@
       "authTier": "console",
       "capability": "students.add",
       "family": "api/admin",
-      "serverLine": 3797
+      "serverLine": 4277
     },
     {
       "method": "GET",
@@ -334,7 +476,7 @@
       "authTier": "console",
       "capability": "overview.own",
       "family": "api/admin",
-      "serverLine": 3862
+      "serverLine": 4335
     },
     {
       "method": "POST",
@@ -348,7 +490,7 @@
       "authTier": "console",
       "capability": "system.migrate",
       "family": "api/admin",
-      "serverLine": 3913
+      "serverLine": 4386
     },
     {
       "method": "GET",
@@ -362,7 +504,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/staff",
-      "serverLine": 3977
+      "serverLine": 4450
     },
     {
       "method": "GET",
@@ -376,7 +518,7 @@
       "authTier": "public",
       "capability": "homepage.edit",
       "family": "api/updates",
-      "serverLine": 3982
+      "serverLine": 4455
     },
     {
       "method": "POST",
@@ -390,7 +532,7 @@
       "authTier": "console",
       "capability": "homepage.edit",
       "family": "api/updates",
-      "serverLine": 3986
+      "serverLine": 4459
     },
     {
       "method": "DELETE",
@@ -404,7 +546,35 @@
       "authTier": "console",
       "capability": "homepage.edit",
       "family": "api/updates",
-      "serverLine": 4004
+      "serverLine": 4477
+    },
+    {
+      "method": "GET",
+      "path": "/api/demo/questions$",
+      "regex": {
+        "source": "^\\/api\\/demo\\/questions$",
+        "flags": ""
+      },
+      "displayPath": "/api/demo/questions",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/demo",
+      "serverLine": 4494
+    },
+    {
+      "method": "POST",
+      "path": "/api/demo/submit$",
+      "regex": {
+        "source": "^\\/api\\/demo\\/submit$",
+        "flags": ""
+      },
+      "displayPath": "/api/demo/submit",
+      "caseInsensitive": false,
+      "authTier": "public",
+      "capability": null,
+      "family": "api/demo",
+      "serverLine": 4513
     },
     {
       "method": "GET",
@@ -418,7 +588,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/affirmations",
-      "serverLine": 4017
+      "serverLine": 4540
     },
     {
       "method": "PUT",
@@ -432,7 +602,7 @@
       "authTier": "console",
       "capability": "homepage.edit",
       "family": "api/affirmations",
-      "serverLine": 4028
+      "serverLine": 4551
     },
     {
       "method": "POST",
@@ -446,7 +616,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/contact",
-      "serverLine": 4048
+      "serverLine": 4571
     },
     {
       "method": "GET",
@@ -460,7 +630,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/unsubscribe",
-      "serverLine": 4108
+      "serverLine": 4631
     },
     {
       "method": "GET",
@@ -474,7 +644,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/settings",
-      "serverLine": 4148
+      "serverLine": 4671
     },
     {
       "method": "PUT",
@@ -488,7 +658,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/settings",
-      "serverLine": 4168
+      "serverLine": 4691
     },
     {
       "method": "PUT",
@@ -502,7 +672,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/settings",
-      "serverLine": 4222
+      "serverLine": 4745
     },
     {
       "method": "PUT",
@@ -516,7 +686,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/settings",
-      "serverLine": 4238
+      "serverLine": 4761
     },
     {
       "method": "GET",
@@ -530,7 +700,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/objective",
-      "serverLine": 4254
+      "serverLine": 4777
     },
     {
       "method": "GET",
@@ -544,7 +714,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/jamb",
-      "serverLine": 4268
+      "serverLine": 4791
     },
     {
       "method": "GET",
@@ -558,7 +728,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/staff",
-      "serverLine": 4289
+      "serverLine": 4812
     },
     {
       "method": "PUT",
@@ -572,7 +742,7 @@
       "authTier": "console",
       "capability": "signup.limits",
       "family": "api/settings",
-      "serverLine": 4306
+      "serverLine": 4829
     },
     {
       "method": "GET",
@@ -586,7 +756,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/rounds",
-      "serverLine": 4332
+      "serverLine": 4855
     },
     {
       "method": "POST",
@@ -600,7 +770,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/rounds",
-      "serverLine": 4343
+      "serverLine": 4866
     },
     {
       "method": "POST",
@@ -614,7 +784,7 @@
       "authTier": "console",
       "capability": "sittings.configure",
       "family": "api/rounds",
-      "serverLine": 4368
+      "serverLine": 4891
     },
     {
       "method": "POST",
@@ -628,7 +798,7 @@
       "authTier": "console",
       "capability": "challenges.manage",
       "family": "api/challenges",
-      "serverLine": 4389
+      "serverLine": 4912
     },
     {
       "method": "GET",
@@ -642,7 +812,7 @@
       "authTier": "console",
       "capability": "challenges.manage",
       "family": "api/challenges",
-      "serverLine": 4404
+      "serverLine": 4927
     },
     {
       "method": "PUT",
@@ -656,21 +826,7 @@
       "authTier": "console",
       "capability": "challenges.manage",
       "family": "api/challenges",
-      "serverLine": 4410
-    },
-    {
-      "method": "POST",
-      "path": "/api/tutor/login$",
-      "regex": {
-        "source": "^\\/api\\/tutor\\/login$",
-        "flags": ""
-      },
-      "displayPath": "/api/tutor/login",
-      "caseInsensitive": false,
-      "authTier": "public",
-      "capability": null,
-      "family": "api/tutor",
-      "serverLine": 4424
+      "serverLine": 4933
     },
     {
       "method": "GET",
@@ -684,7 +840,7 @@
       "authTier": "tutor-setup",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4478
+      "serverLine": 4947
     },
     {
       "method": "POST",
@@ -698,7 +854,7 @@
       "authTier": "tutor-setup",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4483
+      "serverLine": 4952
     },
     {
       "method": "GET",
@@ -712,7 +868,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4519
+      "serverLine": 4988
     },
     {
       "method": "GET",
@@ -726,7 +882,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4548
+      "serverLine": 5017
     },
     {
       "method": "GET",
@@ -740,7 +896,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/admin",
-      "serverLine": 4575
+      "serverLine": 5044
     },
     {
       "method": "GET",
@@ -754,7 +910,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4638
+      "serverLine": 5107
     },
     {
       "method": "GET",
@@ -768,7 +924,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4665
+      "serverLine": 5134
     },
     {
       "method": "GET",
@@ -782,7 +938,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4687
+      "serverLine": 5156
     },
     {
       "method": "GET",
@@ -796,7 +952,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4715
+      "serverLine": 5184
     },
     {
       "method": "GET",
@@ -810,7 +966,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4739
+      "serverLine": 5208
     },
     {
       "method": "GET",
@@ -824,7 +980,7 @@
       "authTier": "console",
       "capability": "overview.own",
       "family": "api/audit",
-      "serverLine": 4748
+      "serverLine": 5217
     },
     {
       "method": "GET",
@@ -838,7 +994,7 @@
       "authTier": "console",
       "capability": "tutors.audit",
       "family": "api/audit",
-      "serverLine": 4755
+      "serverLine": 5224
     },
     {
       "method": "GET",
@@ -852,7 +1008,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4769
+      "serverLine": 5238
     },
     {
       "method": "POST",
@@ -866,7 +1022,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4779
+      "serverLine": 5248
     },
     {
       "method": "POST",
@@ -880,7 +1036,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4801
+      "serverLine": 5270
     },
     {
       "method": "PUT",
@@ -894,7 +1050,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4843
+      "serverLine": 5312
     },
     {
       "method": "PUT",
@@ -908,7 +1064,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4863
+      "serverLine": 5332
     },
     {
       "method": "DELETE",
@@ -922,7 +1078,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4876
+      "serverLine": 5345
     },
     {
       "method": "GET",
@@ -936,7 +1092,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4889
+      "serverLine": 5358
     },
     {
       "method": "POST",
@@ -950,7 +1106,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4899
+      "serverLine": 5368
     },
     {
       "method": "PUT",
@@ -964,7 +1120,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4914
+      "serverLine": 5383
     },
     {
       "method": "PUT",
@@ -978,7 +1134,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4928
+      "serverLine": 5397
     },
     {
       "method": "DELETE",
@@ -992,7 +1148,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4940
+      "serverLine": 5409
     },
     {
       "method": "GET",
@@ -1006,7 +1162,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4953
+      "serverLine": 5422
     },
     {
       "method": "POST",
@@ -1020,7 +1176,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4961
+      "serverLine": 5430
     },
     {
       "method": "PUT",
@@ -1034,7 +1190,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4982
+      "serverLine": 5451
     },
     {
       "method": "DELETE",
@@ -1048,7 +1204,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 4998
+      "serverLine": 5467
     },
     {
       "method": "GET",
@@ -1062,7 +1218,7 @@
       "authTier": "console",
       "capability": "notices.manage",
       "family": "api/notices",
-      "serverLine": 5012
+      "serverLine": 5481
     },
     {
       "method": "DELETE",
@@ -1076,7 +1232,7 @@
       "authTier": "console",
       "capability": "notices.manage",
       "family": "api/notices",
-      "serverLine": 5019
+      "serverLine": 5488
     },
     {
       "method": "GET",
@@ -1090,7 +1246,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 5033
+      "serverLine": 5502
     },
     {
       "method": "POST",
@@ -1104,7 +1260,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 5042
+      "serverLine": 5511
     },
     {
       "method": "GET",
@@ -1118,7 +1274,7 @@
       "authTier": "console",
       "capability": "approvals.review",
       "family": "api/flags",
-      "serverLine": 5059
+      "serverLine": 5528
     },
     {
       "method": "POST",
@@ -1132,7 +1288,7 @@
       "authTier": "console",
       "capability": "approvals.review",
       "family": "api/flags",
-      "serverLine": 5067
+      "serverLine": 5536
     },
     {
       "method": "POST",
@@ -1146,7 +1302,7 @@
       "authTier": "console",
       "capability": "broadcast.send",
       "family": "api/broadcasts",
-      "serverLine": 5087
+      "serverLine": 5556
     },
     {
       "method": "GET",
@@ -1160,7 +1316,7 @@
       "authTier": "console",
       "capability": "broadcast.send",
       "family": "api/broadcasts",
-      "serverLine": 5106
+      "serverLine": 5575
     },
     {
       "method": "GET",
@@ -1174,7 +1330,7 @@
       "authTier": "console",
       "capability": "broadcast.send",
       "family": "api/broadcasts",
-      "serverLine": 5114
+      "serverLine": 5583
     },
     {
       "method": "DELETE",
@@ -1188,7 +1344,7 @@
       "authTier": "console",
       "capability": "broadcast.send",
       "family": "api/broadcasts",
-      "serverLine": 5122
+      "serverLine": 5591
     },
     {
       "method": "GET",
@@ -1202,7 +1358,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 5137
+      "serverLine": 5606
     },
     {
       "method": "GET",
@@ -1216,7 +1372,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 5151
+      "serverLine": 5620
     },
     {
       "method": "POST",
@@ -1230,7 +1386,7 @@
       "authTier": "tutor",
       "capability": null,
       "family": "api/tutor",
-      "serverLine": 5169
+      "serverLine": 5638
     },
     {
       "method": "GET",
@@ -1244,7 +1400,7 @@
       "authTier": "console",
       "capability": "overview.own",
       "family": "api/alerts",
-      "serverLine": 5184
+      "serverLine": 5653
     },
     {
       "method": "POST",
@@ -1258,7 +1414,7 @@
       "authTier": "console",
       "capability": "overview.own",
       "family": "api/alerts",
-      "serverLine": 5189
+      "serverLine": 5658
     },
     {
       "method": "GET",
@@ -1272,7 +1428,7 @@
       "authTier": "console",
       "capability": "approvals.review",
       "family": "api/approvals",
-      "serverLine": 5203
+      "serverLine": 5672
     },
     {
       "method": "POST",
@@ -1286,7 +1442,7 @@
       "authTier": "console",
       "capability": "approvals.review",
       "family": "api/approvals",
-      "serverLine": 5210
+      "serverLine": 5679
     },
     {
       "method": "POST",
@@ -1300,7 +1456,7 @@
       "authTier": "console",
       "capability": "approvals.review",
       "family": "api/approvals",
-      "serverLine": 5219
+      "serverLine": 5688
     },
     {
       "method": "GET",
@@ -1314,7 +1470,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/tutors",
-      "serverLine": 5244
+      "serverLine": 5713
     },
     {
       "method": "POST",
@@ -1328,7 +1484,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/tutors",
-      "serverLine": 5256
+      "serverLine": 5725
     },
     {
       "method": "PUT",
@@ -1342,7 +1498,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/tutors",
-      "serverLine": 5298
+      "serverLine": 5767
     },
     {
       "method": "PUT",
@@ -1356,7 +1512,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/tutors",
-      "serverLine": 5322
+      "serverLine": 5791
     },
     {
       "method": "PUT",
@@ -1370,7 +1526,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/tutors",
-      "serverLine": 5349
+      "serverLine": 5818
     },
     {
       "method": "GET",
@@ -1384,7 +1540,7 @@
       "authTier": "console",
       "capability": "tutors.accounts",
       "family": "api/tutors",
-      "serverLine": 5373
+      "serverLine": 5842
     },
     {
       "method": "GET",
@@ -1398,7 +1554,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/managers",
-      "serverLine": 5391
+      "serverLine": 5860
     },
     {
       "method": "POST",
@@ -1412,7 +1568,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/managers",
-      "serverLine": 5398
+      "serverLine": 5867
     },
     {
       "method": "PUT",
@@ -1426,7 +1582,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/managers",
-      "serverLine": 5448
+      "serverLine": 5917
     },
     {
       "method": "PUT",
@@ -1440,7 +1596,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/managers",
-      "serverLine": 5475
+      "serverLine": 5944
     },
     {
       "method": "DELETE",
@@ -1454,7 +1610,7 @@
       "authTier": "console",
       "capability": "managers.accounts",
       "family": "api/managers",
-      "serverLine": 5512
+      "serverLine": 5981
     },
     {
       "method": "PUT",
@@ -1468,7 +1624,7 @@
       "authTier": "founder",
       "capability": null,
       "family": "api/staff",
-      "serverLine": 5536
+      "serverLine": 6005
     },
     {
       "method": "PUT",
@@ -1482,7 +1638,7 @@
       "authTier": "founder",
       "capability": null,
       "family": "api/settings",
-      "serverLine": 5571
+      "serverLine": 6040
     },
     {
       "method": "GET",
@@ -1496,7 +1652,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5589
+      "serverLine": 6058
     },
     {
       "method": "POST",
@@ -1510,7 +1666,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5639
+      "serverLine": 6108
     },
     {
       "method": "GET",
@@ -1524,7 +1680,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5685
+      "serverLine": 6153
     },
     {
       "method": "POST",
@@ -1538,7 +1694,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5694
+      "serverLine": 6162
     },
     {
       "method": "GET",
@@ -1552,7 +1708,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5729
+      "serverLine": 6197
     },
     {
       "method": "GET",
@@ -1566,7 +1722,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5736
+      "serverLine": 6204
     },
     {
       "method": "GET",
@@ -1580,7 +1736,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5752
+      "serverLine": 6220
     },
     {
       "method": "POST",
@@ -1594,7 +1750,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5764
+      "serverLine": 6231
     },
     {
       "method": "GET",
@@ -1608,7 +1764,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5813
+      "serverLine": 6272
     },
     {
       "method": "GET",
@@ -1622,7 +1778,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5824
+      "serverLine": 6283
     },
     {
       "method": "POST",
@@ -1636,7 +1792,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5833
+      "serverLine": 6292
     },
     {
       "method": "GET",
@@ -1650,7 +1806,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5851
+      "serverLine": 6310
     },
     {
       "method": "POST",
@@ -1664,7 +1820,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5861
+      "serverLine": 6318
     },
     {
       "method": "DELETE",
@@ -1678,7 +1834,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5882
+      "serverLine": 6336
     },
     {
       "method": "GET",
@@ -1692,7 +1848,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5897
+      "serverLine": 6351
     },
     {
       "method": "POST",
@@ -1706,7 +1862,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 5940
+      "serverLine": 6392
     },
     {
       "method": "POST",
@@ -1720,7 +1876,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6056
+      "serverLine": 6503
     },
     {
       "method": "GET",
@@ -1734,7 +1890,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6140
+      "serverLine": 6587
     },
     {
       "method": "GET",
@@ -1748,7 +1904,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6147
+      "serverLine": 6594
     },
     {
       "method": "GET",
@@ -1762,7 +1918,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6167
+      "serverLine": 6614
     },
     {
       "method": "POST",
@@ -1776,7 +1932,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6212
+      "serverLine": 6657
     },
     {
       "method": "POST",
@@ -1790,7 +1946,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6244
+      "serverLine": 6689
     },
     {
       "method": "GET",
@@ -1804,7 +1960,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6299
+      "serverLine": 6744
     },
     {
       "method": "GET",
@@ -1818,7 +1974,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6330
+      "serverLine": 6766
     },
     {
       "method": "GET",
@@ -1832,7 +1988,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6342
+      "serverLine": 6778
     },
     {
       "method": "GET",
@@ -1846,7 +2002,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6354
+      "serverLine": 6790
     },
     {
       "method": "POST",
@@ -1860,7 +2016,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6364
+      "serverLine": 6800
     },
     {
       "method": "GET",
@@ -1874,7 +2030,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6393
+      "serverLine": 6829
     },
     {
       "method": "POST",
@@ -1888,7 +2044,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6405
+      "serverLine": 6841
     },
     {
       "method": "POST",
@@ -1902,7 +2058,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 6523
+      "serverLine": 6946
     },
     {
       "method": "GET",
@@ -1916,7 +2072,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/passages",
-      "serverLine": 6782
+      "serverLine": 7205
     },
     {
       "method": "POST",
@@ -1930,7 +2086,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/passages",
-      "serverLine": 6798
+      "serverLine": 7221
     },
     {
       "method": "PUT",
@@ -1944,7 +2100,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/passages",
-      "serverLine": 6809
+      "serverLine": 7232
     },
     {
       "method": "PUT",
@@ -1958,7 +2114,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/passages",
-      "serverLine": 6827
+      "serverLine": 7250
     },
     {
       "method": "DELETE",
@@ -1972,7 +2128,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/passages",
-      "serverLine": 6838
+      "serverLine": 7261
     },
     {
       "method": "GET",
@@ -1986,7 +2142,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6853
+      "serverLine": 7276
     },
     {
       "method": "POST",
@@ -2000,7 +2156,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6868
+      "serverLine": 7291
     },
     {
       "method": "PUT",
@@ -2014,7 +2170,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6879
+      "serverLine": 7302
     },
     {
       "method": "PUT",
@@ -2028,7 +2184,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6892
+      "serverLine": 7315
     },
     {
       "method": "GET",
@@ -2042,7 +2198,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6901
+      "serverLine": 7324
     },
     {
       "method": "DELETE",
@@ -2056,7 +2212,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6914
+      "serverLine": 7337
     },
     {
       "method": "DELETE",
@@ -2070,7 +2226,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6925
+      "serverLine": 7348
     },
     {
       "method": "POST",
@@ -2084,7 +2240,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/notes",
-      "serverLine": 6949
+      "serverLine": 7372
     },
     {
       "method": "GET",
@@ -2098,7 +2254,7 @@
       "authTier": "staff-or-student",
       "capability": null,
       "family": "api/league",
-      "serverLine": 6986
+      "serverLine": 7409
     },
     {
       "method": "GET",
@@ -2112,7 +2268,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/topics",
-      "serverLine": 7045
+      "serverLine": 7468
     },
     {
       "method": "POST",
@@ -2126,7 +2282,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/topics",
-      "serverLine": 7113
+      "serverLine": 7536
     },
     {
       "method": "GET",
@@ -2140,7 +2296,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7246
+      "serverLine": 7669
     },
     {
       "method": "GET",
@@ -2154,7 +2310,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7275
+      "serverLine": 7698
     },
     {
       "method": "POST",
@@ -2168,7 +2324,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7297
+      "serverLine": 7720
     },
     {
       "method": "POST",
@@ -2182,7 +2338,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7343
+      "serverLine": 7766
     },
     {
       "method": "GET",
@@ -2196,7 +2352,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/import",
-      "serverLine": 7441
+      "serverLine": 7864
     },
     {
       "method": "PUT",
@@ -2210,7 +2366,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7447
+      "serverLine": 7870
     },
     {
       "method": "PUT",
@@ -2224,7 +2380,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7463
+      "serverLine": 7886
     },
     {
       "method": "DELETE",
@@ -2238,7 +2394,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7476
+      "serverLine": 7899
     },
     {
       "method": "DELETE",
@@ -2252,7 +2408,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7498
+      "serverLine": 7921
     },
     {
       "method": "POST",
@@ -2266,7 +2422,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7579
+      "serverLine": 8002
     },
     {
       "method": "GET",
@@ -2280,7 +2436,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7618
+      "serverLine": 8041
     },
     {
       "method": "GET",
@@ -2294,7 +2450,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7638
+      "serverLine": 8061
     },
     {
       "method": "GET",
@@ -2308,7 +2464,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/questions",
-      "serverLine": 7731
+      "serverLine": 8154
     },
     {
       "method": "GET",
@@ -2322,7 +2478,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/results",
-      "serverLine": 7771
+      "serverLine": 8194
     },
     {
       "method": "GET",
@@ -2336,7 +2492,7 @@
       "authTier": "console",
       "capability": "results.export",
       "family": "api/results",
-      "serverLine": 7794
+      "serverLine": 8217
     },
     {
       "method": "GET",
@@ -2350,7 +2506,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/results",
-      "serverLine": 7838
+      "serverLine": 8261
     },
     {
       "method": "POST",
@@ -2364,7 +2520,7 @@
       "authTier": "console",
       "capability": "theory.mark",
       "family": "api/results",
-      "serverLine": 7860
+      "serverLine": 8283
     },
     {
       "method": "GET",
@@ -2378,7 +2534,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/resources",
-      "serverLine": 7866
+      "serverLine": 8289
     },
     {
       "method": "GET",
@@ -2392,7 +2548,77 @@
       "authTier": "student",
       "capability": null,
       "family": "api/resources",
-      "serverLine": 7910
+      "serverLine": 8333
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/mynotes$",
+      "regex": {
+        "source": "^\\/api\\/me\\/mynotes$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/mynotes",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 8398
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/mynotes/upload$",
+      "regex": {
+        "source": "^\\/api\\/me\\/mynotes\\/upload$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/mynotes/upload",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 8414
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/mynotes/([A-Za-z0-9._-]+)/file$",
+      "regex": {
+        "source": "^\\/api\\/me\\/mynotes\\/([A-Za-z0-9._-]+)\\/file$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/mynotes/([A-Za-z0-9._-]+)/file",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 8441
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/mynotes/([A-Za-z0-9._-]+)/replace$",
+      "regex": {
+        "source": "^\\/api\\/me\\/mynotes\\/([A-Za-z0-9._-]+)\\/replace$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/mynotes/([A-Za-z0-9._-]+)/replace",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 8462
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/me/mynotes/([A-Za-z0-9._-]+)$",
+      "regex": {
+        "source": "^\\/api\\/me\\/mynotes\\/([A-Za-z0-9._-]+)$",
+        "flags": ""
+      },
+      "displayPath": "/api/me/mynotes/([A-Za-z0-9._-]+)",
+      "caseInsensitive": false,
+      "authTier": "student",
+      "capability": null,
+      "family": "api/me",
+      "serverLine": 8492
     },
     {
       "method": "GET",
@@ -2406,7 +2632,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 7979
+      "serverLine": 8509
     },
     {
       "method": "PUT",
@@ -2420,7 +2646,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8013
+      "serverLine": 8543
     },
     {
       "method": "POST",
@@ -2434,7 +2660,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8055
+      "serverLine": 8585
     },
     {
       "method": "POST",
@@ -2448,7 +2674,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/admin",
-      "serverLine": 8061
+      "serverLine": 8591
     },
     {
       "method": "GET",
@@ -2462,7 +2688,7 @@
       "authTier": "staff-or-student",
       "capability": null,
       "family": "api/question-images",
-      "serverLine": 8065
+      "serverLine": 8595
     },
     {
       "method": "DELETE",
@@ -2476,7 +2702,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8088
+      "serverLine": 8618
     },
     {
       "method": "GET",
@@ -2490,7 +2716,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/videos",
-      "serverLine": 8143
+      "serverLine": 8673
     },
     {
       "method": "GET",
@@ -2504,7 +2730,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/videos",
-      "serverLine": 8190
+      "serverLine": 8716
     },
     {
       "method": "GET",
@@ -2518,7 +2744,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8227
+      "serverLine": 8750
     },
     {
       "method": "PUT",
@@ -2532,7 +2758,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8262
+      "serverLine": 8785
     },
     {
       "method": "POST",
@@ -2546,7 +2772,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8305
+      "serverLine": 8828
     },
     {
       "method": "DELETE",
@@ -2560,7 +2786,7 @@
       "authTier": "console",
       "capability": "resources.publish",
       "family": "api/admin",
-      "serverLine": 8313
+      "serverLine": 8836
     },
     {
       "method": "GET",
@@ -2574,7 +2800,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/classes",
-      "serverLine": 8369
+      "serverLine": 8892
     },
     {
       "method": "GET",
@@ -2588,7 +2814,7 @@
       "authTier": "console",
       "capability": "classes.schedule",
       "family": "api/admin",
-      "serverLine": 8400
+      "serverLine": 8919
     },
     {
       "method": "POST",
@@ -2602,7 +2828,7 @@
       "authTier": "console",
       "capability": "classes.schedule",
       "family": "api/admin",
-      "serverLine": 8424
+      "serverLine": 8943
     },
     {
       "method": "PUT",
@@ -2616,7 +2842,7 @@
       "authTier": "console",
       "capability": "classes.schedule",
       "family": "api/admin",
-      "serverLine": 8478
+      "serverLine": 8997
     },
     {
       "method": "DELETE",
@@ -2630,7 +2856,7 @@
       "authTier": "console",
       "capability": "classes.schedule",
       "family": "api/admin",
-      "serverLine": 8549
+      "serverLine": 9068
     },
     {
       "method": "GET",
@@ -2644,7 +2870,7 @@
       "authTier": "console",
       "capability": "cohort.manage",
       "family": "api/admin",
-      "serverLine": 8598
+      "serverLine": 9117
     },
     {
       "method": "POST",
@@ -2658,7 +2884,7 @@
       "authTier": "console",
       "capability": "cohort.create",
       "family": "api/admin",
-      "serverLine": 8614
+      "serverLine": 9133
     },
     {
       "method": "PUT",
@@ -2672,7 +2898,7 @@
       "authTier": "console",
       "capability": "cohort.manage",
       "family": "api/admin",
-      "serverLine": 8646
+      "serverLine": 9165
     },
     {
       "method": "DELETE",
@@ -2686,21 +2912,7 @@
       "authTier": "console",
       "capability": "cohort.create",
       "family": "api/admin",
-      "serverLine": 8686
-    },
-    {
-      "method": "PUT",
-      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier$",
-      "regex": {
-        "source": "^\\/api\\/admin\\/cohorts\\/([A-Za-z0-9._-]+)\\/tier$",
-        "flags": ""
-      },
-      "displayPath": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.tier",
-      "family": "api/admin",
-      "serverLine": 8712
+      "serverLine": 9205
     },
     {
       "method": "PUT",
@@ -2714,21 +2926,7 @@
       "authTier": "console",
       "capability": "cohort.manage",
       "family": "api/students",
-      "serverLine": 8751
-    },
-    {
-      "method": "PUT",
-      "path": "/api/students/([A-Za-z0-9-]+)/tier$",
-      "regex": {
-        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/tier$",
-        "flags": ""
-      },
-      "displayPath": "/api/students/([A-Za-z0-9-]+)/tier",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.tier",
-      "family": "api/students",
-      "serverLine": 8785
+      "serverLine": 9228
     },
     {
       "method": "GET",
@@ -2742,7 +2940,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/scholarship",
-      "serverLine": 8846
+      "serverLine": 9277
     },
     {
       "method": "POST",
@@ -2756,7 +2954,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/scholarship",
-      "serverLine": 8851
+      "serverLine": 9282
     },
     {
       "method": "POST",
@@ -2770,7 +2968,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/scholarship",
-      "serverLine": 8872
+      "serverLine": 9303
     },
     {
       "method": "GET",
@@ -2784,7 +2982,7 @@
       "authTier": "console",
       "capability": "scholarship.view",
       "family": "api/scholarship",
-      "serverLine": 8893
+      "serverLine": 9324
     },
     {
       "method": "GET",
@@ -2798,7 +2996,7 @@
       "authTier": "console",
       "capability": "scholarship.export",
       "family": "api/scholarship",
-      "serverLine": 8902
+      "serverLine": 9333
     },
     {
       "method": "POST",
@@ -2812,7 +3010,7 @@
       "authTier": "console",
       "capability": "scholarship.decide",
       "family": "api/scholarship",
-      "serverLine": 8915
+      "serverLine": 9346
     },
     {
       "method": "POST",
@@ -2826,7 +3024,7 @@
       "authTier": "console",
       "capability": "scholarship.approve",
       "family": "api/scholarship",
-      "serverLine": 8938
+      "serverLine": 9369
     },
     {
       "method": "DELETE",
@@ -2840,7 +3038,7 @@
       "authTier": "console",
       "capability": "scholarship.delete",
       "family": "api/scholarship",
-      "serverLine": 8990
+      "serverLine": 9420
     },
     {
       "method": "GET",
@@ -2854,7 +3052,7 @@
       "authTier": "student",
       "capability": null,
       "family": "api/me",
-      "serverLine": 9015
+      "serverLine": 9445
     },
     {
       "method": "GET",
@@ -2868,7 +3066,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9049
+      "serverLine": 9480
     },
     {
       "method": "POST",
@@ -2882,7 +3080,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9061
+      "serverLine": 9492
     },
     {
       "method": "POST",
@@ -2896,7 +3094,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9064
+      "serverLine": 9495
     },
     {
       "method": "POST",
@@ -2910,7 +3108,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9071
+      "serverLine": 9502
     },
     {
       "method": "GET",
@@ -2924,7 +3122,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9081
+      "serverLine": 9512
     },
     {
       "method": "PUT",
@@ -2938,7 +3136,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9087
+      "serverLine": 9518
     },
     {
       "method": "POST",
@@ -2952,7 +3150,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9093
+      "serverLine": 9524
     },
     {
       "method": "GET",
@@ -2966,7 +3164,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9098
+      "serverLine": 9529
     },
     {
       "method": "GET",
@@ -2980,7 +3178,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9101
+      "serverLine": 9532
     },
     {
       "method": "POST",
@@ -2994,7 +3192,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9104
+      "serverLine": 9535
     },
     {
       "method": "GET",
@@ -3008,7 +3206,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9107
+      "serverLine": 9538
     },
     {
       "method": "GET",
@@ -3022,7 +3220,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9114
+      "serverLine": 9545
     },
     {
       "method": "PUT",
@@ -3036,7 +3234,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9117
+      "serverLine": 9548
     },
     {
       "method": "POST",
@@ -3050,7 +3248,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9120
+      "serverLine": 9551
     },
     {
       "method": "GET",
@@ -3064,7 +3262,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9123
+      "serverLine": 9554
     },
     {
       "method": "GET",
@@ -3078,7 +3276,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9130
+      "serverLine": 9561
     },
     {
       "method": "POST",
@@ -3092,7 +3290,7 @@
       "authTier": "free",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9133
+      "serverLine": 9564
     },
     {
       "method": "GET",
@@ -3106,7 +3304,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9139
+      "serverLine": 9570
     },
     {
       "method": "GET",
@@ -3120,7 +3318,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/free2027",
-      "serverLine": 9143
+      "serverLine": 9574
     },
     {
       "method": "GET",
@@ -3134,7 +3332,7 @@
       "authTier": "console",
       "capability": "overview.own",
       "family": "api/free2027",
-      "serverLine": 9152
+      "serverLine": 9583
     },
     {
       "method": "GET",
@@ -3148,21 +3346,7 @@
       "authTier": "console",
       "capability": "homepage.edit",
       "family": "api/free2027",
-      "serverLine": 9162
-    },
-    {
-      "method": "PUT",
-      "path": "/api/free2027/admin/mode$",
-      "regex": {
-        "source": "^\\/api\\/free2027\\/admin\\/mode$",
-        "flags": ""
-      },
-      "displayPath": "/api/free2027/admin/mode",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "homepage.edit",
-      "family": "api/free2027",
-      "serverLine": 9169
+      "serverLine": 9593
     },
     {
       "method": "PUT",
@@ -3176,7 +3360,7 @@
       "authTier": "console",
       "capability": "homepage.edit",
       "family": "api/free2027",
-      "serverLine": 9172
+      "serverLine": 9601
     },
     {
       "method": "PUT",
@@ -3190,7 +3374,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9175
+      "serverLine": 9604
     },
     {
       "method": "GET",
@@ -3204,7 +3388,7 @@
       "authTier": "console",
       "capability": "roster.view",
       "family": "api/free2027",
-      "serverLine": 9180
+      "serverLine": 9609
     },
     {
       "method": "GET",
@@ -3218,7 +3402,7 @@
       "authTier": "console",
       "capability": "roster.view",
       "family": "api/free2027",
-      "serverLine": 9184
+      "serverLine": 9613
     },
     {
       "method": "PUT",
@@ -3232,7 +3416,7 @@
       "authTier": "console",
       "capability": "students.deactivate",
       "family": "api/free2027",
-      "serverLine": 9197
+      "serverLine": 9626
     },
     {
       "method": "DELETE",
@@ -3246,7 +3430,7 @@
       "authTier": "console",
       "capability": "students.deactivate",
       "family": "api/free2027",
-      "serverLine": 9200
+      "serverLine": 9629
     },
     {
       "method": "GET",
@@ -3260,7 +3444,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9205
+      "serverLine": 9634
     },
     {
       "method": "POST",
@@ -3274,7 +3458,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9208
+      "serverLine": 9637
     },
     {
       "method": "PUT",
@@ -3288,7 +3472,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9211
+      "serverLine": 9640
     },
     {
       "method": "DELETE",
@@ -3302,7 +3486,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9214
+      "serverLine": 9643
     },
     {
       "method": "POST",
@@ -3316,7 +3500,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9221
+      "serverLine": 9650
     },
     {
       "method": "GET",
@@ -3330,7 +3514,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/free2027",
-      "serverLine": 9224
+      "serverLine": 9653
     },
     {
       "method": "POST",
@@ -3344,7 +3528,7 @@
       "authTier": "console",
       "capability": "leaderboard.manage",
       "family": "api/free2027",
-      "serverLine": 9228
+      "serverLine": 9657
     },
     {
       "method": "GET",
@@ -3358,7 +3542,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/free2027",
-      "serverLine": 9232
+      "serverLine": 9661
     },
     {
       "method": "GET",
@@ -3372,7 +3556,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/free2027",
-      "serverLine": 9235
+      "serverLine": 9664
     },
     {
       "method": "GET",
@@ -3386,7 +3570,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9245
+      "serverLine": 9674
     },
     {
       "method": "GET",
@@ -3400,7 +3584,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9248
+      "serverLine": 9677
     },
     {
       "method": "POST",
@@ -3414,7 +3598,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9253
+      "serverLine": 9682
     },
     {
       "method": "PUT",
@@ -3428,7 +3612,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9256
+      "serverLine": 9685
     },
     {
       "method": "POST",
@@ -3442,7 +3626,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9259
+      "serverLine": 9688
     },
     {
       "method": "POST",
@@ -3456,7 +3640,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9262
+      "serverLine": 9691
     },
     {
       "method": "POST",
@@ -3470,7 +3654,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9265
+      "serverLine": 9694
     },
     {
       "method": "GET",
@@ -3484,7 +3668,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9270
+      "serverLine": 9699
     },
     {
       "method": "GET",
@@ -3498,7 +3682,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9287
+      "serverLine": 9716
     },
     {
       "method": "POST",
@@ -3512,7 +3696,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9290
+      "serverLine": 9719
     },
     {
       "method": "PUT",
@@ -3526,7 +3710,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9293
+      "serverLine": 9722
     },
     {
       "method": "DELETE",
@@ -3540,7 +3724,7 @@
       "authTier": "console",
       "capability": "questions.manage",
       "family": "api/free2027",
-      "serverLine": 9296
+      "serverLine": 9725
     },
     {
       "method": "GET",
@@ -3554,7 +3738,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/free2027",
-      "serverLine": 9301
+      "serverLine": 9730
     },
     {
       "method": "GET",
@@ -3568,7 +3752,7 @@
       "authTier": "console",
       "capability": "results.view",
       "family": "api/free2027",
-      "serverLine": 9304
+      "serverLine": 9733
     },
     {
       "method": "POST",
@@ -3582,7 +3766,7 @@
       "authTier": "console",
       "capability": "system.migrate",
       "family": "api/free2027",
-      "serverLine": 9309
+      "serverLine": 9738
     },
     {
       "method": "GET",
@@ -3596,7 +3780,7 @@
       "authTier": "console",
       "capability": "system.migrate",
       "family": "api/free2027",
-      "serverLine": 9312
+      "serverLine": 9741
     },
     {
       "method": "GET",
@@ -3610,7 +3794,7 @@
       "authTier": "console",
       "capability": "system.migrate",
       "family": "api/free2027",
-      "serverLine": 9315
+      "serverLine": 9744
     },
     {
       "method": "POST",
@@ -3624,7 +3808,7 @@
       "authTier": "public",
       "capability": null,
       "family": "api/analytics",
-      "serverLine": 9319
+      "serverLine": 9748
     },
     {
       "method": "GET",
@@ -3638,7 +3822,7 @@
       "authTier": "console",
       "capability": "analytics.site",
       "family": "api/analytics",
-      "serverLine": 9350
+      "serverLine": 9779
     }
   ]
 }

@@ -23,7 +23,7 @@ fs.cpSync(path.join(APP, 'js'), path.join(SANDBOX, 'js'), { recursive: true });
 try { fs.rmSync(path.join(SANDBOX, 'server', 'data.json'), { force: true }); } catch (e) {}
 var serverLog = '';
 var child = spawn(process.execPath, [path.join(SANDBOX, 'server', 'server.js')], {
-  cwd: SANDBOX, env: Object.assign({}, process.env, { PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'), GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027' }), stdio: ['ignore', 'pipe', 'pipe'] });
+  cwd: SANDBOX, env: Object.assign({}, process.env, { PORT: String(PORT), NODE_PATH: path.join(APP, 'node_modules'), GOC_FOUNDER_PW: 'founder2027', GOC_ACADDIR_PW: 'acaddir2027', GOC_PASSCODE: '2027', GOC_PUBLIC_URL: 'http://127.0.0.1:' + PORT, GOC_REMINDER_DRY_RUN: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
 child.stdout.on('data', function (c) { serverLog += c; }); child.stderr.on('data', function (c) { serverLog += c; });
 function stop() { try { child.kill(); } catch (e) {} try { fs.rmSync(SANDBOX, { recursive: true, force: true }); } catch (e) {} }
 function call(method, urlPath, body, token) {
@@ -78,17 +78,27 @@ function total(stats, subject, which) {
   var all = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
   function mk(name, n, subs) { return call('POST', '/api/admin/students', { name: name, email: n + '@example.com', phone: '0800000005' + n.slice(-1), goal: 'JAMB / UTME 2027', subjects: subs || all }, adm); }
   var g1 = await mk('Gina Goc', 'g1'), g2 = await mk('Bola Goc', 'g2'), g3 = await mk('Chi Goc', 'g3', ['Use of English', 'Chemistry', 'Mathematics', 'Biology']);
-  var o = await call('POST', '/api/students', { name: 'Olu Open', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: all, privacyConsent: { accepted: true } });
-  var ID1 = g1.body.student.id, ID2 = g2.body.student.id, ID3 = g3.body.student.id, IDO = o.body && o.body.student && o.body.student.id;
+  /* Stage B: the fourth student arrives the way a real applicant now does —
+     Founder-minted code -> application -> approval -> password set through the
+     emailed link, read from the dry-run outbox as the applicant would. */
+  var code1 = (await call('POST', '/api/registrations/codes', { label: 'tutors suite', maxUses: 5 }, adm)).body;
+  var sub = await call('POST', '/api/registrations', { code: code1.code, name: 'Olu Student', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: all, privacyConsent: { accepted: true } });
+  var apps = (await call('GET', '/api/registrations/applications?status=pending', null, adm)).body.applications || [];
+  var myApp = apps.filter(function (a) { return a.email === 'olu@example.com'; }).pop();
+  var appr = await call('POST', '/api/registrations/applications/' + myApp.id + '/approve', {}, adm);
+  var outbox = fs.readFileSync(path.join(SANDBOX, 'server', 'reminders-outbox.jsonl'), 'utf8');
+  var tokMatch = outbox.match(/\/setup\/([A-Za-z0-9_-]+)/);
+  var setup = await call('POST', '/api/registrations/setup', { token: tokMatch && tokMatch[1], password: 'secret123' });
+  var ID1 = g1.body.student.id, ID2 = g2.body.student.id, ID3 = g3.body.student.id, IDO = appr.body && appr.body.application && appr.body.application.scholarId;
   var tok1 = (await call('POST', '/api/auth/login', { id: ID1, password: g1.body.temporaryPassword })).body.token;
-  ok('setup: three GOC students and one Open student', !!ID1 && !!ID2 && !!ID3 && !!IDO);
+  ok('setup: four students created', !!ID1 && !!ID2 && !!ID3 && !!IDO);
   var tutorN = 0;
   async function newTutor(name, subjects, pw) {
     var c = await call('POST', '/api/tutors', { name: name, subjects: subjects, password: pw }, adm);
     var tid = 'GOC-T-00' + (++tutorN);
-    var t = (await call('POST', '/api/tutor/login', { id: tid, password: pw })).body.token;
+    var t = (await call('POST', '/api/auth/login', { id: tid, password: pw })).body.token;
     await call('POST', '/api/tutor/password', { currentPassword: pw, newPassword: pw + '-own' }, t);
-    return { id: tid, token: (await call('POST', '/api/tutor/login', { id: tid, password: pw + '-own' })).body.token };
+    return { id: tid, token: (await call('POST', '/api/auth/login', { id: tid, password: pw + '-own' })).body.token };
   }
   var tp = await newTutor('Mrs Ada Obi', ['Physics'], 'start-pass-1');
   var tc = await newTutor('Mr Chike Eze', ['Chemistry'], 'start-pass-2');
@@ -117,11 +127,11 @@ function total(stats, subject, which) {
   var no3 = await call('GET', '/api/tutor/student?subject=Physics&id=GOC-S-999', null, tp.token);
   var no4 = await call('GET', '/api/tutor/student?subject=Physics&id=..%2F..%2Fx', null, tp.token);
   var no5 = await call('GET', '/api/tutor/student?subject=Physics', null, tp.token);
-  ok('an Open student is a plain 404', no1.status === 404 && !/Olu|example\.com/.test(no1.raw), no1.raw);
-  ok('a GOC student who never took Physics is a plain 404', no2.status === 404);
-  ok('a student who does not exist gives the very same answer', no3.status === 404 && no3.raw === no1.raw && no3.raw === no2.raw, no3.raw);
-  ok('a malformed or missing ID gives the same answer too', no4.status === 404 && no5.status === 404 && no4.raw === no1.raw);
-  ok('none of those were logged', (readDb().tutorAudit || []).length === 0);
+  ok('a self-registered student who took Physics opens like anyone else (no tier gate)', no1.status === 200 && no1.body.student && no1.body.student.id === IDO && !/example\.com/.test(no1.raw), no1.raw);
+  ok('a student who never took Physics is a plain 404', no2.status === 404);
+  ok('a student who does not exist gives the very same answer', no3.status === 404 && no3.raw === no2.raw, no3.raw);
+  ok('a malformed or missing ID gives the same answer too', no4.status === 404 && no5.status === 404 && no4.raw === no2.raw);
+  ok('only the successful open was logged', (readDb().tutorAudit || []).length === 1);
 
   console.log('\nthe page');
   var r1 = await call('GET', URL1, null, tp.token);
@@ -143,39 +153,40 @@ function total(stats, subject, which) {
   var nA = (readDb().tutorAudit || []).length;
   var cn1 = await call('GET', '/api/tutor/student/contact?subject=Physics&id=' + IDO, null, tp.token);
   var cn2 = await call('GET', '/api/tutor/student/contact?subject=Physics&id=' + ID3, null, tp.token);
-  ok('an Open student or one who never took the subject is the same plain 404, and nothing is logged', cn1.status === 404 && cn2.status === 404 && cn1.raw === cn2.raw && (readDb().tutorAudit || []).length === nA && !/Olu|example\.com/.test(cn1.raw));
+  ok('a self-registered student\'s contact opens too, and showing it is logged', cn1.status === 200 && cn1.body.contact && cn1.body.contact.email === 'olu@example.com' && (readDb().tutorAudit || []).length === nA + 1, cn1.raw);
+  ok('one who never took the subject is a plain 404, and nothing more is logged', cn2.status === 404 && (readDb().tutorAudit || []).length === nA + 1 && !/Olu|example\.com/.test(cn2.raw), cn2.raw);
   var c1 = await call('GET', CU, null, tp.token);
   ok('email and phone come back on request', c1.status === 200 && c1.body.contact.email === 'g1@example.com' && /^0800000005/.test(c1.body.contact.phone) && c1.body.contact.id === ID1, c1.raw);
   ok('no hash comes with them', !/hash|salt|password/i.test(c1.raw));
   var ac = readDb().tutorAudit;
-  ok('showing contact is logged as its own entry, with no email or phone in it', ac.length === nA + 1 && ac[ac.length - 1].kind === 'contact-view' && ac[ac.length - 1].tutorId === tp.id && ac[ac.length - 1].studentId === ID1 && !/example\.com|0800000005/.test(JSON.stringify(ac)), JSON.stringify(ac[ac.length - 1]));
+  ok('showing contact is logged as its own entry, with no email or phone in it', ac.length === nA + 2 && ac[ac.length - 1].kind === 'contact-view' && ac[ac.length - 1].tutorId === tp.id && ac[ac.length - 1].studentId === ID1 && !/example\.com|0800000005/.test(JSON.stringify(ac)), JSON.stringify(ac[ac.length - 1]));
   await call('GET', CU, null, tp.token);
-  ok('every tap is logged, a second one too', readDb().tutorAudit.length === nA + 2);
+  ok('every tap is logged, a second one too', readDb().tutorAudit.length === nA + 3);
   var dbR = readDb(); dbR.tutorAudit = dbR.tutorAudit.slice(0, nA); dbR.settings.auditSeq = nA; fs.writeFileSync(path.join(SANDBOX, 'server', 'data.json'), JSON.stringify(dbR));
 
   console.log('\nthe audit log');
   var a1 = readDb().tutorAudit || [];
-  ok('each successful open is logged: who, which student, which subject, when', a1.length === 2 && a1[0].tutorId === tp.id && a1[0].studentId === ID1 && a1[0].subject === 'Physics' && a1[0].tutorName === 'Mrs Ada Obi' && a1[0].studentName === 'Gina Goc' && a1[0].at > 0, JSON.stringify(a1));
+  ok('each successful open is logged: who, which student, which subject, when', a1.length === 3 && a1[1].tutorId === tp.id && a1[1].studentId === ID1 && a1[1].subject === 'Physics' && a1[1].tutorName === 'Mrs Ada Obi' && a1[1].studentName === 'Gina Goc' && a1[1].at > 0, JSON.stringify(a1));
   await call('GET', URL1, null, tp.token);
   await call('GET', URL1, null, tp.token);
   var a2 = readDb().tutorAudit;
-  ok('every open counts, opening the same page again too', a2.length === 4 && a2.filter(function (x) { return x.tutorId === tp.id; }).length === 3);
-  ok('entries have their own distinct ids', new Set(a2.map(function (x) { return x.id; })).size === 4);
+  ok('every open counts, opening the same page again too', a2.length === 5 && a2.filter(function (x) { return x.tutorId === tp.id; }).length === 4);
+  ok('entries have their own distinct ids', new Set(a2.map(function (x) { return x.id; })).size === 5);
   ok('the log holds no email, phone or hash', !/example\.com|0800000005|hash/i.test(JSON.stringify(a2)));
   var mine = await call('GET', '/api/tutor/audit', null, tp.token);
-  ok('a tutor reads their own entries, newest first', mine.status === 200 && mine.body.count === 3 && mine.body.keptDays === 365 && mine.body.entries.every(function (x) { return x.tutorId === tp.id; }) && mine.body.entries[0].at >= mine.body.entries[2].at, mine.raw);
+  ok('a tutor reads their own entries, newest first', mine.status === 200 && mine.body.count === 4 && mine.body.keptDays === 365 && mine.body.entries.every(function (x) { return x.tutorId === tp.id; }) && mine.body.entries[0].at >= mine.body.entries[2].at, mine.raw);
   var theirs = await call('GET', '/api/tutor/audit', null, tc.token);
   ok('another tutor sees only theirs, never the Physics tutor\'s', theirs.body.count === 1 && theirs.body.entries[0].tutorId === tc.id && theirs.body.entries[0].subject === 'Chemistry');
-  ok('a tutor cannot ask for someone else\'s entries', (await call('GET', '/api/tutor/audit?tutorId=' + tc.id, null, tp.token)).body.count === 3);
+  ok('a tutor cannot ask for someone else\'s entries', (await call('GET', '/api/tutor/audit?tutorId=' + tc.id, null, tp.token)).body.count === 4);
   ok('students and management are refused on the tutor\'s own log', [401, 403].indexOf((await call('GET', '/api/tutor/audit', null, tok1)).status) > -1 && (await call('GET', '/api/tutor/audit', null, adm)).status === 403);
   var adminAll = await call('GET', '/api/audit/tutor-views', null, adm);
-  ok('management reads every entry', adminAll.status === 200 && adminAll.body.count === 4 && adminAll.body.keptDays === 365, adminAll.raw);
-  ok('management can narrow by tutor and by student', (await call('GET', '/api/audit/tutor-views?tutorId=' + tc.id, null, adm)).body.count === 1 && (await call('GET', '/api/audit/tutor-views?studentId=' + ID1, null, adm)).body.count === 4 && (await call('GET', '/api/audit/tutor-views?studentId=' + ID2, null, adm)).body.count === 0);
+  ok('management reads every entry', adminAll.status === 200 && adminAll.body.count === 5 && adminAll.body.keptDays === 365, adminAll.raw);
+  ok('management can narrow by tutor and by student', (await call('GET', '/api/audit/tutor-views?tutorId=' + tc.id, null, adm)).body.count === 1 && (await call('GET', '/api/audit/tutor-views?studentId=' + ID1, null, adm)).body.count === 4 && (await call('GET', '/api/audit/tutor-views?studentId=' + IDO, null, adm)).body.count === 1 && (await call('GET', '/api/audit/tutor-views?studentId=' + ID2, null, adm)).body.count === 0);
   var kOpen = await call('GET', '/api/audit/tutor-views?kind=tutor-view', null, adm), kCon = await call('GET', '/api/audit/tutor-views?kind=contact-view', null, adm);
-  ok('management can narrow by action: the two kinds add up to the whole log', kOpen.status === 200 && kCon.status === 200 && kOpen.body.count + kCon.body.count === 4 && kOpen.body.entries.every(function (x) { return x.kind === 'tutor-view'; }) && kCon.body.entries.every(function (x) { return x.kind === 'contact-view'; }), kOpen.raw);
-  ok('an unknown action is ignored, not an error', (await call('GET', '/api/audit/tutor-views?kind=bogus', null, adm)).body.count === 4);
+  ok('management can narrow by action: the two kinds add up to the whole log', kOpen.status === 200 && kCon.status === 200 && kOpen.body.count + kCon.body.count === 5 && kOpen.body.entries.every(function (x) { return x.kind === 'tutor-view'; }) && kCon.body.entries.every(function (x) { return x.kind === 'contact-view'; }), kOpen.raw);
+  ok('an unknown action is ignored, not an error', (await call('GET', '/api/audit/tutor-views?kind=bogus', null, adm)).body.count === 5);
   var todayStr = core.lagosDay(Date.now());
-  ok('management can narrow by date: today holds all four, a range in the past none', (await call('GET', '/api/audit/tutor-views?from=' + todayStr + '&to=' + todayStr, null, adm)).body.count === 4 && (await call('GET', '/api/audit/tutor-views?from=2020-01-01&to=2020-12-31', null, adm)).body.count === 0);
+  ok('management can narrow by date: today holds all five, a range in the past none', (await call('GET', '/api/audit/tutor-views?from=' + todayStr + '&to=' + todayStr, null, adm)).body.count === 5 && (await call('GET', '/api/audit/tutor-views?from=2020-01-01&to=2020-12-31', null, adm)).body.count === 0);
   ok('filters combine (tutor + action + date)', (await call('GET', '/api/audit/tutor-views?tutorId=' + tc.id + '&kind=tutor-view&from=' + todayStr, null, adm)).body.count === 1);
   ok('a tutor still cannot use the date or action filters on management\'s log', [401, 403].indexOf((await call('GET', '/api/audit/tutor-views?kind=tutor-view&from=' + todayStr, null, tp.token)).status) > -1);
   ok('a tutor and a student are refused on management\'s log', [401, 403].indexOf((await call('GET', '/api/audit/tutor-views', null, tp.token)).status) > -1 && [401, 403].indexOf((await call('GET', '/api/audit/tutor-views', null, tok1)).status) > -1);
@@ -186,7 +197,7 @@ function total(stats, subject, which) {
   fs.writeFileSync(path.join(SANDBOX, 'server', 'data.json'), JSON.stringify(db2));
   await call('GET', URL1, null, tp.token);
   var a3 = readDb().tutorAudit;
-  ok('an entry over a year old is dropped at the next open; newer ones stay', !a3.some(function (x) { return x.id === 'AU-old'; }) && a3.length === 5, a3.length);
+  ok('an entry over a year old is dropped at the next open; newer ones stay', !a3.some(function (x) { return x.id === 'AU-old'; }) && a3.length === 6, a3.length);
 
   console.log('\na student switched off since');
   var off = await call('PUT', '/api/students/' + ID2 + '/active', { active: false }, adm);

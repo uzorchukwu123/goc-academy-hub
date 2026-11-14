@@ -1,7 +1,7 @@
 /* build/build.js — Phase 3D slice 3: make the code hard to read.
    Builds a production copy of the public app into dist/ (or the folder given):
      - JavaScript and CSS are minified, comments removed, local names shortened
-     - the demo driver's test-only hooks (_setJambReadyMin, _setTier) are removed
+     - the demo driver's test-only hooks (_setJambReadyMin) are removed
      - HTML comments are removed from index.html
      - sw.js keeps its cache name; every file it lists is checked to exist in the build
    The readable source in js/ css/ stays untouched and private. Tests keep running on it.
@@ -46,7 +46,7 @@ try { esbuild = require('esbuild'); } catch (e) {
   }
 }
 
-var TEST_HOOKS = ['_setJambReadyMin', '_setTier', '_grantXp'];
+var TEST_HOOKS = ['_setJambReadyMin', '_setTier', '_grantXp', '_setupTokenFor'];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
 function write(rel, data) {
@@ -93,7 +93,7 @@ fs.mkdirSync(OUT, { recursive: true });
 /* The 2027 Free Tutorial Edition's three scripts are built beside the hub's own,
    and its stylesheet is minified with them. Deleting this line only stops the
    edition being built; the original hub is unaffected. */
-['js/goc-core.js', 'js/goc-free-2027.js', 'js/note-questions.js', 'js/api.js', 'js/app.js', 'js/onboarding.js',
+['js/goc-core.js', 'js/goc-free-2027.js', 'js/note-questions.js', 'js/api.js', 'js/tutor-app.js', 'js/app.js', 'js/onboarding.js',
  'js/free2027-api.js', 'js/free2027-ui.js', 'js/free2027-admin.js', 'js/pwa.js', 'sw.js'].forEach(minJs);
 
 write('css/styles.css', esbuild.transformSync(read('css/styles.css'), { loader: 'css', minify: true, legalComments: 'none' }).code);

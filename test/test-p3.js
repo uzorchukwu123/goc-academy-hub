@@ -92,7 +92,7 @@ async function registerStudent(name, pw, subjects) {
     signupCode: 'GOC-2027', name: name, password: pw,
     goal: 'JAMB / UTME', subjects: subjects
   });
-  run('GOC.api._drivers.mock._setTier')(r.student.id, 'goc');   // a public sign-up is Open; this suite sits Web Tests
+  // every student now has full GOC access — no promotion step exists
   return r.student.id;
 }
 
@@ -521,7 +521,7 @@ async function main() {
   }
   await run('GOC.api.logout')();
   await run('GOC.api.login')(SID, PW);
-  run('GOC.api._drivers.mock._setTier')(SID, 'goc');
+
 
   head('a self-directed CBT run uses the same screen but never the record');
   run('openCBT')();

@@ -7,7 +7,7 @@ var path = require('path');
 var vm = require('vm');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var md = require('./minidom.js');
-var bundle = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var bundle = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
@@ -33,7 +33,6 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   function fetchStub(url, opts) {
     var method = (opts && opts.method) || 'GET';
     calls.push({ url: url, method: method, auth: opts && opts.headers && opts.headers.Authorization });
-    if (/^api\/tutor\/login/.test(url)) return reply(200, { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } });
     if (/^api\/tutor\/subject/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } });
     if (/^api\/tutor\/top/.test(url)) {
       if (failNext) { failNext = false; return reply(500, { error: 'The top performers are not available.' }); }
@@ -47,7 +46,9 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     if (/^api\/tutor\/scripts/.test(url)) return reply(200, { subject: 'Chemistry', counts: { waiting: 0, marked: 0 }, scripts: [] });
     return reply(200, {});
   }
-  var win = {};
+  var tutorSession = { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } };
+  var navigated = '', lastToast = '';
+  var win = { go: function (where) { navigated = where; }, toast: function (msg) { lastToast = msg; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String, Number: Number, Object: Object, Array: Array });
   bctx.window.confirm = function () { return true; };
   vm.runInContext(bundle, bctx);
@@ -58,7 +59,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   function text() { return root() ? root().textContent : ''; }
   function raw() { return root() ? root().__raw : ''; }
   function topCalls() { return calls.filter(function (c) { return /^api\/tutor\/top/.test(c.url); }); }
-  function signIn() { q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123'; click(q('button[data-act=signin]')); return tick(60); }
+  function signIn() { win.__zxOpen(tutorSession); return tick(60); }
 
   testsRows = [
     { id: 'GOC-S-021', name: 'Chidi <b>Okoro</b>', average: 91.5, papers: 3 },
@@ -101,11 +102,11 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   click(q('button[data-act=signout]')); await tick(30);
   ok('sign out clears the card from the page', !/Top performers/.test(text()) && !/Chidi/.test(text()));
   failNext = true;
-  bctx.window.__zxOpen(); await tick(30); await signIn();
+  await signIn();
   ok('a failed load is explained on this card only', /The top performers are not available\./.test(text()) && /Class snapshot/.test(text()) && /At-risk students/.test(text()) && !q('.zx-tplist'), text().slice(0, 300));
   click(q('button[data-act=signout]')); await tick(30);
   testsRows = []; practiceRows = []; hiddenT = 0; hiddenP = 0;
-  bctx.window.__zxOpen(); await tick(30); await signIn();
+  await signIn();
   ok('with nobody ranked the card says so and shows no count', /Nobody is ranked yet\./.test(text()) && !/need more work/.test(text()) && !q('.zx-tplist'));
   ok('the next sign-in opens on Web Tests again', q('button[data-tab=tests]').getAttribute('aria-pressed') === 'true');
   click(q('button[data-act=signout]')); await tick(30);
