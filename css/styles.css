@@ -940,22 +940,6 @@ a.cv:hover{color:var(--red)}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
 .auth-swap{text-align:center;font-size:13.5px;color:var(--gray);margin-top:22px}
 .auth-legal{font-size:11.5px;color:var(--mute);line-height:1.5;margin-top:16px;text-align:center}
-.tier-compare{margin-top:16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--white)}
-.tier-compare summary{cursor:pointer;padding:12px 14px;font-size:13.5px;font-weight:800;color:var(--ink);list-style:none}
-.tier-compare summary::-webkit-details-marker{display:none}
-.tier-compare summary::after{content:"+";float:right;font-weight:900;color:var(--red-deep)}
-.tier-compare[open] summary::after{content:"\2212"}
-.tier-compare .tc-grid{display:grid;gap:10px;padding:0 12px 4px}
-.tc-card{border-radius:var(--r-sm);padding:12px 14px;border:1px solid var(--line);background:var(--bg)}
-.tc-card.goc{background:var(--gold-soft);border-color:#E7C766}
-.tc-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
-.tc-h b{font-size:14px;color:var(--ink)}.tc-h span{font-size:11px;font-weight:800;color:var(--gold-deep)}
-.tc-card ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.55;color:var(--slate)}
-.tier-compare .tc-note{font-size:12px;color:var(--mute);line-height:1.5;margin:8px 14px 12px}
-.tier-compare.landing-tiers{margin:0 auto;max-width:760px;border:0;background:transparent}
-.landing-tiers .tc-grid{padding:0}
-.landing-tiers .tc-note{margin:14px 4px 0;text-align:center}
-@media(min-width:700px){.landing-tiers .tc-grid{grid-template-columns:1fr 1fr}}
 .auth-side{display:none}
 .auth-back{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1.5px solid var(--line);border-radius:11px;padding:9px 14px;font-family:var(--font);font-size:13px;font-weight:800;color:var(--slate);cursor:pointer;margin-bottom:20px}
 .auth-back:hover{border-color:var(--red);color:var(--red)}
@@ -3469,8 +3453,8 @@ a.cv:hover{color:var(--red)}
 .lp-news-meta{ display:flex; gap:8px; align-items:center; font-size:11.5px; color:#9CA3AF; }
 .lp-news-more{ background:none; border:0; color:#DC2626; font-weight:800; font-size:13px; cursor:pointer; padding:0; font-family:inherit; }
 .lp-news-empty{ font-size:13px; color:#9CA3AF; }
-.lp-try{ text-align:left; }
-.lp-try-btn{ margin:14px auto 0; display:block; }
+.lp-try{ text-align:center; }
+.lp-try-btn{ display:inline-flex; align-items:center; justify-content:center; margin:14px auto 0; max-width:100%; }
 .lp-try-note{ font-size:12.5px; color:#9CA3AF; margin-top:10px; line-height:1.5; }
 @media (min-width:720px){ .lp-news-list{ grid-template-columns:repeat(3,1fr); } }
 
@@ -3494,7 +3478,7 @@ a.cv:hover{color:var(--red)}
    button. The run itself opens the shared CBT runner (#cbt). */
 #demo.demo-screen{ overflow:hidden; }
 #demo .demo-pre{ flex:1 1 0; min-height:0; display:flex; align-items:center; justify-content:center; padding:14px 16px; overflow:hidden; }
-#demo .demo-card{ width:100%; max-height:100%; overflow:hidden; padding:18px; }
+#demo .demo-card{ width:100%; max-width:640px; margin:0 auto; max-height:100%; overflow:hidden; padding:18px; }
 #demo .demo-points{ display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 4px; }
 #demo .demo-points span{ font-size:11.5px; font-weight:700; color:#5E1212; background:#FEF8F8; border:1px solid #F3D6D6; border-radius:999px; padding:5px 9px; }
 #demo .demo-start{ position:relative; margin-top:14px; flex:0 0 auto; }

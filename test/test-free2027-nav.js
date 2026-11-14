@@ -355,7 +355,8 @@ settle(w1).then(function () {
     ok('the hub screen ' + id + ' is NOT full-bleed, so it keeps its sidebar', listed.indexOf(id) < 0);
   });
   ok('the original public screens keep their full-bleed treatment', ['landing', 'login-v2', 'signup', 'updates', 'legal'].every(function (id) { return listed.indexOf(id) > -1; }));
-  ok('the is-login toggle is still the only mechanism driving the split', /classList\.toggle\('is-login', publicScreens\.indexOf\(id\) > -1\)/.test(appSrc));
+  ok('the is-login toggle remains the single mechanism, extended only for the public preview',
+  /classList\.toggle\('is-login', publicScreens\.indexOf\(id\) > -1 \|\| demoSurface\)/.test(appSrc));
   ok('the hub sidebar rule is unchanged (no global removal, no CSS hack)', /\.phone:not\(\.is-login\) \.tabbar\{/.test(styles) && /\.phone:not\(\.is-login\) \.screens\{left:256px\}/.test(styles));
   ok('the edition still supplies its own header navigation', /class="lp-nav f27-nav"/.test(html));
   ok('returning to a hub screen still restores the chrome in Free mode', /goc-original-area .phone:not\(\.is-login\) .tabbar \{ display: flex !important; \}/.test(css) && /goc-original-area/.test(uiSrc));

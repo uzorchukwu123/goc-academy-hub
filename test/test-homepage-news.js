@@ -33,11 +33,12 @@ function grab(name) {
 }
 
 head('clear information architecture on the landing');
-[['Programmes', "dwGoTo('lpTiers')"], ['Updates & News', "go('updates')"], ['Try GOC free', "dwGoTo('lpTry')"]].forEach(function (pair) {
+[['Updates & News', "go('updates')"], ['Try GOC free', "dwGoTo('lpTry')"]].forEach(function (pair) {
   ok('top nav offers “' + pair[0] + '”', index.indexOf(pair[0]) >= 0 && index.indexOf(pair[1]) >= 0);
 });
 ok('the hero offers the free preview beside sign-up', /onclick="dwGoTo\('lpTry'\)">Try a free practice session<\/button>/.test(index));
-ok('the drawer carries the same labelled paths', /Try GOC — free practice/.test(index) && />Programmes<\/button>/.test(index) && /About G\.O\.C<\/button>/.test(index));
+ok('the drawer carries the same labelled paths', /Try GOC — free practice/.test(index) && /About G\.O\.C<\/button>/.test(index)
+  && !/>Programmes<\/button>/.test(index));
 ok('About and the Independent Scholars System are labelled in plain words',
   /About G\.O\.C Academy Hub/.test(index) && /The Independent Scholars System/.test(index));
 ok('the Try GOC section makes the free, anonymous offer plainly',
@@ -45,8 +46,8 @@ ok('the Try GOC section makes the free, anonymous offer plainly',
   && /not official JAMB questions/i.test(index) && /onclick="demoOpen\(\)"/.test(index));
 ok('parents, schools and partners are addressed by label', /id="lpParents"/.test(index) && /Parents, schools &amp; partners/.test(index));
 ok('announcements have a prominent home on the landing', /id="lpNewsList"/.test(index) && /Updates &amp; News/.test(index));
-ok('existing sections survive (subjects, tiers, scholarship, contact, footer)',
-  /id="lpSubjects"/.test(index) && /id="lpTiers"/.test(index) && /id="lpScholarship"/.test(index) && /id="contact"/.test(index) && /lp-foot/.test(index));
+ok('existing sections survive (subjects, scholarship, contact, footer)',
+  /id="lpSubjects"/.test(index) && !/id="lpTiers"/.test(index) && /id="lpScholarship"/.test(index) && /id="contact"/.test(index) && /lp-foot/.test(index));
 ok('the landing announcements grid adapts (1 column mobile, 3 desktop)',
   /\.lp-news-list\{[^}]*display:grid/.test(css) && /@media \(min-width:720px\)\{ \.lp-news-list\{ grid-template-columns:repeat\(3,1fr\)/.test(css));
 ok('no onboarding overlay attaches to the public homepage',

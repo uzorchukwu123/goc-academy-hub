@@ -539,6 +539,15 @@ function dwGoTo(secId){
   }, {passive:true});
 })();
 
+/* The anonymous Try GOC preview owns the screen from entry to result. These
+   surfaces must never inherit the authenticated student's sidebar/tabbar, even
+   though the CBT runner and result screen are shared with the signed-in app. */
+function isDemoSurface(id){
+  if(id === 'demo') return true;
+  if(id === 'cbt' && typeof cbtDemo !== 'undefined' && cbtDemo) return true;
+  if(id === 'studyRes' && typeof srLast !== 'undefined' && srLast && srLast.mode === 'demo') return true;
+  return false;
+}
 function go(id){
   if(typeof closeDrawer === 'function') closeDrawer();
   /* Priority 9 — no in-app screen may be reached once the session has run out,
@@ -546,8 +555,9 @@ function go(id){
      refuses the data anyway; this stops the empty shell being shown at all.
      The public screens stay open, because that is where an expired student is
      being sent. */
-  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship','free-admin'];
-  if(openScreens.indexOf(id) < 0 && ssExpired()){ ssEnd(); return; }
+  var openScreens = ['landing','login-v2','signup','updates','legal','scholarship','free-admin','demo'];
+  var demoSurface = isDemoSurface(id);
+  if(openScreens.indexOf(id) < 0 && !demoSurface && ssExpired()){ ssEnd(); return; }
   if(id === 'login-v2' && typeof ssClearNotice === 'function' && !(ss && ss.ending)) ssClearNotice();
   // Access guard: the admin console is never reachable as a student, and only
   // after passing the secure access portal (firewall) as an admin.
@@ -612,7 +622,7 @@ function go(id){
     clearInterval(wtTimerId); wtTimerId = null;
   }
   // The preview banner belongs only to student-facing screens.
-  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin'){
+  if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin' || demoSurface){
     previewing = false;
     document.body.classList.remove('previewing');
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
@@ -632,8 +642,8 @@ function go(id){
   // (which lost on specificity and left a 256px sidebar over the tutorial).
   // Hub screens are untouched: they still get the sidebar and the 256px offset.
   var publicScreens = ['landing','login-v2','signup','updates','legal','free-admin',
-    'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard'];
-  document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
+    'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard','demo'];
+  document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1 || demoSurface);
   // highlight tab (map sub-screens to their section)
   var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
   var active = map[id] || id;

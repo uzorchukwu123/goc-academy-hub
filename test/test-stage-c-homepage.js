@@ -4,7 +4,7 @@
    platform:
      A. the existing mobile drawer is the single navigation surface, is
         reorganised (not replaced), and every link resolves on a phone;
-     B. Programmes is still called Programmes and still points at #lpTiers;
+     B. the public Programmes section and its navigation are retired;
      C. Scholarship and Stage keep their existing disabled/ready positions;
      D. Try GOC sits before Get in touch/Contact, with its anonymous preview
         and links unchanged.
@@ -51,16 +51,15 @@ function labelsOf(markup) {
   });
 }
 
-console.log('\nC-B: Programmes keeps its name and approved destination');
-ok('the landing presents the section as “Programmes”',
-  /<div class="lp-eyebrow">Programmes<\/div>\s*<h2>One student identity: the GOC student<\/h2>/.test(index));
-ok('Programmes still has its own #lpTiers section and GOC student card',
-  /<div class="lp-sec" id="lpTiers">/.test(index) && /<b>GOC student<\/b>/.test(index));
-ok('the top nav still labels it “Programmes” and targets #lpTiers',
-  /<button\b[^>]*onclick="dwGoTo\('lpTiers'\)"[^>]*>Programmes<\/button>/.test(index));
-ok('Programmes was not merged into Subjects or renamed',
-  !/id="lpTiers"[^>]*>[\s\S]{0,80}(Subjects offered|Subject offering)/.test(index)
-  && !/>Programmes? &amp; subjects</.test(index));
+console.log('\nC-B: the public Programmes section is retired');
+ok('the landing no longer presents a Programmes section',
+  !/id="lpTiers"/.test(index) && !/<div class="lp-eyebrow">Programmes<\/div>/.test(index));
+ok('the GOC student card and full-access list are gone from the homepage',
+  !/<b>GOC student<\/b>/.test(index) && !/tc-card goc/.test(index) && !/no limited accounts/.test(index));
+ok('no desktop Programmes navigation link remains',
+  !/dwGoTo\('lpTiers'\)/.test(index) && !/>Programmes<\/button>/.test(index));
+ok('no obsolete anchor or empty section is left behind',
+  !/id="lpTiers"/.test(index) && !/landing-tiers|tier-compare/.test(index + css));
 
 console.log('\nC-C: Scholarship and Stage stay put');
 var iHow = at('id="lpHow"');
@@ -87,6 +86,13 @@ ok('Get in touch is the last content section, after Updates & News', iNews < iCo
 ok('the Try GOC block itself is unchanged',
   /id="lpTry"[\s\S]*?<div class="lp-eyebrow">Try G\.O\.C<\/div>[\s\S]*?<h2>Free JAMB Practice Preview<\/h2>[\s\S]*?no account, no name, no email needed[\s\S]*?onclick="demoOpen\(\)"[\s\S]*?Try a free practice session[\s\S]*?not official JAMB questions/.test(index));
 ok('Get in touch is still the contact section', /id="contact"[\s\S]{0,160}<div class="lp-eyebrow">Get in touch<\/div>/.test(index));
+ok('the practice button is centred by the layout, not by a left offset',
+  /\.lp-try\{[^}]*text-align:center/.test(css)
+  && /\.lp-try-btn\{[^}]*display:inline-flex/.test(css)
+  && /\.lp-try-btn\{[^}]*margin:14px auto 0/.test(css)
+  && !/\.lp-try-btn\{[^}]*margin-left:/.test(css));
+ok('the centred button keeps its existing preview handler',
+  /class="lp-cta lp-try-btn"[^>]*onclick="demoOpen\(\)"/.test(index));
 
 console.log('\nC-A: the existing mobile drawer is reorganised, not replaced');
 var drawer = section('<aside class="lp-drawer" id="lpDrawer"', '</aside>');
@@ -96,8 +102,8 @@ ok('the drawer keeps its identity, scrim and close control',
   /id="lpDrawer"/.test(index) && /class="lp-scrim" id="lpScrim"/.test(index) && /class="dw-x"[^>]*aria-label="Close menu"/.test(index));
 ok('drawer markup still exposes the existing navigation and account groups',
   nav.length > 0 && buttons.length > 0 && /id="lpDrawer"/.test(drawer));
-ok('the drawer links mirror the landing order (About, Subjects, Programmes, How, Try, Contact, Updates)',
-  JSON.stringify(labelsOf(nav)) === JSON.stringify(['About G.O.C', 'Subjects offered', 'Programmes', 'How it works', 'Try GOC — free practice', 'Contact us', 'Updates & News']),
+ok('the drawer links mirror the landing order (About, Subjects, How, Try, Contact, Updates)',
+  JSON.stringify(labelsOf(nav)) === JSON.stringify(['About G.O.C', 'Subjects offered', 'How it works', 'Try GOC — free practice', 'Contact us', 'Updates & News']),
   labelsOf(nav).join(' | '));
 
 var drawerTargets = [];
@@ -105,7 +111,7 @@ var m;
 var reTarget = /dwGoTo\('([^']+)'\)/g;
 while ((m = reTarget.exec(nav))) drawerTargets.push(m[1]);
 ok('every drawer section link has a real destination',
-  drawerTargets.length === 6 && drawerTargets.every(function (id) { return new RegExp('id="' + id + '"').test(index); }),
+  drawerTargets.length === 5 && drawerTargets.every(function (id) { return new RegExp('id="' + id + '"').test(index); }),
   drawerTargets.join(', '));
 ok('Try GOC in the drawer points at the relocated #lpTry', /dwGoTo\('lpTry'\)/.test(nav) && iTry < iContact);
 
@@ -196,7 +202,9 @@ screenTargets.forEach(function (id) {
 
 console.log('\nStage A/B boundaries relied on by this page are still present');
 ok('no Open Student tier was reintroduced', !/Open Student|open-student|tier-open/i.test(index));
-ok('the unified GOC student architecture is still advertised', /One student identity: the GOC student/.test(index) && /no limited accounts/.test(index));
+ok('the unified GOC student architecture is untouched even though its homepage advert is gone',
+  !/id="lpTiers"/.test(index) && /no Open Student|open-student|tier-open/i.test(index) === false
+  && /id="signup"/.test(index) && /Submit application/.test(index));
 ok('the application-first registration screen is still on the page', /id="signup"[\s\S]*?Submit application/.test(index));
 ok('the maintenance controls are not touched by this page', !/GOC_MAINTENANCE_MODE|maintenance\.json/.test(index));
 
