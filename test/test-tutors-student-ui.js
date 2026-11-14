@@ -7,7 +7,7 @@ var path = require('path');
 var vm = require('vm');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var md = require('./minidom.js');
-var bundle = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var bundle = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
@@ -37,7 +37,6 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   function fetchStub(url, opts) {
     var method = (opts && opts.method) || 'GET';
     calls.push({ url: url, method: method, auth: opts && opts.headers && opts.headers.Authorization });
-    if (/^api\/tutor\/login/.test(url)) return reply(200, { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } });
     if (/^api\/tutor\/subject/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } });
     if (/^api\/tutor\/atrisk/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], sort: 'inactive', limits: { inactiveDays: 7, lowAverage: 40 }, count: 1, students: [{ id: 'GOC-S-011', name: 'Tunde <i>Bello</i>', daysInactive: 8, never: false, average: 35, papers: 2, lastScore: 30, reasons: ['inactive'] }] });
     if (/^api\/tutor\/top/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], tests: { items: [{ id: 'GOC-S-012', name: 'Amina Yusuf', average: 90, papers: 3 }], hidden: 0, minPapers: 2 }, practice: { items: [], hidden: 0, minAnswers: 20 } });
@@ -60,7 +59,9 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     if (/^api\/tutor\/scripts/.test(url)) return reply(200, { subject: 'Chemistry', counts: { waiting: 0, marked: 0 }, scripts: [] });
     return reply(200, {});
   }
-  var win = {};
+  var tutorSession = { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } };
+  var navigated = '', lastToast = '';
+  var win = { go: function (where) { navigated = where; }, toast: function (msg) { lastToast = msg; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String, Number: Number, Object: Object, Array: Array, Date: Date, Math: Math });
   bctx.window.confirm = function () { return true; };
   vm.runInContext(bundle, bctx);
@@ -72,8 +73,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   function raw() { return root() ? root().__raw : ''; }
   function hits(re) { return calls.filter(function (c) { return re.test(c.url); }); }
 
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(q('button[data-act=signin]')); await tick(60);
+  win.__zxOpen(tutorSession); await tick(60);
 
   console.log('\nthe Open buttons');
   var openBtns = all('button[data-act=stuopen]');
@@ -129,16 +129,12 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   click(q('button[data-act=stuback]')); await tick(30);
   click(q('button[data-act=signout]')); await tick(30);
   auditEntries = []; for (var i = 1; i <= 25; i++) auditEntries.push({ id: 'AU-' + i, kind: 'tutor-view', tutorId: 'GOC-T-001', studentId: 'GOC-S-0' + (i < 10 ? '0' : '') + i, studentName: 'Student ' + i, subject: 'Chemistry', at: Date.UTC(2026, 9, 9, 12, 0) - i * 60000 });
-  bctx.window.__zxOpen(); await tick(10);
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(q('button[data-act=signin]')); await tick(60);
+  win.__zxOpen(tutorSession); await tick(60);
   ok('only the last twenty are listed, with the full count', /Your last 20 of 25/.test(text()) && /Student 20/.test(text()) && !/Student 21/.test(text()), text().slice(-300));
   click(q('button[data-act=signout]')); await tick(30);
   ok('sign out clears the student and the views from the page', !/My views/.test(text()) && !/Student 1/.test(text()));
   failAudit = true;
-  bctx.window.__zxOpen(); await tick(30);
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(q('button[data-act=signin]')); await tick(60);
+  win.__zxOpen(tutorSession); await tick(60);
   ok('a failed views load is explained on its card only', /Your views are not available\./.test(text()) && /Class snapshot/.test(text()) && /At-risk students/.test(text()));
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
   process.exit(fails ? 1 : 0);

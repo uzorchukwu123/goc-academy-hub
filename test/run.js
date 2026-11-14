@@ -36,7 +36,7 @@ var suites = ['test-rules.js', 'test-p1.js', 'test-p2.js', 'test-p6.js', 'test-p
               'test-migration-api-config.js', 'test-migration-gateway.js', 'test-migration-sessions.js',
               'test-entry-host.js', 'test-competition-desktop.js', 'test-pitch-readiness.js', 'test-jamb-dashboard.js', 'test-practice-navigation.js', 'test-student-notes.js', 'test-note-practice.js', 'test-dashboard-command.js', 'test-onboarding-student.js', 'test-onboarding-console.js', 'test-tutor-access.js', 'test-homepage-news.js', 'test-demo-preview.js',
               /* Workstream A: the temporary full-platform maintenance switch. */
-              'test-maintenance-mode.js', 'test-tutor-resilience.js'];
+              'test-maintenance-mode.js', 'test-tutor-resilience.js', 'test-stage-c-homepage.js', 'test-no-open-student.js', 'test-registrations-rules.js', 'test-registrations-route.js', 'test-registrations-appwrite.js', 'test-registrations-demo.js'];
 var failed = [];
 
 suites.forEach(function (s) {

@@ -85,7 +85,7 @@ async function main() {
     subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics']
   });
   SID = reg.student.id;
-  run('GOC.api._drivers.mock._setTier')(SID, 'goc');   // Web Tests are for GOC students
+  // every student now has full GOC access — no promotion step exists
   await api('logout')();
 
   /* A theory paper that nobody has marked yet — the console needs one, and the
@@ -401,7 +401,7 @@ async function main() {
     subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics']
   });
   SID2 = reg2.student.id;
-  run('GOC.api._drivers.mock._setTier')(SID2, 'goc');
+
   await api('login')(SID2, SPW2);
   var objPaper = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' });
   var objResponses = {};

@@ -28,9 +28,9 @@ var students = [
   { id: 'S7', tier: ' GOC ', subjects: ['Chemistry'] }
 ];
 var snap = core.tutorSnapshot('Chemistry', students, {}, [], NOW);
-ok('GOC students taking the subject are counted (spaces and case in tier tidied)', snap.gocStudents === 3, snap.gocStudents);
-ok('Open students, and a student with no tier, are only a count', snap.openStudents === 2, snap.openStudents);
-ok('a deactivated student is in neither count', snap.gocStudents + snap.openStudents === 5 && core.tutorSnapshot('Chemistry', [students[5]], {}, [], NOW).gocStudents === 0);
+ok('students taking the subject are counted (stored tier values are ignored — one category)', snap.gocStudents === 5, snap.gocStudents);
+ok('there is no Open count any more', snap.openStudents === undefined);
+ok('a deactivated student is not counted', snap.gocStudents === 5 && core.tutorSnapshot('Chemistry', [students[5]], {}, [], NOW).gocStudents === 0);
 ok('a student of another subject is not counted', core.tutorSnapshot('Physics', students, {}, [], NOW).gocStudents === 2);
 ok('no students at all reads as zeros, not an error', (function () { var s = core.tutorSnapshot('Chemistry', [], null, null, NOW); return s.gocStudents === 0 && s.active === 0 && s.practice.average === null && s.tests.average === null; })());
 ok('a missing list is tolerated', core.tutorSnapshot('Chemistry', null, undefined, undefined, NOW).gocStudents === 0);
@@ -44,10 +44,10 @@ var runs = {
   S3: [run(1, rows(5, 5, 'Physics'), 'Physics')]
 };
 snap = core.tutorSnapshot('Chemistry', students, runs, [], NOW);
-ok('a practice run in the subject within 7 days makes a student active', snap.active === 1, snap.active);
+ok('a practice run in the subject within 7 days makes a student active', snap.active === 2, snap.active);
 ok('a run from 9 days ago does not', core.tutorSnapshot('Chemistry', students, { S2: runs.S2 }, [], NOW).active === 0);
-ok('practice in a different subject does not make them active here', snap.active === 1);
-ok('an Open student\'s practice never counts', snap.active === 1 && snap.practice.answers === 10, snap.practice.answers);
+ok('practice in a different subject does not make them active here', snap.active === 2);
+ok('a formerly-Open student\'s practice counts like everyone else\'s', snap.active === 2 && snap.practice.answers === 15, snap.practice.answers);
 var att = [
   { scholarId: 'S2', subject: 'Chemistry', section: 'objective', status: 'marked', percent: 60, submittedAt: NOW - 3 * DAY },
   { scholarId: 'S7', subject: 'Chemistry', section: 'jamb', status: 'marked', percent: 80, submittedAt: NOW - 20 * DAY },
@@ -56,10 +56,10 @@ var att = [
   { scholarId: 'S2', subject: 'Chemistry', section: 'theory', status: 'awaiting-marking', percent: null, submittedAt: NOW - 1 * DAY }
 ];
 snap = core.tutorSnapshot('Chemistry', students, runs, att, NOW);
-ok('a test submitted within 7 days makes a student active', snap.active === 2, snap.active);
+ok('a test submitted within 7 days makes a student active', snap.active === 3, snap.active);
 ok('a student who both practised and sat a test is counted once', (function () {
   var s = core.tutorSnapshot('Chemistry', students, runs, [{ scholarId: 'S1', subject: 'Chemistry', status: 'marked', percent: 50, submittedAt: NOW - DAY }], NOW);
-  return s.active === 1;
+  return s.active === 2;
 })());
 ok('exactly 7 days ago still counts, 7 days and a second does not', (function () {
   var edge = { S1: [{ ts: NOW - 7 * DAY, subject: 'Chemistry', review: rows(1, 1) }] };
@@ -69,7 +69,7 @@ ok('exactly 7 days ago still counts, 7 days and a second does not', (function ()
 
 console.log('\npractice average');
 var p = core.tutorSnapshot('Chemistry', students, runs, [], NOW).practice;
-ok('it is correct over answered, across every GOC run still held', p.answers === 10 && p.correct === 6 && p.average === 60, JSON.stringify(p));
+ok('it is correct over answered, across every student run still held', p.answers === 15 && p.correct === 11 && p.average === 73.3, JSON.stringify(p));
 ok('unanswered rows are not counted', (function () {
   var r = { S1: [{ ts: NOW, subject: 'Chemistry', review: [row(true), { given: null, isCorrect: false }, row(false)] }] };
   var s = core.tutorSnapshot('Chemistry', students, r, [], NOW).practice; return s.answers === 2 && s.average === 50;
@@ -87,9 +87,9 @@ ok('no answers means no average, not 0', core.tutorSnapshot('Chemistry', student
 
 console.log('\ntest average');
 var t = snap.tests;
-ok('only marked papers of GOC students in the subject are averaged', t.papers === 2 && t.average === 70, JSON.stringify(t));
-ok('theory awaiting marking is left out, never guessed', t.papers === 2);
-ok('fewer than 3 papers is flagged small', t.small === true);
+ok('only marked papers of students in the subject are averaged', t.papers === 3 && t.average === 79.7, JSON.stringify(t));
+ok('theory awaiting marking is left out, never guessed', t.papers === 3);
+ok('three papers is not flagged small', t.small === false);
 ok('3 papers is not small', core.tutorSnapshot('Chemistry', students, {}, [1, 2, 3].map(function (n) { return { scholarId: 'S1', subject: 'Chemistry', status: 'marked', percent: 50, submittedAt: NOW }; }), NOW).tests.small === false);
 ok('a percent of 0 is a real score', core.tutorSnapshot('Chemistry', students, {}, [{ scholarId: 'S1', subject: 'Chemistry', status: 'marked', percent: 0, submittedAt: NOW }], NOW).tests.average === 0);
 ok('no papers means no average, not 0', core.tutorSnapshot('Chemistry', students, {}, [], NOW).tests.average === null);

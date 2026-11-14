@@ -47,7 +47,7 @@ vm.runInContext('GOC.api._drivers.mock._setJambReadyMin(1)', ctx);
 activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Ada Round', password: 'secret123',
   goal: 'JAMB / UTME 2027', subjects: COMBO }).then(function (r) {
   stuId = r.student.id;
-  vm.runInContext('GOC.api._drivers.mock._setTier', ctx)(stuId, 'goc');   // Objective is for GOC students
+  // every student now has full GOC access — no promotion step exists
   return mock.startTest({ period: 'test', section: 'objective', subject: 'All subjects' });
 }).then(function (st) {
   return mock.submitTest({ attemptId: st.attemptId, responses: {} });

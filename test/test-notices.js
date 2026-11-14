@@ -67,9 +67,9 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
   async function tutorToken(name, subjects, pw) {
     var t = await call('POST', '/api/tutors', { name: name, subjects: subjects, password: 'start-pass-1' }, adm);
     var id = t.body.tutor.id;
-    var tk = (await call('POST', '/api/tutor/login', { id: id, password: 'start-pass-1' })).body.token;
+    var tk = (await call('POST', '/api/auth/login', { id: id, password: 'start-pass-1' })).body.token;
     await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: pw }, tk);
-    return { id: id, token: (await call('POST', '/api/tutor/login', { id: id, password: pw })).body.token };
+    return { id: id, token: (await call('POST', '/api/auth/login', { id: id, password: pw })).body.token };
   }
   var chem = await tutorToken('Mrs Ada Obi', ['Chemistry'], 'my-own-pass-1');
   var phys = await tutorToken('Mr Eze', ['Physics'], 'my-own-pass-2');
@@ -100,10 +100,10 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
   var g2 = await call('GET', '/api/me/notices', null, gocNoChem.token);
   ok('a GOC student NOT taking Chemistry sees nothing', g2.status === 200 && g2.body.notices.length === 0 && g2.body.locked === false);
   var o1 = await call('GET', '/api/me/notices', null, openChem.token);
-  ok('an Open student sees nothing, locked, and the text never leaves the server', o1.status === 200 && o1.body.locked === true && o1.body.notices.length === 0 && o1.raw.indexOf('ZQXNOTICE') === -1);
+  ok('a student created with a stored open tier sees notices like everyone (no tier gate)', o1.status === 200 && o1.body.locked === false && o1.body.notices.length === 1, o1.raw.slice(0, 160));
   ok('no session is refused', (await call('GET', '/api/me/notices')).status === 401);
   ok('a tutor session is refused on the student route', [401, 403].indexOf((await call('GET', '/api/me/notices', null, chem.token)).status) > -1);
-  ok('a switched-over tier takes effect at once: Open made GOC now sees it', (await call('PUT', '/api/students/' + openChem.id + '/tier', { tier: 'goc' }, adm)).status === 200 && (await call('GET', '/api/me/notices', null, openChem.token)).body.notices.length === 1);
+  ok('the old tier-switch route is gone (404) and changes nothing', (await call('PUT', '/api/students/' + openChem.id + '/tier', { tier: 'goc' }, adm)).status === 404 && (await call('GET', '/api/me/notices', null, openChem.token)).body.notices.length === 1);
 
   console.log('\nthe admin alert');
   var a1 = await call('GET', '/api/alerts', null, adm);

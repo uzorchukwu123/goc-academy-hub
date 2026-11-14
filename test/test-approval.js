@@ -1,9 +1,13 @@
-/* test-approval.js — Admin-approval flow (registration gating), over real HTTP.
-   A self-registered account starts inactive and cannot log in until a Founder or
-   Academic Director approves it from the console. Starts server/server.js on a
-   spare port against a throwaway data file. No dependencies:
+/* test-approval.js — the LEGACY admin-approval routes, over real HTTP.
+   Stage B made registration application-first (see test-registrations-route.js);
+   the old POST/DELETE /api/students/:id/approve routes remain only for pending
+   student records created before that flow existed. This suite seeds two such
+   legacy pending records and proves they can still be approved/rejected, that
+   the new public sign-up route is gone, and that nothing else changed.
+   Starts server/server.js on a spare port against a throwaway data file.
    run:  node test/test-approval.js  */
 'use strict';
+var crypto = require('crypto');
 var http = require('http');
 var path = require('path');
 var fs = require('fs');
@@ -76,14 +80,24 @@ function stop() {
   try { fs.rmSync(SANDBOX, { recursive: true, force: true }); } catch (e) {}
 }
 
-/* A valid self-registration body: four subjects (Use of English plus three),
-   which the combination rules accept. */
-function signupBody(n) {
-  return { name: 'Pending ' + n, password: 'secret123',
-           email: 'pending' + n + '@example.com', phone: '0800000' + (1000 + n),
-           goal: 'JAMB / UTME 2027',
+function hashPw(plain) {
+  var salt = crypto.randomBytes(16).toString('hex');
+  return 'scrypt$' + salt + '$' + crypto.scryptSync(plain, salt, 64).toString('hex');
+}
+/* A legacy pending student record, exactly as the old public sign-up left it. */
+function legacyPending(id, n) {
+  return { id: id, name: 'Pending ' + n, email: 'pending' + n + '@example.com', phone: '0800000' + (1000 + n),
+           goal: 'JAMB / UTME 2027', exam: 'JAMB / UTME 2027',
            subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'],
-           privacyConsent: { accepted: true } };
+           pwHash: hashPw('secret123'), active: false, pendingApproval: true,
+           xp: 0, streak: 0, createdAt: new Date().toISOString() };
+}
+function seedLegacy() {
+  var f = path.join(SANDBOX, 'server', 'data.json');
+  var db = JSON.parse(fs.readFileSync(f, 'utf8'));
+  db.students.push(legacyPending('GOC-S-901', 1));
+  db.students.push(legacyPending('GOC-S-902', 2));
+  fs.writeFileSync(f, JSON.stringify(db));
 }
 
 var adm = null, pendingId = null, rejectId = null;
@@ -92,14 +106,13 @@ waitForBoot(20).then(async function (h) {
   head('the server is up');
   ok('health responds', h.status === 200 && h.body && h.body.service === 'goc-academy-hub', h.raw);
 
-  head('a self-registration is pending, with no session');
-  var reg = await call('POST', '/api/students', signupBody(1));
-  ok('registration is accepted', reg.status === 200 && !!reg.body, reg.status + ' ' + reg.raw);
-  ok('the reply says pending and carries only id and name', reg.body && reg.body.pending === true
-     && reg.body.student && reg.body.student.id && reg.body.student.name === 'Pending 1', reg.raw);
-  ok('no session token is issued at sign-up', !(reg.body && reg.body.token), reg.raw);
-  ok('no credential leaks in the reply', !/pwHash|"password"|salt/i.test(reg.raw), reg.raw);
-  pendingId = reg.body.student.id;
+  head('the new public sign-up route is gone; registration is application-first');
+  var reg = await call('POST', '/api/students', { name: 'Old Way', password: 'secret123', email: 'old@example.com', phone: '08000001001', goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'], privacyConsent: { accepted: true } });
+  ok('POST /api/students no longer creates accounts (404/405)', reg.status === 404 || reg.status === 405, reg.status + ' ' + reg.raw);
+  var appReg = await call('POST', '/api/registrations', { name: 'No Code', password: 'secret123', email: 'nocode@example.com', phone: '08000001001', goal: 'JAMB / UTME 2027', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'], privacyConsent: { accepted: true } });
+  ok('an application without a registration code is refused', appReg.status === 400 && /registration code is not valid/.test((appReg.body && appReg.body.error) || ''), appReg.raw);
+  seedLegacy();
+  pendingId = 'GOC-S-901';
 
   head('a pending account cannot log in');
   var early = await call('POST', '/api/auth/login', { id: pendingId, password: 'secret123' });
@@ -139,9 +152,7 @@ waitForBoot(20).then(async function (h) {
   ok('login now succeeds with a token', now.status === 200 && !!now.body.token, now.status + ' ' + now.raw.slice(0, 120));
 
   head('rejecting deletes a pending account');
-  var reg2 = await call('POST', '/api/students', signupBody(2));
-  ok('a second registration is pending', reg2.status === 200 && reg2.body.pending === true, reg2.raw);
-  rejectId = reg2.body.student.id;
+  rejectId = 'GOC-S-902';
   var rej = await call('DELETE', '/api/students/' + rejectId + '/approve', undefined, adm);
   ok('reject succeeds', rej.status === 200 && rej.body && rej.body.rejected === true && rej.body.id === rejectId, rej.status + ' ' + rej.raw);
   var roster2 = await call('GET', '/api/students', undefined, adm);

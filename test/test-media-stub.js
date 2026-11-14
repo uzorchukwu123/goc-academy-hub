@@ -108,39 +108,37 @@ async function main() {
   ok('a record whose file is missing from storage fails cleanly (404, no crash)', r.status === 404 && /Could not open|missing/i.test(json(r).error || ''), r.status);
   ok('a stranger cannot fetch a file', (await call('GET', '/api/resources/RES-pdf/file')).status === 401);
 
-  head('resources: an Open student may download but not open');
-  var ola = await activeStudent(callJ, { signupCode: 'GOC-2027', name: 'Ola Open', password: 'ola2027!', goal: 'JAMB / UTME', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] }, null);
+  head('resources: every student may download and open (one category)');
+  var ola = await activeStudent(callJ, { signupCode: 'GOC-2027', name: 'Ola Student', password: 'ola2027!', goal: 'JAMB / UTME', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics'] }, null);
   var olog = ola.login;
   var otok = ola.token;
-  ok('an Open student signs in', olog.status === 200 && !!otok, olog.status);
+  ok('the second student signs in', olog.status === 200 && !!otok, olog.status);
   var olist = json(await call('GET', '/api/resources', null, otok));
-  ok('the list tells the screen they cannot open files', olist.canView === false && (olist.resources || []).length === 4, JSON.stringify(olist).slice(0, 120));
-  ok('the GOC student is told they can', json(await call('GET', '/api/resources', null, tok)).canView === true);
+  ok('the list tells the screen they can open files (no tier)', olist.canView === true && (olist.resources || []).length === 4, JSON.stringify(olist).slice(0, 120));
+  ok('the first student is told they can too', json(await call('GET', '/api/resources', null, tok)).canView === true);
   r = await call('GET', '/api/resources/RES-pdf/file', null, otok);
-  ok('opening is refused 403 with reason tier', r.status === 403 && json(r).reason === 'tier' && /GOC/.test(json(r).error || ''), r.status + ' ' + r.buf.toString().slice(0, 100));
-  ok('  and no file bytes leak', r.buf.slice(0, 4).toString() !== '%PDF');
+  ok('opening serves the file inline (no tier gate)', r.status === 200 && r.headers['content-disposition'] === 'inline' && r.buf.slice(0, 4).toString() === '%PDF', r.status + ' ' + r.buf.toString().slice(0, 100));
   r = await call('GET', '/api/resources/RES-pdf/file?download=1', null, otok);
   ok('downloading is allowed, as an attachment', r.status === 200 && r.headers['content-disposition'] === 'attachment' && r.buf.slice(0, 4).toString() === '%PDF', r.status + ' ' + r.headers['content-disposition']);
   r = await call('GET', '/api/resources/RES-pdf/file?download=1', null, tok);
-  ok('a GOC student can download too', r.status === 200 && r.headers['content-disposition'] === 'attachment');
+  ok('the first student can download too', r.status === 200 && r.headers['content-disposition'] === 'attachment');
   r = await call('GET', '/api/resources/RES-pdf/file', null, tok);
   ok('and still opens inline', r.status === 200 && r.headers['content-disposition'] === 'inline');
   ok('an unpublished resource is still a 404 when downloaded', (await call('GET', '/api/resources/RES-draft/file?download=1', null, otok)).status === 404);
   ok('a stranger cannot download', (await call('GET', '/api/resources/RES-pdf/file?download=1')).status === 401);
 
-  head('live classes: Open students get no classes at all');
+  head('live classes: every student gets the classes');
   var gc = await call('GET', '/api/classes', null, tok);
   var gcj = json(gc);
-  ok('a GOC student gets the class with its Zoom link', gc.status === 200 && (gcj.classes || []).length === 1 && /secret-room/.test(gcj.classes[0].zoomLink || '') && gcj.joinLocked === false, gc.buf.toString().slice(0, 160));
+  ok('a student gets the class with its Zoom link', gc.status === 200 && (gcj.classes || []).length === 1 && /secret-room/.test(gcj.classes[0].zoomLink || '') && gcj.joinLocked === false, gc.buf.toString().slice(0, 160));
   var oc = await call('GET', '/api/classes', null, otok);
   var ocj = json(oc);
-  ok('an Open student gets an empty class list', oc.status === 200 && Array.isArray(ocj.classes) && ocj.classes.length === 0 && ocj.joinLocked === true, oc.buf.toString().slice(0, 160));
-  ok('  and neither the class details nor the Zoom link appear in the response', !/secret-room|zoom\.invalid|Waves revision|Mr Ade/.test(oc.buf.toString()));
+  ok('the second student gets the same class list (no tier)', oc.status === 200 && Array.isArray(ocj.classes) && ocj.classes.length === 1 && ocj.joinLocked === false, oc.buf.toString().slice(0, 160));
   ok('a stranger cannot list classes', (await call('GET', '/api/classes')).status === 401);
 
   head('videos: seeking');
   var vids = json(await call('GET', '/api/videos', null, tok)).videos || [];
-  ok('a GOC student sees both published videos, lesson and live replay', vids.map(function (v) { return v.videoId; }).sort().join(',') === 'VID-1,VID-2', JSON.stringify(vids));
+  ok('a student sees both published videos, lesson and live replay', vids.map(function (v) { return v.videoId; }).sort().join(',') === 'VID-1,VID-2', JSON.stringify(vids));
   var full = await call('GET', '/api/videos/VID-1/file', null, tok);
   ok('a video is served inline and advertises byte ranges', full.status === 200 && full.headers['accept-ranges'] === 'bytes' && full.headers['content-disposition'] === 'inline' && /^video\/mp4/.test(full.headers['content-type'] || ''), full.status);
   ok('the full body is the whole file', full.buf.equals(mp4));
@@ -151,18 +149,18 @@ async function main() {
   var bad = await call('GET', '/api/videos/VID-1/file', null, tok, { Range: 'bytes=' + (mp4.length + 5) + '-' + (mp4.length + 9) });
   ok('a range past the end is refused with 416', bad.status === 416, bad.status);
   ok('a stranger cannot stream a video', (await call('GET', '/api/videos/VID-1/file')).status === 401);
-  head('videos: an Open student is held back');
+  head('videos: every student can watch');
   var ovl = await call('GET', '/api/videos', null, otok);
   var ovj = json(ovl);
-  ok('the Open list is empty and says it is locked', ovl.status === 200 && Array.isArray(ovj.videos) && ovj.videos.length === 0 && ovj.locked === true, ovl.buf.toString().slice(0, 150));
-  ok('no title, file id or external link leaks', !/Kinematics|Live class replay|secret-replay|f-mp4/.test(ovl.buf.toString()), ovl.buf.toString().slice(0, 150));
+  ok('the second student sees both videos, nothing locked', ovl.status === 200 && Array.isArray(ovj.videos) && ovj.videos.length === 2 && ovj.locked === false, ovl.buf.toString().slice(0, 150));
+  ok('titles are served to students (they are allowed to watch)', /Kinematics/.test(ovl.buf.toString()), ovl.buf.toString().slice(0, 150));
   var ov1 = await call('GET', '/api/videos/VID-1/file', null, otok);
-  ok('a lesson file is refused 403 with reason tier', ov1.status === 403 && json(ov1).reason === 'tier' && /Lesson videos/.test(json(ov1).error || ''), ov1.status + ' ' + ov1.buf.length);
+  ok('a lesson file streams for the second student too', ov1.status === 200 && ov1.buf.equals(mp4), ov1.status + ' ' + ov1.buf.length);
   var ov2 = await call('GET', '/api/videos/VID-2/file', null, otok);
-  ok('a live replay is refused 403 with reason tier', ov2.status === 403 && json(ov2).reason === 'tier' && /Live class replays/.test(json(ov2).error || ''), ov2.status);
+  ok('a live replay streams for the second student too', ov2.status === 200, ov2.status);
   var ov3 = await call('GET', '/api/videos/VID-1/file', null, otok, { Range: 'bytes=0-99' });
-  ok('a Range request does not slip past it', ov3.status === 403 && ov3.buf.length < 300, ov3.status + ' ' + ov3.buf.length);
-  ok('a GOC student is told nothing is locked', json(await call('GET', '/api/videos', null, tok)).locked === false);
+  ok('a Range request serves bytes normally', ov3.status === 206 && ov3.buf.equals(mp4.slice(0, 100)), ov3.status + ' ' + ov3.buf.length);
+  ok('the first student is told nothing is locked', json(await call('GET', '/api/videos', null, tok)).locked === false);
 
 
   head('verify-media.js (the check you run against your real project)');

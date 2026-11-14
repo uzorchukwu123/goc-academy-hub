@@ -76,16 +76,19 @@ function total(stats, subject, which) {
   var adm = login.body && login.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
   var subs = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
-  function mk(name, n) { return call('POST', '/api/admin/students', { name: name, email: n + '@example.com', phone: '0800000005' + n.slice(-1), goal: 'JAMB / UTME 2027', subjects: subs }, adm); }
+  function mk(name, n, subsOverride) { return call('POST', '/api/admin/students', { name: name, email: n + '@example.com', phone: '0800000005' + n.slice(-1), goal: 'JAMB / UTME 2027', subjects: subsOverride || subs }, adm); }
   var g1 = await mk('Gina Goc', 'g1'), g2 = await mk('Bola Goc', 'g2'), g3 = await mk('Chi Goc', 'g3');
-  var o = await call('POST', '/api/students', { name: 'Olu Open', password: 'secret123', email: 'olu@example.com', phone: '08000000059', goal: 'JAMB / UTME 2027', subjects: subs, privacyConsent: { accepted: true } });
+  /* Stage B note: there is no second student category to exclude any more —
+     every approved student is a full G.O.C student. The fourth student simply
+     never took Physics, which is what keeps them off a Physics tutor's board. */
+  var o = await mk('Olu Other', 'o1', ['Use of English', 'Chemistry', 'Biology', 'Mathematics']);
   var ID1 = g1.body.student.id, ID2 = g2.body.student.id, ID3 = g3.body.student.id, IDO = o.body && o.body.student && o.body.student.id;
   var tok1 = (await call('POST', '/api/auth/login', { id: ID1, password: g1.body.temporaryPassword })).body.token;
-  ok('setup: three GOC students and one Open student', !!ID1 && !!ID2 && !!ID3 && !!IDO);
+  ok('setup: three Physics students and one who never took Physics', !!ID1 && !!ID2 && !!ID3 && !!IDO);
   await call('POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Physics'], password: 'start-pass-1' }, adm);
-  var tk = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' })).body.token;
+  var tk = (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' })).body.token;
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'my-own-pass-1' }, tk);
-  tk = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'my-own-pass-1' })).body.token;
+  tk = (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'my-own-pass-1' })).body.token;
   ok('setup: a Physics tutor is signed in', !!tk);
 
   console.log('\nwho may ask');
@@ -107,7 +110,7 @@ function total(stats, subject, which) {
   db.practiceRuns[ID1] = [{ ts: Date.now(), subject: 'Physics', review: rev(20, 18, 'Physics') }];   /* 90% */
   db.practiceRuns[ID2] = [{ ts: Date.now(), subject: 'Physics', review: rev(20, 12, 'Physics') }];   /* 60% */
   db.practiceRuns[ID3] = [{ ts: Date.now(), subject: 'Physics', review: rev(19, 19, 'Physics') }];   /* 19 answers: held back */
-  db.practiceRuns[IDO] = [{ ts: Date.now(), subject: 'Physics', review: rev(30, 30, 'Physics') }];   /* Open: never counted */
+  db.practiceRuns[IDO] = [{ ts: Date.now(), subject: 'Physics', review: rev(30, 30, 'Physics') }];   /* not a Physics student: never counted */
   function att(id, pct, status, subj) { return { id: 'ATT-' + Math.random(), scholarId: id, subject: subj || 'Physics', status: status || 'marked', percent: pct, submittedAt: Date.now() }; }
   db.attempts = (db.attempts || []).concat([att(ID1, 70), att(ID1, 80), att(ID2, 95), att(ID2, 85), att(ID3, 99), att(IDO, 100), att(IDO, 100), att(ID1, 10, 'marked', 'Chemistry'), att(ID2, 10, 'awaiting-marking')]);
   fs.writeFileSync(path.join(SANDBOX, 'server', 'data.json'), JSON.stringify(db));
@@ -118,7 +121,7 @@ function total(stats, subject, which) {
   ok('Practice: Gina (90%) is ahead of Bola (60%), with answers and correct counts', pI.length === 2 && pI[0].id === ID1 && pI[0].percent === 90 && pI[0].answers === 20 && pI[0].correct === 18 && pI[1].id === ID2, r1.raw);
   ok('19 answers is held back', r1.body.practice.hidden === 1 && !pI.some(function (x) { return x.id === ID3; }));
   ok('each row carries the name and the Scholar ID', tI[0].name === 'Bola Goc' && pI[0].name === 'Gina Goc');
-  ok('the Open student never appears, whatever their score', !/Olu/.test(r1.raw) && r1.raw.indexOf(IDO) < 0);
+  ok('the student who never took Physics never appears, whatever their score', !/Olu/.test(r1.raw) && r1.raw.indexOf(IDO) < 0);
   ok('a paper in another subject or still awaiting marking changes nothing', tI[1].papers === 2 && tI[0].papers === 2);
   ok('no email, phone or password hash leaves the server', !/example\.com|0800000005|hash|password|salt/i.test(r1.raw), r1.raw);
 

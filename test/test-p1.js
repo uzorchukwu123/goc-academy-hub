@@ -69,7 +69,7 @@ function ok(name, cond, extra) {
 function head(t) { console.log('\n' + t); }
 function run(expr) { return vm.runInContext(expr, ctx); }
 var activeStudent = require('./active-student.js');
-/* sign-up leaves the account pending; DEMO lets activeStudent.demo walk sign-up -> founder approves -> student signs in */
+/* DEMO lets activeStudent.demo walk the Stage B flow: code -> application -> approval -> password setup -> student signs in */
 var DEMO = new Proxy({}, { get: function (_, n) { return run('GOC.api.' + n); } });
 function rootClasses() { return doc.documentElement.className || ''; }
 function hasAnimOn() { return rootClasses().indexOf('anim-on') > -1; }
@@ -193,11 +193,11 @@ ok('html.anim-on appears only once on the element',
 /* ------------------------------------------- the hand-off into the app ----- */
 head('Priorities 1.2 and 1.3 — the hand-off into the app');
 ok('the richer entrance is armed in the login\'s resolved branch only',
-   /GOC\.api\.login\(raw, pw\)[\s\S]{0,400}?animEnter\(\)/.test(appSrc));
+   /GOC\.api\.login\(raw, pw\)[\s\S]{0,600}?animEnter\(\)/.test(appSrc));
 ok('it is not armed in the login\'s failure branch',
    !/catch\(function\(err\)\{[\s\S]{0,200}?animEnter\(\)/.test(appSrc));
-ok('it is armed in the sign-up\'s resolved branch',
-   /createStudent\([\s\S]{0,300}?\.then\(function\(r2\)\{[\s\S]{0,900}?animEnter\('id'\)/.test(appSrc));
+ok('the sign-up\'s resolved branch shows the application-received screen, not the app',
+   /submitRegistration\([\s\S]{0,300}?\.then\(function\(r2\)\{[\s\S]{0,900}?go\('signup-pending'\)/.test(appSrc));
 ok('nothing in the hand-off puts a timer between the student and the app',
    !/animEnter[\s\S]{0,80}setTimeout/.test(appSrc));
 
@@ -287,17 +287,16 @@ ok('1.3 reveals the Scholar ID last, and only on the sign-up arrival',
    /\.enter-rich\.enter-id #idStrip\{animation:idLand/.test(rules));
 ok('that reveal is transform and opacity only',
    /@keyframes idLand\{from\{opacity:0;transform:scale\([\d.]+\)\}to\{opacity:1;transform:none\}\}/.test(css));
-ok('sign-up asks for the ID variant of the hand-off',
-   /animEnter\('id'\)/.test(appSrc));
+ok('sign-up no longer asks for the ID variant (no Scholar ID exists at application time)',
+   !/animEnter\('id'\)/.test(appSrc));
 ok('and login asks for the plain one, so an ordinary login does not re-announce the ID',
    /animEnter\(\);/.test(appSrc) && !/animEnter\('id'\)[\s\S]*function login/.test(appSrc));
-ok('signupSubmit still creates the account before it navigates',
-   appSrc.indexOf('GOC.api.createStudent(') < appSrc.indexOf("animEnter('id')"));
-ok('applyIdentity still runs before the dashboard is shown',
+ok('signupSubmit submits the application before it navigates',
+   appSrc.indexOf('GOC.api.submitRegistration(') > -1 && appSrc.indexOf('GOC.api.submitRegistration(') < appSrc.indexOf("go('signup-pending')"));
+ok('signup never applies an identity (an application issues no session)',
    (function () {
-     var b = appSrc.slice(appSrc.indexOf("animEnter('id')"));
-     return b.indexOf('applyIdentity(r2.session)') > -1 &&
-            b.indexOf('applyIdentity(r2.session)') < b.indexOf("go('home')");
+     var b = appSrc.slice(appSrc.indexOf('function signupSubmit'), appSrc.indexOf('SUBJECT PERSONALIZATION'));
+     return b.indexOf('applyIdentity') === -1 && b.indexOf('submitRegistration') > -1;
    })());
 ok('go() clears enter-id as well as enter-rich, so the reveal cannot repeat',
    /classList\.remove\('enter-id'\)/.test(appSrc));
@@ -314,7 +313,7 @@ run('role = null;');
 var LOGIN_PW = 'amara2027!';
 var LOGIN_SID;
 activeStudent.demo(DEMO, {
-  signupCode: 'GOC-2027', name: 'Amara Obi', password: LOGIN_PW,
+  name: 'Amara Obi', email: 'amara.obi@example.com', phone: '08011112222', password: LOGIN_PW,
   goal: 'JAMB / UTME', subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics']
 }).then(function (r) {
   LOGIN_SID = r.student.id;

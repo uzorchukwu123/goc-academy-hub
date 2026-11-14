@@ -1,15 +1,11 @@
-/* Tutor screens (Phase 3C). This file is NOT part of the public app bundle: it lives in
-   server/tutor/, which the static server never serves. The old hidden door route that used
-   to deliver it has been removed; tutor account authentication and the tutor API remain on
-   the server. It is plain ES5 like the rest of the app and draws its own overlay and its own
-   styles, so nothing here touches the student screens.
-   The session token is held in memory only: a reload ends the session on purpose. */
+/* Tutor dashboard. The UI is public; all data and operations remain server-authorized.
+   The session token is held in memory only. */
 (function () {
   'use strict';
-  if (window.__zxOpen) { window.__zxOpen(); return; }
+  if (window.__zxOpen) return;
 
   var PW_MIN = 8;
-  var st = { view: 'signin', token: null, user: null, subject: '', info: null, stats: null, statsError: '', busy: false, error: '', note: '', idDraft: '', shown: false, connectionProblem: null,
+  var st = { view: 'dash', token: null, user: null, subject: '', info: null, stats: null, statsError: '', busy: false, error: '', note: '',
     qs: null, qError: '', qFilter: 'all', form: null, imp: null,
     ns: null, nError: '', nForm: null,
     sc: null, scError: '', scFilter: 'awaiting-marking', script: null, scriptError: '',
@@ -33,7 +29,7 @@
     var opts = { method: method, headers: { 'Accept': 'application/json' } };
     if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     if (st.token) opts.headers.Authorization = 'Bearer ' + st.token;
-    return fetch('api' + path, opts).then(function (r) {
+    return fetch((window.GOC && window.GOC.apiBase || 'api') + path, opts).then(function (r) {
       var type = r.headers ? (r.headers.get('content-type') || '') : '';
       var isJson = /^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|\s*$)/i.test(type);
       var unavailable = r.status === 502 || r.status === 503 || r.status === 504;
@@ -61,9 +57,6 @@
   /* ------------------------------------------------------------------ styles */
   var CSS = [
     '.zx-wrap{position:fixed;inset:0;z-index:99999;font-family:inherit;color:#1c1c1e}',
-    '.zx-back{position:absolute;inset:0;background:rgba(15,15,20,.55)}',
-    '.zx-sheet{position:absolute;left:0;right:0;bottom:0;max-width:460px;margin:0 auto;background:#fff;border-radius:18px 18px 0 0;padding:22px 20px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.25);transform:translateY(100%);transition:transform .28s ease}',
-    '.zx-wrap.zx-in .zx-sheet{transform:translateY(0)}',
     '.zx-full{position:absolute;inset:0;background:#f5f5f7;overflow:auto;-webkit-overflow-scrolling:touch}',
     '.zx-h{margin:0 0 4px;font-size:20px;font-weight:700}',
     '.zx-p{margin:0 0 14px;font-size:14px;color:#555;line-height:1.45}',
@@ -109,27 +102,6 @@
   /* ----------------------------------------------------------------- drawing */
   function errHTML() { return st.error ? '<div class="zx-err" role="alert">' + esc(st.error) + '</div>' : ''; }
   function noteHTML() { return st.note ? '<div class="zx-note" role="status">' + esc(st.note) + '</div>' : ''; }
-
-  function signinHTML() {
-    if (st.connectionProblem) {
-      var e = st.connectionProblem;
-      var title = e.kind === 'waking' ? 'G.O.C is waking up' : e.kind === 'maintenance' ? 'G.O.C is under maintenance' : e.kind === 'network' ? 'Connection problem' : 'Temporary service error';
-      var message = e.kind === 'waking' ? 'Our server is temporarily starting up after a period of inactivity. Your tutor account is safe. Please wait a little and try again.' : e.message;
-      return '<div class="zx-back" data-act="close"></div><div class="zx-sheet" role="dialog" aria-modal="true" aria-label="Connection status">' +
-        '<h2 class="zx-h">' + esc(title) + '</h2><p class="zx-p" role="status">' + esc(message) + '</p>' +
-        '<button type="button" class="zx-btn" data-act="retry"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Checking…' : 'Retry Connection') + '</button>' +
-        '<button type="button" class="zx-btn zx-ghost" style="margin-top:8px" data-act="close">Cancel</button></div>';
-    }
-    return '<div class="zx-back" data-act="close"></div>' +
-      '<div class="zx-sheet" role="dialog" aria-modal="true" aria-label="Sign in">' +
-      '<h2 class="zx-h">Sign in</h2><p class="zx-p">Enter your ID and password.</p>' +
-      errHTML() +
-      '<div class="zx-f"><label for="zxId">ID</label><input id="zxId" type="text" autocomplete="username" autocapitalize="characters" placeholder="GOC-T-001" value="' + esc(st.idDraft) + '"></div>' +
-      '<div class="zx-f"><label for="zxPw">Password</label><div class="zx-row"><input id="zxPw" type="password" autocomplete="current-password"><button type="button" class="zx-btn zx-ghost zx-sm" data-act="show" data-for="zxPw">Show</button></div></div>' +
-      '<button type="button" class="zx-btn" data-act="signin"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Please wait…' : 'Sign in') + '</button>' +
-      '<button type="button" class="zx-btn zx-ghost" style="margin-top:8px" data-act="close">Cancel</button>' +
-      '</div>';
-  }
 
   function passwordHTML() {
     return '<div class="zx-full"><div class="zx-body" style="max-width:460px;padding-top:40px">' +
@@ -181,7 +153,6 @@
       s('Practice average', avgText(sn.practice.average, 'answers')) +
       s('Test average', avgText(sn.tests.average, 'marked tests')) +
       '</div>' +
-      '<p style="margin-top:10px">' + esc(sn.openStudents) + ' Open student' + (sn.openStudents === 1 ? '' : 's') + ' also take ' + esc(st.subject) + ' (counted only, never averaged).</p>' +
       warn.map(function (w) { return '<p class="zx-warn">' + esc(w) + '</p>'; }).join('') +
       '</div>';
   }
@@ -938,14 +909,9 @@
 
   function draw() {
     if (!root) return;
-    root.className = 'zx-wrap' + (st.view !== 'signin' || st.shown ? ' zx-in' : '');
-    root.innerHTML = st.view === 'signin' ? signinHTML() : (st.view === 'password' ? passwordHTML() :
-      (st.view === 'questions' ? questionsHTML() : (st.view === 'qform' ? formHTML() : (st.view === 'qimport' ? importHTML() : (st.view === 'notes' ? notesHTML() : (st.view === 'nform' ? noteFormHTML() : (st.view === 'notices' ? noticesHTML() : (st.view === 'ntform' ? noticeFormHTML() : (st.view === 'scripts' ? scriptsHTML() : (st.view === 'script' ? scriptHTML() : (st.view === 'student' ? studentHTML() : dashHTML())))))))))));
-    if (st.view === 'signin') {
-      /* the sheet slides in once; later redraws (an error message) keep it in place */
-      if (!st.shown) setTimeout(function () { st.shown = true; if (root) root.className = 'zx-wrap zx-in'; }, 20);
-      var f = root.querySelector(st.idDraft ? '#zxPw' : '#zxId'); if (f && f.focus) f.focus();
-    }
+    root.className = 'zx-wrap zx-in';
+    var views = { password: passwordHTML, questions: questionsHTML, qform: formHTML, qimport: importHTML, notes: notesHTML, nform: noteFormHTML, notices: noticesHTML, ntform: noticeFormHTML, scripts: scriptsHTML, script: scriptHTML, student: studentHTML };
+    root.innerHTML = (views[st.view] || dashHTML)();
   }
 
   function val(id) { var e = root && root.querySelector('#' + id); return e ? e.value : ''; }
@@ -1011,8 +977,10 @@
     var m = (e && e.message) || '';
     if (e && e.status === 403 && /new password/i.test(m)) { st.view = 'password'; st.busy = false; setError(m); draw(); return true; }
     if (e && (e.status === 401 || (e.status === 403 && /switched off|no longer available|accounts only/i.test(m)))) {
-      st.token = null; st.user = null; st.info = null; st.stats = null; st.statsError = ''; st.qs = null; st.qError = ''; st.form = null; st.imp = null; st.ns = null; st.nError = ''; st.nForm = null; st.nt = null; st.ntError = ''; st.ntForm = null; st.sc = null; st.scError = ''; st.script = null; st.scriptError = ''; st.ar = null; st.arError = ''; st.arSort = 'inactive'; st.arAll = false; st.top = null; st.topError = ''; st.topTab = 'tests'; st.topAll = false; st.stu = null; st.stuError = ''; st.stuId = ''; st.stuContact = null; st.stuContactError = ''; st.stuContactBusy = false; st.audit = null; st.auditError = ''; st.view = 'signin'; st.busy = false;
-      setError(m); draw(); return true;
+      st.token = null; st.user = null; st.info = null; st.stats = null; st.statsError = ''; st.qs = null; st.qError = ''; st.form = null; st.imp = null; st.ns = null; st.nError = ''; st.nForm = null; st.nt = null; st.ntError = ''; st.ntForm = null; st.sc = null; st.scError = ''; st.script = null; st.scriptError = ''; st.ar = null; st.arError = ''; st.arSort = 'inactive'; st.arAll = false; st.top = null; st.topError = ''; st.topTab = 'tests'; st.topAll = false; st.stu = null; st.stuError = ''; st.stuId = ''; st.stuContact = null; st.stuContactError = ''; st.stuContactBusy = false; st.audit = null; st.auditError = ''; st.view = 'dash'; st.busy = false;
+      signout();
+      if (typeof window.toast === 'function') window.toast(m);
+      return true;
     }
     return false;
   }
@@ -1023,28 +991,6 @@
     if (user.mustChangePassword) { st.view = 'password'; setError(''); draw(); return; }
     st.view = 'dash'; setError(''); draw();
     loadSubject();
-  }
-
-  function signin() {
-    if (st.busy || st.connectionProblem) return;
-    var id = val('zxId').trim(), pw = val('zxPw');
-    st.idDraft = id;
-    if (!id || !pw) { setError('Enter your ID and password.'); draw(); return; }
-    st.busy = true; setError(''); draw();
-    call('POST', '/tutor/login', { id: id, password: pw }).then(function (r) {
-      st.busy = false; st.token = r.token; st.idDraft = ''; enter(r.user);
-    }).catch(function (e) { st.busy = false; if (e.kind) st.connectionProblem = e; else setError(e.message); draw(); });
-  }
-
-  /* A user-initiated, credential-free probe; never repeat the login POST. */
-  function retryConnection() {
-    if (st.busy) return;
-    st.busy = true; draw();
-    call('GET', '/health').then(function (data) {
-      if (data.service !== 'goc-academy-hub') throw connectionError('unexpected', 'The service returned an unexpected response. Please try again later.');
-      st.connectionProblem = null; setError('Connection restored. Please sign in again.');
-    }).catch(function (e) { st.connectionProblem = e.kind ? e : connectionError('unexpected', 'The service returned an unexpected response. Please try again later.'); })
-      .then(function () { st.busy = false; draw(); });
   }
 
   function setpw() {
@@ -1063,15 +1009,17 @@
 
   function close() {
     if (root && root.parentNode) root.parentNode.removeChild(root);
-    root = null; st.shown = false; st.idDraft = '';
+    root = null;
     var f = document.getElementById('loginId'); if (f && f.focus) f.focus();
   }
 
   function signout() {
     var t = st.token;
     st.token = null; st.user = null; st.info = null; st.stats = null; st.statsError = ''; st.note = ''; st.qs = null; st.qError = ''; st.form = null; st.imp = null; st.ns = null; st.nError = ''; st.nForm = null; st.sc = null; st.scError = ''; st.script = null; st.scriptError = ''; st.ar = null; st.arError = ''; st.arSort = 'inactive'; st.arAll = false; st.top = null; st.topError = ''; st.topTab = 'tests'; st.topAll = false; st.stu = null; st.stuError = ''; st.stuId = ''; st.stuContact = null; st.stuContactError = ''; st.stuContactBusy = false; st.audit = null; st.auditError = '';
-    if (t) { try { fetch('api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } }); } catch (e) { /* best effort; the session also expires */ } }
+    if (window.GOC && window.GOC.api) window.GOC.api.logout();
+    else if (t) { try { fetch('api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } }); } catch (e) {} }
     close();
+    if (typeof window.go === 'function') window.go('login-v2');
   }
 
   function onClick(ev) {
@@ -1079,10 +1027,7 @@
     while (t && t !== root) { if (t.getAttribute && t.getAttribute('data-act')) { act = t; break; } t = t.parentNode; }
     if (!act) return;
     var a = act.getAttribute('data-act');
-    if (a === 'close') close();
-    else if (a === 'signin') signin();
-    else if (a === 'retry') retryConnection();
-    else if (a === 'setpw') setpw();
+    if (a === 'setpw') setpw();
     else if (a === 'signout') signout();
     else if (a === 'arsort') { var so = act.getAttribute('data-sort') === 'score' ? 'score' : 'inactive'; if (so !== st.arSort || !st.ar) { st.arSort = so; loadAtRisk(); draw(); } }
     else if (a === 'arall') { st.arAll = !st.arAll; draw(); }
@@ -1145,10 +1090,7 @@
     }
   }
   function onKey(ev) {
-    if (ev.key === 'Escape' && st.view === 'signin') close();
-    else if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT') {
-      if (st.view === 'signin') signin(); else if (st.view === 'password') setpw();
-    }
+    if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT' && st.view === 'password' && !st.busy) setpw();
   }
 
   function open() {
@@ -1164,14 +1106,13 @@
     draw();
   }
 
-  /* Opening again (a second knock) resumes where the tutor was, or starts at sign-in. */
-  window.__zxOpen = function () {
-    if (!st.token) { st.view = 'signin'; st.shown = false; setError(''); }
-    open();
+  /* The common login passes only a server-verified tutor session. */
+  window.__zxOpen = function (session) {
+    if (!session || !session.token || !session.user || session.user.role !== 'tutor') return;
+    st.token = session.token; open(); enter(session.user);
   };
 
-  /* Guided-tour bridge (Stage 8): the onboarding engine in the /tutor
-     shell moves between the real tutor views through here — the same
+  /* Guided-tour bridge (Stage 8): the shared onboarding engine moves between the real tutor views through here — the same
      internal navigation the tutor's own buttons use, nothing new. */
   window.__zxTourGo = function (view) {
     if (!st.token) return;
@@ -1182,14 +1123,4 @@
     else { st.view = 'dash'; setError(''); draw(); }
   };
 
-  /* Delivered by the /tutor shell after sign-in (Stage 8): a session the
-     shell authenticated is adopted instead of asking a second time. The
-     token stays memory-only; a reload returns to the shell's sign-in. */
-  if (window.__zxSession && window.__zxSession.token && window.__zxSession.user) {
-    st.token = window.__zxSession.token;
-    open();
-    enter(window.__zxSession.user);
-    return;
-  }
-  window.__zxOpen();
 })();

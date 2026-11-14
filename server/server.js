@@ -60,8 +60,10 @@ const founderContact = require('./lib/founder-contact');
 /* Workstream A — the temporary maintenance switch. One module owns the page,
    the switch and the gate; see server/lib/maintenance.js and
    MAINTENANCE-MODE.md. Turning the variable off restores the app unchanged. */
-const maintenance = require('./lib/maintenance');
 const mailstatus = require('./lib/mailstatus');
+/* The temporary full-platform maintenance switch. Off unless
+   GOC_MAINTENANCE_MODE is set to a truthy value; see server/lib/maintenance.js. */
+const maintenance = require('./lib/maintenance');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -264,11 +266,6 @@ async function createAppwriteStudent(rec) {
       /* Sent only when held: a deployment whose students collection has not
          yet had the integer attribute `streakFreezes` added must keep working. */
       ...(Number(rec.streakFreezes) > 0 ? { streakFreezes: Number(rec.streakFreezes) } : {}),
-      /* Access tier (Phase 3B). Only 'goc' is ever written: an Open account
-         stores nothing and reads back as Open, so a deployment whose students
-         collection has not yet had the optional string attribute `tier` added
-         can still register Open users. */
-      ...(core.cleanTier(rec.tier) === 'goc' ? { tier: 'goc' } : {}),
       /* Daily practice count (Phase 3B). Sent only when held, so a collection
          without the optional attributes `practiceCountDay` (string, size 16) and
          `practiceCount` (integer) keeps working. */
@@ -322,11 +319,6 @@ function appwriteStudentToRecord(doc) {
     streak: Number(doc.streak || 0),
     streakDay: doc.streakDay || null,
     streakFreezes: Number(doc.streakFreezes || 0),
-    tier: typeof doc.tier === 'string' && doc.tier ? doc.tier : null,
-    /* Who last moved this student between tiers, and when (optional string
-       attributes `tierChangedBy` size 80 and `tierChangedAt` size 40). */
-    tierChangedBy: typeof doc.tierChangedBy === 'string' && doc.tierChangedBy ? doc.tierChangedBy : null,
-    tierChangedAt: typeof doc.tierChangedAt === 'string' && doc.tierChangedAt ? doc.tierChangedAt : null,
     questDay: doc.questDay || null,
     /* Weekly quest progress, kept as a small JSON string in the optional
        string attribute `weekQuest` (size 80). Absent or unreadable = none. */
@@ -1311,6 +1303,11 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
   /* B#2 scholarship: all submitted applications and the Cohort-2.0 waitlist. */
   if (!Array.isArray(db.scholarshipApplications)) db.scholarshipApplications = [];
   if (!Array.isArray(db.scholarshipWaitlist))     db.scholarshipWaitlist = [];
+  /* Stage B: registration codes and applications. Server data store only —
+     applications are never student records and never touch Appwrite. Codes
+     are stored as SHA-256 hashes; the plaintext exists once, at creation. */
+  if (!Array.isArray(db.registrationCodes)) db.registrationCodes = [];
+  if (!Array.isArray(db.registrationApplications)) db.registrationApplications = [];
   /* Phase 3C slice 5: per-question and per-topic answer counters for the tutor dashboard
      (counts only, GOC students only; see core.recordAnswerStats). */
   if (!db.answerStats || typeof db.answerStats !== 'object' || Array.isArray(db.answerStats)) db.answerStats = {};
@@ -1460,26 +1457,12 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
   const legacyPeriod = v => core.LEGACY_PERIODS.indexOf(String(v)) > -1 || !v;
   db.questions.forEach(q => { if (legacyPeriod(q.period)) q.period = core.PERIOD; });
   db.attempts.forEach(a => { if (legacyPeriod(a.period)) a.period = core.PERIOD; });
-  /* Access tiers, one-time migration (Phase 3B decision 2): everyone already
-     in the local roster becomes GOC, so nobody loses anything the day tiers
-     ship. It runs once, then the marker stops it, so a student who signs up
-     later and is stored as Open is never promoted. In Appwrite mode the local
-     roster is empty and the marker is NOT set here; migrateAppwriteTiers()
-     does that job against the real roster. */
-  if (!appwriteDatabases && !db.settings.tierMigrated) {
-    (db.students || []).forEach(s => { if (s.tier == null) s.tier = 'goc'; });
-    db.settings.tierMigrated = new Date().toISOString();
-  }
   (db.students || []).forEach(s => {
     if (s.active == null) s.active = true;
     if (s.xp == null) s.xp = 0;
     if (s.streak == null) s.streak = 0;
     if (s.streakDay === undefined) s.streakDay = null;
     if (s.streakFreezes == null) s.streakFreezes = 0;
-    /* Access tiers (Phase 3B): a student on file the day tiers first run is
-       already part of the academy, so the one-time migration below makes them
-       GOC; a stored tier is only ever normalised, never promoted. */
-    if (s.tier != null) s.tier = core.cleanTier(s.tier);
     if (s.questDay === undefined) s.questDay = null;
     if (s.weekQuest === undefined) s.weekQuest = null;
     if (s.cohort === undefined) s.cohort = null;
@@ -1639,7 +1622,7 @@ function noteFailure(ip) {
 }
 
 /* Successful sign-ups per address (Phase 3B slice 5). Sign-up is open, so the thing to
-   slow down is one person making many Open accounts. The numbers are management's: the
+   slow down is one person making many accounts. The numbers are management's: the
    defaults are in core.SIGNUP_LIMIT_DEFAULTS and Console -> Access & firewall can raise
    them for a school or shared phone network (many students, one address). Kept in memory
    per address, like the other throttles: a restart forgets the counts. */
@@ -1784,14 +1767,10 @@ async function publicStudent(db, s, opts) {
      student, only to console callers. */
   if (opts && opts.console) {
     out.lastSeenAt = s.lastSeenAt || null;
-    /* Staff-only: who moved this account between tiers, and when. */
-    out.tierChangedBy = s.tierChangedBy || null;
-    out.tierChangedAt = s.tierChangedAt || null;
   }
   /* cohort is harmless for a student to see about themselves (it's just
      which group they're in), so it's not console-gated the way lastSeenAt is. */
   out.cohort = s.cohort || null;
-  out.tier = core.cleanTier(s.tier);
   /* Admin-approval flow: surface pending status and approval record. */
   out.pendingApproval = s.pendingApproval === true;
   out.approvedBy = s.approvedBy || null;
@@ -1850,8 +1829,8 @@ async function findQ(db, id) {
 /* How many practice runs the server keeps per student. Matches the 30 the
    device used to keep on its own, so no student loses history in the move to
    server-authoritative storage (Phase 1). */
-/* How many practice runs a student keeps comes from their tier (core.tierLimits(...).practiceHistory;
-   null = no count limit) and, for everyone, a maximum age (core.PRACTICE_MAX_AGE_DAYS). */
+/* Practice runs are kept with no count limit and, for everyone, a maximum
+   age (core.PRACTICE_MAX_AGE_DAYS). */
 
 /* Trims and validates one practice-run result posted by the browser before it
    is stored. A run with no review is refused — there is nothing to review
@@ -2074,30 +2053,20 @@ function practiceXpToday(s) {
   return Number(s.practiceXpToday) || 0;
 }
 
-/* The access tier of a student by Scholar ID, from the local roster or from
-   Appwrite. An unknown or unreadable student reads as Open (fail closed). */
-async function studentTierOf(db, id) {
-  const st = appwriteDatabases
-    ? await getAppwriteStudent(id).catch(() => null)
-    : (db.students || []).find(x => x.id === id);
-  return core.cleanTier(st && st.tier);
-}
-
-/* A student's stored practice runs, newest first, held to what their tier keeps
-   (Open 30, GOC no count limit, via TIER_LIMITS) and to the maximum age
-   (core.PRACTICE_MAX_AGE_DAYS). A list already over either is trimmed straight
-   away and the trim is stored, so lowering a limit later permanently drops
-   older runs. Mistakes review, spaced
-   repetition and the daily quest all read through this, so they agree. */
+/* A student's stored practice runs, newest first, held to the maximum age
+   (core.PRACTICE_MAX_AGE_DAYS; there is no count limit). A list already over
+   the age limit is trimmed straight away and the trim is stored. Mistakes
+   review, spaced repetition and the daily quest all read through this, so
+   they agree. */
 async function practiceRunsOf(db, id) {
-  const cap = core.tierLimits(await studentTierOf(db, id)).practiceHistory;
+  const cap = core.studentLimits().practiceHistory;
   const all = Array.isArray(db.practiceRuns && db.practiceRuns[id]) ? db.practiceRuns[id] : [];
   const kept = core.capList(core.dropOldRuns(all), cap);
   if (kept.length !== all.length) { db.practiceRuns[id] = kept; writeData(db); }
   return kept;
 }
 
-/* Practice questions this student has answered today (Phase 3B, access tiers).
+/* Practice questions this student has answered today.
    Counted against the calendar day in Nigeria (core.lagosDay), so the allowance
    resets at midnight there whatever time zone the server runs in. A stored
    count from an earlier day reads as zero. The daily limit is enforced at study start. */
@@ -2106,7 +2075,7 @@ function practiceCountToday(s) {
   return Math.max(0, Math.floor(Number(s.practiceCount) || 0));
 }
 
-/* Spaced reviews answered today (Phase 3B, access tiers). Kept in
+/* Spaced reviews answered today. Kept in
    db.reviewCount[studentId] = { day, count } beside db.reviewState, so it works
    on Appwrite too with no new attribute. A count from an earlier Lagos day
    reads as zero, so the allowance resets at Nigeria midnight with no sweep. */
@@ -2163,6 +2132,200 @@ function nextScholarId(db) {
   });
   const n = max + 1;
   return 'GOC-S-' + (n < 10 ? '00' + n : n < 100 ? '0' + n : String(n));
+}
+
+
+/* ------------------------------------------------- Stage B: registrations
+   Registration codes, applications, approval provisioning and password
+   setup. The rules live in core (cleanRegistrationCode, registration*); this
+   block owns hashing, storage, Appwrite and email. Security invariants:
+     · a code's plaintext is generated here, shown once in the creation
+       response, and never stored — only its SHA-256 hash is;
+     · an application stores only a scrypt pwHash, which is discarded at
+       provisioning and never copied onto the student account;
+     · the password-setup token is 32 random bytes; only its SHA-256 hash
+       is stored, it is single-use, it expires, and it is emailed to the
+       applicant only — no API ever returns it to staff. */
+
+function sha256Hex(text) {
+  return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex');
+}
+
+const REG_CODE_GROUPS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+function newRegistrationCodePlain() {
+  const group = () => {
+    let out = '';
+    const bytes = crypto.randomBytes(6);
+    for (let i = 0; i < 6; i++) out += REG_CODE_GROUPS[bytes[i] % REG_CODE_GROUPS.length];
+    return out;
+  };
+  return 'GOC-REG-' + group() + '-' + group();
+}
+
+function findRegistrationCode(db, cleanCode) {
+  if (!cleanCode) return null;
+  const hash = sha256Hex(cleanCode);
+  return (db.registrationCodes || []).find(c => c.hash === hash) || null;
+}
+
+function nextRegistrationApplicationId(db) {
+  let max = 0;
+  (db.registrationApplications || []).forEach(a => {
+    const n = parseInt(String(a.id || '').replace('REGAPP-', ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  const n = max + 1;
+  return 'REGAPP-' + (n < 1000 ? ('000' + n).slice(-4) : String(n));
+}
+
+function registrationHistory(app, by, action, detail) {
+  app.history = Array.isArray(app.history) ? app.history : [];
+  app.history.push({ at: new Date().toISOString(), by: by || null, action, detail: detail || null });
+}
+
+/* The setup link goes to the applicant's own email address and nowhere else.
+   Delivery mirrors the reminder mailer: GOC_REMINDER_DRY_RUN=1 writes the
+   message to reminders-outbox.jsonl instead of mailing it. Without a public
+   URL or SMTP the delivery is honestly 'not-configured' — the token still
+   exists, nothing pretends the email was sent, and staff can resend once
+   mail is configured. Returns 'sent' | 'dry-run' | 'not-configured' | 'failed'. */
+async function deliverSetupEmail(app, token) {
+  const base = reminderPublicUrl();
+  if (!base) return 'not-configured';
+  const link = base + '/setup/' + token;
+  const text = 'Hello ' + app.name + ',\n\n' +
+    'Good news — your G.O.C Academy Hub registration has been approved.\n\n' +
+    'Your Scholar ID is ' + app.scholarId + '. You will sign in with this ID.\n\n' +
+    'Before you can sign in, set your password using this secure link:\n' + link + '\n\n' +
+    'The link can be used once and expires in 72 hours. If it expires, contact the academy and ask for a new one.\n' +
+    'If you did not apply to G.O.C Academy Hub, ignore this message.\n\nG.O.C Academy Hub';
+  if (process.env.GOC_REMINDER_DRY_RUN === '1') {
+    try {
+      fs.appendFileSync(path.join(DATA_DIR, 'reminders-outbox.jsonl'),
+        JSON.stringify({ at: new Date().toISOString(), to: app.email, subject: 'Your G.O.C Academy Hub account is approved — set your password', text }) + '\n');
+      return 'dry-run';
+    } catch (err) { console.error('[registrations] dry-run outbox write failed:', err.message); return 'failed'; }
+  }
+  const transport = getMailTransport();
+  if (!transport) return 'not-configured';
+  try {
+    await transport.sendMail({
+      from: process.env.GOC_SMTP_FROM || process.env.GOC_SMTP_USER,
+      to: app.email,
+      subject: 'Your G.O.C Academy Hub account is approved — set your password',
+      text
+    });
+    return 'sent';
+  } catch (err) { console.error('[registrations] setup email failed:', err.message); return 'failed'; }
+}
+
+/* Issue (or re-issue) the single-use setup token for an approved application.
+   Only the hash is stored; the plaintext leaves with the email. Re-issuing
+   replaces the hash, so any earlier link stops working at once. */
+async function issueSetupToken(db, app) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  app.setup = {
+    tokenHash: sha256Hex(token),
+    expiresAt: new Date(Date.now() + core.SETUP_TOKEN_TTL_MS).toISOString(),
+    sentAt: new Date().toISOString(),
+    usedAt: null,
+    delivery: null
+  };
+  app.setup.delivery = await deliverSetupEmail(app, token);
+  return app.setup.delivery;
+}
+
+/* Claim → provision. Each step is idempotent, persists before moving on, and
+   a failure stops at the named step with the application in
+   'provisioning-failed' so Resume can continue without duplicating anything.
+   Assumes the caller already persisted status 'provisioning'. */
+async function provisionRegistration(db, app, actorId) {
+  const fail = (step, err) => {
+    app.status = 'provisioning-failed';
+    app.provisionStep = step;
+    app.provisionError = String((err && err.message) || err || 'Unknown error').slice(0, 300);
+    registrationHistory(app, actorId, 'provisioning-failed', step + ': ' + app.provisionError);
+    writeData(db);
+    return { ok: false, step, error: app.provisionError };
+  };
+  try {
+    /* Revalidate the code at approval: a code revoked or expired after the
+       application was submitted blocks approval (the held use stays held
+       until a reviewer rejects the application). */
+    app.provisionStep = 'validate-code';
+    const code = (db.registrationCodes || []).find(c => c.id === app.codeId);
+    if (!code) return fail('validate-code', new Error('The registration code no longer exists.'));
+    if (code.revokedAt) return fail('validate-code', new Error('The registration code was revoked after this application was submitted.'));
+    if (code.expiresAt && Date.parse(code.expiresAt) <= Date.now()) return fail('validate-code', new Error('The registration code has expired.'));
+
+    /* The Scholar ID exists only from this moment — a pending application
+       never had one. Persisted before anything external is created. */
+    if (!app.scholarId) {
+      app.provisionStep = 'scholar-id';
+      app.scholarId = appwriteDatabases ? await nextAppwriteScholarId() : nextScholarId(db);
+      writeData(db);
+    }
+    const id = app.scholarId;
+
+    /* A password nobody knows: the Auth account and pwHash are placeholders
+       until the applicant sets their own password through the setup link. */
+    const unusable = crypto.randomBytes(24).toString('hex');
+    const rec = {
+      id, name: app.name, email: app.email, phone: app.phone,
+      goal: app.goal, exam: core.EXAM, subjects: app.subjects,
+      pwHash: hashPassword(unusable), plainPassword: unusable,
+      appwriteUserId: app.appwriteUserId || null,
+      mustChangePassword: false,
+      active: true, pendingApproval: false,
+      xp: 0, streak: 0, streakDay: null, streakFreezes: 0,
+      last: 'Approved', tag: 'g', tl: 'New',
+      createdAt: new Date().toISOString(),
+      approvedBy: actorId, approvedAt: new Date().toISOString()
+    };
+
+    if (appwriteDatabases) {
+      if (!app.appwriteUserId) {
+        app.provisionStep = 'auth-user';
+        const authUser = await createAppwriteAuthUser(rec);
+        app.appwriteUserId = authUser.$id;
+        rec.appwriteUserId = authUser.$id;
+        writeData(db);
+      }
+      app.provisionStep = 'student-document';
+      await createAppwriteStudent(rec);
+    } else {
+      app.provisionStep = 'student-record';
+      if (!db.students.find(x => x.id === id)) db.students.push(rec);
+    }
+    delete rec.plainPassword;
+
+    /* Finalise the held code use — finalised uses count against maxUses
+       forever; the seat is now a real account. */
+    app.provisionStep = 'finalize-code';
+    const use = (code.uses || []).find(u => u.applicationId === app.id);
+    if (use && use.state === 'held') { use.state = 'finalised'; use.finalisedAt = new Date().toISOString(); }
+
+    /* The application's stored password hash has served its purpose and is
+       discarded — the setup link is now the only credential path. */
+    delete app.pwHash;
+    app.passwordHashDiscardedAt = new Date().toISOString();
+
+    /* Privacy consent recorded against the Scholar ID, as sign-up did. */
+    if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
+    db.consentLog[id] = { at: app.createdAt || new Date().toISOString(), version: app.consentVersion || core.PRIVACY_POLICY_VERSION };
+
+    app.provisionStep = 'password-setup';
+    await issueSetupToken(db, app);
+
+    app.status = 'approved';
+    app.provisionStep = 'done';
+    app.provisionError = null;
+    registrationHistory(app, actorId, 'approved', 'Scholar ID ' + id + ' created; setup email ' + app.setup.delivery);
+    writeData(db);
+    return { ok: true, scholarId: id, setupDelivery: app.setup.delivery };
+  } catch (err) {
+    return fail(app.provisionStep || 'provisioning', err);
+  }
 }
 
 function todayLabel() {
@@ -3265,7 +3428,7 @@ function tutorRow(t) {
    the student's own result carries on. */
 function noteAnswerStats(db, stu, subject, rows) {
   try {
-    if (!stu || core.cleanTier(stu.tier) !== 'goc') return false;
+    if (!stu) return false;
     if (!db.answerStats || typeof db.answerStats !== 'object') db.answerStats = {};
     core.recordAnswerStats(db.answerStats, subject, rows);
     writeData(db);
@@ -3386,6 +3549,52 @@ const ROUTES = [
       const password = String(body.password == null ? '' : body.password);
       const db = readData();
 
+      // Tutors use the same public login endpoint, with their existing verifier and throttles.
+      if (/^GOC-T-/i.test(id)) {
+        if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+
+        let t = null;
+        if (core.validTutorId(id)) {
+          if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
+            t = await getAppwriteTutor(id);
+          } else {
+            t = db.tutors.find(x => x.id === id) || null;
+          }
+        }
+
+        /* Keep identical failure responses and dummy-hash work for unknown,
+           incorrect-password, and inactive tutor accounts. */
+        if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
+        const pwOk = verifyPassword(password.slice(0, 300), t ? t.pwHash : TUTOR_DUMMY_HASH);
+        if (!t || !pwOk || t.active === false) {
+          noteFailure(ip);
+          if (id) tutorIdFailed(id);
+          return errJson(res, 401, 'That ID and password do not match.');
+        }
+
+        attempts.delete(ip);
+        tutorFails.delete(id);
+
+        t.lastLogin = new Date().toISOString();
+        if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
+          await saveAppwriteTutor(t);
+        } else {
+          const local = db.tutors.find(x => x.id === t.id);
+          if (local) local.lastLogin = t.lastLogin;
+          writeData(db);
+        }
+
+
+        return newSession(t, 'tutor', db).then(token => {
+          const d = sessions.get(token);
+          okJson(res, { token, user: {
+            id: t.id, name: t.name, role: 'tutor',
+            subjects: t.subjects.slice(),
+            mustChangePassword: !!t.mustChangePassword,
+            sessionMinutes: d.sessionMinutes, expiresAt: d.expires
+          } });
+        });
+      }
       const isStaff = /^GOC-A-\d+$/.test(id);
       const isStudent = /^GOC-S-\d+$/.test(id);
       let account = isStaff ? db.staff.find(s => s.id === id) : null;
@@ -3399,6 +3608,17 @@ const ROUTES = [
           }
         } else {
           account = db.students.find(s => s.id === id) || null;
+        }
+      }
+
+      // Registration-flow accounts must set their password first: approval
+      // creates the account, but access opens only once the student completes
+      // the single-use setup link emailed to them. The state lives on the
+      // application (server store), so this holds in both storage modes.
+      if (isStudent && account && !account.pendingApproval) {
+        const regApp = (db.registrationApplications || []).find(a => a.scholarId === account.id && a.status === 'approved' && a.setup && !a.setup.usedAt);
+        if (regApp) {
+          return errJson(res, 403, 'Your account is approved. Set your password using the link we emailed you, then sign in with your Scholar ID (' + account.id + ').');
         }
       }
 
@@ -3662,15 +3882,32 @@ const ROUTES = [
       okJson(res, await Promise.all(students.map(s => publicStudent(db, s, { console: true }))));
     } },
 
-  /* Public: this is the sign-up form. UTME only, and the subject combination is
-     validated here as well as on screen — the rule belongs to the server.
-     Sign-up is open (Phase 3B slice 5): anyone may register, and every self-made
-     account is Open. There is no access code any more. What stops one person
-     minting accounts is a limit on SUCCESSFUL sign-ups per address. */
-  { method: 'POST', path: /^\/api\/students$/, need: null, handler: async (req, res, body) => {
+    /* ------------------------------------------------ Stage B: registrations
+     The public sign-up route (POST /api/students) is gone: new registrations
+     use the application-first process exclusively. Nothing below creates a
+     student account, a Scholar ID, an Appwrite Auth user or a session until
+     a reviewer approves an application (see provisionRegistration). The old
+     POST/DELETE /api/students/:id/approve routes further down remain only
+     for legacy pending student records created before this flow existed. */
+
+  /* Public: is this registration code usable? Generic ok/fail only — never
+     which check failed, never any part of any stored code. */
+  { method: 'POST', path: /^\/api\/registrations\/validate-code$/, need: null, handler: async (req, res, body) => {
       const ip = getClientIp(req);
-      /* Sign-up runs a deliberately slow password hash, so the failed-attempt
-         throttle that guards login still applies here too. */
+      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+      const db = readData();
+      const code = findRegistrationCode(db, core.cleanRegistrationCode(body && body.code));
+      const usable = !!code && core.registrationCodeStatus(code, Date.now()) === 'active';
+      if (!usable) noteFailure(ip);
+      okJson(res, { ok: usable });
+    } },
+
+  /* Public: submit a registration application. Validates the code
+     authoritatively, holds one use of it, and stores the application —
+     server data store only, pwHash only. Creates NO student account, NO
+     Scholar ID, NO session. */
+  { method: 'POST', path: /^\/api\/registrations$/, need: null, handler: async (req, res, body) => {
+      const ip = getClientIp(req);
       if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
       const db = readData();
       const lim = signupLimitsOf(db);
@@ -3679,88 +3916,211 @@ const ROUTES = [
         res.setHeader('Retry-After', String(blocked.retryAfter));
         return errJson(res, 429, core.signupLimitMessage(blocked.retryAfter, blocked.window));
       }
-
-      /* Explicit privacy-policy acceptance is required, server-side: the
-         sign-up form's ticked box sends { accepted: true, version }, and a
-         registration that arrives without it is refused before anything is
-         created. The version stored is the server's own current policy
-         version — never a value the browser chooses. */
-      const consent = body && body.privacyConsent;
-      if (!consent || consent.accepted !== true) {
-        return errJson(res, 400, 'Please read and accept the Privacy Policy to create your account.');
+      const v = core.validateRegistrationApplication(body || {});
+      if (v.error) return errJson(res, 400, v.error);
+      const code = findRegistrationCode(db, core.cleanRegistrationCode(body && body.code));
+      if (!code || core.registrationCodeStatus(code, Date.now()) !== 'active') {
+        noteFailure(ip);
+        return errJson(res, 400, 'That registration code is not valid. Check it and try again.');
       }
-
-      const name = clean(body.name, 80);
-      const password = String(body.password == null ? '' : body.password);
-      if (name.length < 2) return errJson(res, 400, 'Enter your full name.');
-      if (password.length < 8) return errJson(res, 400, 'Choose a password of at least 8 characters.');
-
-      const exam = core.requireExam(body.goal);
-      if (!exam.ok) return errJson(res, 400, exam.error);
-      const combo = core.validateSubjects(Array.isArray(body.subjects) ? body.subjects : []);
-      if (!combo.ok) return errJson(res, 400, combo.error);
-
-      const rec = {
-        id: appwriteDatabases
-          ? await nextAppwriteScholarId()
-          : nextScholarId(db),
-        name,
-        email: clean(body.email, 120),
-        phone: clean(body.phone, 30),
-        goal: exam.exam,
-        exam: core.EXAM,
-        subjects: combo.subjects,
-        pwHash: hashPassword(password),
-    plainPassword: password,
-    appwriteUserId: null,
-        mustChangePassword: false,
-        /* Self-registered accounts are Open and start inactive, pending admin
-           approval. Only the console activates them (admin-approval flow). */
-        tier: 'open',
-        active: false, pendingApproval: true,
-        xp: 0, streak: 0, streakDay: null, streakFreezes: 0,
-        last: 'Awaiting approval', tag: 'a', tl: 'Pending',
-        createdAt: new Date().toISOString()
+      const emailBlock = core.registrationEmailBlock(db.registrationApplications, appwriteDatabases ? await listAppwriteStudents() : db.students, v.rec.email);
+      if (emailBlock) return errJson(res, 400, emailBlock);
+      const app = {
+        id: nextRegistrationApplicationId(db),
+        codeId: code.id, codeLabel: code.label || '',
+        name: v.rec.name, email: v.rec.email, phone: v.rec.phone,
+        goal: v.rec.goal, exam: core.EXAM, subjects: v.rec.subjects,
+        pwHash: hashPassword(String((body && body.password) || '')),
+        consentVersion: core.PRIVACY_POLICY_VERSION,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        decidedBy: null, decidedAt: null, rejectReason: null,
+        scholarId: null, appwriteUserId: null,
+        provisionStep: null, provisionError: null, setup: null,
+        history: [{ at: new Date().toISOString(), by: null, action: 'submitted', detail: 'Application received' }]
       };
-      if (appwriteDatabases) {
-    let authUser = null;
-    try {
-      authUser = await createAppwriteAuthUser(rec);
-      rec.appwriteUserId = authUser.$id;
-
-      await createAppwriteStudent(rec);
-    } catch (err) {
-      if (authUser && authUser.$id) {
-        await deleteAppwriteAuthUser(authUser.$id);
-      }
-      console.error('Appwrite student registration failed:', err.message);
-      return errJson(res, 503, 'Registration could not be completed. Please try again.');
-    }
-  } else {
-        db.students.push(rec);
-      }
-      delete rec.plainPassword;
-      /* Record the acceptance against the Scholar ID with the server's own
-         policy version and a timestamp. Kept in the data blob (db.consentLog)
-         so it needs no students-collection attribute and works on any
-         Appwrite schema; /api/me reads it back for the device's visit-counter
-         gate. */
-      if (!db.consentLog || typeof db.consentLog !== 'object') db.consentLog = {};
-      db.consentLog[rec.id] = { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION };
-  writeData(db);
-      attempts.delete(ip);
+      code.uses = Array.isArray(code.uses) ? code.uses : [];
+      code.uses.push({ applicationId: app.id, state: 'held', at: app.createdAt });
+      db.registrationApplications.push(app);
+      writeData(db);
       noteSignup(ip);
+      okJson(res, { received: true });
+    } },
 
-      /* Admin-approval flow: no session is issued at sign-up. The student must
-         wait for a Founder or Academic Director to approve their account from
-         the console before they can log in. */
+  /* Public: complete password setup. The token is looked up by hash; it must
+     be unused and unexpired. Only after the password is actually set (both
+     the Auth account and the local hash, when Appwrite is configured) is the
+     token consumed — a failed attempt leaves the link usable. */
+  { method: 'POST', path: /^\/api\/registrations\/setup$/, need: null, handler: async (req, res, body) => {
+      const ip = getClientIp(req);
+      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+      const password = String((body && body.password) == null ? '' : body.password);
+      if (password.length < 8) return errJson(res, 400, 'Choose a password of at least 8 characters.');
+      if (password.length > 256) return errJson(res, 400, 'Password must not be longer than 256 characters.');
+      const token = String((body && body.token) || '');
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.setup && a.setup.tokenHash && a.setup.tokenHash === sha256Hex(token));
+      if (!app || !app.scholarId) { noteFailure(ip); return errJson(res, 400, 'This password-setup link is not valid. Ask the academy to send you a new one.'); }
+      if (app.setup.usedAt) { noteFailure(ip); return errJson(res, 400, 'This password-setup link has already been used. Sign in with your Scholar ID and the password you set.'); }
+      if (Date.parse(app.setup.expiresAt) <= Date.now()) { noteFailure(ip); return errJson(res, 400, 'This password-setup link has expired. Ask the academy to send you a new one.'); }
+      try {
+        const pwHash = hashPassword(password);
+        if (appwriteDatabases) {
+          if (!app.appwriteUserId) return errJson(res, 503, 'Your account is not ready yet. Contact the academy.');
+          await appwriteUsers.updatePassword(app.appwriteUserId, password);
+          await updateAppwriteStudent(app.scholarId, { passwordHash: pwHash, pwHash: pwHash });
+        } else {
+          const stu = db.students.find(x => x.id === app.scholarId);
+          if (!stu) return errJson(res, 503, 'Your account is not ready yet. Contact the academy.');
+          stu.pwHash = pwHash;
+        }
+      } catch (err) {
+        console.error('[registrations] password setup failed:', err.message);
+        return errJson(res, 503, 'Your password could not be set. Try again, or ask the academy for a new link.');
+      }
+      app.setup.usedAt = new Date().toISOString();
+      app.setup.tokenHash = null;
+      app.setupCompletedAt = new Date().toISOString();
+      registrationHistory(app, null, 'password-setup-completed', 'Password set by the student');
+      writeData(db);
+      attempts.delete(ip);
+      okJson(res, { ok: true, scholarId: app.scholarId });
+    } },
+
+  /* Console: registration codes (Finance + Founder). The plaintext code is
+     returned exactly once, in this creation response; listings carry only a
+     hint. Codes are never accepted from the client — always generated here. */
+  { method: 'GET', path: /^\/api\/registrations\/codes$/, need: 'console', cap: 'registrations.codes', handler: async (req, res) => {
+      const db = readData();
       okJson(res, {
-        pending: true,
-        student: { id: rec.id, name: rec.name }
+        codes: (db.registrationCodes || []).map(c => core.publicRegistrationCode(c, Date.now())),
+        counts: core.registrationCounts(db.registrationApplications, db.registrationCodes, Date.now())
       });
     } },
 
-  /* Priority 7 — close or reopen an account. History is never deleted. */
+  { method: 'POST', path: /^\/api\/registrations\/codes$/, need: 'console', cap: 'registrations.codes', handler: async (req, res, body, sess) => {
+      const db = readData();
+      const label = clean(body && body.label, 60);
+      const maxUses = Math.floor(Number(body && body.maxUses));
+      if (!label) return errJson(res, 400, 'Give the code a label (for example, the school or group it is for).');
+      if (!(maxUses >= 1 && maxUses <= 10000)) return errJson(res, 400, 'Uses must be between 1 and 10,000.');
+      let expiresAt = null;
+      const days = Math.floor(Number(body && body.expiresInDays));
+      if (body && body.expiresInDays != null && body.expiresInDays !== '') {
+        if (!(days >= 1 && days <= 3650)) return errJson(res, 400, 'Expiry must be between 1 and 3,650 days, or left blank.');
+        expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      }
+      /* Generate until the hash is unique (a collision is astronomically
+         unlikely, but a duplicate hash would shadow another code). */
+      let plain = newRegistrationCodePlain();
+      while (findRegistrationCode(db, plain)) plain = newRegistrationCodePlain();
+      const code = {
+        id: 'REGCODE-' + sha256Hex(plain).slice(0, 10).toUpperCase(),
+        label, hash: sha256Hex(plain), hint: plain.slice(-4),
+        maxUses, uses: [], expiresAt,
+        revokedAt: null, revokedBy: null,
+        createdBy: sess.data.id, createdAt: new Date().toISOString()
+      };
+      db.registrationCodes.push(code);
+      writeData(db);
+      /* The ONLY place the plaintext ever leaves the server. */
+      okJson(res, { code: plain, registrationCode: core.publicRegistrationCode(code, Date.now()) });
+    } },
+
+  { method: 'POST', path: /^\/api\/registrations\/codes\/([A-Za-z0-9-]+)\/revoke$/, need: 'console', cap: 'registrations.codes', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const code = (db.registrationCodes || []).find(c => c.id === params[0]);
+      if (!code) return errJson(res, 404, 'No such registration code.');
+      if (code.revokedAt) return errJson(res, 400, 'That code is already revoked.');
+      code.revokedAt = new Date().toISOString();
+      code.revokedBy = sess.data.id;
+      writeData(db);
+      okJson(res, { registrationCode: core.publicRegistrationCode(code, Date.now()) });
+    } },
+
+  /* Console: application review (Finance + Founder, students.approve). The
+     public views never carry pwHash or the setup-token hash. */
+  { method: 'GET', path: /^\/api\/registrations\/applications$/, need: 'console', cap: 'students.approve', handler: async (req, res) => {
+      const db = readData();
+      okJson(res, {
+        applications: (db.registrationApplications || []).map(a => core.publicRegistrationApplication(a)),
+        counts: core.registrationCounts(db.registrationApplications, db.registrationCodes, Date.now())
+      });
+    } },
+
+  { method: 'GET', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      okJson(res, { application: core.publicRegistrationApplication(app) });
+    } },
+
+  /* Approve (or resume a failed provisioning). The claim is persisted before
+     any external system is touched: a second approve while provisioning sees
+     'provisioning' and is refused 409, so duplicates cannot be created. */
+  { method: 'POST', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)\/approve$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      if (app.status === 'approved') return errJson(res, 409, 'This application has already been approved.');
+      if (app.status === 'rejected') return errJson(res, 409, 'This application was rejected. Ask the applicant to apply again.');
+      if (app.status === 'provisioning') return errJson(res, 409, 'Approval is already in progress for this application.');
+      const resuming = app.status === 'provisioning-failed';
+      app.status = 'provisioning';
+      app.provisionError = null;
+      app.decidedBy = sess.data.id;
+      app.decidedAt = new Date().toISOString();
+      registrationHistory(app, sess.data.id, resuming ? 'provisioning-resumed' : 'approval-started', null);
+      writeData(db);
+      const result = await provisionRegistration(db, app, sess.data.id);
+      if (!result.ok) {
+        return errJson(res, 502, 'Provisioning stopped at ' + result.step + ': ' + result.error + ' Use Resume to continue.');
+      }
+      okJson(res, { application: core.publicRegistrationApplication(app), setupDelivery: result.setupDelivery });
+    } },
+
+  /* Reject with a required reason. Releases the held code use; creates no
+     account of any kind. The application's password hash is discarded. */
+  { method: 'POST', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)\/reject$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const reason = clean(body && body.reason, 300);
+      if (!reason) return errJson(res, 400, 'Give a reason for the rejection — it is recorded with the decision.');
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      if (app.status === 'approved') return errJson(res, 409, 'This application has already been approved and cannot be rejected.');
+      if (app.status === 'rejected') return errJson(res, 409, 'This application has already been rejected.');
+      if (app.status === 'provisioning') return errJson(res, 409, 'Approval is in progress for this application.');
+      const code = (db.registrationCodes || []).find(c => c.id === app.codeId);
+      if (code) {
+        const use = (code.uses || []).find(u => u.applicationId === app.id);
+        if (use && use.state === 'held') { use.state = 'released'; use.releasedAt = new Date().toISOString(); }
+      }
+      app.status = 'rejected';
+      app.rejectReason = reason;
+      app.decidedBy = sess.data.id;
+      app.decidedAt = new Date().toISOString();
+      delete app.pwHash;
+      registrationHistory(app, sess.data.id, 'rejected', reason);
+      writeData(db);
+      okJson(res, { application: core.publicRegistrationApplication(app) });
+    } },
+
+  /* Resend the password-setup link (approved applications only). Issues a
+     fresh token — the old link dies at once — and emails it to the applicant.
+     The response reports delivery status only, never the link or token. */
+  { method: 'POST', path: /^\/api\/registrations\/applications\/([A-Za-z0-9-]+)\/resend-setup$/, need: 'console', cap: 'students.approve', handler: async (req, res, body, sess, params) => {
+      const db = readData();
+      const app = (db.registrationApplications || []).find(a => a.id === params[0]);
+      if (!app) return errJson(res, 404, 'No such application.');
+      if (app.status !== 'approved' || !app.scholarId) return errJson(res, 409, 'Only an approved application can be sent a setup link.');
+      if (app.setup && app.setup.usedAt) return errJson(res, 409, 'This student has already set their password.');
+      const delivery = await issueSetupToken(db, app);
+      registrationHistory(app, sess.data.id, 'setup-link-resent', 'Delivery: ' + delivery);
+      writeData(db);
+      okJson(res, { setupDelivery: delivery });
+    } },
+
+/* Priority 7 — close or reopen an account. History is never deleted. */
   { method: 'PUT', path: /^\/api\/students\/([A-Za-z0-9-]+)\/active$/, need: 'console', cap: 'students.deactivate', handler: async (req, res, body, sess, params) => {
       const db = readData();
       const studentId = params[0].toUpperCase();
@@ -3923,10 +4283,6 @@ const ROUTES = [
       if (!exam.ok) return errJson(res, 400, exam.error);
       const combo = core.validateSubjects(Array.isArray(body.subjects) ? body.subjects : []);
       if (!combo.ok) return errJson(res, 400, combo.error);
-      /* Optional: Open or GOC; left out it is GOC (Phase 3B decision 3). */
-      const newTier = core.newStudentTier(body.tier);
-      if (!newTier.ok) return errJson(res, 400, newTier.error);
-
       const temp = 'GOC' + crypto.randomInt(10000, 99999);
 
       const rec = {
@@ -3943,9 +4299,6 @@ const ROUTES = [
         plainPassword: temp,
         appwriteUserId: null,
         mustChangePassword: true,
-        /* A student the academy adds itself is GOC unless the console chose Open
-           (Phase 3B decision 3). Appwrite stores only 'goc'; Open stores nothing. */
-        tier: newTier.tier,
         active: true, xp: 0, streak: 0, streakDay: null, streakFreezes: 0,
         last: 'Just registered', tag: 'g', tl: 'New',
         createdAt: new Date().toISOString(),
@@ -4590,81 +4943,6 @@ const ROUTES = [
 
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
-
-  /* The tutor application itself, delivered only to an authenticated
-     tutor session ('tutor-setup', so a first-login password change can
-     still load it; subject APIs stay closed until then). The central
-     gate above has already re-read the tutor record for this request,
-     so a switched-off tutor is refused here like everywhere else. The
-     file lives outside the static root and is never cached. */
-  { method: 'GET', path: /^\/api\/tutor\/app$/, need: 'tutor-setup', handler: async (req, res, body, sess) => {
-      try {
-        const code = await fs.promises.readFile(path.join(ROOT, 'server', 'tutor', 'tutor-app.js'), 'utf8');
-        res.writeHead(200, {
-          'Content-Type': 'text/javascript; charset=utf-8',
-          'Content-Length': Buffer.byteLength(code),
-          'Cache-Control': 'private, no-store',
-          'X-Content-Type-Options': 'nosniff'
-        });
-        return res.end(code);
-      } catch (e) {
-        return errJson(res, 503, 'The tutor screens are not available right now.');
-      }
-    } },
-
-  { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
-      const ip = getClientIp(req);
-      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      const id = core.cleanTutorId(clean(body.id, 20));
-      const password = String(body.password == null ? '' : body.password).slice(0, 300);
-      if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-
-      const db = readData();
-      let t = null;
-      if (core.validTutorId(id)) {
-        if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
-          t = await getAppwriteTutor(id);
-        } else {
-          t = db.tutors.find(x => x.id === id) || null;
-        }
-      }
-
-      /* Keep identical failure responses and dummy-hash work for unknown,
-         incorrect-password, and inactive tutor accounts. */
-      if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
-      const pwOk = verifyPassword(password, t ? t.pwHash : TUTOR_DUMMY_HASH);
-      if (!t || !pwOk || t.active === false) {
-        noteFailure(ip);
-        if (id) tutorIdFailed(id);
-        return errJson(res, 401, 'That ID and password do not match.');
-      }
-
-      attempts.delete(ip);
-      tutorFails.delete(id);
-
-      t.lastLogin = new Date().toISOString();
-      if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
-        await saveAppwriteTutor(t);
-      } else {
-        const local = db.tutors.find(x => x.id === t.id);
-        if (local) local.lastLogin = t.lastLogin;
-        else db.tutors.push(t);
-        writeData(db);
-      }
-
-      if (!Array.isArray(db.tutors)) db.tutors = [];
-      if (!db.tutors.some(x => x.id === t.id)) db.tutors.push(t);
-
-      return newSession(t, 'tutor', db).then(token => {
-        const d = sessions.get(token);
-        okJson(res, { token, user: {
-          id: t.id, name: t.name, role: 'tutor',
-          subjects: t.subjects.slice(),
-          mustChangePassword: !!t.mustChangePassword,
-          sessionMinutes: d.sessionMinutes, expiresAt: d.expires
-        } });
-      });
-    } },
 
   { method: 'GET', path: /^\/api\/tutor\/me$/, need: 'tutor-setup', handler: (req, res, body, sess) => {
       const t = sess.tutor;
@@ -5806,17 +6084,17 @@ const ROUTES = [
         performance: p.overall, performanceDetail: p,
         active: s.active !== false,
         mustChangePassword: !!s.mustChangePassword,
-        /* Access tier (Phase 3B): the screens read what this account may use
-           from here instead of guessing; the routes enforce it themselves. */
-        tier: core.cleanTier(s.tier),
-        features: core.tierFeatures(s.tier),
-        limits: core.tierLimits(s.tier),
+        /* Student access: the screens read what this account may use from
+           here instead of guessing; the routes enforce it themselves. Every
+           student carries the same entitlement set. */
+        features: core.studentFeatures(),
+        limits: core.studentLimits(),
         /* What is left today, so screens can say so plainly. Informational
            only for now: no route refuses on it yet. */
         today: {
           day: core.lagosDay(),
-          practice: core.dailyAllowance(practiceCountToday(s), s.tier),
-          reviews: core.reviewAllowance(reviewsToday(db, s.id), s.tier)
+          practice: core.dailyAllowance(practiceCountToday(s)),
+          reviews: core.reviewAllowance(reviewsToday(db, s.id))
         }
       });
     } },
@@ -5837,11 +6115,10 @@ const ROUTES = [
           stu = db.students.find(x => x.id === sess.data.id);
         }
         if (!stu) return { notFound: true };
-        /* Access tiers: buying a freeze is a GOC feature (TIER_FEATURES.open
-           .streakFreezes is false). Enforced here, not only on the Profile
-           row — freezes a student EARNS in the weekly quest or team challenge
-           are still held and spent by anyone; only the XP purchase is gated. */
-        if (!core.canUse('streakFreezes', stu.tier)) return { tierLocked: true };
+        /* Buying a freeze with XP is a student feature, enforced here, not
+           only on the Profile row — freezes a student EARNS in the weekly
+           quest or team challenge are held and spent the same way. */
+        if (!core.canUse('streakFreezes')) return { featureLocked: true };
         const r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
         if (!r.ok) return { refused: r };
         if (appwriteDatabases) {
@@ -5854,7 +6131,7 @@ const ROUTES = [
         return { r };
       });
       if (out.notFound) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-      if (out.tierLocked) return errJson(res, 403, 'Buying streak freezes is for GOC students. Ask the academy about joining.');
+      if (out.featureLocked) return errJson(res, 403, 'Buying streak freezes is not available.');
       if (out.refused) {
         const why = out.refused.reason === 'max'
           ? 'You already hold the most streak freezes you can (' + core.STREAK_FREEZE_MAX + ').'
@@ -5948,8 +6225,7 @@ const ROUTES = [
       const state = (db.reviewState && db.reviewState[sess.data.id]) || {};
       const queue = core.srQueue(mistakes, state, Date.now());
       queue.due = core.attachImagesToMistakes(core.attachPassagesToMistakes(queue.due, bank, db.passages), bank);
-      const tier = await studentTierOf(db, sess.data.id);
-      okJson(res, { review: queue, today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsToday(db, sess.data.id), tier) } });
+      okJson(res, { review: queue, today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsToday(db, sess.data.id)) } });
     } },
 
   { method: 'POST', path: /^\/api\/me\/review$/, need: 'student', handler: async (req, res, body, sess) => {
@@ -5963,12 +6239,10 @@ const ROUTES = [
         const m = mistakes.find(x => x.key === key);
         if (!m) return { missing: true };
         if (!Array.isArray(m.options) || given >= m.options.length) return { badOption: true };
-        /* Access tiers: an Open student has a daily number of spaced reviews.
-           Checked after the question is found, so a bad request is never charged
-           and never shown the limit; GOC has none (limit is null). */
-        const tier = await studentTierOf(db, sess.data.id);
+        /* Spaced reviews carry no daily limit for students. Checked after the
+           question is found, so a bad request is never charged. */
         const usedBefore = reviewsToday(db, sess.data.id);
-        const allowance = core.reviewAllowance(usedBefore, tier);
+        const allowance = core.reviewAllowance(usedBefore);
         if (!allowance.allowed) return { limited: true, allowance };
         const now = Date.now();
         const state = (db.reviewState && db.reviewState[sess.data.id]) || {};
@@ -5980,16 +6254,10 @@ const ROUTES = [
         db.reviewCount[sess.data.id] = { day: core.lagosDay(), count: usedBefore + 1 };
         writeData(db);
         const q = core.srQueue(mistakes, db.reviewState[sess.data.id], now);
-        return { correct, entry, q, m, allowance: core.reviewAllowance(usedBefore + 1, tier) };
+        return { correct, entry, q, m, allowance: core.reviewAllowance(usedBefore + 1) };
       });
       if (out.missing) return errJson(res, 404, 'That question is not in your mistakes.');
       if (out.badOption) return errJson(res, 400, 'Pick one of the answer options.');
-      if (out.limited) {
-        return send(res, 403, {
-          error: core.reviewLimitMessage(out.allowance.limit), reason: 'daily',
-          today: { day: core.lagosDay(), reviews: out.allowance }
-        });
-      }
       okJson(res, {
         ok: true, today: { day: core.lagosDay(), reviews: out.allowance }, correct: out.correct, answer: out.m.answer, explanation: out.m.explanation || '',
         box: out.entry.box, mastered: out.entry.mastered, nextDue: out.entry.due,
@@ -6028,7 +6296,7 @@ const ROUTES = [
       if (!db.practiceRuns || typeof db.practiceRuns !== 'object') db.practiceRuns = {};
       const list = Array.isArray(db.practiceRuns[sess.data.id]) ? db.practiceRuns[sess.data.id] : [];
       list.unshift(rec);
-      const keep = core.tierLimits(await studentTierOf(db, sess.data.id)).practiceHistory;
+      const keep = core.studentLimits().practiceHistory;
       db.practiceRuns[sess.data.id] = core.capList(core.dropOldRuns(list), keep);
       writeData(db);
       okJson(res, { ok: true, saved: rec, runs: db.practiceRuns[sess.data.id] });
@@ -6041,10 +6309,8 @@ const ROUTES = [
      saving the same question twice is a no-op rather than a duplicate. */
   { method: 'GET', path: /^\/api\/me\/bookmarks$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
-      const cap = core.tierLimits(await studentTierOf(db, sess.data.id)).bookmarks;
+      const cap = core.studentLimits().bookmarks;
       const all = Array.isArray(db.bookmarks && db.bookmarks[sess.data.id]) ? db.bookmarks[sess.data.id] : [];
-      /* Access tiers (Phase 3B): an account over its tier's limit is trimmed
-         straight away, newest kept, and the trim is stored. */
       if (cap != null && all.length > cap) { db.bookmarks[sess.data.id] = all.slice(0, cap); writeData(db); }
       okJson(res, { bookmarks: core.capList(all, cap), limit: cap });
     } },
@@ -6053,16 +6319,13 @@ const ROUTES = [
       const rec = core.sanitizeBookmark(body);
       if (!rec) return errJson(res, 400, 'A bookmark needs the question text and at least two options.');
       const db = readData();
-      const cap = core.tierLimits(await studentTierOf(db, sess.data.id)).bookmarks;
+      const cap = core.studentLimits().bookmarks;
       if (!db.bookmarks || typeof db.bookmarks !== 'object') db.bookmarks = {};
       let list = Array.isArray(db.bookmarks[sess.data.id]) ? db.bookmarks[sess.data.id] : [];
       if (cap != null && list.length > cap) { list = list.slice(0, cap); db.bookmarks[sess.data.id] = list; writeData(db); }
       const existing = list.find(b => b.key === rec.key);
       if (existing) return okJson(res, { ok: true, saved: existing, already: true, bookmarks: list });
       /* Full: refuse and say how to make room. Nothing is dropped silently. */
-      if (cap != null && list.length >= cap) {
-        return send(res, 409, { error: core.bookmarkLimitMessage(cap), reason: 'tier', limit: cap, count: list.length });
-      }
       rec.ts = Date.now();
       list.unshift(rec);
       db.bookmarks[sess.data.id] = core.capList(list, cap);
@@ -6121,8 +6384,6 @@ const ROUTES = [
                     papers: jbp.map(r => ({ subject: r.subject, questions: r.serving })) },
                     await sitStatus(s.id, 'jamb', core.OBJECTIVE_SUBJECT, db)));
       }
-      /* Open students still see the papers, marked locked; the start route is the real gate. */
-      rows.forEach(r => { if (!core.webTestAllowed(r.section, s.tier)) r.locked = true; });
       okJson(res, { subjects: subs, tests: rows, objectiveMinutes: minutes,
                     objectiveMinutesLabel: core.hoursLabel(minutes),
                     jambMinutes: jambMinutes, jambMinutesLabel: core.hoursLabel(jambMinutes) });
@@ -6146,11 +6407,6 @@ const ROUTES = [
       const section = clean(body.section, 12);
       let subject = clean(body.subject, 40);
       if (core.SECTIONS.indexOf(section) === -1) return errJson(res, 400, 'Choose a test section.');
-      /* ACCESS TIER: Web Tests are for GOC students. Checked here, before anything
-         is opened or recorded, because the catalogue is only a courtesy. */
-      if (core.WEB_TEST_SECTIONS.indexOf(section) > -1 && !core.webTestAllowed(section, s.tier)) {
-        return send(res, 403, { error: core.webTestLockMessage(section), reason: 'tier' });
-      }
       const subs = (s.subjects || []).slice();
       /* A question whose passage is missing, switched off or from another subject is
          held back, so a paper never promises a question it cannot show. */
@@ -6314,7 +6570,7 @@ const ROUTES = [
           }
         }
 
-        if (core.cleanTier(stu && stu.tier) === 'goc') {
+        if (stu) {
           if (!db.answerStats || typeof db.answerStats !== 'object') db.answerStats = {};
           core.recordAnswerStats(db.answerStats, paper.subject, marked.answers);
         }
@@ -6365,10 +6621,8 @@ const ROUTES = [
       const allQuestions = await listQuestions({}, db);
       const subjects = (s.subjects || []).map(sub => {
         const topics = core.studyTopics(allQuestions, sub);
-        /* Open students are offered only the newest past-paper year; how many
-           older ones are held back is reported so the screen can say so. */
         const allYears = core.studyYears(allQuestions, sub);
-        const years = core.tierStudyYears(allYears, s.tier);
+        const years = allYears;
         /* poolTotal is the full live bank size for this subject — identical to
            what the practice start route exposes, so the setup screen and the
            in-run counter always agree and the bank never appears to shrink. */
@@ -6504,39 +6758,30 @@ const ROUTES = [
         if (topic && n.topic !== topic) return false;
         return true;
       });
-      /* Access tiers (Phase 3B): an Open student reads the first few notes of
-         each subject. "First" is by note id among the subject's active notes,
-         so it does not shift with the topic filter. The rest are listed but
-         locked, and their text is never sent. */
-      const tier = core.cleanTier(s.tier);
-      const placeInSubject = {}, seenIn = {};
-      db.notes.filter(n => n.active && (s.subjects || []).indexOf(n.subject) !== -1)
-        .sort((a, b) => Number(a.id) - Number(b.id))
-        .forEach(n => { seenIn[n.subject] = seenIn[n.subject] || 0; placeInSubject[n.id] = seenIn[n.subject]++; });
-      okJson(res, { notes: rows.map(n => core.noteVisible(placeInSubject[n.id], tier) ? core.publicNote(n) : core.lockedNote(n)) });
+      okJson(res, { notes: rows.map(n => core.publicNote(n)) });
     } },
 
-  /* Class notices (Phase 3C slice 7): GOC students only, and only for a subject they take. An Open
-     student gets an empty list and `locked: true`, so no notice text ever leaves the server. */
+  /* Class notices (Phase 3C slice 7): students only, and only for a subject they take. A student
+     outside that audience gets an empty list and `locked: true`, so no notice text ever leaves the server. */
   { method: 'GET', path: /^\/api\/me\/notices$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
       const s = appwriteDatabases
         ? await getAppwriteStudent(sess.data.id).catch(() => null)
         : db.students.find(x => x.id === sess.data.id);
       if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-      const locked = !core.canUse('classNotices', core.cleanTier(s.tier));
+      const locked = !core.canUse('classNotices');
       okJson(res, { locked, notices: locked ? [] : core.noticesForStudent(db.notices, s) });
     } },
 
-  /* Broadcasts (Phase 4): GOC students only, and only those whose audience includes them. An Open student
-     gets an empty list and `locked: true`, so no message text ever leaves the server. */
+  /* Broadcasts (Phase 4): students whose audience includes them. A student outside
+     the audience gets an empty list and `locked: true`, so no message text ever leaves the server. */
   { method: 'GET', path: /^\/api\/me\/broadcasts$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
       const s = appwriteDatabases
         ? await getAppwriteStudent(sess.data.id).catch(() => null)
         : db.students.find(x => x.id === sess.data.id);
       if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-      const locked = !core.canUse('classNotices', core.cleanTier(s.tier));
+      const locked = !core.canUse('classNotices');
       okJson(res, { locked, broadcasts: locked ? [] : core.broadcastsForStudent(db.broadcasts, s) });
     } },
 
@@ -6548,7 +6793,7 @@ const ROUTES = [
         ? await getAppwriteStudent(sess.data.id).catch(() => null)
         : db.students.find(x => x.id === sess.data.id);
       if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-      const locked = !core.canUse('askTutor', core.cleanTier(s.tier));
+      const locked = !core.canUse('askTutor');
       okJson(res, { locked, flags: locked ? [] : core.flagsForStudent(db.flags, s) });
     } },
 
@@ -6559,7 +6804,7 @@ const ROUTES = [
           ? await getAppwriteStudent(sess.data.id).catch(() => null)
           : db.students.find(x => x.id === sess.data.id);
         if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-        if (!core.canUse('askTutor', core.cleanTier(s.tier))) {
+        if (!core.canUse('askTutor')) {
           return errJson(res, 403, 'Asking a tutor is for GOC students. Ask the academy about joining.');
         }
         const qid = String((body && body.questionId) != null ? body.questionId : '').trim();
@@ -6638,15 +6883,6 @@ const ROUTES = [
       }
       const rawQuestions = await listQuestions({}, db);
       const allQuestions = core.servablePool(rawQuestions, db.passages);
-      /* Access tiers: an Open student may pick only the newest year. Checked
-         here, not just on the screen. */
-      if (mode === 'practice' && year.length) {
-        const heldYears = core.studyYears(rawQuestions, subject);
-        if (core.lockedPastYears(year, heldYears, s.tier).length) {
-          const latest = core.tierStudyYears(heldYears, s.tier)[0];
-          return send(res, 403, { error: core.pastYearLockMessage(latest && latest.year), reason: 'tier' });
-        }
-      }
       const pool = core.studyPool(allQuestions, subject, body.topics, year);
       if (!pool.length) {
         return errJson(res, 404, mode === 'practice'
@@ -6655,22 +6891,18 @@ const ROUTES = [
           : 'No questions have been published for the topics you chose yet.');
       }
       let count = core.clampStudyCount(body.count, pool.length);
-      /* Access tiers (Phase 3B, slice 2): an Open student has a daily allowance
-         of questions (practice and timed CBT set-ups share it) and a most per
-         run. A run bigger than what is left is shortened to fit; with nothing
-         left it is refused. GOC students have no tier limit (limit is null). */
       const asked = count;
       const usedToday = practiceCountToday(s);
-      const allowed = core.capPracticeRun(count, usedToday, s.tier);
+      const allowed = core.capPracticeRun(count, usedToday);
       if (allowed < 1) {
         return send(res, 403, {
-          error: core.dailyLimitMessage(core.tierLimits(s.tier).practicePerDay),
+          error: 'No practice questions are available right now.',
           reason: 'daily',
-          today: { day: core.lagosDay(), practice: core.dailyAllowance(usedToday, s.tier) }
+          today: { day: core.lagosDay(), practice: core.dailyAllowance(usedToday) }
         });
       }
       count = allowed;
-      const tierCapped = count < asked;
+      const runCapped = count < asked;
       const picked = mode === 'practice'
         ? core.pickPractice(pool, count, practiceRecentIds(s.id, subject))
         : core.pickStudy(pool, count);
@@ -6698,7 +6930,7 @@ const ROUTES = [
           xpPerAnswer: core.PRACTICE_XP_PER_ANSWER,
           xpPerCorrect: core.PRACTICE_XP_PER_CORRECT,
           xpLeftToday: core.practiceXpRemaining(practiceXpToday(s)),
-          capped: tierCapped, asked: asked,
+          capped: runCapped, asked: asked,
           questions: core.attachPassages(picked, db.passages).map(core.forPractice)
         });
       }
@@ -6706,7 +6938,7 @@ const ROUTES = [
         mode, paperId: paper.id, subject,
         total: picked.length, durationSec: paper.durationSec,
         poolTotal: pool.length,
-        capped: tierCapped, asked: asked,
+        capped: runCapped, asked: asked,
         questions: core.attachPassages(picked, db.passages).map(core.forStudent)      // correct answers stripped out
       });
     } },
@@ -6913,8 +7145,8 @@ const ROUTES = [
             writeData(db);
           }
         }
-        /* Access tiers (Phase 3B, slice 2): count the questions answered today,
-           practice and timed CBT set-ups alike (the limit is enforced at start). On Appwrite the write is
+        /* Count the questions answered today, practice and timed CBT set-ups
+           alike. On Appwrite the write is
            best-effort: if the optional attributes have not been added the
            run is still saved and the count simply stays at zero. */
         if (stu && marked.answered > 0) {
@@ -8091,7 +8323,7 @@ const ROUTES = [
       /* Tells the screen up front whether this student may open files in the app
          (the file route is the real gate). */
       const st = await getAppwriteStudent(sess.data.id).catch(() => null);
-      return okJson(res, { resources, canView: core.canUse('resourceView', st && st.tier) });
+      return okJson(res, { resources, canView: core.canUse('resourceView') });
     } catch (err) {
       console.error('[goc] Student resource list failed:', err.message);
       return errJson(res, 500, 'Could not load resources.');
@@ -8105,16 +8337,8 @@ const ROUTES = [
 
     const resourceId = params[0];
 
-    /* ACCESS TIER: an Open student may download a resource but not open it in the
-       app. `?download=1` is the download; anything else is a view. Fails closed:
-       a student record that cannot be read is treated as Open. */
+    /* Every student may open a resource in the app; `?download=1` downloads it. */
     const wantsDownload = new URL(req.url, 'http://localhost').searchParams.get('download') === '1';
-    if (!wantsDownload) {
-      const st = await getAppwriteStudent(sess.data.id).catch(() => null);
-      if (!core.canUse('resourceView', st && st.tier)) {
-        return send(res, 403, { error: core.RESOURCE_VIEW_LOCK_MESSAGE, reason: 'tier' });
-      }
-    }
 
     try {
       const doc = await appwriteDatabases.getDocument(
@@ -8481,11 +8705,7 @@ const ROUTES = [
         String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
       );
 
-      /* ACCESS TIER: lessons and live-class replays are for GOC students. An Open
-         student is sent only what their tier allows, so a held-back video's title,
-         file id and external link never leave the server. */
-      const st = await getAppwriteStudent(sess.data.id).catch(() => null);
-      const allowed = videos.filter(v => core.videoAllowed(v.type, st && st.tier));
+      const allowed = videos.filter(v => core.videoAllowed(v.type));
       return okJson(res, { videos: allowed, locked: allowed.length < videos.length });
     } catch (err) {
       console.error('[goc] Student video list failed:', err.message);
@@ -8511,11 +8731,8 @@ const ROUTES = [
         return errJson(res, 404, 'That video is not available.');
       }
 
-      /* ACCESS TIER: the file is the real gate, whatever the list said. A student
-         record that cannot be read counts as Open. */
-      const st = await getAppwriteStudent(sess.data.id).catch(() => null);
-      if (!core.videoAllowed(doc.type, st && st.tier)) {
-        return send(res, 403, { error: core.videoLockMessage(doc.type), reason: 'tier' });
+      if (!core.videoAllowed(doc.type)) {
+        return send(res, 403, { error: 'That video is not available.', reason: 'feature' });
       }
 
       if (!doc.storageFileId) {
@@ -8691,11 +8908,7 @@ const ROUTES = [
         .filter(c => c.status !== 'cancelled' && Date.parse(c.scheduledAt || '') >= now)
         .sort((a, b) => String(a.scheduledAt || '').localeCompare(String(b.scheduledAt || '')));
 
-      /* ACCESS TIER: live classes are for GOC students. An Open student gets no
-         classes at all, so neither the timetable entries nor the Zoom link leave
-         the server. `joinLocked` stays true so a screen can say why it is empty. */
-      const st = await getAppwriteStudent(sess.data.id).catch(() => null);
-      const joinOk = core.canUse('liveClassJoin', st && st.tier);
+      const joinOk = core.canUse('liveClassJoin');
       return okJson(res, { classes: joinOk ? classes : [], joinLocked: !joinOk });
     } catch (err) {
       console.error('[goc] Student class list failed:', err.message);
@@ -9008,48 +9221,6 @@ const ROUTES = [
     }
   } },
 
-  /* Move every student in a cohort between Open and GOC at once (Phase 3B, slice 3).
-     Cohorts live in Appwrite, so this needs it, like the rest of the cohort routes. Same
-     rules as the single-student route: students already on that tier are left alone and
-     record nothing; each student actually moved gets the staff member's name and the time.
-     If the very first change is refused (the `tier` attribute is missing) it stops with
-     503 rather than failing for every student; after that, a student that cannot be
-     changed is listed in `failed` and the rest carry on. */
-  { method: 'PUT', path: /^\/api\/admin\/cohorts\/([A-Za-z0-9._-]+)\/tier$/, need: 'console', cap: 'students.tier', handler: async (req, res, body, sess, params) => {
-      if (!appwriteDatabases) return errJson(res, 503, 'Appwrite Database is not initialized.');
-      const want = core.parseTierChange(body && body.tier);
-      if (!want.ok) return errJson(res, 400, want.error);
-      const cohortId = params[0];
-      const db = readData();
-      const cohort = await getCohortOrNull(cohortId);
-      if (!cohort) return errJson(res, 404, 'No such cohort.');
-      const staffRec = (db.staff || []).find(x => x.id === sess.data.id);
-      const by = (staffRec && staffRec.name) || sess.data.id;
-      const at = new Date().toISOString();
-      const members = (await listAppwriteStudents()).filter(s => s.cohort === cohortId);
-      let changed = 0, unchanged = 0, auditWarned = false;
-      const failed = [];
-      for (const s of members) {
-        if (core.cleanTier(s.tier) === want.tier) { unchanged++; continue; }
-        try {
-          await updateAppwriteStudent(s.id, { tier: want.tier });
-        } catch (err) {
-          if (changed === 0 && failed.length === 0) {
-            console.warn('[tiers] could not store the tier - add an optional string attribute "tier" (size 8) to the students collection.');
-            return errJson(res, 503, 'The access tier could not be saved. Add the optional "tier" attribute to the students collection, then try again.');
-          }
-          failed.push(s.id);
-          continue;
-        }
-        changed++;
-        try {
-          await updateAppwriteStudent(s.id, { tierChangedBy: by, tierChangedAt: at });
-        } catch (err) {
-          if (!auditWarned) { auditWarned = true; console.warn('[tiers] tier changed but who/when not stored - add optional string attributes "tierChangedBy" (size 80) and "tierChangedAt" (size 40).'); }
-        }
-      }
-      okJson(res, { cohortId, tier: want.tier, total: members.length, changed, unchanged, failed });
-    } },
 
   /* Assigns (or clears, with cohortId: null) the cohort a student belongs
      to. Works in both storage modes, same dual-path shape as the existing
@@ -9079,52 +9250,6 @@ const ROUTES = [
       okJson(res, await publicStudent(db, s, { console: true }));
     } },
 
-  /* Move a student between Open and GOC (Phase 3B, slice 3). Console only, so the
-     Founder and the Academic Director can; nobody else holds a console session.
-     The target is named in the body ({ tier: 'goc' | 'open' }); the change takes effect
-     on the student's next request, because every route reads the tier from the record.
-     Who did it and when are stored on the student and shown on the console row. A
-     request for the tier the student already has changes nothing and records nothing,
-     so the note always reflects a real change. Moving to Open does not delete anything
-     itself: the saved-question and practice-history limits trim on the student's next
-     read, as before (the console confirm says so). */
-  { method: 'PUT', path: /^\/api\/students\/([A-Za-z0-9-]+)\/tier$/, need: 'console', cap: 'students.tier', handler: async (req, res, body, sess, params) => {
-      const db = readData();
-      const studentId = params[0].toUpperCase();
-      const want = core.parseTierChange(body && body.tier);
-      if (!want.ok) return errJson(res, 400, want.error);
-      const staffRec = (db.staff || []).find(x => x.id === sess.data.id);
-      const by = (staffRec && staffRec.name) || sess.data.id;
-      const at = new Date().toISOString();
-
-      if (appwriteDatabases) {
-        const s = await getAppwriteStudentOrNull(studentId);
-        if (!s) return errJson(res, 404, 'No such Scholar ID.');
-        if (core.cleanTier(s.tier) === want.tier) return okJson(res, await publicStudent(db, s, { console: true }));
-        let updated;
-        try {
-          updated = await updateAppwriteStudent(studentId, { tier: want.tier });
-        } catch (err) {
-          console.warn('[tiers] could not store the tier - add an optional string attribute "tier" (size 8) to the students collection.');
-          return errJson(res, 503, 'The access tier could not be saved. Add the optional "tier" attribute to the students collection, then try again.');
-        }
-        try {
-          updated = await updateAppwriteStudent(studentId, { tierChangedBy: by, tierChangedAt: at });
-        } catch (err) {
-          console.warn('[tiers] tier changed but who/when not stored - add optional string attributes "tierChangedBy" (size 80) and "tierChangedAt" (size 40).');
-        }
-        return okJson(res, await publicStudent(db, appwriteStudentToRecord(updated), { console: true }));
-      }
-
-      const s = db.students.find(x => x.id === studentId);
-      if (!s) return errJson(res, 404, 'No such Scholar ID.');
-      if (core.cleanTier(s.tier) === want.tier) return okJson(res, await publicStudent(db, s, { console: true }));
-      s.tier = want.tier;
-      s.tierChangedBy = by;
-      s.tierChangedAt = at;
-      writeData(db);
-      okJson(res, await publicStudent(db, s, { console: true }));
-    } },
 
   /* The cohort-resolved settings a signed-in student actually studies
      under — GET /api/settings stays as the academy-wide default (it has no
@@ -9257,8 +9382,8 @@ const ROUTES = [
       a.approvedAt = new Date().toISOString();
       a.approvedBy = sess.data.id;
 
-      /* Create a GOC (paid-tier) student account from the scholarship application.
-         Reuse the same logic as POST /api/admin/students but tier = 'GOC'. */
+      /* Create a student account from the scholarship application.
+         Reuse the same logic as POST /api/admin/students. */
       const emailLower = String(a.email || '').toLowerCase().trim();
       const duplicate = !appwriteDatabases && db.students.some(s => String(s.email || '').toLowerCase() === emailLower);
       if (!duplicate) {
@@ -9271,7 +9396,6 @@ const ROUTES = [
           email:         a.email,
           phone:         a.phone,
           subjects:      a.subjects,
-          tier:          'GOC',
           active:        true,
           pendingApproval: false,
           passwordHash:  hashPassword(tempPw),
@@ -9744,135 +9868,6 @@ const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\
   + '\n' + AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
   + '\nUser-agent: *\nDisallow: /\n';
 
-/* Tutor entrance (Stage 8, owner-approved): a sign-in shell with NONE of
-   the tutor application in it. The shell signs in through the existing
-   POST /api/tutor/login, then — and only then — fetches the application
-   from GET /api/tutor/app with the session token and runs it. The tutor
-   screens therefore never appear in a public file or an unauthenticated
-   response; server/tutor/ stays outside the static root throughout. */
-const TUTOR_SHELL = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tutor sign-in · G.O.C Academy Hub</title>
-<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}[hidden]{display:none}</style>
-</head>
-<body>
-<main class="card" id="tutorGate">
-<div id="tutorForm">
-<h1>G.O.C Tutor</h1>
-<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>
-<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">
-<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">
-<div class="err" id="tutorErr" role="alert"></div>
-<button type="button" id="tutorGo">Sign in</button>
-</div>
-<div id="tutorUnavailable" role="status" hidden>
-<h1 id="tutorUnavailableHeading"></h1>
-<p id="tutorUnavailableMessage"></p>
-<button type="button" id="tutorRetry">Retry Connection</button>
-</div>
-</main>
-<script src="js/onboarding.js"></script>
-<script>
-(function(){
-  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");
-  var idInput = document.getElementById("tutorId"), pwInput = document.getElementById("tutorPw");
-  var form = document.getElementById("tutorForm"), unavailable = document.getElementById("tutorUnavailable");
-  var heading = document.getElementById("tutorUnavailableHeading"), message = document.getElementById("tutorUnavailableMessage");
-  var retry = document.getElementById("tutorRetry"), busy = false;
-  function problem(kind, text, status){ var e = new Error(text); e.kind = kind; e.status = status; return e; }
-  function network(){ return problem("network", "Cannot reach the server. Check your connection and try again."); }
-  function unexpected(){ return problem("unexpected", "The service returned an unexpected response. Please try again later."); }
-  function request(url, options){
-    return fetch(url, options).catch(function(){ throw network(); });
-  }
-  function jsonResponse(r){
-    var type = r.headers.get("content-type") || "";
-    var isJson = /^application\\/(?:[a-z0-9.+-]*\\+)?json(?:\\s*;|\\s*$)/i.test(type);
-    if (!isJson) {
-      if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
-      throw unexpected();
-    }
-    return r.text().then(function(text){
-      var data;
-      try { data = JSON.parse(text); } catch (e) {
-        if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
-        throw unexpected();
-      }
-      if (!data || typeof data !== "object" || Array.isArray(data)) throw unexpected();
-      if (data.maintenance === true) throw problem("maintenance", typeof data.error === "string" ? data.error : "G.O.C Academy Hub is temporarily under maintenance. Please check back later.");
-      if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
-      if (!r.ok) {
-        if (typeof data.error !== "string" || !data.error) throw unexpected();
-        throw problem("api", data.error, r.status);
-      }
-      return data;
-    }, function(){ throw network(); });
-  }
-  function showProblem(e){
-    pwInput.value = "";
-    if (e.kind === "api") { form.hidden = false; unavailable.hidden = true; err.textContent = e.message; return; }
-    form.hidden = true; unavailable.hidden = false; err.textContent = "";
-    if (e.kind === "waking") {
-      heading.textContent = "G.O.C is waking up";
-      message.textContent = "Our server is temporarily starting up after a period of inactivity. Your tutor account is safe. Please wait a little and try again.";
-    } else if (e.kind === "maintenance") {
-      heading.textContent = "G.O.C is under maintenance"; message.textContent = e.message;
-    } else if (e.kind === "network") {
-      heading.textContent = "Connection problem"; message.textContent = "Cannot reach the server. Check your connection and try again.";
-    } else {
-      heading.textContent = "Temporary service error"; message.textContent = "The service returned an unexpected response. Please try again later.";
-    }
-  }
-  function finish(){ busy = false; btn.disabled = false; btn.textContent = "Sign in"; retry.disabled = false; retry.textContent = "Retry Connection"; }
-  btn.addEventListener("click", function(){
-    if (busy) return;
-    var id = idInput.value.trim(), pw = pwInput.value;
-    if (!id || !pw) { err.textContent = "Enter your tutor ID and password."; return; }
-    busy = true; btn.disabled = true; btn.textContent = "Signing in…"; err.textContent = "";
-    pwInput.value = "";
-    var body = JSON.stringify({ id: id, password: pw }); pw = "";
-    request("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: body })
-    .then(jsonResponse).then(function(j){
-      if (typeof j.token !== "string" || !j.token || !j.user || j.user.role !== "tutor" || !j.user.id) throw unexpected();
-      return request("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })
-      .then(function(r){
-        var type = r.headers.get("content-type") || "";
-        if (!r.ok || !/^(?:text|application)\\/javascript(?:\\s*;|\\s*$)/i.test(type)) {
-          if (r.status === 502 || r.status === 503 || r.status === 504 || /json/i.test(type)) return jsonResponse(r).then(function(){ throw unexpected(); });
-          throw unexpected();
-        }
-        return r.text().catch(function(){ throw network(); });
-      })
-      .then(function(code){
-        window.__zxSession = { token: j.token, user: j.user };
-        var s = document.createElement("script");
-        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
-        document.body.appendChild(s);
-        document.getElementById("tutorGate").style.display = "none";
-        if(window.GOCOnboarding && window.GOCTours){
-          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);
-          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);
-        }
-      });
-    }).catch(function(e){ showProblem(e); }).then(finish);
-  });
-  retry.addEventListener("click", function(){
-    if (busy) return;
-    busy = true; retry.disabled = true; retry.textContent = "Checking…";
-    request("api/health", { headers: { "Accept": "application/json" }, cache: "no-store" })
-      .then(jsonResponse).then(function(data){
-        if (data.service !== "goc-academy-hub") throw unexpected();
-        unavailable.hidden = true; form.hidden = false; err.textContent = "Connection restored. Please sign in again.";
-      }).catch(function(e){ showProblem(e); }).then(finish);
-  });
-})();
-</script>
-</body>
-</html>`;
-
 /* Turn barred crawlers away. The politeness layer above only binds crawlers
    that obey it; this refuses the ones that announce themselves. Generic
    HTTP-library names (Go-http-client, node-fetch) are deliberately NOT
@@ -9935,6 +9930,8 @@ const TYPES = {
 /* Phase 3D slice 3: GOC_PUBLIC_DIR serves the built (minified) app from a folder such as
    dist/ made by `node build/build.js`. Unset, the readable source is served as before. */
 const PUBLIC_ROOT = process.env.GOC_PUBLIC_DIR ? path.resolve(ROOT, process.env.GOC_PUBLIC_DIR) : ROOT;
+/* Read once at boot, like the other deployment switches: changing it needs a
+   restart so a running process cannot half-enter or half-leave maintenance. */
 const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico']);
 
 function serveStatic(req, res, urlPath) {
@@ -9996,23 +9993,12 @@ const server = http.createServer(async (req, res) => {
   // (browsers, health checks, and the crawlers refused below) still gets it.
   if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
 
-  /* MAINTENANCE GATE (Workstream A) — before the tutor shell, the password
+  /* MAINTENANCE GATE (Workstream A) — before the password
      setup link, static files, any session lookup and every API route. See
      server/lib/maintenance.js for what stays open (health, robots, the
      cache-clearing service worker) and why. Returning here means the
      application below is untouched, not deleted. */
   if (MAINTENANCE_MODE && maintenance.intercept(req, res, urlPath)) return;
-
-  if (urlPath === '/tutor') {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
-    res.writeHead(200, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Content-Length': Buffer.byteLength(TUTOR_SHELL),
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff'
-    });
-    return res.end(req.method === 'HEAD' ? undefined : TUTOR_SHELL);
-  }
 
   if (urlPath === '/robots.txt') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
@@ -10032,6 +10018,33 @@ const server = http.createServer(async (req, res) => {
 
   if (urlPath.indexOf('/api/') !== 0) {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    /* Stage B: the password-setup page the approval email links to. The
+       token in the path is NOT validated here (opening a link must never
+       consume it); the page posts it with the chosen password to
+       POST /api/registrations/setup, which checks it properly. */
+    const setupMatch = /^\/setup\/([A-Za-z0-9_-]{16,128})$/.exec(urlPath);
+    if (setupMatch) {
+      const tokenJson = JSON.stringify(setupMatch[1]);
+      const html = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Set your password — G.O.C Academy Hub</title></head>' +
+        '<body style="font-family:Arial,Helvetica,sans-serif;max-width:460px;margin:10vh auto;padding:0 20px;color:#1f2937">' +
+        '<h2 style="text-align:center">Welcome to G.O.C Academy Hub</h2>' +
+        '<p>Your registration has been approved. Choose the password you will sign in with, using your Scholar ID (it is in the email this link came from).</p>' +
+        '<form id="f"><label style="display:block;margin:14px 0 6px">New password</label>' +
+        '<input id="pw" type="password" autocomplete="new-password" style="width:100%;padding:10px;box-sizing:border-box" minlength="8" required>' +
+        '<label style="display:block;margin:14px 0 6px">Type it again</label>' +
+        '<input id="pw2" type="password" autocomplete="new-password" style="width:100%;padding:10px;box-sizing:border-box" minlength="8" required>' +
+        '<button style="margin-top:18px;width:100%;padding:12px;background:#b91c1c;color:#fff;border:0;border-radius:8px;font-weight:700">Set password</button></form>' +
+        '<p id="msg" role="status"></p>' +
+        '<script>document.getElementById("f").addEventListener("submit",function(e){e.preventDefault();var m=document.getElementById("msg");var pw=document.getElementById("pw").value;if(pw!==document.getElementById("pw2").value){m.textContent="The two passwords do not match.";return;}m.textContent="Setting your password...";fetch("/api/registrations/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:' + tokenJson + ',password:pw})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){m.innerHTML="Done. Your Scholar ID is <b>"+j.scholarId+"</b> — you can now <a href=\"/\">sign in</a> with it and your new password.";}else{m.textContent=(j&&j.error)||"That link could not be used.";}}).catch(function(){m.textContent="Something went wrong. Try again.";});});<\/script>' +
+        '</body></html>';
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(html),
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'"
+      });
+      return res.end(html);
+    }
     if (staticRateLimited(getClientIp(req))) {
       res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60', 'Cache-Control': 'no-store' });
       return res.end('Too many requests. Wait a minute and try again.');
@@ -10143,7 +10156,7 @@ const server = http.createServer(async (req, res) => {
 
   /* Roles slice (c), step 7: a successful sensitive action by a signed-in management account is
      written to the manager log before the reply goes out, so the log is never behind the answer.
-     Only the method, path and the two whitelisted choices (tier, on/off) are read (core.auditActionFor);
+     Only the method, path and the whitelisted on/off choice are read (core.auditActionFor);
      a failed request is never logged, and a logging fault never breaks the request. */
   if (sess && sess.data.role === 'admin') {
     const actor = { id: sess.data.id, name: sess.data.name, roleKey: sess.data.roleKey };
@@ -10471,7 +10484,6 @@ function start() {
   writeData(startupDb);
   startBackupSchedule();
   startReminderSchedule();
-  // Chrome UI test: skip automatic Appwrite tier migration.
   server.listen(PORT, HOST, () => {
     console.log('');
     console.log('  G.O.C Academy Hub is running');
@@ -10501,11 +10513,6 @@ function start() {
     /* Value-free diagnostic: never print the configured phrase or address. */
     console.log('  Founder contact entrance: ' + founderContact.configurationStatus(process.env) + '.');
     console.log('');
-    if (appwriteDatabases) {
-      migrateAppwriteTiers().catch(function(err) {
-        console.error('[goc] Tier migration error:', err && err.message || err);
-      });
-    }
   });
 }
 
@@ -10623,44 +10630,6 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
    Students are stored in Appwrite Database.
    Other application data remains in server/data.json for now.
    ============================================================ */
-
-/* Access tiers, one-time migration for Appwrite deployments (Phase 3B).
-   Students are stored in Appwrite, so the local roster migration cannot reach
-   them. This stamps tier 'goc' on every student who already existed. A cutoff
-   time is recorded the first time it runs, and only students created at or
-   before it are promoted, so an Open sign-up made while the optional `tier`
-   attribute was still missing is never promoted by a later retry. The
-   finished marker is set only when every update succeeded; until then it
-   tries again at the next boot, and students without a stored tier read as
-   Open (fail closed). Add the optional string attribute `tier` (size 8) to
-   the students collection before this can finish. */
-async function migrateAppwriteTiers() {
-  if (!appwriteDatabases) return { skipped: true };
-  const db = readData();
-  if (db.settings.tierAppwriteMigrated) return { skipped: true };
-  if (!db.settings.tierCutoff) { db.settings.tierCutoff = new Date().toISOString(); writeData(db); }
-  const cutoff = Date.parse(db.settings.tierCutoff);
-  let list;
-  try { list = await listAppwriteStudents(); }
-  catch (err) { console.error('[goc] Tier migration could not list students:', err.message); return { failed: true }; }
-  let promoted = 0;
-  for (const st of list) {
-    if (st.tier) continue;
-    const made = st.createdAt ? Date.parse(st.createdAt) : NaN;
-    if (!(made <= cutoff)) continue;
-    try { await updateAppwriteStudent(st.id, { tier: 'goc' }); promoted++; }
-    catch (err) {
-      console.error('[goc] Tier migration stopped at ' + st.id + ': ' + err.message +
-        ' - add an optional string attribute "tier" (size 8) to the students collection, then restart.');
-      return { failed: true, promoted };
-    }
-  }
-  const fresh = readData();
-  fresh.settings.tierAppwriteMigrated = new Date().toISOString();
-  writeData(fresh);
-  if (promoted) console.log('[goc] Tier migration: ' + promoted + ' existing student(s) set to GOC.');
-  return { promoted };
-}
 
 async function listAppwriteStudents() {
   if (!appwriteDatabases) {

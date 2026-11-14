@@ -33,8 +33,8 @@ head('The rule');
 ok('a fresh broadcast to a GOC student with an address is sent', plan().send === true);
 ok('reminder unticked: never emailed', plan(bc({ remind: false })).reason === 'no-reminder');
 ok('a missing remind flag counts as ticked (the default)', plan(bc({ remind: undefined })).send === true);
-ok('an Open student is never emailed', plan(null, stu({ tier: 'open' })).reason === 'audience');
-ok('no stored tier reads as Open: not emailed', plan(null, stu({ tier: undefined })).reason === 'audience');
+ok('a stored tier value is ignored: the student is emailed', plan(null, stu({ tier: 'open' })).send === true);
+ok('no stored tier: still emailed', plan(null, stu({ tier: undefined })).send === true);
 ok('a deactivated student is not emailed', plan(null, stu({ active: false })).reason === 'audience');
 ok('a subject broadcast reaches only students taking the subject',
   plan(bc({ audience: { kind: 'subject', subject: 'Physics' } })).send &&
@@ -128,8 +128,7 @@ function world(students, data, over) {
     stu({ id: 'D', email: 'd@x.ng', active: false }), stu({ id: 'E', email: 'e@x.ng' })],
     { reminderState: { E: { prefs: { email: false } } } });
   r = await w.svc.broadcastSweep(NOW);
-  ok('only the one eligible student is emailed (Open, no address, deactivated and opted-out are not)',
-    w.box.length === 1 && w.box[0].to === 'a@x.ng', w.box.map(function (x) { return x.to; }).join());
+  ok('eligible students are emailed (no address, deactivated and opted-out are not)', w.box.length === 2 && w.box.some(function (x) { return x.to === 'a@x.ng'; }) && w.box.some(function (x) { return x.to === 'b@x.ng'; }), w.box.map(function (x) { return x.to; }).join());
 
   w = world([stu({ id: 'A', email: 'a@x.ng' }), stu({ id: 'B', email: 'b@x.ng', subjects: ['Biology'] })],
     { broadcasts: [bc({ audience: { kind: 'subject', subject: 'Physics' } })] });
