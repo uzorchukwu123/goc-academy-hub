@@ -79,7 +79,7 @@ function registerStudent(name, pw) {
   return activeStudent.demo(DEMO, {
     signupCode: 'GOC-2027', name: name, password: pw,
     goal: 'JAMB / UTME 2027', subjects: SUBJECTS
-  }).then(function (r) { run('GOC.api._drivers.mock._setTier')(r.student.id, 'goc'); return r.student.id; });
+  }).then(function (r) { return r.student.id; });
 }
 
 var MPW = 'bello#88';

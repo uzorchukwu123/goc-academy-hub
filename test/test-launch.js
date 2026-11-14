@@ -101,7 +101,7 @@ ok('the server checks the per-address limit before any other work, and records o
    srvPost.indexOf('signupBlocked(ip, lim)') > -1 && srvPost.indexOf('signupBlocked') < srvPost.indexOf('clean(body.name') &&
    srvPost.indexOf('noteSignup(ip)') > srvPost.indexOf('writeData(db)'));
 ok('a refusal carries Retry-After', /setHeader\('Retry-After'/.test(srvPost));
-ok('every self-made account is stored as Open', /tier: 'open'/.test(srvPost));
+ok('every self-made account is stored with no access tier (one student category)', !/tier:/.test(srvPost));
 ok('the published code appears nowhere on the page or in the app layer', !leaks(html) && !leaks(appSrc));
 ok('the neither GOC_SIGNUP_CODE nor the code is needed to seed a fresh install', !/GOC_SIGNUP_CODE/.test(srvSrc));
 

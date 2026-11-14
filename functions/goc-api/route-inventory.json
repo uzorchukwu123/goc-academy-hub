@@ -2,14 +2,14 @@
   "generatedBy": "functions/goc-api/tools/extract-routes.js",
   "source": "server/server.js",
   "note": "Generated from the OneBit route table. Do not hand-edit; re-run the extractor.",
-  "total": 253,
+  "total": 251,
   "counts": {
     "byAuthTier": {
       "public": 21,
       "student": 37,
       "staff-or-student": 4,
       "staff": 3,
-      "console": 145,
+      "console": 143,
       "tutor-setup": 2,
       "tutor": 27,
       "founder": 2,
@@ -18,15 +18,15 @@
     "byMethod": {
       "GET": 113,
       "POST": 77,
-      "PUT": 41,
+      "PUT": 39,
       "DELETE": 22
     },
     "byFamily": {
       "api/health": 1,
       "api/auth": 7,
       "api/me": 32,
-      "api/students": 8,
-      "api/admin": 22,
+      "api/students": 7,
+      "api/admin": 21,
       "api/staff": 3,
       "api/updates": 3,
       "api/affirmations": 2,
@@ -91,7 +91,6 @@
     "students.approve",
     "students.deactivate",
     "students.passwords",
-    "students.tier",
     "system.migrate",
     "theory.mark",
     "tutors.accounts",
@@ -2690,20 +2689,6 @@
     },
     {
       "method": "PUT",
-      "path": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier$",
-      "regex": {
-        "source": "^\\/api\\/admin\\/cohorts\\/([A-Za-z0-9._-]+)\\/tier$",
-        "flags": ""
-      },
-      "displayPath": "/api/admin/cohorts/([A-Za-z0-9._-]+)/tier",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.tier",
-      "family": "api/admin",
-      "serverLine": 8712
-    },
-    {
-      "method": "PUT",
       "path": "/api/students/([A-Za-z0-9-]+)/cohort$",
       "regex": {
         "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/cohort$",
@@ -2715,20 +2700,6 @@
       "capability": "cohort.manage",
       "family": "api/students",
       "serverLine": 8751
-    },
-    {
-      "method": "PUT",
-      "path": "/api/students/([A-Za-z0-9-]+)/tier$",
-      "regex": {
-        "source": "^\\/api\\/students\\/([A-Za-z0-9-]+)\\/tier$",
-        "flags": ""
-      },
-      "displayPath": "/api/students/([A-Za-z0-9-]+)/tier",
-      "caseInsensitive": false,
-      "authTier": "console",
-      "capability": "students.tier",
-      "family": "api/students",
-      "serverLine": 8785
     },
     {
       "method": "GET",

@@ -86,7 +86,7 @@ function signup(extra) {
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, ftok);
   var roster = await call('GET', '/api/students', undefined, ftok);
   var mine = ((roster.body && (roster.body.students || roster.body)) || []).filter(function (x) { return r.body && r.body.student && x.id === r.body.student.id; })[0];
-  ok('stored as Open, waiting for approval', r.body && r.body.pending === true && !!mine && mine.tier === 'open' && mine.pendingApproval === true, JSON.stringify(mine) + ' ' + r.raw);
+  ok('stored with no tier, waiting for approval', r.body && r.body.pending === true && !!mine && !('tier' in mine) && mine.pendingApproval === true, JSON.stringify(mine) + ' ' + r.raw);
   r = await signup({ signupCode: 'whatever' });
   ok('a stale code field is ignored', r.status === 200, r.status + ' ' + r.raw);
 

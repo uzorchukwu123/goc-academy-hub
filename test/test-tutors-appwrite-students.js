@@ -11,10 +11,10 @@
    This boots the server against the in-memory Appwrite stand-in with the tutor,
    the students and the marked papers seeded in Appwrite and a deliberately EMPTY
    local cache (db.students / db.attempts / db.practiceRuns), then asserts:
-     · at-risk lists the GOC student with the low marked average, by name, and
-       excludes the Open student and the high-average GOC student;
-     · top-performers ranks the GOC students by their Appwrite marked-paper
-       average (highest first) and excludes the Open student.
+     · at-risk lists the student with the low marked average, by name, and
+       excludes the high-average students;
+     · top-performers ranks the students by their Appwrite marked-paper
+       average (highest first).
    If the routes ever fall back to the empty local roster, both lists come back
    empty and these checks fail.
    node test/test-tutors-appwrite-students.js */
@@ -49,17 +49,13 @@ var tutorRec = {
 
 var SUBS = ['Use of English', 'Physics', 'Chemistry', 'Biology'];
 var NOW = Date.now();
-function student(id, name, tier, createdAt) {
+function student(id, name, createdAt) {
   var d = {
     $id: id, scholarId: id, name: name, email: id.toLowerCase() + '@example.com',
     phone: '08000000000', exam: 'JAMB / UTME 2027', subjects: JSON.stringify(SUBS),
     active: true, xp: 0, streak: 0, goal: 'JAMB / UTME 2027',
     $createdAt: new Date(createdAt).toISOString()
   };
-  /* Only 'goc' is ever stored; an Open account stores nothing. The Open student
-     here is given a createdAt AFTER the boot-time tier-migration cutoff so the
-     one-time migration leaves it Open (as it would a post-cutoff sign-up). */
-  if (tier === 'goc') d.tier = 'goc';
   return { col: 'students', data: d };
 }
 var attemptSeq = 0;
@@ -75,14 +71,14 @@ function attempt(scholarId, percent) {
 }
 var seed = { files: [], docs: [
   { col: 'tutors', data: { $id: 'GOC-T-001', record: JSON.stringify(tutorRec) } },
-  student('GOC-S-001', 'Gina Low', 'goc', NOW - 86400000),
-  student('GOC-S-002', 'Bola High', 'goc', NOW - 86400000),
-  student('GOC-S-003', 'Ope Open', null, NOW + 86400000),
+  student('GOC-S-001', 'Gina Low', NOW - 86400000),
+  student('GOC-S-002', 'Bola High', NOW - 86400000),
+  student('GOC-S-003', 'Ope Strong', NOW - 86400000),
   /* Gina: two marked Physics papers at 30% -> low average (at-risk) and ranked. */
   attempt('GOC-S-001', 30), attempt('GOC-S-001', 30),
   /* Bola: two marked Physics papers at 90% -> tops the class, not at-risk. */
   attempt('GOC-S-002', 90), attempt('GOC-S-002', 90),
-  /* Ope: Open tier, so never listed even with strong papers. */
+  /* Ope: the strongest papers of the three. */
   attempt('GOC-S-003', 95), attempt('GOC-S-003', 95)
 ] };
 var SEED = path.join(TMP, 'seed.json'); fs.writeFileSync(SEED, JSON.stringify(seed));
@@ -156,7 +152,7 @@ function call(method, url, body, token) {
   ok('at-risk reflects the Appwrite GOC student with the low average (Gina, by name)',
     arIds.indexOf('GOC-S-001') > -1 && arRows.some(function (r) { return r.id === 'GOC-S-001' && r.name === 'Gina Low' && r.average === 30 && r.reasons.indexOf('low-average') > -1; }),
     JSON.stringify(arRows));
-  ok('at-risk excludes the high-average GOC student and the Open student',
+  ok('at-risk excludes the high-average students',
     arIds.indexOf('GOC-S-002') < 0 && arIds.indexOf('GOC-S-003') < 0, JSON.stringify(arIds));
 
   /* ---- top performers ---- */
@@ -164,11 +160,10 @@ function call(method, url, body, token) {
   ok('the top-performers route answers', top.status === 200, top.status + ' ' + top.raw);
   var tests = (top.body && top.body.tests && top.body.tests.items) || [];
   var testIds = tests.map(function (r) { return r.id; });
-  ok('top-performers reflects the Appwrite GOC students ranked by marked average (Bola 90 before Gina 30)',
-    testIds.length === 2 && testIds[0] === 'GOC-S-002' && testIds[1] === 'GOC-S-001' &&
-    tests[0].name === 'Bola High' && tests[0].average === 90 && tests[1].name === 'Gina Low' && tests[1].average === 30,
+  ok('top-performers reflects the Appwrite students ranked by marked average (Ope 95, Bola 90, Gina 30)',
+    testIds.length === 3 && testIds[0] === 'GOC-S-003' && testIds[1] === 'GOC-S-002' && testIds[2] === 'GOC-S-001' &&
+    tests[0].name === 'Ope Strong' && tests[0].average === 95 && tests[1].name === 'Bola High' && tests[1].average === 90 && tests[2].name === 'Gina Low' && tests[2].average === 30,
     JSON.stringify(tests));
-  ok('top-performers excludes the Open student', testIds.indexOf('GOC-S-003') < 0, JSON.stringify(testIds));
 
   await halt();
   console.log('\n' + passes + ' passed, ' + fails + ' failed');

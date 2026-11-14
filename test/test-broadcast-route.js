@@ -76,15 +76,15 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
 
   console.log('\nthe audience count before sending');
   var c1 = await call('GET', '/api/broadcasts/audience?kind=goc', null, adm);
-  ok('all GOC students counts only GOC students', c1.status === 200 && c1.body.reached === 2 && c1.body.label === 'All GOC students', c1.raw);
-  ok('one subject counts GOC students taking it', (await call('GET', '/api/broadcasts/audience?kind=subject&subject=Chemistry', null, adm)).body.reached === 1);
+  ok('the all-students audience counts every student', c1.status === 200 && c1.body.reached === 3 && c1.body.label === 'All GOC students', c1.raw);
+  ok('one subject counts students taking it', (await call('GET', '/api/broadcasts/audience?kind=subject&subject=Chemistry', null, adm)).body.reached === 2);
   ok('a subject nobody takes counts zero', (await call('GET', '/api/broadcasts/audience?kind=subject&subject=Agricultural%20Science', null, adm)).status !== 500);
   ok('a bad audience is refused', (await call('GET', '/api/broadcasts/audience?kind=everyone', null, adm)).status === 400 && (await call('GET', '/api/broadcasts/audience?kind=subject&subject=Latin', null, adm)).status === 400);
 
   console.log('\nsending');
   var p0 = await call('POST', '/api/broadcasts', Object.assign({ sentBy: 'forged', sentAt: 'forged', id: 9999, reached: 500 }, good), adm);
   ok('the console sends a subject broadcast', p0.status === 200 && p0.body.created === true && p0.body.broadcast.audienceLabel === 'Chemistry students', p0.raw);
-  ok('forged sender, time, id and reach are ignored', p0.body.broadcast.sentBy !== 'forged' && p0.body.broadcast.sentAt !== 'forged' && p0.body.broadcast.id !== 9999 && p0.body.broadcast.reached === 1);
+  ok('forged sender, time, id and reach are ignored', p0.body.broadcast.sentBy !== 'forged' && p0.body.broadcast.sentAt !== 'forged' && p0.body.broadcast.id !== 9999 && p0.body.broadcast.reached === 2);
   ok('the sender is the signed-in staff member', /Ernest/.test(p0.body.broadcast.sentBy));
   ok('the reminder is on by default', p0.body.broadcast.remind === true);
   var bid = p0.body.broadcast.id;
@@ -99,22 +99,22 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
   var g2 = await call('GET', '/api/me/broadcasts', null, gocBio.token);
   ok('a GOC student NOT taking Chemistry sees nothing', g2.status === 200 && g2.body.broadcasts.length === 0 && g2.body.locked === false);
   var o1 = await call('GET', '/api/me/broadcasts', null, openChem.token);
-  ok('an Open student sees nothing, locked, and the text never leaves the server', o1.body.locked === true && o1.body.broadcasts.length === 0 && o1.raw.indexOf('ZQXBROADCAST') === -1);
+  ok('a student with a stored open tier sees broadcasts like everyone (no tier gate)', o1.body.locked === false && o1.body.broadcasts.length === 1 && o1.raw.indexOf('ZQXBROADCAST') > -1);
   ok('no session is refused; a tutor session is refused', (await call('GET', '/api/me/broadcasts')).status === 401 && [401, 403].indexOf((await call('GET', '/api/me/broadcasts', null, tk)).status) > -1);
 
   console.log('\nan all-GOC broadcast, newest first');
   var p1 = await call('POST', '/api/broadcasts', { audience: { kind: 'goc' }, title: 'Holiday notice', body: 'The academy is closed on Monday for the holiday.', remind: false }, adm);
-  ok('it is sent, reminder off, reaching both GOC students', p1.status === 200 && p1.body.broadcast.remind === false && p1.body.broadcast.reached === 2);
+  ok('it is sent, reminder off, reaching all three students', p1.status === 200 && p1.body.broadcast.remind === false && p1.body.broadcast.reached === 3);
   ok('the Chemistry student sees both, newest first', (await call('GET', '/api/me/broadcasts', null, gocChem.token)).body.broadcasts.map(function (b) { return b.title; }).join('|') === 'Holiday notice|Mock exam on Friday');
   ok('the Biology student sees only the all-GOC one', (await call('GET', '/api/me/broadcasts', null, gocBio.token)).body.broadcasts.map(function (b) { return b.title; }).join('|') === 'Holiday notice');
 
-  console.log('\ntier changes take effect at once');
-  ok('Open made GOC now sees the messages for them', (await call('PUT', '/api/students/' + openChem.id + '/tier', { tier: 'goc' }, adm)).status === 200 && (await call('GET', '/api/me/broadcasts', null, openChem.token)).body.broadcasts.length === 2);
-  ok('GOC made Open loses them at once', (await call('PUT', '/api/students/' + openChem.id + '/tier', { tier: 'open' }, adm)).status === 200 && (await call('GET', '/api/me/broadcasts', null, openChem.token)).body.locked === true);
+  console.log('\nno tier changes exist to take effect');
+  ok('the tier-switch route is gone (404); the student keeps both messages', (await call('PUT', '/api/students/' + openChem.id + '/tier', { tier: 'goc' }, adm)).status === 404 && (await call('GET', '/api/me/broadcasts', null, openChem.token)).body.broadcasts.length === 2);
+  ok('a stored tier change has no effect on what a student reads', (await call('GET', '/api/me/broadcasts', null, openChem.token)).body.locked === false);
 
   console.log('\nthe console list and removing');
   var all = await call('GET', '/api/broadcasts', null, adm);
-  ok('the console lists every broadcast, newest first, with sender, audience and reach', all.status === 200 && all.body.count === 2 && all.body.broadcasts[0].title === 'Holiday notice' && /Ernest/.test(all.body.broadcasts[0].sentBy) && all.body.broadcasts[1].audienceLabel === 'Chemistry students' && all.body.broadcasts[1].reached === 1);
+  ok('the console lists every broadcast, newest first, with sender, audience and reach', all.status === 200 && all.body.count === 2 && all.body.broadcasts[0].title === 'Holiday notice' && /Ernest/.test(all.body.broadcasts[0].sentBy) && all.body.broadcasts[1].audienceLabel === 'Chemistry students' && all.body.broadcasts[1].reached === 2);
   var d1 = await call('DELETE', '/api/broadcasts/' + bid, null, adm);
   ok('the console removes one', d1.status === 200 && d1.body.ok === true);
   ok('it is gone from the student at once', (await call('GET', '/api/me/broadcasts', null, gocChem.token)).body.broadcasts.map(function (b) { return b.title; }).join() === 'Holiday notice');

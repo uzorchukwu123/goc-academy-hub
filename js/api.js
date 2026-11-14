@@ -238,12 +238,11 @@
     var bookmarks = {};
     /* Spaced-repetition schedule per Scholar ID (Phase 2) — in-memory, like the above. */
     var reviewState = {};
-    /* Access tiers (Phase 3B), mirroring server.js: spaced reviews answered per
-       student per Lagos day, { day, count }. In memory like the rest of demo mode. */
+    /* Spaced reviews answered per student per Lagos day, { day, count }.
+       In memory like the rest of demo mode. */
     var reviewCount = {};
-    /* A student's kept practice runs: their tier's count limit (null = none) and the maximum age. */
-    function demoRuns(id, list) { return core.capList(core.dropOldRuns(list), core.tierLimits(tierOf(id)).practiceHistory); }
-    function tierOf(id) { var st = find(students, id); return core.cleanTier(st && st.tier); }
+    /* A student's kept practice runs: the maximum age only (no count limit). */
+    function demoRuns(id, list) { return core.capList(core.dropOldRuns(list), core.studentLimits().practiceHistory); }
     function reviewsUsedToday(id) {
       var r = reviewCount[id];
       return r && r.day === core.lagosDay() ? Math.max(0, Math.floor(Number(r.count) || 0)) : 0;
@@ -322,9 +321,6 @@
         active: s.active !== false, xp: s.xp || 0, streak: s.streak || 0,
         level: core.levelFor(s.xp || 0), subjects: (s.subjects || []).slice(),
         exam: core.EXAM, performance: perfFor(s.id).overall,
-        tier: core.cleanTier(s.tier),   /* as the server's console view of a student */
-        tierChangedBy: s.tierChangedBy || null,
-        tierChangedAt: s.tierChangedAt || null
       };
     }
     function find(arr, id) {
@@ -573,7 +569,6 @@
           last: 'Awaiting approval', tag: 'a', tl: 'Pending',
           xp: 0, streak: 0, active: false, pendingApproval: true,
           subjects: sub.subjects,
-          tier: 'open',  /* self-registered accounts are Open, as on the server */
           /* The acceptance, stamped with the server-side policy version rule:
              the demo keeps the same shape the real server stores. */
           privacyConsent: { at: new Date().toISOString(), version: core.PRIVACY_POLICY_VERSION }
@@ -596,8 +591,6 @@
         if (!ex.ok) return fail(ex.error);
         var sub = core.validateSubjects((data && data.subjects) || []);
         if (!sub.ok) return fail(sub.error);
-        var newTier = core.newStudentTier(data && data.tier);
-        if (!newTier.ok) return fail(newTier.error);
         var max = 0;
         students.forEach(function (s) {
           var n = parseInt(String(s.id).replace('GOC-S-', ''), 10);
@@ -610,8 +603,7 @@
           phone: String((data && data.phone) || '').trim(),
           last: 'Just registered', tag: 'g', tl: 'New',
           xp: 0, streak: 0, active: true, subjects: sub.subjects,
-          mustChangePassword: true,
-          tier: newTier.tier   /* GOC unless the console chose Open */
+          mustChangePassword: true
         };
         students.push(rec);
         return ok({ student: publicStudent(rec), temporaryPassword: t });
@@ -803,7 +795,6 @@
          without signing in as management. */
       _setJambReadyMin: function (min) { settings.jambReadyMin = core.clampJambReadyMin(min); },
       /* Test-only: a public sign-up is Open, so a suite that sits Web Tests promotes its student, as the console would. */
-      _setTier: function (id, tier) { var st = find(students, id); if (st) st.tier = core.cleanTier(tier); },
       /* Test-only (stripped from the production build like the two above):
          grants an XP balance so a suite can test an XP purchase (e.g. a 500-XP
          streak freeze) without grinding past the daily practice XP cap. */
@@ -863,13 +854,12 @@
           xpPerLevel: core.xpPerLevel(),
           performance: p.overall, performanceDetail: p,
           active: s.active !== false,
-          tier: core.cleanTier(s.tier),
-          features: core.tierFeatures(s.tier),
-          limits: core.tierLimits(s.tier),
+          features: core.studentFeatures(),
+          limits: core.studentLimits(),
           today: {
             day: core.lagosDay(),
-            practice: core.dailyAllowance(0, s.tier),
-            reviews: core.reviewAllowance(reviewsUsedToday(s.id), s.tier)
+            practice: core.dailyAllowance(0),
+            reviews: core.reviewAllowance(reviewsUsedToday(s.id))
           }
         });
       },
@@ -910,8 +900,6 @@
                       papers: jbp.map(function (r) { return { subject: r.subject, questions: r.serving }; }) },
                       sitStatus(s.id, 'jamb', core.OBJECTIVE_SUBJECT)));
         }
-        /* Open students still see the papers, marked locked; startTest is the real gate. */
-        rows.forEach(function (r) { if (!core.webTestAllowed(r.section, s.tier)) r.locked = true; });
         return ok({ subjects: subs, tests: rows,
                     objectiveMinutes: core.clampObjectiveMinutes(settings.objectiveMinutes),
                     jambMinutes: core.clampJambMinutes(settings.jambMinutes) });
@@ -929,10 +917,6 @@
         var section = String((d && d.section) || '');
         var subject = String((d && d.subject) || '');
         if (core.SECTIONS.indexOf(section) === -1) return fail('Choose a test section.');
-        /* ACCESS TIER: same gate as the server, before anything is opened or recorded. */
-        if (core.WEB_TEST_SECTIONS.indexOf(section) > -1 && !core.webTestAllowed(section, s.tier)) {
-          return fail(core.webTestLockMessage(section));
-        }
         var pool, dur, subs = (s.subjects || []).slice(), papers = null;
         /* A question whose passage cannot be shown is held back, as on the server. */
         var bank = core.servablePool(questions, passages);
@@ -1119,14 +1103,7 @@
           if (f.topic && n.topic !== f.topic) return false;
           return true;
         });
-        /* Access tiers: an Open student reads the first few notes of each subject
-           (by note id among the subject's active notes, so the topic filter does not
-           move the line); the rest are listed but locked, with no body. */
-        var tier = core.cleanTier(s.tier), place = {}, seenIn = {};
-        notes.filter(function (n) { return n.active && (s.subjects || []).indexOf(n.subject) !== -1; })
-          .sort(function (a, b) { return Number(a.id) - Number(b.id); })
-          .forEach(function (n) { seenIn[n.subject] = seenIn[n.subject] || 0; place[n.id] = seenIn[n.subject]++; });
-        return ok({ notes: clone(rows).map(function (n) { return core.noteVisible(place[n.id], tier) ? n : core.lockedNote(n); }) });
+        return ok({ notes: clone(rows) });
       },
 
       startStudy: function (d) {
@@ -1486,7 +1463,7 @@
       listReview: function () {
         var e = requireStudent(); if (e) return e;
         return ok({ review: core.srQueue(demoMistakes(session.id), reviewState[session.id] || {}, Date.now()),
-                    today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsUsedToday(session.id), tierOf(session.id)) } });
+                    today: { day: core.lagosDay(), reviews: core.reviewAllowance(reviewsUsedToday(session.id)) } });
       },
       answerReview: function (key, given) {
         var e = requireStudent(); if (e) return e;
@@ -1497,10 +1474,8 @@
         var m = mistakes.filter(function (x) { return x.key === key; })[0];
         if (!m) return fail('That question is not in your mistakes.');
         if (!Array.isArray(m.options) || given >= m.options.length) return fail('Pick one of the answer options.');
-        /* Access tiers: checked after the question is found, so a bad request is never charged. */
-        var usedBefore = reviewsUsedToday(session.id), tier = tierOf(session.id);
-        var allowance = core.reviewAllowance(usedBefore, tier);
-        if (!allowance.allowed) return fail(core.reviewLimitMessage(allowance.limit));
+        var usedBefore = reviewsUsedToday(session.id);
+        var allowance = core.reviewAllowance(usedBefore);
         reviewCount[session.id] = { day: core.lagosDay(), count: usedBefore + 1 };
         var now = Date.now(), state = reviewState[session.id] || {};
         var correct = given === Number(m.answer);
@@ -1508,7 +1483,7 @@
         reviewState[session.id] = core.srStore(state, key, entry);
         var q = core.srQueue(mistakes, reviewState[session.id], now);
         return ok({
-          ok: true, today: { day: core.lagosDay(), reviews: core.reviewAllowance(usedBefore + 1, tier) },
+          ok: true, today: { day: core.lagosDay(), reviews: core.reviewAllowance(usedBefore + 1) },
           correct: correct, answer: m.answer, explanation: m.explanation || '',
           box: entry.box, mastered: entry.mastered, nextDue: entry.due,
           dueCount: q.dueCount, upcoming: q.upcoming, masteredCount: q.mastered
@@ -1558,7 +1533,7 @@
       buyStreakFreeze: function () {
         var e = requireStudent(); if (e) return e;
         var stu = find(students, session.id);
-        if (!core.canUse('streakFreezes', stu.tier)) {
+        if (!core.canUse('streakFreezes')) {
           return fail('Buying streak freezes is for GOC students. Ask the academy about joining.');
         }
         var r = core.buyStreakFreeze(stu.xp, stu.streakFreezes);
@@ -1576,21 +1551,19 @@
       /* Bookmarks (Phase 1, part 2), mirroring the http driver. */
       listBookmarks: function () {
         var e = requireStudent(); if (e) return e;
-        var cap = core.tierLimits(tierOf(session.id)).bookmarks;
+        var cap = core.studentLimits().bookmarks;
         return ok({ bookmarks: core.capList(bookmarks[session.id], cap), limit: cap });
       },
       addBookmark: function (b) {
         var e = requireStudent(); if (e) return e;
         var rec = core.sanitizeBookmark(b);
         if (!rec) return fail('A bookmark needs the question text and at least two options.');
-        var cap = core.tierLimits(tierOf(session.id)).bookmarks;
+        var cap = core.studentLimits().bookmarks;
         var list = Array.isArray(bookmarks[session.id]) ? core.capList(bookmarks[session.id], cap) : [];
         bookmarks[session.id] = list;
         var existing = null;
         list.forEach(function (x) { if (x.key === rec.key) existing = x; });
         if (existing) return ok({ ok: true, saved: existing, already: true, bookmarks: list });
-        /* Full: refuse and say how to make room. Nothing is dropped silently. */
-        if (cap != null && list.length >= cap) return fail(core.bookmarkLimitMessage(cap));
         rec.ts = Date.now();
         list.unshift(rec);
         bookmarks[session.id] = core.capList(list, cap);
@@ -1956,24 +1929,6 @@
         return ok(publicStudent(s));
       },
 
-      /* Move a student between Open and GOC, as PUT /api/students/:id/tier does on the
-         server: same refusal wording, no change (and nothing recorded) when the student
-         already has that tier, otherwise who and when are stamped on the student. */
-      setStudentTier: function (id, tier) {
-        var e = requireUnlocked(); if (e) return e;
-        if (!core.adminMayUse(session.id, core.adminRoleKey(session.title), 'students.tier')) return fail('Your role does not include this.');
-        var want = core.parseTierChange(tier);
-        if (!want.ok) return fail(want.error);
-        var s = find(students, id);
-        if (!s) return fail('That Scholar ID is not on the roster.');
-        if (core.cleanTier(s.tier) !== want.tier) {
-          s.tier = want.tier;
-          s.tierChangedBy = session.name || session.id;
-          s.tierChangedAt = new Date().toISOString();
-        }
-        return ok(publicStudent(s));
-      },
-
       /* Admin-approval flow: approve a pending self-registered account. */
       approveStudent: function (id) {
         var e = requireUnlocked(); if (e) return e;
@@ -2133,10 +2088,10 @@
         return fail('Approvals need a server connection.');
       },
       /* Class notices come from tutors, and the offline demo has no tutors: nothing to show. A student's
-         answer still follows the tier rule, so an Open student reads as locked here too. */
+         answer follows the same student-access rule here too. */
       listMyNotices: function () {
         var e = requireStudent(); if (e) return e;
-        var locked = !core.canUse('classNotices', tierOf(session.id));
+        var locked = !core.canUse('classNotices');
         return ok({ locked: locked, notices: [] });
       },
       listNotices: function () {
@@ -2183,20 +2138,20 @@
       },
       listMyBroadcasts: function () {
         var e = requireStudent(); if (e) return e;
-        var locked = !core.canUse('classNotices', tierOf(session.id));
+        var locked = !core.canUse('classNotices');
         return ok({ locked: locked, broadcasts: locked ? [] : core.broadcastsForStudent(broadcasts, find(students, session.id)) });
       },
       /* Ask a tutor (Phase 4.A): the student side, offline, with the same core rules as the server. */
       listMyFlags: function () {
         var e = requireStudent(); if (e) return e;
         var s = find(students, session.id);
-        var locked = !core.canUse('askTutor', tierOf(session.id));
+        var locked = !core.canUse('askTutor');
         return ok({ locked: locked, flags: locked ? [] : core.flagsForStudent(flags, s) });
       },
       askTutor: function (d) {
         var e = requireStudent(); if (e) return e;
         var s = find(students, session.id);
-        if (!core.canUse('askTutor', tierOf(session.id))) return fail('Asking a tutor is for GOC students. Ask the academy about joining.');
+        if (!core.canUse('askTutor')) return fail('Asking a tutor is not available.');
         var qid = String((d && d.questionId) != null ? d.questionId : '').trim();
         var q = null;
         for (var qi = 0; qi < questions.length; qi++) { if (String(questions[qi].id) === qid) { q = questions[qi]; break; } }
@@ -2523,12 +2478,6 @@
       listCohorts: function () {
         var e = requireUnlocked(); if (e) return e;
         return ok({ cohorts: [] });
-      },
-      setCohortTier: function (id, tier) {
-        var e = requireUnlocked(); if (e) return e;
-        var want = core.parseTierChange(tier);
-        if (!want.ok) return fail(want.error);
-        return fail('Moving a whole cohort needs a server connection.');
       },
       createCohort: function (d) {
         var e = requireUnlocked(); if (e) return e;
@@ -2868,7 +2817,6 @@
       markTheory:     function (id, m) { return req('POST', '/results/' + encodeURIComponent(id) + '/mark', { marks: m || {} }); },
 
       setStudentActive: function (id, on) { return req('PUT', '/students/' + encodeURIComponent(norm(id)) + '/active', { active: !!on }); },
-      setStudentTier:   function (id, tier) { return req('PUT', '/students/' + encodeURIComponent(norm(id)) + '/tier', { tier: String(tier) }); },
       approveStudent:   function (id) { return req('POST', '/students/' + encodeURIComponent(norm(id)) + '/approve', {}); },
       rejectStudent:    function (id) { return req('DELETE', '/students/' + encodeURIComponent(norm(id)) + '/approve', {}); },
 
@@ -3121,9 +3069,6 @@ listPublishedVideos: function () {
     listCohorts: function () {
       return req('GET', '/admin/cohorts');
     },
-    setCohortTier: function (id, tier) {
-      return req('PUT', '/admin/cohorts/' + encodeURIComponent(String(id)) + '/tier', { tier: String(tier) });
-    },
     createCohort: function (d) {
       return req('POST', '/admin/cohorts', d || {});
     },
@@ -3289,7 +3234,6 @@ listPublishedVideos: function () {
 
     /* Priority 7 / 8 — account activation and founder-only credentials. */
     setStudentActive: function (id, on) { return active.setStudentActive(id, on); },
-    setStudentTier: function (id, tier) { return active.setStudentTier(id, tier); },
     approveStudent:  function (id)      { return active.approveStudent(id); },
     rejectStudent:   function (id)      { return active.rejectStudent(id); },
     staffAccess:    function ()       { return active.staffAccess(); },
@@ -3353,7 +3297,6 @@ listPublishedVideos: function () {
     listAlerts: function () { return active.listAlerts(); },
     seenAlert: function (id) { return active.seenAlert(id); },
     listCohorts: function () { return active.listCohorts(); },
-    setCohortTier: function (id, tier) { return active.setCohortTier(id, tier); },
     createCohort: function (d) { return active.createCohort(d); },
     updateCohort: function (id, d) { return active.updateCohort(id, d); },
     deleteCohort: function (id) { return active.deleteCohort(id); },

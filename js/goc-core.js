@@ -3765,134 +3765,80 @@
     };
   }
 
-  /* ------------------------------------------------------- ACCESS TIERS
-     Phase 3B slice 1. Every account is either OPEN (anyone who signs up) or
-     GOC (a student the academy has added). Only the console can move someone
-     between the two. These are the pure rules: what each tier may use and how
-     much. The server enforces them in its routes; the screens only explain
-     them. Every number lives in TIER_LIMITS, so tuning is one place.
-
-     Fail closed: a missing, misspelt or unknown tier reads as OPEN, and an
-     unknown feature is refused for everyone. A limit of null means "no
-     tier limit" (the existing caps, such as the 120 XP daily practice
-     allowance, still apply on top). */
-  var TIERS = ['open', 'goc'];
-  var DEFAULT_TIER = 'open';
-
-  var TIER_LIMITS = {
-    open: {
-      practicePerDay: null,      // practice is open to everyone: no daily cap
-      practiceRunMax: null,      // ... and no cap on a run
-      notesPerSubject: 3,        // the first few notes of each subject
-      reviewsPerDay: 10,         // spaced-repetition answers per day
-      bookmarks: 20,
-      practiceHistory: 30,       // same as GOC: practice history is not trimmed
-      pastYears: 'all'           // every year of past questions
-    },
-    goc: {
-      practicePerDay: null,
-      practiceRunMax: null,
-      notesPerSubject: null,
-      reviewsPerDay: null,
-      bookmarks: null,           // GOC: no limit on saved questions (owner, 8 Oct 2026)
-      practiceHistory: null,     // ... nor on how many practice runs are kept (only age, below)
-      pastYears: 'all'
-    }
+  /* ------------------------------------------------------- STUDENT ACCESS
+     One student identity: the G.O.C Student. Every student account carries
+     the same entitlement set — there is no second student category and
+     nothing is held back by account type. (The former two-tier Open/GOC
+     access system was removed wholesale; tier values stored on older
+     records are ignored everywhere.) A limit of null means "no limit";
+     general caps that are not about account type (such as the 120 XP
+     daily practice allowance) still apply on top. */
+  var STUDENT_LIMITS = {
+    practicePerDay: null,      // practice is open to every student: no daily cap
+    practiceRunMax: null,      // ... and no cap on a run
+    notesPerSubject: null,     // every note of every subject
+    reviewsPerDay: null,       // spaced-repetition answers per day
+    bookmarks: null,           // no limit on saved questions
+    practiceHistory: null,     // no count limit on kept runs (only age, below)
+    pastYears: 'all'           // every year of past questions
   };
 
-  /* Yes/no features. Anything not listed is refused (fail closed). */
-  var TIER_FEATURES = {
-    open: {
-      practice: true, mistakes: true, notes: true,
-      pastQuestions: true, resourceDownload: true, news: true, reminders: true,
-      league: true, bookmarks: true, spacedReview: true,
-      jambMock: true, webTestObjective: false, webTestTheory: false,
-      resourceView: false, videos: false, classRecordings: false, liveClassJoin: false,
-      streakFreezes: false, fullRecord: false, classNotices: false, askTutor: false
-    },
-    goc: {
-      practice: true, mistakes: true, notes: true,
-      pastQuestions: true, resourceDownload: true, news: true, reminders: true,
-      league: true, bookmarks: true, spacedReview: true,
-      jambMock: true, webTestObjective: true, webTestTheory: true,
-      resourceView: true, videos: true, classRecordings: true, liveClassJoin: true,
-      streakFreezes: true, fullRecord: true, classNotices: true, askTutor: true
-    }
+  /* Yes/no features for a student account. Anything not listed is refused
+     (fail closed). */
+  var STUDENT_FEATURES = {
+    practice: true, mistakes: true, notes: true,
+    pastQuestions: true, resourceDownload: true, news: true, reminders: true,
+    league: true, bookmarks: true, spacedReview: true,
+    jambMock: true, webTestObjective: true, webTestTheory: true,
+    resourceView: true, videos: true, classRecordings: true, liveClassJoin: true,
+    streakFreezes: true, fullRecord: true, classNotices: true, askTutor: true
   };
 
-  /* Anything that is not exactly 'goc' (any capitalisation, stray spaces) is
-     OPEN. A student can never be GOC by accident. */
-  function cleanTier(t) {
-    return typeof t === 'string' && t.trim().toLowerCase() === 'goc' ? 'goc' : 'open';
+  /* Fresh copies, so no caller can change the tables by editing what it got. */
+  function studentLimits() {
+    var out = {}, k;
+    for (k in STUDENT_LIMITS) if (Object.prototype.hasOwnProperty.call(STUDENT_LIMITS, k)) out[k] = STUDENT_LIMITS[k];
+    return out;
   }
-
-  /* The tier a console user picks when adding a student. Left out (or blank) it is
-     GOC, the Phase 3B default for a student the academy enrols; only 'goc' or 'open'
-     (any capitalisation, stray spaces) are accepted, so a typo is refused rather than
-     quietly turning into either one. */
-  function newStudentTier(t) {
-    if (t === undefined || t === null || (typeof t === 'string' && t.trim() === '')) return { ok: true, tier: 'goc' };
-    var v = typeof t === 'string' ? t.trim().toLowerCase() : '';
-    if (v === 'goc' || v === 'open') return { ok: true, tier: v };
-    return { ok: false, error: 'Choose Open or GOC for the new student.' };
-  }
-
-  /* Moving a student that already exists between tiers (Console -> Students). Unlike
-     newStudentTier there is no default: the target must be named, so a missing or
-     misspelt value is refused rather than quietly becoming either tier. */
-  function parseTierChange(t) {
-    var v = typeof t === 'string' ? t.trim().toLowerCase() : '';
-    if (v === 'goc' || v === 'open') return { ok: true, tier: v };
-    return { ok: false, error: 'Choose Open or GOC.' };
-  }
-
-  /* What the console asks before restricting a GOC student to Open. Making someone GOC
-     needs no confirm (it only adds access); this one takes things away and part of it
-     cannot be undone, so it says exactly what. The numbers come from the Open column
-     of TIER_LIMITS, so tuning the table keeps this wording true. */
-  function restrictWarning(who) {
-    var lim = TIER_LIMITS.open, lost = [], gone = [];
-    lost.push('Objective and Theory Web Tests, live classes, lesson videos and class replays');
-    if (lim.notesPerSubject != null) lost.push('notes beyond the first ' + lim.notesPerSubject + ' of each subject');
-    if (lim.reviewsPerDay != null) lost.push('spaced reviews beyond ' + lim.reviewsPerDay + ' a day');
-    if (lim.bookmarks != null) gone.push('saved questions beyond the newest ' + lim.bookmarks);
-    if (lim.practiceHistory != null) gone.push('practice history beyond the newest ' + lim.practiceHistory + ' runs');
-    var text = 'Restrict ' + who + ' to Open?\n\nAccess changes straight away. They lose ' + lost.join(', ') + '.';
-    if (gone.length) text += '\n\nThis cannot be undone: ' + gone.join(' and ') + ' will be deleted, and moving them back to GOC does not restore it.';
-    return text;
-  }
-
-  /* The toast after a whole cohort is moved. `r` is the server's reply ({ changed, unchanged, failed }). */
-  function cohortTierMessage(name, tier, r) {
-    r = r || {};
-    var label = cleanTier(tier) === 'goc' ? 'GOC' : 'Open';
-    var changed = Number(r.changed) || 0, same = Number(r.unchanged) || 0;
-    var failed = Array.isArray(r.failed) ? r.failed.length : 0;
-    var out;
-    if (!changed && !failed) out = 'Everyone in ' + name + ' is already ' + label + '.';
-    else {
-      out = name + ': ' + changed + ' student' + (changed === 1 ? '' : 's') + ' moved to ' + label;
-      if (same) out += ', ' + same + ' already ' + (same === 1 ? 'was' : 'were');
-      out += '.';
-    }
-    if (failed) out += ' ' + failed + ' could not be changed \u2014 try again.';
+  function studentFeatures() {
+    var out = {}, k;
+    for (k in STUDENT_FEATURES) if (Object.prototype.hasOwnProperty.call(STUDENT_FEATURES, k)) out[k] = STUDENT_FEATURES[k];
     return out;
   }
 
-  /* The line shown under a student's access: who changed it and when, with the time as
-     it reads in Nigeria (the academy's clock). Nothing recorded, nothing shown. */
-  function tierChangeNote(by, at) {
-    var t = Date.parse(at);
-    if (!by || !(t > 0)) return '';
-    var when;
-    try {
-      when = new Date(t).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short',
-        year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-    } catch (e) { when = new Date(t).toISOString(); }
-    return 'Changed by ' + by + ' \u00b7 ' + when;
+  function canUse(feature) {
+    return Object.prototype.hasOwnProperty.call(STUDENT_FEATURES, feature) && STUDENT_FEATURES[feature] === true;
   }
 
-  /* Practice runs are kept without a count limit for GOC, but not forever: a run
+  /* How much of a counted allowance is left. `limit` null means unlimited. */
+  function allowanceOf(limit, used) {
+    var u = Math.max(0, Math.floor(Number(used) || 0));
+    if (limit == null) return { limit: null, used: u, remaining: null, unlimited: true, allowed: true };
+    var left = Math.max(0, limit - u);
+    return { limit: limit, used: u, remaining: left, unlimited: false, allowed: left > 0 };
+  }
+
+  /* Practice questions left today. `used` is how many the student has answered
+     since midnight Africa/Lagos (see lagosDay). */
+  function dailyAllowance(used) {
+    return allowanceOf(STUDENT_LIMITS.practicePerDay, used);
+  }
+  /* Spaced-repetition answers left today. */
+  function reviewAllowance(used) {
+    return allowanceOf(STUDENT_LIMITS.reviewsPerDay, used);
+  }
+  /* How many questions a practice run may hold: what was asked, held to the
+     run size and to whatever is left of today's allowance. */
+  function capPracticeRun(requested, usedToday) {
+    var want = Math.max(0, Math.floor(Number(requested) || 0));
+    var runMax = STUDENT_LIMITS.practiceRunMax;
+    var left = dailyAllowance(usedToday).remaining;
+    if (runMax != null) want = Math.min(want, runMax);
+    if (left != null) want = Math.min(want, left);
+    return want;
+  }
+
+  /* Practice runs are kept without a count limit, but not forever: a run
      older than this many days is dropped, so the data file cannot grow without end. */
   var PRACTICE_MAX_AGE_DAYS = 365;
   function dropOldRuns(runs, now) {
@@ -3908,133 +3854,17 @@
     return cap == null ? l.slice() : l.slice(0, cap);
   }
 
-  /* A fresh copy, so no caller can change the table by editing what it got. */
-  function tierLimits(tier) {
-    var src = TIER_LIMITS[cleanTier(tier)], out = {}, k;
-    for (k in src) if (Object.prototype.hasOwnProperty.call(src, k)) out[k] = src[k];
-    return out;
-  }
-
-  /* Every yes/no feature for a tier, as a fresh copy (for GET /api/me and the
-     screens, so they never guess). */
-  function tierFeatures(tier) {
-    var src = TIER_FEATURES[cleanTier(tier)], out = {}, k;
-    for (k in src) if (Object.prototype.hasOwnProperty.call(src, k)) out[k] = src[k];
-    return out;
-  }
-
-  function canUse(feature, tier) {
-    var f = TIER_FEATURES[cleanTier(tier)];
-    return Object.prototype.hasOwnProperty.call(f, feature) && f[feature] === true;
-  }
-
-  /* How much of a counted allowance is left. `limit` null means unlimited. */
-  function allowanceOf(limit, used) {
-    var u = Math.max(0, Math.floor(Number(used) || 0));
-    if (limit == null) return { limit: null, used: u, remaining: null, unlimited: true, allowed: true };
-    var left = Math.max(0, limit - u);
-    return { limit: limit, used: u, remaining: left, unlimited: false, allowed: left > 0 };
-  }
-
-  /* Practice questions left today. `used` is how many the student has answered
-     since midnight Africa/Lagos (see lagosDay). */
-  function dailyAllowance(used, tier) {
-    return allowanceOf(tierLimits(tier).practicePerDay, used);
-  }
-  /* Spaced-repetition answers left today. */
-  function reviewAllowance(used, tier) {
-    return allowanceOf(tierLimits(tier).reviewsPerDay, used);
-  }
-  /* How many questions a practice run may hold: what was asked, held to the
-     tier's run size and to whatever is left of today's allowance. 0 means the
-     day's allowance is spent. */
-  function capPracticeRun(requested, usedToday, tier) {
-    var want = Math.max(0, Math.floor(Number(requested) || 0));
-    var runMax = tierLimits(tier).practiceRunMax;
-    var left = dailyAllowance(usedToday, tier).remaining;
-    if (runMax != null) want = Math.min(want, runMax);
-    if (left != null) want = Math.min(want, left);
-    return want;
-  }
-  /* What an Open student is told when the day's allowance is spent. One
-     wording, shared by the server and the demo driver: come back tomorrow, and
-     how to join. */
-  function dailyLimitMessage(limit) {
-    return "You've used today's " + (limit == null ? '' : limit + ' ') + 'free practice questions. They come back at midnight (Nigeria time). ' +
-      'To practise without a daily limit, ask the academy about joining as a GOC student.';
-  }
-  /* What an Open student is told when today's spaced reviews are used up. */
-  function reviewLimitMessage(limit) {
-    return "You've done today's " + (limit == null ? '' : limit + ' ') + 'free spaced reviews. They come back at midnight (Nigeria time). ' +
-      'To review without a daily limit, ask the academy about joining as a GOC student.';
-  }
-  /* What an Open student is told when their saved questions are full. */
-  function bookmarkLimitMessage(limit) {
-    return 'You have saved ' + limit + ' questions, the most an Open account can keep. ' +
-      'Remove one to save another, or ask the academy about joining as a GOC student.';
-  }
-  /* A note an Open student may see in the list but not read: the title and
-     where it sits stay, the body is gone (it never leaves the server). */
-  function lockedNote(n) {
-    return { id: n.id, title: n.title, subject: n.subject, topic: n.topic,
-             minutes: n.minutes, body: '', locked: true };
-  }
   /* Which yes/no feature gates each Web Test section. Anything not listed is
      refused (fail closed), like canUse itself. */
   var WEB_TEST_FEATURE = { objective: 'webTestObjective', theory: 'webTestTheory', jamb: 'jambMock' };
-  function webTestAllowed(section, tier) {
+  function webTestAllowed(section) {
     var f = WEB_TEST_FEATURE[section];
-    return !!f && canUse(f, tier);
+    return !!f && canUse(f);
   }
-  /* What an Open student is told when they try to sit a Web Test. */
-  function webTestLockMessage(section) {
-    var what = section === 'jamb' ? 'The JAMB-oriented mock' :
-               section === 'theory' ? 'Theory Web Tests' : 'Objective Web Tests';
-    return what + ' are for GOC students. Ask the academy about joining to sit them. ' +
-      'You can keep practising with the free practice questions.';
-  }
-  /* What an Open student is told when they try to open a resource in the app
-     (they may still download it). */
-  var RESOURCE_VIEW_LOCK_MESSAGE = 'Opening files in the app is for GOC students. Tap the download icon to save this file instead, or ask the academy about joining.';
   /* Videos: a recording of a live class (type 'live') is the classRecordings
      feature, every other video is a lesson (the videos feature). Fails closed. */
   function videoFeature(type) { return type === 'live' ? 'classRecordings' : 'videos'; }
-  function videoAllowed(type, tier) { return canUse(videoFeature(type), tier); }
-  function videoLockMessage(type) {
-    return (type === 'live' ? 'Live class replays' : 'Lesson videos') +
-      ' are for GOC students. Ask the academy about joining to watch them.';
-  }
-  /* Open students get no live classes: not the timetable entries, not the Zoom link. */
-  var LIVE_JOIN_LOCK_MESSAGE = 'Live classes are for GOC students. Ask the academy about joining.';
-  /* Past questions by year (Phase 3B, slice 2): an Open student may pick only
-     the NEWEST year a subject holds; GOC may pick any. `years` is the list
-     studyYears returns (objects with a `year`). Selecting a year is what is
-     limited; ordinary mixed practice with no year ticked is not. */
-  function tierStudyYears(years, tier) {
-    var list = (years || []).slice().sort(function (a, b) { return Number(b.year) - Number(a.year); });
-    if (tierLimits(tier).pastYears !== 'latest') return list;
-    return list.slice(0, 1);
-  }
-  /* The ticked years an Open student may not pick: held by the subject but not
-     its newest. A year the subject does not hold is not "locked" (the normal
-     "no questions published" answer covers it). */
-  function lockedPastYears(requested, years, tier) {
-    var allowed = tierStudyYears(years, tier).map(function (y) { return Number(y.year); });
-    var held = (years || []).map(function (y) { return Number(y.year); });
-    return (requested || []).map(Number).filter(function (y) {
-      return held.indexOf(y) !== -1 && allowed.indexOf(y) === -1;
-    });
-  }
-  function pastYearLockMessage(latest) {
-    return 'Open accounts can practise the latest past-paper year' + (latest ? ' (' + latest + ')' : '') +
-      ' only. Older years are for GOC students. Ask the academy about joining.';
-  }
-  var NOTE_LOCK_MESSAGE = 'That note is for GOC students. Ask the academy about joining to read every note.';
-  /* Notes an Open user may read per subject (null = all). */
-  function noteVisible(indexInSubject, tier) {
-    var n = tierLimits(tier).notesPerSubject;
-    return n == null || (Number(indexInSubject) >= 0 && Number(indexInSubject) < n);
-  }
+  function videoAllowed(type) { return canUse(videoFeature(type)); }
 
   /* The calendar day in Nigeria (UTC+1, no daylight saving), as YYYY-MM-DD.
      Daily allowances reset at midnight there, whatever time zone the server
@@ -4477,7 +4307,7 @@
   /* The notices ONE student may read: GOC only (fails closed for anything else), and only for a subject
      the student takes. Newest first. */
   function noticesForStudent(list, student) {
-    if (!student || !canUse('classNotices', cleanTier(student.tier))) return [];
+    if (!student || !canUse('classNotices')) return [];
     var mine = Array.isArray(student.subjects) ? student.subjects : [];
     return (list || []).filter(function (n) { return n && mine.indexOf(n.subject) !== -1; })
       .sort(function (a, b) { return String(b.addedAt || '').localeCompare(String(a.addedAt || '')); })
@@ -4568,7 +4398,7 @@
     if (!rec || typeof rec !== 'object') return { error: 'There is nothing to send.' };
     var v = validateFlag(rec);
     if (v.error) return v;
-    if (!student || student.active === false || !canUse('askTutor', cleanTier(student.tier))) {
+    if (!student || student.active === false || !canUse('askTutor')) {
       return { error: 'Asking a tutor is for GOC students. Ask the academy about joining.' };
     }
     if (!question || !questionIsLive(question) || question.active === false || String(question.id) !== v.rec.questionId) {
@@ -4653,7 +4483,7 @@
   }
   /* The flags ONE student may read: their own only, and only while they are GOC (fails closed). Newest first. */
   function flagsForStudent(list, student) {
-    if (!student || !student.id || !canUse('askTutor', cleanTier(student.tier))) return [];
+    if (!student || !student.id || !canUse('askTutor')) return [];
     return (list || []).filter(function (f) { return f && String(f.studentId) === String(student.id); })
       .sort(flagNewestFirst).map(publicFlag);
   }
@@ -4702,8 +4532,7 @@
   /* ------------------------------------------------------------ targeted broadcast (Phase 4, slice 1)
      The console sends a message to GOC students. Owner answers (8 Oct 2026): a student gets it as a
      NOTICE CARD plus a REMINDER (the email reminder system; push does not exist yet), and the audience is
-     either ALL GOC students or ONE SUBJECT's GOC students. Open students are never reached (they have no
-     class notices either), and no cohort or "everyone" target exists. The card stays until removed. */
+     either ALL students or ONE SUBJECT's students, and no cohort target exists. The card stays until removed. */
   var BROADCAST_TITLE_MIN = 3, BROADCAST_TITLE_MAX = 80, BROADCAST_BODY_MIN = 10, BROADCAST_BODY_MAX = 1000;
   var BROADCAST_AUDIENCES = ['goc', 'subject'];
 
@@ -4723,12 +4552,12 @@
     if (!c) return '';
     return c.kind === 'goc' ? 'All GOC students' : c.subject + ' students';
   }
-  /* Does this student belong to the audience? GOC only (a missing or odd tier reads as Open), never a deactivated
+  /* Does this student belong to the audience? Every student is a G.O.C student; never a deactivated
      student, and a subject audience needs the subject in the student's combination. Fails closed. */
   function audienceHas(audience, student) {
     var a = cleanAudience(audience);
     if (!a || !student || student.active === false) return false;
-    if (!canUse('classNotices', cleanTier(student.tier))) return false;
+    if (!canUse('classNotices')) return false;
     if (a.kind === 'goc') return true;
     return Array.isArray(student.subjects) && student.subjects.indexOf(a.subject) !== -1;
   }
@@ -4799,7 +4628,7 @@
   /* ------------------------------------------------------------ tutor snapshot
      Phase 3C slice 5, part 1: the numbers on a tutor's snapshot cards, as pure rules.
      Nothing is read or served here; the route (part 2) feeds these functions.
-     - "Their students" are GOC students taking the subject; Open students are only counted.
+     - "Their students" are the students taking the subject (every student is a G.O.C student).
      - Active = practised the subject, or submitted a test in it, in the last 7 days.
      - Practice average: percent of answered questions in that subject that were right,
        over the runs the server still holds (old runs age out, so this is "recent", not "ever").
@@ -4817,7 +4646,7 @@
     var cutoff = at - ANALYTICS_ACTIVE_DAYS * 86400000;
     var runsOf = runsByStudent || {};
     var goc = {}, out = {
-      subject: subject, gocStudents: 0, openStudents: 0, active: 0, activeDays: ANALYTICS_ACTIVE_DAYS,
+      subject: subject, gocStudents: 0, active: 0, activeDays: ANALYTICS_ACTIVE_DAYS,
       practice: { answers: 0, correct: 0, average: null, small: true },
       tests: { papers: 0, average: null, small: true }
     };
@@ -4826,8 +4655,7 @@
       st = students[i];
       if (!st || !st.id || !Array.isArray(st.subjects) || st.subjects.indexOf(subject) < 0) continue;
       if (st.active === false) continue;
-      if (cleanTier(st.tier) === 'goc') { goc[st.id] = true; out.gocStudents++; }
-      else out.openStudents++;
+      goc[st.id] = true; out.gocStudents++;
     }
     Object.keys(goc).forEach(function (id) {
       runs = runsOf[id] || [];
@@ -4888,7 +4716,7 @@
     for (i = 0; i < (students || []).length; i++) {
       st = students[i];
       if (!st || !st.id || !Array.isArray(st.subjects) || st.subjects.indexOf(subject) < 0) continue;
-      if (st.active === false || cleanTier(st.tier) !== 'goc') continue;
+      if (st.active === false) continue;
       goc[st.id] = true;
     }
     function slot(ts) {
@@ -4947,7 +4775,7 @@
     for (i = 0; i < (students || []).length; i++) {
       st = students[i];
       if (!st || !st.id || !Array.isArray(st.subjects) || st.subjects.indexOf(subject) < 0) continue;
-      if (st.active === false || cleanTier(st.tier) !== 'goc' || info[st.id]) continue;
+      if (st.active === false || info[st.id]) continue;
       info[st.id] = { st: st, last: 0, sum: 0, papers: 0, lastScore: null, lastScoreAt: 0 };
       ids.push(st.id);
     }
@@ -5049,7 +4877,7 @@
     for (i = 0; i < (students || []).length; i++) {
       st = students[i];
       if (!st || !st.id || !Array.isArray(st.subjects) || st.subjects.indexOf(subject) < 0) continue;
-      if (st.active === false || cleanTier(st.tier) !== 'goc' || info[st.id]) continue;
+      if (st.active === false || info[st.id]) continue;
       info[st.id] = { st: st, sum: 0, papers: 0, answers: 0, correct: 0 };
       ids.push(st.id);
     }
@@ -5096,7 +4924,7 @@
   /* ------------------------------------------------------------ tutor student detail + audit log (rules)
      Phase 3C, student detail page, slice 1: WHAT a tutor may open and what the page holds. Owner's decisions, 9 Oct 2026:
      - A tutor may open any GOC student who took their subject (the subject is in the student's own list), even if the
-       account has since been switched off. An Open student, or one who never took the subject, is not openable.
+       account has since been switched off. A student who never took the subject is not openable.
      - The page holds name, Scholar ID and, for the OPEN SUBJECT ONLY: test scores, practice
        figures, the last ten attempts and the student's weakest topics. Nothing from another subject, never a password hash.
      - Weak topics are this student's own practice answers in the subject; a topic needs 3+ answers to be listed (thinner ones are
@@ -5110,7 +4938,6 @@
 
   function tutorMayOpenStudent(subject, student) {
     if (!student || !student.id || !subject) return false;
-    if (cleanTier(student.tier) !== 'goc') return false;
     return Array.isArray(student.subjects) && student.subjects.indexOf(subject) > -1;
   }
 
@@ -5645,7 +5472,6 @@
     /* Finance & Administration */
     'students.approve': [FIN],
     'students.add': [FIN],
-    'students.tier': [FIN],
     'students.deactivate': [FIN],
     'payments.view': [FIN],
     /* Academic Director */
@@ -5841,11 +5667,11 @@
   function allConsoleSections() { return Object.keys(CONSOLE_SECTIONS); }
 
   /* Roles slice (c), step 7: the manager-action log. Owner decisions (14 Oct 2026): only sensitive
-     actions are recorded (passwords, access tiers, switching accounts off or on, approvals, and
+     actions are recorded (passwords, switching accounts off or on, approvals, and
      deletions); the Founder reads every entry and each manager reads only their own; the newest
      1,000 are kept. Entries are worked out here from the request's method and path, so the same
      table can never drift from what the server logs. Nothing typed into the request is stored
-     except the access tier and the on/off choice; a password or passcode never reaches the log. */
+     except the on/off choice; a password or passcode never reaches the log. */
   var MANAGER_LOG_KEEP = 1000;
   var ID = '([A-Za-z0-9._-]+)';
   var AUDIT_RULES = [
@@ -5853,8 +5679,6 @@
     ['POST',   new RegExp('^/api/students/' + ID + '/approve$'),       'student-approve',        'Approved a sign-up', null],
     ['DELETE', new RegExp('^/api/students/' + ID + '/approve$'),       'student-reject',         'Rejected a sign-up (record deleted)', null],
     ['POST',   new RegExp('^/api/students/' + ID + '/reset$'),         'student-password-reset', 'Reset a student password', null],
-    ['PUT',    new RegExp('^/api/students/' + ID + '/tier$'),          'student-tier',           'Changed a student access tier', 'tier'],
-    ['PUT',    new RegExp('^/api/admin/cohorts/' + ID + '/tier$'),     'cohort-tier',            'Changed the access tier of a whole cohort', 'tier'],
     ['DELETE', new RegExp('^/api/admin/cohorts/' + ID + '$'),          'cohort-delete',          'Deleted a cohort', null],
     ['PUT',    new RegExp('^/api/tutors/' + ID + '/password$'),        'tutor-password-reset',   'Reset a tutor password', null],
     ['PUT',    new RegExp('^/api/tutors/' + ID + '/active$'),          'tutor-active',           'Switched a tutor account on or off', 'active'],
@@ -5880,7 +5704,7 @@
     ['DELETE', new RegExp('^/api/admin/classes/' + ID + '$'),          'class-delete',           'Deleted a live class', null]
   ];
   /* Is this request one the log records? Returns { action, label, target, detail } or null.
-     `detail` is only ever the access tier ('goc' or 'open') or the on/off choice (true or false). */
+     `detail` is only ever the on/off choice (true or false). */
   function auditActionFor(method, urlPath, body) {
     var m = String(method || '').toUpperCase(), p = String(urlPath || '').split('?')[0];
     for (var i = 0; i < AUDIT_RULES.length; i++) {
@@ -5890,10 +5714,6 @@
       if (!hit) continue;
       var detail = null, b = body && typeof body === 'object' ? body : {};
       if (r[4] === 'active' && typeof b.active === 'boolean') detail = b.active;
-      if (r[4] === 'tier') {
-        var t = String(b.tier == null ? '' : b.tier).trim().toLowerCase();
-        if (t === 'goc' || t === 'open') detail = t;
-      }
       return { action: r[2], label: r[3], target: hit[1] ? String(hit[1]) : '', detail: detail };
     }
     return null;
@@ -6036,7 +5856,7 @@
                  parent/guardian name + email + phone/WhatsApp, pledge checkbox.
        • Public sees "open" or "closed" only — no remaining-place count.
        • When 30 places fill: form closes, Cohort 2.0 waitlist opens (one mode at a time).
-       • Anyone may apply — new visitors and existing Open students alike.
+       • Anyone may apply — new visitors and existing students alike.
        • One active application per email address: a pending or accepted applicant
          cannot submit again; a rejected one may reapply.
        • Application IDs: SCH-1, SCH-2, … (server mints them; rules use a counter).
@@ -6626,9 +6446,6 @@
     guardianPinMatches: guardianPinMatches,
     STUDY_MODES: STUDY_MODES.slice(),
     STUDY_MAX: STUDY_MAX,
-    dailyLimitMessage: dailyLimitMessage,
-    bookmarkLimitMessage: bookmarkLimitMessage,
-    reviewLimitMessage: reviewLimitMessage,
     clampStudyCount: clampStudyCount,
     clampStudyMinutes: clampStudyMinutes,
     studyPool: studyPool,
@@ -6638,18 +6455,9 @@
     pickStudy: pickStudy,
     forPractice: forPractice,
     BOOKMARK_CAP: BOOKMARK_CAP,
-    TIERS: TIERS.slice(),
-    DEFAULT_TIER: DEFAULT_TIER,
-    cleanTier: cleanTier,
-    newStudentTier: newStudentTier,
-    parseTierChange: parseTierChange,
-    restrictWarning: restrictWarning,
-    tierChangeNote: tierChangeNote,
-    cohortTierMessage: cohortTierMessage,
     PRACTICE_MAX_AGE_DAYS: PRACTICE_MAX_AGE_DAYS,
     dropOldRuns: dropOldRuns,
     capList: capList,
-    tierLimits: tierLimits,
     TUTOR_PASSWORD_MIN: TUTOR_PASSWORD_MIN,
     cleanTutorId: cleanTutorId,
     validTutorId: validTutorId,
@@ -6767,23 +6575,14 @@
     ANALYTICS_HARDEST_QUESTIONS: ANALYTICS_HARDEST_QUESTIONS,
     SUBJECT_DEPTH_MIN: SUBJECT_DEPTH_MIN,
     subjectDepth: subjectDepth,
-    tierFeatures: tierFeatures,
     canUse: canUse,
+    studentFeatures: studentFeatures,
+    studentLimits: studentLimits,
     dailyAllowance: dailyAllowance,
     reviewAllowance: reviewAllowance,
     capPracticeRun: capPracticeRun,
-    noteVisible: noteVisible,
-    tierStudyYears: tierStudyYears,
-    lockedPastYears: lockedPastYears,
-    pastYearLockMessage: pastYearLockMessage,
-    lockedNote: lockedNote,
-    NOTE_LOCK_MESSAGE: NOTE_LOCK_MESSAGE,
-    LIVE_JOIN_LOCK_MESSAGE: LIVE_JOIN_LOCK_MESSAGE,
     videoAllowed: videoAllowed,
-    videoLockMessage: videoLockMessage,
-    RESOURCE_VIEW_LOCK_MESSAGE: RESOURCE_VIEW_LOCK_MESSAGE,
     webTestAllowed: webTestAllowed,
-    webTestLockMessage: webTestLockMessage,
     lagosDay: lagosDay,
     bookmarkKey: bookmarkKey,
     sanitizeBookmark: sanitizeBookmark,

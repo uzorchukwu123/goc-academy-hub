@@ -346,9 +346,9 @@
     'objective', 'jamb', 'window', 'tutors', 'managers', 'flags', 'challenges', 'access', 'siteanalytics', 'scholarship'];
   var CONSOLE_COPY = {
     overview: ['Overview', 'Your whole academy at a glance: enrolment, today\u2019s activity, average mock score and what needs attention. Start here each morning.'],
-    students: ['Students', 'The roster: approve sign-ups, manage tiers, reset passwords and switch accounts on or off — every action is limited to what your role allows.'],
+    students: ['Students', 'The roster: approve sign-ups, reset passwords and switch accounts on or off — every action is limited to what your role allows.'],
     approvals: ['Approvals', 'Work waiting for a decision: tutor questions and submissions to review before they reach students.'],
-    cohorts: ['Cohorts', 'Group students into cohorts with their own limits and tiers, so a whole class can be managed at once.'],
+    cohorts: ['Cohorts', 'Group students into cohorts with their own limits, so a whole class can be managed at once.'],
     questions: ['Question bank', 'Every question, by subject and section. The JAMB section is held apart here — it only reaches students when the readiness rule says the bank is deep enough.'],
     import: ['Import', 'Bring questions in by CSV instead of typing them one by one. The importer validates and reports before anything is saved.'],
     notes: ['Reading notes', 'The lessons students read under Read / Learn, written and published per subject and topic.'],

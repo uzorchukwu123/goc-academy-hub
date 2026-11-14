@@ -87,10 +87,10 @@ function total(stats, subject, which) {
   var subs = ['Use of English', 'Physics', 'Chemistry', 'Mathematics'];
   function mk(name, n) { return call('POST', '/api/admin/students', { name: name, email: n + '@example.com', phone: '0800000004' + n.slice(-1), goal: 'JAMB / UTME 2027', subjects: subs }, adm); }
   var g1 = await mk('Gina Goc', 'g1'), g2 = await mk('Bola Goc', 'g2');
-  var o = await activeStudent(call, { name: 'Olu Open', password: 'secret123', email: 'olu@example.com', phone: '08000000049', goal: 'JAMB / UTME 2027', subjects: subs }, adm);
+  var o = await activeStudent(call, { name: 'Olu Student', password: 'secret123', email: 'olu@example.com', phone: '08000000049', goal: 'JAMB / UTME 2027', subjects: subs }, adm);
   var ID1 = g1.body.student.id, ID2 = g2.body.student.id, IDO = o.id;
   var tok1 = (await call('POST', '/api/auth/login', { id: ID1, password: g1.body.temporaryPassword })).body.token;
-  ok('setup: two GOC students and one Open student', !!ID1 && !!ID2 && g1.body.student.tier === 'goc' && !!o.token);
+  ok('setup: three students, none carrying a tier', !!ID1 && !!ID2 && !('tier' in g1.body.student) && !!o.token);
   await call('POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Physics'], password: 'start-pass-1' }, adm);
   var tk = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' })).body.token;
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'my-own-pass-1' }, tk);
@@ -115,14 +115,14 @@ function total(stats, subject, which) {
   fs.writeFileSync(path.join(SANDBOX, 'server', 'data.json'), JSON.stringify(db));
   var r1 = await call('GET', '/api/tutor/atrisk', null, tk);
   var ids1 = (r1.body.students || []).map(function (x) { return x.id; });
-  ok('both GOC students are listed as never started, the Open student is not',
-    r1.status === 200 && r1.body.count === 2 && ids1.indexOf(ID1) > -1 && ids1.indexOf(ID2) > -1 && ids1.indexOf(IDO) < 0 && r1.body.students.every(function (x) { return x.never === true && x.reasons.join() === 'never-started'; }), r1.raw);
+  ok('all three students are listed as never started (no tier exclusion)',
+    r1.status === 200 && r1.body.count === 3 && ids1.indexOf(ID1) > -1 && ids1.indexOf(ID2) > -1 && ids1.indexOf(IDO) > -1 && r1.body.students.every(function (x) { return x.never === true && x.reasons.join() === 'never-started'; }), r1.raw);
   ok('no email, phone or password hash leaves the server', !/example\.com|0800000004|hash|password|salt/i.test(r1.raw), r1.raw);
 
   console.log('\npractice takes a student off the list');
   var sp = await sitPractice(tok1, 'Physics', 10, false);
   var r2 = await call('GET', '/api/tutor/atrisk', null, tk);
-  ok('after a Physics run the student is gone, the other stays', sp.status === 200 && r2.body.count === 1 && r2.body.students[0].id === ID2, r2.raw);
+  ok('after a Physics run the student is gone, the others stay', sp.status === 200 && r2.body.count === 2 && (r2.body.students || []).every(function (x) { return x.id !== ID1; }), r2.raw);
   var sc = await sitPractice(tok1, 'Chemistry', 5, false);
   var db2 = readDb();
   db2.practiceRuns[ID1].forEach(function (run) { run.ts = Date.now() - 9 * DAY; });
@@ -139,12 +139,12 @@ function total(stats, subject, which) {
   var byScore = await call('GET', '/api/tutor/atrisk?sort=score', null, tk);
   var rowS = (byDays.body.students || []).filter(function (x) { return x.id === ID1; })[0];
   ok('a 30% marked paper adds the low-average reason, with last score and average', !!rowS && rowS.reasons.join() === 'inactive,low-average' && rowS.average === 30 && rowS.lastScore === 30 && rowS.papers === 1, byDays.raw);
-  ok('inactive order: never started (Bola) before 9 days (Gina)', byDays.body.students[0].id === ID2 && byDays.body.students[1].id === ID1, byDays.raw);
-  ok('score order: lowest average first (Gina has 30, Bola has none)', byScore.body.sort === 'score' && byScore.body.students[0].id === ID1 && byScore.body.students[1].id === ID2, byScore.raw);
+  ok('inactive order: never started before 9 days (Gina last)', byDays.body.students[byDays.body.students.length - 1].id === ID1 && byDays.body.students[0].never === true, byDays.raw);
+  ok('score order: lowest average first (Gina has 30, the rest have none)', byScore.body.sort === 'score' && byScore.body.students[0].id === ID1, byScore.raw);
   var junk = await call('GET', '/api/tutor/atrisk?sort=%27%3Cscript%3E', null, tk);
-  ok('an unknown sort reads as inactive and is reported as such', junk.status === 200 && junk.body.sort === 'inactive' && junk.body.students[0].id === ID2, junk.raw);
+  ok('an unknown sort reads as inactive and is reported as such', junk.status === 200 && junk.body.sort === 'inactive' && junk.body.students[0].never === true, junk.raw);
   var chem = await call('GET', '/api/tutor/atrisk?subject=Physics', null, tk);
-  ok('a paper in another subject never counts here', chem.status === 200 && chem.body.students.length === 2);
+  ok('a paper in another subject never counts here', chem.status === 200 && chem.body.students.length === 3);
 
   console.log('\nwiring');
   var srv = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');

@@ -80,7 +80,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   /* Slice 5.2: the analytics route has its own queue so the order of the other answers is untouched. */
   var analyticsCalls = [], analyticsQueue = [];
   function snapFor(subject) {
-    return { subject: subject, subjects: [], snapshot: { subject: subject, gocStudents: 14, openStudents: 3, active: 9, activeDays: 7,
+    return { subject: subject, subjects: [], snapshot: { subject: subject, gocStudents: 14, active: 9, activeDays: 7,
       practice: { answers: 120, correct: 78, average: 65, small: false }, tests: { papers: 2, average: 71.5, small: true } },
       weakTopics: { items: [{ topic: 'Acids <i>', answers: 40, correct: 4, percent: 10 }, { topic: 'Salts', answers: 20, correct: 9, percent: 45 }], hidden: 2, minAnswers: 10 },
       hardestQuestions: { items: [{ id: '17', text: 'Which unit <script>x</script>?', topic: 'Electricity', section: 'objective', answers: 40, correct: 4, percent: 10 }], hidden: 0, minAnswers: 10 } };
@@ -189,7 +189,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('the switcher marks the open subject', q('button[data-subject=Chemistry]').getAttribute('aria-pressed') === 'true' && q('button[data-subject=Physics]').getAttribute('aria-pressed') === 'false');
   ok('the snapshot is asked for with the same subject and the token', analyticsCalls.length === 1 && analyticsCalls[0].url === 'api/tutor/analytics?subject=Chemistry' && analyticsCalls[0].auth === 'Bearer tok-1', JSON.stringify(analyticsCalls));
   ok('the snapshot card shows the class numbers', /Class snapshot/.test(text()) && /GOC students/.test(text()) && /14/.test(text()) && /65%/.test(text()) && /71\.5%/.test(text()) && /Active in the last 7 days/.test(text()), text());
-  ok('Open students are mentioned as a count only', /3 Open students also take Chemistry/.test(text()), text());
+  ok('no Open-student count exists any more (one student category)', !/Open students/.test(text()), text());
   ok('a small test sample carries a plain warning, the practice average (120 answers) does not', /only 2 marked papers/.test(text()) && !/Practice average rests on only/.test(text()), text());
   ok('the Weak topics card lists topics weakest first with percent and answers', /Weak topics/.test(text()) && /Acids/.test(text()) && /10% right · 40 answers/.test(text()) && text().indexOf('Acids') < text().indexOf('Salts'), text());
   ok('and says how many topics are held back for too few answers', /2 more topics have fewer than 10 answers/.test(text()), text());

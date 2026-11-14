@@ -15,7 +15,7 @@ var open = { id: 'GOC-S-002', name: 'Open One', tier: 'open', active: true };
 var q = { id: '41', subject: 'Chemistry', section: 'practice', text: 'What  is the   pH of pure water at 25°C?', options: ['5', '7', '9', '14'], answer: 1 };
 
 console.log('\nthe feature');
-ok('GOC students may ask a tutor, Open students may not', core.canUse('askTutor', 'goc') && !core.canUse('askTutor', 'open') && !core.canUse('askTutor'));
+ok('every student may ask a tutor; an unknown feature is refused', core.canUse('askTutor') && !core.canUse('noSuchFeature'));
 
 console.log('\nreasons and validation');
 ok('four reasons, each with a label', core.FLAG_REASONS.length === 4 && core.FLAG_REASONS.every(function (r) { return r.id && r.label && core.flagReasonLabel(r.id) === r.label; }));
@@ -42,8 +42,8 @@ ok('the question wording is kept as a tidy snapshot', st.rec.questionText === 'W
 ok('a very long question is cut to 300 characters', core.stampFlag({ questionId: '41', reason: 'typo' }, Object.assign({}, q, { text: new Array(600).join('w') }), stu, NOW).rec.questionText.length === 300);
 ok('the time is stamped', st.rec.createdAt === new Date(NOW).toISOString());
 ok('the stamp does not carry the tier or any hash', st.rec.tier === undefined && st.rec.password === undefined);
-ok('an Open student is refused, with the way to join', /GOC/.test(core.stampFlag({ questionId: '41', reason: 'typo' }, q, open, NOW).error || ''));
-ok('a student with no tier, a switched-off student or nobody is refused', !!core.stampFlag({ questionId: '41', reason: 'typo' }, q, { id: 'S', name: 'N' }, NOW).error && !!core.stampFlag({ questionId: '41', reason: 'typo' }, q, Object.assign({}, stu, { active: false }), NOW).error && !!core.stampFlag({ questionId: '41', reason: 'typo' }, q, null, NOW).error);
+ok('a student with a stored open tier flags like everyone else', !!core.stampFlag({ questionId: '41', reason: 'typo' }, q, open, NOW).rec);
+ok('a switched-off student or nobody is refused', !!core.stampFlag({ questionId: '41', reason: 'typo' }, q, Object.assign({}, stu, { active: false }), NOW).error && !!core.stampFlag({ questionId: '41', reason: 'typo' }, q, null, NOW).error);
 ok('a pending, returned or switched-off question cannot be flagged', ['pending', 'returned', 'bogus'].every(function (s) { return !!core.stampFlag({ questionId: '41', reason: 'typo' }, Object.assign({}, q, { status: s }), stu, NOW).error; }) && !!core.stampFlag({ questionId: '41', reason: 'typo' }, Object.assign({}, q, { active: false }), stu, NOW).error);
 ok('a question with no status counts as live (nothing existing is lost)', !core.stampFlag({ questionId: '41', reason: 'typo' }, q, stu, NOW).error);
 ok('a missing question, or one that is not the one named, is refused', !!core.stampFlag({ questionId: '41', reason: 'typo' }, null, stu, NOW).error && !!core.stampFlag({ questionId: '99', reason: 'typo' }, q, stu, NOW).error);
@@ -120,8 +120,8 @@ var all = [
 ];
 var mine = core.flagsForStudent(all, stu);
 ok('a student reads only their own flags, newest first', mine.map(function (f) { return f.id; }).join() === 'FL-2,FL-1,FL-4,FL-5');
-ok('an Open student, or nobody, reads nothing (even if flags exist)', core.flagsForStudent(all, Object.assign({}, open, { id: 'GOC-S-001' })).length === 0 && core.flagsForStudent(all, null).length === 0 && core.flagsForStudent(all, { tier: 'goc' }).length === 0);
-ok('a student demoted to Open stops seeing them on the next read', core.flagsForStudent(all, Object.assign({}, stu, { tier: 'open' })).length === 0);
+ok('a student reads their own flags whatever tier value is stored; nobody reads any', core.flagsForStudent(all, Object.assign({}, open, { id: 'GOC-S-001' })).length === core.flagsForStudent(all, stu).length && core.flagsForStudent(all, Object.assign({}, open, { id: 'GOC-S-001' })).length > 0 && core.flagsForStudent(all, null).length === 0 && core.flagsForStudent(all, { tier: 'goc' }).length === 0);
+ok('a stored tier change has no effect on what a student reads', core.flagsForStudent(all, Object.assign({}, stu, { tier: 'open' })).length === core.flagsForStudent(all, stu).length);
 
 console.log('\nwhat a tutor and the console see');
 var ct = core.flagsForTutor(all, chem);

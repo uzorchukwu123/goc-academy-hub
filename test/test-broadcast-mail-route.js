@@ -77,7 +77,7 @@ async function waitFor(fn, ms) { var t = Date.now(); while (Date.now() - t < ms)
 
   console.log('\nsending a Chemistry broadcast with the reminder ticked');
   var p = await call('POST', '/api/broadcasts', { audience: { kind: 'subject', subject: 'Chemistry' }, title: 'Chemistry mock on Friday', body: 'ZQXMAIL The Chemistry mock holds on Friday at 10am.\nBring a calculator.' }, adm);
-  ok('it is sent and reaches the two Chemistry GOC students', p.status === 200 && p.body.broadcast.reached === 2 && p.body.broadcast.remind === true, p.raw);
+  ok('it is sent and reaches the three Chemistry students', p.status === 200 && p.body.broadcast.reached === 3 && p.body.broadcast.remind === true, p.raw);
   var bid = p.body.broadcast.id;
 
   var got = await waitFor(function () { return outbox().filter(function (m) { return /ZQXMAIL/.test(m.text); }).length >= 1; }, 15000);
@@ -85,17 +85,17 @@ async function waitFor(fn, ms) { var t = Date.now(); while (Date.now() - t < ms)
   await sleep(3500);  /* several more sweeps: nobody may be mailed twice */
   var sent = outbox().filter(function (m) { return /ZQXMAIL/.test(m.text); });
   var tos = sent.map(function (m) { return m.to; }).sort();
-  ok('exactly one email, to the Chemistry GOC student who has reminders on', tos.join() === gina.email, tos.join());
-  ok('nothing to the Biology student, the Open student or the student who opted out', tos.indexOf(gabe.email) === -1 && tos.indexOf(opal.email) === -1 && tos.indexOf(quin.email) === -1);
+  ok('one email each to the Chemistry students who have reminders on', tos.join() === [gina.email, opal.email].sort().join(), tos.join());
+  ok('nothing to the Biology student or the student who opted out', tos.indexOf(gabe.email) === -1 && tos.indexOf(quin.email) === -1);
   ok('the email carries the title as subject, the message, and is from the academy not the staff member',
     sent[0].subject === 'Chemistry mock on Friday' && /Bring a calculator\./.test(sent[0].text) && /G\.O\.C Academy/.test(sent[0].text) && !/Ernest/.test(sent[0].text));
   ok('it carries a one-tap opt-out link on the configured address', /https:\/\/hub\.example\.ng\/api\/unsubscribe\?id=/.test(sent[0].text));
 
   console.log('\nthe console list and storage');
   var list = await call('GET', '/api/broadcasts', null, adm);
-  ok('the console list says how many were emailed', list.status === 200 && list.body.broadcasts[0].emailed === 1 && list.body.broadcasts[0].reached === 2, list.raw);
+  ok('the console list says how many were emailed', list.status === 200 && list.body.broadcasts[0].emailed === 2 && list.body.broadcasts[0].reached === 3, list.raw);
   var db = readDb();
-  ok('who was emailed is kept in data.json', db.broadcastMail && db.broadcastMail[String(bid)] && Object.keys(db.broadcastMail[String(bid)].sent).join() === gina.id);
+  ok('who was emailed is kept in data.json', db.broadcastMail && db.broadcastMail[String(bid)] && Object.keys(db.broadcastMail[String(bid)].sent).sort().join() === [gina.id, opal.id].sort().join());
   ok('students never see the email record (card shows no staff name or counts)', !/emailed|broadcastMail|Ernest/.test(JSON.stringify((await call('GET', '/api/me/broadcasts', null, gina.token)).body)));
 
   console.log('\na second broadcast without the reminder');
@@ -110,7 +110,7 @@ async function waitFor(fn, ms) { var t = Date.now(); while (Date.now() - t < ms)
   ok('removing the first broadcast succeeds', (await call('DELETE', '/api/broadcasts/' + bid, null, adm)).status === 200);
   ok('its who-was-emailed record is deleted with it', !readDb().broadcastMail[String(bid)]);
   await sleep(3500);
-  ok('and nothing is re-sent after the removal', outbox().filter(function (m) { return /ZQXMAIL/.test(m.text); }).length === 1);
+  ok('and nothing is re-sent after the removal', outbox().filter(function (m) { return /ZQXMAIL/.test(m.text); }).length === 2);
 
   console.log('\nopt-out');
   var off = outbox().filter(function (m) { return /ZQXMAIL/.test(m.text); })[0].text.match(/https:\/\/hub\.example\.ng(\/api\/unsubscribe\?[^\s]+)/);
@@ -121,7 +121,11 @@ async function waitFor(fn, ms) { var t = Date.now(); while (Date.now() - t < ms)
   ok('a later broadcast is sent', next.status === 200);
   await sleep(4500);
   var after = outbox().filter(function (m) { return /ZQXAFTER/.test(m.text); }).map(function (m) { return m.to; });
-  ok('the student who opted out is not emailed it, the other GOC students are', after.indexOf(gina.email) === -1 && after.indexOf(gabe.email) > -1 && after.indexOf(opal.email) === -1 && after.indexOf(quin.email) === -1, after.join());
+  var offId = decodeURIComponent((off[1].match(/id=([^&\s]+)/) || [])[1] || '');
+  var byId = {}; [gina, gabe, opal, quin].forEach(function (x) { byId[x.id] = x.email; });
+  var optedEmail = byId[offId];
+  var expectedAfter = [gina.email, gabe.email, opal.email].filter(function (e) { return e !== optedEmail; }).sort();
+  ok('the student who opted out is not emailed it, the other students are', !!optedEmail && after.slice().sort().join() === expectedAfter.join() && after.indexOf(quin.email) === -1, after.join() + ' opted=' + optedEmail);
 
   stop();
   console.log(fails ? '\n' + fails + ' check(s) FAILED' : '\nall checks passed');

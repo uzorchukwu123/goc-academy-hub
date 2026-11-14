@@ -40,9 +40,9 @@ http.getResourceFile('RES-1').then(function () {
 }).then(function () {
   console.log('\nthe screen');
   var app = read('js/app.js');
-  ok('opening is refused up front when the list said canView is false', /if\(!resourcesCanView\)\{\s*toast\(GOC\.core\.RESOURCE_VIEW_LOCK_MESSAGE\);\s*return;/.test(app));
+  ok('opening is refused up front when the list said canView is false', /if\(!resourcesCanView\)\{\s*toast\('Opening files in the app is not available right now\.\'\);\s*return;/.test(app));
   ok('the download button asks for a download', /getResourceFile\(r\.resourceId, \{ download: true \}\)/.test(app));
-  ok('the lock message names the download icon and GOC', /download icon/.test(sandbox.GOC.core.RESOURCE_VIEW_LOCK_MESSAGE) && /GOC/.test(sandbox.GOC.core.RESOURCE_VIEW_LOCK_MESSAGE));
+  ok('no tier lock message remains in core', typeof sandbox.GOC.core.RESOURCE_VIEW_LOCK_MESSAGE === 'undefined');
 }).catch(function (e) { fails++; console.log('  FAIL  threw ' + e.stack); }).then(function () {
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
   process.exit(fails ? 1 : 0);

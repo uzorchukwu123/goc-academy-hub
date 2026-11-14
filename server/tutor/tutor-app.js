@@ -158,7 +158,6 @@
       s('Practice average', avgText(sn.practice.average, 'answers')) +
       s('Test average', avgText(sn.tests.average, 'marked tests')) +
       '</div>' +
-      '<p style="margin-top:10px">' + esc(sn.openStudents) + ' Open student' + (sn.openStudents === 1 ? '' : 's') + ' also take ' + esc(st.subject) + ' (counted only, never averaged).</p>' +
       warn.map(function (w) { return '<p class="zx-warn">' + esc(w) + '</p>'; }).join('') +
       '</div>';
   }

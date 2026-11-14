@@ -1,7 +1,7 @@
 /* build/build.js — Phase 3D slice 3: make the code hard to read.
    Builds a production copy of the public app into dist/ (or the folder given):
      - JavaScript and CSS are minified, comments removed, local names shortened
-     - the demo driver's test-only hooks (_setJambReadyMin, _setTier) are removed
+     - the demo driver's test-only hooks (_setJambReadyMin) are removed
      - HTML comments are removed from index.html
      - sw.js keeps its cache name; every file it lists is checked to exist in the build
    The readable source in js/ css/ stays untouched and private. Tests keep running on it.
@@ -29,7 +29,7 @@ if (OUT === ROOT || ROOT.startsWith(OUT + path.sep) || OUT === path.join(ROOT, '
   console.error('Refusing to build into ' + OUT); process.exit(1);
 }
 
-var TEST_HOOKS = ['_setJambReadyMin', '_setTier', '_grantXp'];
+var TEST_HOOKS = ['_setJambReadyMin', '_grantXp'];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
 function write(rel, data) {

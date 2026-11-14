@@ -84,7 +84,7 @@ async function registerStudent(name, pw, subjects) {
     signupCode: 'GOC-2027', name: name, password: pw,
     goal: 'JAMB / UTME', subjects: subjects
   });
-  run('GOC.api._drivers.mock._setTier')(r.student.id, 'goc');   // Web Tests are for GOC students
+  // every student now has full GOC access — no promotion step exists
   return r.student.id;
 }
 

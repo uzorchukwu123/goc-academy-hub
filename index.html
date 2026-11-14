@@ -203,38 +203,25 @@
         </div>
       </div>
 
-      <!-- Phase 3B slice 5 — the same two tier cards as the sign-up screen's "Open or GOC?" panel.
-           The wording is kept identical to that panel (checked by test/test-tiers-signup.js).
-           No price here on purpose: GOC is "ask the academy". -->
+      <!-- One student identity: every G.O.C student gets the full academy. -->
       <div class="lp-sec" id="lpTiers">
-        <div class="lp-eyebrow">Two ways in</div>
-        <h2>Open or GOC? See what you get</h2>
-        <p class="lead">Start free today with an Open account. GOC students get the full academy.</p>
-        <div class="tier-compare landing-tiers" id="tierCompareLanding">
+        <div class="lp-eyebrow">Programme</div>
+        <h2>One student identity: the GOC student</h2>
+        <p class="lead">Every enrolled student gets the full academy — no limited accounts.</p>
+        <div class="tier-compare landing-tiers">
           <div class="tc-grid">
-                    <div class="tc-card open">
-                      <div class="tc-h"><b>Open</b><span>This sign-up</span></div>
-                      <ul>
-                        <li>Unlimited practice and past questions, every year</li>
-                        <li>The JAMB-oriented test, as often as you like</li>
-                        <li>The first 3 notes of each subject</li>
-                        <li>10 spaced reviews a day</li>
-                        <li>20 saved questions</li>
-                        <li>Resource downloads and the league</li>
-                      </ul>
-                    </div>
-                    <div class="tc-card goc">
-                      <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
-                      <ul>
-                        <li>Everything in Open, with no limits</li>
-                        <li>Objective and Theory Web Tests</li>
-                        <li>Every note, unlimited reviews and saved questions</li>
-                        <li>Live classes, lesson videos and class replays</li>
-                        <li>Read resources in the app, and earn streak freezes</li>
-                      </ul>
-                    </div>
-                  </div>
-          <p class="tc-note">Creating an account here gives you an <b>Open</b> account. GOC is for students the academy enrols — ask the academy about joining and your account will be upgraded.</p>
+            <div class="tc-card goc">
+              <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
+              <ul>
+                <li>Unlimited practice and past questions, every year</li>
+                <li>Objective and Theory Web Tests, plus the JAMB-oriented test</li>
+                <li>Every note, unlimited reviews and saved questions</li>
+                <li>Live classes, lesson videos and class replays</li>
+                <li>Read resources in the app, and earn streak freezes</li>
+                <li>Ask-a-tutor help and class notices</li>
+              </ul>
+            </div>
+          </div>
           <div class="tc-cta"><button class="btn btn-red" type="button" onclick="go('signup')">Create account</button></div>
         </div>
       </div>
@@ -726,35 +713,6 @@
             <button class="auth-back" onclick="go('landing')">← Back to homepage</button>
             <h1>Create your account</h1>
             <p class="tagline">Free to start. Takes less than a minute.</p>
-            <!-- Open vs GOC: what this sign-up gives, and what a GOC student has on top.
-                 The figures match core.TIER_LIMITS / TIER_FEATURES (checked by test/test-tiers-signup.js). -->
-            <details class="tier-compare" id="tierCompare">
-              <summary>Open or GOC? See what you get</summary>
-              <div class="tc-grid">
-                <div class="tc-card open">
-                  <div class="tc-h"><b>Open</b><span>This sign-up</span></div>
-                  <ul>
-                    <li>Unlimited practice and past questions, every year</li>
-                    <li>The JAMB-oriented test, as often as you like</li>
-                    <li>The first 3 notes of each subject</li>
-                    <li>10 spaced reviews a day</li>
-                    <li>20 saved questions</li>
-                    <li>Resource downloads and the league</li>
-                  </ul>
-                </div>
-                <div class="tc-card goc">
-                  <div class="tc-h"><b>GOC student</b><span>Full access</span></div>
-                  <ul>
-                    <li>Everything in Open, with no limits</li>
-                    <li>Objective and Theory Web Tests</li>
-                    <li>Every note, unlimited reviews and saved questions</li>
-                    <li>Live classes, lesson videos and class replays</li>
-                    <li>Read resources in the app, and earn streak freezes</li>
-                  </ul>
-                </div>
-              </div>
-              <p class="tc-note">Creating an account here gives you an <b>Open</b> account. GOC is for students the academy enrols — ask the academy about joining and your account will be upgraded.</p>
-            </details>
             <form onsubmit="signupSubmit();return false">
               <div class="field">
                 <label for="signName">Full name</label>
@@ -1539,11 +1497,6 @@
 
         <div class="sec-head" style="margin-top:18px"><div class="section-t">Account</div><span class="chip">Verified</span></div>
         <div class="card wrap" style="padding:2px 16px">
-          <div class="set-row" id="tierRow" style="display:none">
-            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></div>
-            <div class="lbl"><h4>Your access</h4><p id="tierNote">—</p></div>
-            <span class="chip" id="tierChip">—</span>
-          </div>
           <div class="set-row">
             <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
             <div class="lbl"><h4>Daily study window</h4><p>Set by academy · <b id="limitVal">90 min</b></p></div>
