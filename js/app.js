@@ -614,7 +614,7 @@ function go(id){
   /* B#2 slice 7 — show/hide the scholarship banner depending on current status. */
   if(id === 'landing') scholBannerInit();
   if(id === 'admin' && typeof admMenuApply === 'function') admMenuApply();
-  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof admApBadge === 'function') admApBadge(); }
+  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof admApBadge === 'function') admApBadge(); if(typeof tourConsoleAuto === 'function') tourConsoleAuto(); }
   /* Priority 12 — the standings are re-read on the way in, so they are current
      whenever the student looks rather than only just after logging in. */
   if(id === 'league' && typeof renderLeague === 'function') renderLeague();
@@ -634,7 +634,7 @@ function go(id){
   if(id === 'study' && typeof refreshChallenge === 'function') refreshChallenge();
   // Install-state can change between visits (installed elsewhere, prompt
   // captured after the screen first loaded), so it's re-read on the way in.
-  if(id === 'profile'){ renderInstallRow(); renderProfileBadges(); }
+  if(id === 'profile'){ renderInstallRow(); renderProfileBadges(); if(typeof tourHelpPaint === 'function') tourHelpPaint(); }
   /* Priority 2 — the nav height is only measurable once the screen is visible,
      so the filter row's sticky offset is set on the way in. */
   if(id === 'updates' && typeof upFiltersInit === 'function') upFiltersInit();
@@ -1176,7 +1176,7 @@ function logout(){
   var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   var entry = document.getElementById('adminEntry'); if(entry) entry.style.display='none';
   // Blank the identity fields so a signed-out page never shows the last user.
-  ['idName','idCode','dashId','dashName','profName','profId','admWho'].forEach(function(k){
+  ['idName','idCode','dashId','dashName','profName','profId','admWho','dashLevel','dashXp','dashStreak','dashStreakChip'].forEach(function(k){
     var e = document.getElementById(k); if(e) e.textContent = '\u2014';
   });
   go('landing');
@@ -1454,15 +1454,50 @@ function sendContact(){
 var updatesData = [];      // cache of GET /updates
 
 /* Homepage updates are public, so this runs before anyone logs in. */
+/* Landing "Latest announcements" (Stage 9): the top three of the same
+   public feed the Updates & News screen renders — one source, two
+   presentations, never a duplicate news store. Bodies are summarised
+   here; the full text lives one click away on the Updates screen. */
+function lpSummary(text, n){
+  var t = String(text || '').replace(/\s+/g, ' ').trim();
+  if(t.length <= n) return t;
+  var cut = t.slice(0, n);
+  var sp = cut.lastIndexOf(' ');
+  return (sp > 40 ? cut.slice(0, sp) : cut) + '…';
+}
+function renderLpNews(){
+  var host = document.getElementById('lpNewsList');
+  if(!host) return;
+  var labels = { admission: 'Admission', utme: 'UTME', scholarship: 'Scholarship', news: 'News' };
+  var rows = (updatesData || []).slice(0, 3);
+  if(!rows.length){
+    host.innerHTML = '<p class="lp-news-empty">No announcements yet — new ones will appear here and on the Updates &amp; News page.</p>';
+    return;
+  }
+  host.innerHTML = rows.map(function(u){
+    return '<article class="lp-news-card"><div class="lp-news-meta"><span class="up-tag ' + esc(u.cat || 'news') + '">'
+      + esc(labels[u.cat] || 'News') + '</span><span>' + esc(u.date || '') + '</span></div>'
+      + '<h3>' + esc(u.title || '') + '</h3><p>' + esc(lpSummary(u.body, 150)) + '</p>'
+      + '<button type="button" class="lp-news-more" onclick="lpNewsOpen(\'' + esc(u.cat || 'news') + '\')">Read more →</button></article>';
+  }).join('');
+}
+function lpNewsOpen(cat){
+  go('updates');
+  upActiveFilter = cat;
+  renderUpdates();
+}
 function loadUpdates(){
   return GOC.api.listUpdates().then(function(rows){
     updatesData = rows || [];
     renderUpdates();
+    renderLpNews();
     var mu = document.getElementById('admUpList'); if(mu) mu.innerHTML = admUpdatesHTML();
     return updatesData;
   }).catch(function(){
     var l = document.getElementById('upList');
     if(l) l.innerHTML = '<p class="ad-p">Updates could not be loaded right now.</p>';
+    var ln = document.getElementById('lpNewsList');
+    if(ln) ln.innerHTML = '<p class="lp-news-empty">Announcements could not be loaded right now — please try again shortly.</p>';
     return [];
   });
 }
@@ -3388,7 +3423,7 @@ function admOpen(section){
       '<div id="admChkOut"><div class="ad-empty">Press Check to list them.</div></div></div>'
     ); },
     tutors: function(){ return (
-      '<div class="ad-card"><div class="ad-h">New tutor</div><p class="ad-p">A tutor sees only the subjects you give them. The starting password must be changed at their first sign-in.</p>'+
+      '<div class="ad-card"><div class="ad-h">New tutor</div><p class="ad-p">A tutor sees only the subjects you give them. The starting password must be changed at their first sign-in. Tutors sign in at <b>/tutor</b> — give them that address with their tutor ID.</p>'+
       '<div class="ad-field"><label>Name</label><input id="admTutName" placeholder="e.g. Mrs Ada Obi"></div>'+
       '<div class="ad-field"><label>Subjects</label><div id="admTutSubjNew">'+admTutSubjectBoxes('admTutNew', [])+'</div></div>'+
       '<div class="ad-field"><label>Starting password</label><input id="admTutPw" type="text" autocomplete="off" placeholder="at least 8 characters"></div>'+
@@ -7997,6 +8032,17 @@ function openStudySet(mode, subject, past){
     live.forEach(function(e){ if(!pick && (!want || e.subject === want)) pick = e; });
     suSubj = (pick || live[0]).subject;
     suSelectAll(true);
+    /* Next Up's weakest-topic recommendation narrows the set-up to that one
+       topic when the subject really holds it; anything else keeps the
+       ordinary all-topics set-up. */
+    if(suMode === 'practice' && dashUpWeakPick){
+      if(canonSubject(dashUpWeakPick.subject) === suSubj
+         && suTopicList().some(function(t){ return t.topic === dashUpWeakPick.topic; })){
+        suPick = {};
+        suPick[dashUpWeakPick.topic] = true;
+      }
+      dashUpWeakPick = null;
+    }
     suResetYears();
     renderStudySet();
   }, function(err){
@@ -8315,11 +8361,89 @@ function pracOpen(p){
   renderPrac();
 }
 function pracQ(){ return (pracPaper && pracPaper.questions[pracI]) || null; }
+/* JAMB-style navigation state (Stage 2). Marks are held per question index,
+   so moving around a run can never lose, duplicate or re-mark an answer:
+   pracMarks[i] exists exactly when question i has been answered, and
+   answerPrac refuses a second marking. Formal CBT is a different screen and
+   none of this touches it. */
+function pracAnsweredCount(){
+  var n = 0;
+  for(var i = 0; i < pracMarks.length; i++) if(pracMarks[i]) n++;
+  return n;
+}
+function pracAllAnswered(){
+  return !!pracPaper && pracAnsweredCount() >= pracPaper.questions.length;
+}
+function pracFirstUnanswered(){
+  for(var i = 0; i < (pracPaper ? pracPaper.questions.length : 0); i++) if(!pracMarks[i]) return i;
+  return -1;
+}
+function pracFbHtml(d, right){
+  return '<div class="feedback ' + (right ? 'ok' : 'no') + '"><h4>' + (right ? 'Correct' : 'Not quite') + '</h4>' +
+    '<p>' + mth(d.explanation || 'Read the note on this topic in Read / Learn.', {breaks:true}) + '</p>' +
+    bmButton({ id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: d.options,
+               answer: d.answer, explanation: d.explanation }) +
+    askTutorButton({ id: d.id }) + '</div>';
+}
+/* Progress segments, question palette, answered count and the Prev/Next bar,
+   painted from the same marks every time — after an answer and after every
+   move — so the three can never disagree about where the student stands. */
+function pracPaintChrome(total){
+  var prog = document.getElementById('pracProg');
+  if(prog){
+    prog.innerHTML = '';
+    for(var i = 0; i < total; i++){
+      var s = document.createElement('span');
+      s.className = ((pracMarks[i] ? 'on' : '') + (i === pracI ? ' cur' : '')).trim();
+      prog.appendChild(s);
+    }
+  }
+  var pal = document.getElementById('pracPalette');
+  if(pal){
+    pal.innerHTML = '';
+    for(var p = 0; p < total; p++){
+      (function(idx){
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'prac-pal' + (pracMarks[idx] ? ' ans' : '') + (idx === pracI ? ' cur' : '');
+        b.textContent = idx + 1;
+        b.setAttribute('aria-label', 'Question ' + (idx + 1)
+          + (pracMarks[idx] ? ' (answered)' : ' (unanswered)') + (idx === pracI ? ' (current)' : ''));
+        if(idx === pracI) b.setAttribute('aria-current', 'true');
+        b.onclick = function(){ pracGo(idx); };
+        pal.appendChild(b);
+      })(p);
+    }
+  }
+  var cnt = document.getElementById('pracNavCount');
+  if(cnt) cnt.textContent = pracAnsweredCount() + ' of ' + total + ' answered';
+  var prev = document.getElementById('pracPrevBtn');
+  if(prev) prev.disabled = pracI <= 0;
+  var btn = document.getElementById('pracBtn');
+  if(btn){
+    if(!pracAnswered){ btn.disabled = true; btn.textContent = 'Select an answer'; }
+    else {
+      btn.disabled = false;
+      btn.textContent = pracI < total - 1 ? 'Next question →'
+        : (pracAllAnswered() ? 'See your review' : 'Next unanswered →');
+    }
+  }
+}
+function pracGo(i){
+  if(!pracPaper) return;
+  if(i < 0 || i >= pracPaper.questions.length) return;
+  pracI = i;
+  renderPrac();
+}
+function pracPrev(){ pracGo(pracI - 1); }
 function renderPrac(){
-  pracAnswered = false;
   var d = pracQ();
   if(!d) return;
   var total = pracPaper.questions.length;
+  /* Returning to an answered question restores it exactly as it was left:
+     the chosen option, the correct one, the feedback and the locks. */
+  var mark = pracMarks[pracI] || null;
+  pracAnswered = !!mark;
   var sub = document.getElementById('pracSub');
   if(sub){
     /* The header states what the run is worth, from the figures the data layer
@@ -8339,18 +8463,15 @@ function renderPrac(){
     b.className = 'opt';
     b.innerHTML = '<span class="key">' + OPT_KEYS[i] + '</span>' + mth(o);
     b.onclick = function(){ answerPrac(i, b); };
+    if(mark){
+      b.disabled = true;
+      if(i === mark.given) b.classList.add(mark.isCorrect ? 'correct' : 'wrong');
+      if(i === d.answer) b.classList.add('correct');
+    }
     host.appendChild(b);
   });
-  document.getElementById('pracFb').innerHTML = '';
-  var btn = document.getElementById('pracBtn');
-  btn.disabled = true; btn.textContent = 'Select an answer';
-  var prog = document.getElementById('pracProg');
-  prog.innerHTML = '';
-  for(var i = 0; i < total; i++){
-    var s = document.createElement('span');
-    if(i < pracI) s.className = 'on'; else if(i === pracI) s.className = 'cur';
-    prog.appendChild(s);
-  }
+  document.getElementById('pracFb').innerHTML = mark ? pracFbHtml(d, mark.isCorrect) : '';
+  pracPaintChrome(total);
 }
 function answerPrac(i, btn){
   if(pracAnswered) return;
@@ -8361,17 +8482,14 @@ function answerPrac(i, btn){
   var right = i === d.answer;
   btn.classList.add(right ? 'correct' : 'wrong');
   if(!right && opts[d.answer]) opts[d.answer].classList.add('correct');
-  document.getElementById('pracFb').innerHTML =
-    '<div class="feedback ' + (right ? 'ok' : 'no') + '"><h4>' + (right ? 'Correct' : 'Not quite') + '</h4>' +
-    '<p>' + mth(d.explanation || 'Read the note on this topic in Read / Learn.', {breaks:true}) + '</p>' +
-    bmButton({ id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: d.options,
-               answer: d.answer, explanation: d.explanation }) +
-    askTutorButton({ id: d.id }) + '</div>';
-  pracMarks.push({ n: pracI + 1, id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: (d.options || []).slice(),
-                   answer: d.answer, given: i, isCorrect: right, explanation: d.explanation || '' });
-  var b = document.getElementById('pracBtn');
-  b.disabled = false;
-  b.textContent = pracI < pracPaper.questions.length - 1 ? 'Next question →' : 'See your review';
+  document.getElementById('pracFb').innerHTML = pracFbHtml(d, right);
+  /* One mark per question, stored at its own index: navigation can revisit
+     this question but can never push a second mark (or a second XP claim)
+     for it — pracAnswered above is the lock, this is the record. */
+  pracMarks[pracI] = { n: pracI + 1, id: d.id, subject: pracPaper.subject, topic: d.topic, text: d.text, options: (d.options || []).slice(),
+                   answer: d.answer, given: i, isCorrect: right, explanation: d.explanation || '',
+                   source: d.source || null, page: d.page || null, sourceText: d.sourceText || '' };
+  pracPaintChrome(pracPaper.questions.length);
 }
 /* Finishing a practice run: the page has already marked every question for the
    student, but the run is sent back all the same. The data layer marks it again
@@ -8381,6 +8499,13 @@ function answerPrac(i, btn){
 function pracNext(){
   if(!pracAnswered) return;
   if(pracI < pracPaper.questions.length - 1){ pracI++; renderPrac(); return; }
+  /* On the last question with earlier ones still open, Next takes the student
+     to the first unanswered question rather than ending the run early; the
+     review opens only once every question has been answered. */
+  if(!pracAllAnswered()){ pracGo(pracFirstUnanswered()); return; }
+  pracFinish();
+}
+function pracFinish(){
   var paper = pracPaper;
   var local = pracLocalResult(paper);
   pracPaper = null;
@@ -8392,7 +8517,7 @@ function pracNext(){
   });
   GOC.api.submitStudy({ paperId: paper.paperId, responses: responses, timeUsedSec: 0 })
     .then(function(res){
-      res.review = pracMarks;          /* keep the order the student answered in */
+      res.review = pracMarks;          /* one mark per question, in question order */
       res.mode = 'practice';
       srShow(res);
       refreshMe();                     /* the XP has moved, so the header must too */
@@ -8408,10 +8533,12 @@ function pracNext(){
 function pracLocalResult(paper){
   var correct = pracMarks.filter(function(m){ return m.isCorrect; }).length;
   var total = paper.questions.length;
+  var answered = pracAnsweredCount();
   return {
     mode: 'practice', subject: paper.subject, assessed: false,
-    total: total, answered: pracMarks.length, unanswered: total - pracMarks.length,
-    correct: correct, wrong: pracMarks.length - correct,
+    source: paper.source || null, noteTitle: paper.noteTitle || '',
+    total: total, answered: answered, unanswered: total - answered,
+    correct: correct, wrong: answered - correct,
     percent: total ? Math.round(correct * 100 / total) : 0,
     timeUsedSec: null, xpAwarded: 0, review: pracMarks, topics: pracTopicBands()
   };
@@ -9996,7 +10123,18 @@ function renderDash(){
   if(role !== 'student' && !previewing) return;
   var helloEl = document.getElementById('dashHello');
   if(helloEl && role === 'student') helloEl.textContent = greetingWord();
+  /* First-visit guided tour (Stage 6): auto-starts exactly once for a
+     student with no saved tour state; a finished, skipped or interrupted
+     tour never auto-repeats — Help & tutorial in Profile resumes or
+     replays it. Delayed so the login flyer has settled first. */
+  if(role === 'student' && window.GOCOnboarding){
+    setTimeout(function(){
+      if(window.GOCOnboarding) window.GOCOnboarding.maybeAutoStart('student', studentId);
+    }, 900);
+  }
   dashPaintNext();
+  dashPaintUp();
+  dashPaintSubjects();
   dashPaintStanding();
   dashPaintLast();
   dashPaintBroadcasts();
@@ -10013,11 +10151,62 @@ function dashRow(title, sub, cta){
 function dashStat(k, v){
   return '<div class="wt-stat"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>';
 }
+/* The JAMB-oriented catalogue row from the dashboard's last catalogue read
+   (null when the sitting is not listed for this student). It is only ever a
+   mirror of what the server chose to list: dashPaintJamb never invents a
+   sitting, and starting goes through wtConfirmStart -> POST /api/me/tests/start,
+   which re-checks the bank-depth gate server-side before opening anything. */
+var dashJambTest = null;
+function dashPaintJamb(rows){
+  if(!document.getElementById('dashJamb')) return;
+  if(!rows){
+    dashJambTest = null;
+    dashSet('dashJamb', '<div class="wt-none">The JAMB-oriented sitting is not available right now.</div>');
+    return;
+  }
+  var j = null;
+  rows.forEach(function(t){ if(t.section === 'jamb') j = t; });
+  dashJambTest = j;
+  if(!j){
+    /* Not listed means the dedicated JAMB bank is not yet deep enough in every
+       one of this student's subjects (the server holds the sitting back until
+       it is). Say exactly that; never offer a Start the server would refuse. */
+    dashSet('dashJamb', '<div class="wt-none">The JAMB-oriented sitting opens once its question bank is ready in all of your subjects. Sit the Objective sitting meanwhile.</div>');
+    return;
+  }
+  var line = j.questions + ' question' + (j.questions !== 1 ? 's' : '')
+    + ' · ' + wtMinutes(j.durationSec) + ' · your whole combination';
+  if(j.papers && j.papers.length) line += ' · ' + wtPapersLine(j.papers);
+  var sat = Number(j.attempts) || 0;
+  if(j.repeatable && sat > 0) line += ' · sat ' + sat + ' time' + (sat !== 1 ? 's' : '') + ' — you can sit it again';
+  if(j.locked){
+    dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
+      + esc(line) + ' · for GOC students — ask the academy about joining</span></div>'
+      + '<button class="wt-start locked" disabled>Locked · GOC</button></div>');
+    return;
+  }
+  dashSet('dashJamb', '<div class="wt-row"><div class="nm"><b>JAMB-oriented sitting</b><span>'
+    + esc(line) + '</span></div>'
+    + '<button class="wt-start" onclick="dashJambSit(this)">' + (j.repeatable && sat > 0 ? 'Sit again' : 'Sit it') + '</button></div>');
+}
+/* Dashboard/Study JAMB entry: start the listed sitting through the very same
+   instructions + start route as the Web Test screen; when no sitting is
+   listed (or the catalogue has not been read yet), land on the Web Test
+   screen, which explains the readiness position itself. */
+function dashJambSit(btn){
+  if(dashJambTest && !dashJambTest.locked) wtConfirmStart(dashJambTest, btn);
+  else openWebTest();
+}
+function openJambTest(){
+  if(dashJambTest && !dashJambTest.locked){ wtConfirmStart(dashJambTest, null); return; }
+  openWebTest();
+}
 /* What is actually published for this student, in the order they would sit it. */
 function dashPaintNext(){
   if(!GOC.api.listMyTests) return;
   GOC.api.listMyTests().then(function(r){
     var rows = (r && r.tests) || [];
+    dashPaintJamb(rows);
     if(!rows.length){
       dashSet('dashNext', '<div class="wt-none">No paper has been published for your subjects yet. One will appear here the moment it is.</div>');
       return;
@@ -10042,6 +10231,7 @@ function dashPaintNext(){
     }
     dashSet('dashNext', h || '<div class="wt-none">No paper has been published for your subjects yet.</div>');
   }, function(){
+    dashPaintJamb(null);
     dashSet('dashNext', '<div class="wt-none">Your papers are not available right now.</div>');
   });
 }
@@ -10087,6 +10277,155 @@ function dashPaintLast(){
   }, function(){
     dashSet('dashLast', '<div class="wt-none">Your record is not available right now.</div>');
   });
+}
+
+/* ================= NEXT UP (Stage 5) =================
+   One recommended next step, chosen only from data the academy already
+   holds for this student, in a fixed priority: an unfinished available
+   exam paper first, then questions due for spaced review, then practice
+   on the weakest topic their own practice record shows. If a source
+   needed to rule out a higher priority cannot be read, the card says so
+   instead of guessing — it never invents a paper, a due count or a weak
+   topic. */
+var dashUpCurrent = null;
+var dashUpWeakPick = null;
+function dashUpFromTests(rows){
+  var rank = { objective: 0, jamb: 1, theory: 2 };
+  var open = (rows || []).filter(function(t){ return t && !t.completed && !t.locked; });
+  open.sort(function(a, b){ return (rank[a.section] != null ? rank[a.section] : 3) - (rank[b.section] != null ? rank[b.section] : 3); });
+  var t = open[0];
+  if(!t) return null;
+  var title = t.section === 'jamb' ? 'Sit your JAMB-oriented sitting'
+    : t.section === 'objective' ? 'Sit your Objective sitting'
+    : 'Sit your ' + (t.subject || '') + ' theory paper';
+  var sub = (Number(t.questions) || 0) + ' question' + (Number(t.questions) !== 1 ? 's' : '')
+    + (t.durationSec ? ' · ' + wtMinutes(t.durationSec) : ' · no time limit') + ' · waiting for you';
+  return { kind: 'paper', section: t.section, title: title, sub: sub, cta: 'Sit it' };
+}
+function dashUpFromReview(payload){
+  var q = (payload && payload.review) || payload || {};
+  var due = Number(q.dueCount) || 0;
+  if(!due) return null;
+  return { kind: 'review', title: 'Review what is due',
+           sub: due + ' question' + (due !== 1 ? 's are' : ' is') + ' due for another look, spaced so they stick', cta: 'Start review' };
+}
+function dashWeakTopic(runs){
+  var agg = {};
+  (runs || []).forEach(function(r){
+    (r.topics || []).forEach(function(t){
+      if(!t || !t.topic) return;
+      var key = (r.subject || '') + '|' + t.topic;
+      agg[key] = agg[key] || { subject: r.subject || '', topic: t.topic, sum: 0, runs: 0 };
+      agg[key].sum += Number(t.percent) || 0;
+      agg[key].runs++;
+    });
+  });
+  var best = null;
+  Object.keys(agg).forEach(function(k){
+    var a = agg[k];
+    a.percent = Math.round(a.sum / a.runs);
+    if(!best || a.percent < best.percent || (a.percent === best.percent && a.runs > best.runs)) best = a;
+  });
+  return best;
+}
+function dashUpPick(d){
+  var paper = dashUpFromTests(d.rows);
+  if(paper) return paper;
+  if(!d.testsOk) return { kind: 'unavailable' };
+  var review = dashUpFromReview(d.review);
+  if(review) return review;
+  if(!d.reviewOk) return { kind: 'unavailable' };
+  var weak = dashWeakTopic(d.runs);
+  if(weak) return { kind: 'practice', subject: weak.subject, topic: weak.topic, percent: weak.percent,
+    title: 'Practise ' + weak.topic,
+    sub: 'Your weakest topic in ' + (weak.subject || 'practice') + ' so far · ' + weak.percent + '% across ' + weak.runs + ' run' + (weak.runs !== 1 ? 's' : ''), cta: 'Practise it' };
+  if(!d.practiceOk) return { kind: 'unavailable' };
+  return { kind: 'start', title: 'Start with practice',
+           sub: 'No paper is waiting and nothing is due — build the habit one question at a time', cta: 'Open Practice' };
+}
+function dashUpFetch(fn){
+  try {
+    return Promise.resolve(fn()).then(function(v){ return { ok: true, value: v }; },
+                                      function(){ return { ok: false, value: null }; });
+  } catch(e){ return Promise.resolve({ ok: false, value: null }); }
+}
+function dashPaintUp(){
+  if(!document.getElementById('dashUp')) return;
+  if(!GOC.api) { dashSet('dashUp', '<div class="wt-none">Your next step is not available right now.</div>'); return; }
+  var tests = dashUpFetch(function(){ return GOC.api.listMyTests(); });
+  var review = dashUpFetch(function(){ return GOC.api.listReview(); });
+  var practice = dashUpFetch(function(){ return GOC.api.listPractice(); });
+  Promise.all([tests, review, practice]).then(function(rs){
+    var pick = dashUpPick({
+      testsOk: rs[0].ok, rows: (rs[0].value && rs[0].value.tests) || [],
+      reviewOk: rs[1].ok, review: rs[1].value,
+      practiceOk: rs[2].ok, runs: (rs[2].value && rs[2].value.runs) || []
+    });
+    dashUpCurrent = pick;
+    if(pick.kind === 'unavailable'){
+      dashSet('dashUp', '<div class="wt-none">Your next step is not available right now — your papers, review and practice below still work.</div>');
+      return;
+    }
+    dashSet('dashUp', '<div class="wt-row"><div class="nm"><b>' + esc(pick.title) + '</b><span>' + esc(pick.sub)
+      + '</span></div><button class="wt-start" onclick="dashUpGo()">' + esc(pick.cta) + '</button></div>');
+  });
+}
+function dashUpGo(){
+  var p = dashUpCurrent;
+  if(!p) return;
+  if(p.kind === 'paper'){ if(p.section === 'jamb') openJambTest(); else openWebTest(); return; }
+  if(p.kind === 'review'){ go('review'); return; }
+  if(p.kind === 'practice'){ dashUpWeakPick = { subject: p.subject, topic: p.topic }; openStudySet('practice', p.subject); return; }
+  openPractice();
+}
+function dashPaintSubjects(){
+  if(!document.getElementById('dashSubjects')) return;
+  var subs = mySubjects || [];
+  if(!subs.length){
+    dashSet('dashSubjects', '<div class="wt-none">Your subjects appear here once your combination is set on your account.</div>');
+    return;
+  }
+  dashSet('dashSubjects', subs.map(function(s){
+    return '<div class="wt-row"><div class="nm"><b>' + esc(s) + '</b><span>Your paper</span></div>'
+      + '<button class="wt-start" onclick="openStudySet(\'practice\',&quot;' + esc(s) + '&quot;)">Practise</button></div>';
+  }).join(''));
+}
+
+/* Help & tutorial (Stage 6): replay or resume the guided tour on demand. */
+function tourRestart(){
+  if(window.GOCOnboarding) window.GOCOnboarding.restart('student', studentId);
+}
+function tourHelpPaint(){
+  if(!window.GOCOnboarding) return;
+  var label = window.GOCOnboarding.helpLabel('student', studentId);
+  var btn = document.getElementById('tourHelpBtn');
+  if(btn) btn.textContent = label.replace(/ · step.*$/, '');
+  var note = document.getElementById('tourHelpNote');
+  if(note) note.textContent = label === 'Watch the tour again' ? 'See the guided walk again, any time'
+    : label.indexOf('Resume') === 0 ? label.replace('Resume the tour · ', 'Paused at ') + ' — tap to continue'
+    : 'A guided walk around your hub';
+}
+
+/* Console tour (Stage 7): the tour is generated from the sections the
+   signed-in role may open (consoleSectionAllowed via GOC.core), so a
+   Founder tours all 26 sections while each manager tours only their
+   own. First entry auto-starts it once per manager; the Tour button in
+   the console header replays it. */
+function tourConsoleSetup(){
+  if(!window.GOCOnboarding || !window.GOC || !GOC.core || !admMe.id) return null;
+  var allowed = GOC.core.consoleSectionsFor(admMe.id, admMe.roleKey);
+  window.GOCOnboarding.register('console', window.GOCOnboarding.consoleSteps(allowed));
+  return allowed;
+}
+function tourConsoleAuto(){
+  if(!tourConsoleSetup()) return;
+  setTimeout(function(){
+    if(window.GOCOnboarding && admMe.id) window.GOCOnboarding.maybeAutoStart('console', admMe.id);
+  }, 900);
+}
+function tourConsoleStart(){
+  if(!tourConsoleSetup()){ toast('The tour is not available right now.'); return; }
+  window.GOCOnboarding.restart('console', admMe.id || 'staff');
 }
 
 /* ================= THE SCHOLAR LEAGUE (Priorities 10, 11, 12) =================
@@ -11650,6 +11989,381 @@ function openResourceMediaViewer(blob, title, kind, ext){
     renderPage(1);
   }).catch(function(){
     showFallback();
+  });
+}
+
+/* ================= MY NOTES (Stage 3) =================
+   The student's own private library. The server owner-checks every call;
+   this screen only ever sees the signed-in student's notes, and says so.
+   Academy Resources (above) is a different, shared library — the two are
+   never mixed. Reading reuses the app's own media viewer (PDF.js / image);
+   text notes open in a simple reader; anything else downloads honestly. */
+var myNotesCache = [];
+function openMyNotes(){ go('mynotes'); myNotesLoad(); }
+function myNotesLoad(){
+  var sel = document.getElementById('myNoteSubject');
+  if(sel && !sel.options.length){
+    mySubjectList().concat(['Other']).forEach(function(s){
+      var o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o);
+    });
+  }
+  if(!GOC.api.listMyNotes) return;
+  GOC.api.listMyNotes().then(function(r){
+    myNotesCache = (r && r.notes) || [];
+    myNotesRender();
+  }, function(err){
+    myNotesCache = [];
+    var host = document.getElementById('myNotesList');
+    if(host) host.innerHTML = '<div class="wt-none">' + esc((err && err.message) || 'Your notes are not available right now.') + '</div>';
+  });
+}
+function myNotesRender(){
+  var host = document.getElementById('myNotesList');
+  if(!host) return;
+  var qEl = document.getElementById('myNoteSearch');
+  var q = qEl ? String(qEl.value || '').trim().toLowerCase() : '';
+  var rows = myNotesCache.filter(function(n){
+    if(!q) return true;
+    return (String(n.title || '') + ' ' + String(n.subject || '') + ' ' + String(n.topic || '')).toLowerCase().indexOf(q) > -1;
+  });
+  host.innerHTML = '';
+  if(!rows.length){
+    host.innerHTML = '<div class="wt-none">' + (myNotesCache.length
+      ? 'No note matches that search.'
+      : 'You have not uploaded any notes yet. Add your first note above — it stays private to your account.') + '</div>';
+    return;
+  }
+  var bySubject = {};
+  rows.forEach(function(n){ (bySubject[n.subject || 'Other'] = bySubject[n.subject || 'Other'] || []).push(n); });
+  Object.keys(bySubject).sort().forEach(function(subj){
+    var h = document.createElement('div');
+    h.className = 'sec-head';
+    h.innerHTML = '<div class="section-t">' + esc(subj) + '</div>';
+    host.appendChild(h);
+    bySubject[subj].forEach(function(n){ host.appendChild(myNoteRow(n)); });
+  });
+}
+function myNoteRow(n){
+  var d = document.createElement('div');
+  d.className = 'card wrap dash-card';
+  var when = n.createdAt ? wtWhen(new Date(n.createdAt).getTime()) : '';
+  d.innerHTML = '<div class="wt-row"><div class="nm"><b>' + esc(n.title || 'Untitled note') + '</b><span>'
+    + esc(n.subject || '') + (n.topic ? ' · ' + esc(n.topic) : '') + ' · ' + esc(n.fileType || 'FILE')
+    + (when ? ' · ' + esc(when) : '') + '</span></div></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    + '<button type="button" class="btn btn-red" onclick="myNoteRead(\'' + esc(n.noteId) + '\')">Read</button>'
+    + '<button type="button" class="btn btn-outline" onclick="notePracticeOpen(\'' + esc(n.noteId) + '\')">Practise this note</button>'
+    + '<button type="button" class="btn btn-outline" onclick="myNoteReplace(\'' + esc(n.noteId) + '\')">Replace</button>'
+    + '<button type="button" class="btn btn-outline" onclick="myNoteDelete(\'' + esc(n.noteId) + '\')">Delete</button>'
+    + '</div>';
+  return d;
+}
+function myNoteUpload(){
+  var title = String((document.getElementById('myNoteTitle') || {}).value || '').trim();
+  var subject = String((document.getElementById('myNoteSubject') || {}).value || '').trim();
+  var topic = String((document.getElementById('myNoteTopic') || {}).value || '').trim();
+  var fileEl = document.getElementById('myNoteFile');
+  var file = fileEl && fileEl.files && fileEl.files[0];
+  if(!title){ toast('Give your note a title.'); return; }
+  if(!subject){ toast('Choose the subject this note belongs to.'); return; }
+  if(!file){ toast('Choose a note file to upload.'); return; }
+  if(file.size > 25 * 1024 * 1024){ toast('That note file is too large. Maximum size is 25 MB.'); return; }
+  var fd = new FormData();
+  fd.append('title', title); fd.append('subject', subject); fd.append('topic', topic); fd.append('file', file);
+  var btn = document.getElementById('myNoteUploadBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Uploading…'; }
+  GOC.api.uploadMyNote(fd).then(function(){
+    if(btn){ btn.disabled = false; btn.textContent = 'Upload note'; }
+    document.getElementById('myNoteTitle').value = '';
+    document.getElementById('myNoteTopic').value = '';
+    if(fileEl) fileEl.value = '';
+    toast('Note saved to your private library.');
+    myNotesLoad();
+  }, function(err){
+    if(btn){ btn.disabled = false; btn.textContent = 'Upload note'; }
+    toast((err && err.message) || 'That note could not be uploaded.');
+  });
+}
+function myNoteRead(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  GOC.api.getMyNoteFile(id).then(function(blob){
+    var ext = String(n.fileType || '').toLowerCase();
+    if(ext === 'pdf') openResourceMediaViewer(blob, n.title, 'pdf', 'pdf');
+    else if(ext === 'png' || ext === 'jpg' || ext === 'jpeg') openResourceMediaViewer(blob, n.title, 'image', ext);
+    else if(ext === 'txt' || ext === 'md'){
+      blob.text().then(function(text){ myNoteShowText(n.title, text); },
+        function(){ downloadResourceBlob(blob, n.title, ext); });
+    }
+    else { downloadResourceBlob(blob, n.title, ext); toast('This format downloads to open on your device.'); }
+  }, function(err){ toast((err && err.message) || 'Could not open that note.'); });
+}
+function myNoteShowText(title, text){
+  var old = document.getElementById('gocNoteText');
+  if(old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'gocNoteText';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#111;display:flex;flex-direction:column;';
+  overlay.innerHTML = '<div style="height:58px;flex:0 0 58px;background:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #e5e7eb;">'
+    + '<button type="button" id="gocNoteTextClose" aria-label="Close reader" style="border:0;background:#f3f4f6;border-radius:10px;width:38px;height:38px;font-size:20px;cursor:pointer;">×</button>'
+    + '<div style="flex:1;min-width:0;font-size:14px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title || 'Note') + '</div></div>'
+    + '<pre style="flex:1;overflow:auto;margin:0;padding:18px;background:#FAF7F2;color:#20242C;font-size:14px;line-height:1.65;white-space:pre-wrap;">' + esc(text || '') + '</pre>';
+  document.body.appendChild(overlay);
+  document.getElementById('gocNoteTextClose').onclick = function(){ overlay.remove(); };
+}
+function myNoteReplace(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg';
+  input.onchange = function(){
+    var file = input.files && input.files[0];
+    if(!file) return;
+    if(file.size > 25 * 1024 * 1024){ toast('That note file is too large. Maximum size is 25 MB.'); return; }
+    if(typeof confirm === 'function' && !confirm('Replace "' + n.title + '" with "' + file.name + '"?\n\nThe current file will be removed. This cannot be undone.')) return;
+    var fd = new FormData();
+    fd.append('file', file);
+    GOC.api.replaceMyNote(id, fd).then(function(){
+      toast('Note replaced.');
+      myNotesLoad();
+    }, function(err){ toast((err && err.message) || 'That note could not be replaced.'); });
+  };
+  input.click();
+}
+function myNoteDelete(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  if(typeof confirm === 'function' && !confirm('Delete "' + n.title + '"?\n\nYour uploaded file will be removed from your private library. This cannot be undone.')) return;
+  GOC.api.deleteMyNote(id).then(function(){
+    toast('Note deleted.');
+    myNotesLoad();
+  }, function(err){ toast((err && err.message) || 'That note could not be deleted.'); });
+}
+
+/* ================= PRACTISE THIS NOTE (Stage 4) =================
+   Questions are built on this device, only from the text of the one note
+   the student picked: js/note-questions.js is extractive, so every correct
+   answer is lifted from a sentence in that note and carries the sentence
+   (and page) it came from. The run opens in the ordinary Practice screen
+   with no paperId, so it is marked locally, earns no XP, is never sent to
+   the official banks and is never labelled JAMB material. A PDF with no
+   text layer (a scanned note) is explained honestly rather than guessed at. */
+var notePracNote = null;
+function notePracticeOpen(id){
+  var n = null;
+  myNotesCache.forEach(function(x){ if(x.noteId === id) n = x; });
+  if(!n) return;
+  notePracNote = n;
+  var old = document.getElementById('gocNotePractice');
+  if(old) old.remove();
+  var ext = String(n.fileType || '').toLowerCase();
+  var readable = (ext === 'pdf' || ext === 'txt' || ext === 'md');
+  var overlay = document.createElement('div');
+  overlay.id = 'gocNotePractice';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(17,17,17,.72);display:flex;align-items:center;justify-content:center;padding:18px;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:86vh;overflow:auto;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'
+    + '<div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="eyebrow">Practise this note</div>'
+    + '<h3 style="margin:4px 0 6px;font-size:17px">' + esc(n.title || 'Untitled note') + '</h3>'
+    + '<div class="muted" style="font-size:12.5px">' + esc(n.subject || '') + (n.topic ? ' · ' + esc(n.topic) : '') + '</div></div>'
+    + '<button type="button" id="notePracClose" aria-label="Close" style="border:0;background:#f3f4f6;border-radius:10px;width:38px;height:38px;font-size:20px;cursor:pointer;">×</button></div>'
+    + '<p style="font-size:13px;line-height:1.55;color:#374151">Questions are built only from the words in this note, on your device. Every answer can be checked against the sentence it came from. These are your own practice questions — they are not official JAMB questions and they never enter the academy\u2019s question banks.</p>'
+    + (readable
+      ? '<div class="ad-field"><label for="notePracCount">How many questions?</label><select id="notePracCount"><option value="3">3</option><option value="5" selected>5</option><option value="8">8</option><option value="10">10</option></select></div>'
+        + '<div class="ad-field"><label for="notePracDiff">Difficulty</label><select id="notePracDiff"><option value="easy">Easy — direct definitions</option><option value="standard" selected>Standard — a mix</option><option value="challenge">Challenge — complete the sentence</option></select></div>'
+        + '<button type="button" class="btn btn-red btn-block" id="notePracGo">Build my questions</button>'
+      : '<div class="wt-none">Practise This Note can read PDFs with selectable text, and .txt or .md notes. This ' + esc(ext || 'file') + ' note cannot be read inside the app, so no questions can be built from it here. You can still read or download it from your library.</div>')
+    + '<div id="notePracStatus" class="muted" style="font-size:13px;line-height:1.55;margin-top:12px"></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('notePracClose').onclick = notePracticeClose;
+  overlay.addEventListener('click', function(e){ if(e.target === overlay) notePracticeClose(); });
+  var goBtn = document.getElementById('notePracGo');
+  if(goBtn) goBtn.onclick = notePracticeGenerate;
+}
+function notePracticeClose(){
+  var o = document.getElementById('gocNotePractice');
+  if(o) o.remove();
+}
+function notePracticeStatus(msg){
+  var el = document.getElementById('notePracStatus');
+  if(el) el.textContent = msg || '';
+}
+function noteExtractPages(n, blob){
+  var ext = String(n.fileType || '').toLowerCase();
+  if(ext === 'txt' || ext === 'md'){
+    return blob.text().then(function(text){ return [{ page: null, text: text }]; });
+  }
+  if(ext !== 'pdf') return Promise.reject(new Error('unsupported-format'));
+  return blob.arrayBuffer().then(function(buf){
+    return import(pdfjsAssetUrl('pdf.min.mjs')).then(function(pdfjsLib){
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsAssetUrl('pdf.worker.min.mjs');
+      return pdfjsLib.getDocument({ data: buf }).promise;
+    });
+  }).then(function(doc){
+    var pages = [];
+    var chain = Promise.resolve();
+    for(var p = 1; p <= doc.numPages; p++){
+      (function(pageNo){
+        chain = chain.then(function(){
+          return doc.getPage(pageNo).then(function(page){ return page.getTextContent(); }).then(function(tc){
+            pages.push({ page: pageNo, text: (tc.items || []).map(function(it){ return it.str || ''; }).join(' ') });
+          });
+        });
+      })(p);
+    }
+    return chain.then(function(){ return pages; });
+  });
+}
+function notePracticeGenerate(){
+  var n = notePracNote;
+  if(!n || !window.GOCNoteQuestions) return;
+  var count = Number((document.getElementById('notePracCount') || {}).value) || 5;
+  var difficulty = String((document.getElementById('notePracDiff') || {}).value || 'standard');
+  var btn = document.getElementById('notePracGo');
+  if(btn){ btn.disabled = true; btn.textContent = 'Reading your note…'; }
+  notePracticeStatus('Reading the text from “' + (n.title || 'your note') + '”…');
+  GOC.api.getMyNoteFile(n.noteId).then(function(blob){
+    return noteExtractPages(n, blob);
+  }).then(function(pages){
+    var built = window.GOCNoteQuestions.generateFromPages(pages, {
+      count: count, difficulty: difficulty,
+      noteId: n.noteId, noteTitle: n.title, subject: n.subject, topic: n.topic
+    });
+    if(!built.questions.length){
+      if(btn){ btn.disabled = false; btn.textContent = 'Build my questions'; }
+      if(built.stats.reason === 'no-readable-text'){
+        notePracticeStatus(String(n.fileType || '').toLowerCase() === 'pdf'
+          ? 'This PDF appears to be scanned pictures of pages — it has no readable text layer, so the app cannot build questions from it. A text-based PDF (saved or exported as text, not photographed/scanned), or a .txt/.md note, will work.'
+          : 'This note has no readable text the app can build questions from.');
+      } else {
+        notePracticeStatus('Only ' + (built.stats.sentences || 0) + ' usable sentence(s) could be found in this note — that is not enough to build fair questions with four real choices each. A longer or clearer note will work better; nothing was guessed or made up.');
+      }
+      return;
+    }
+    notePracticeClose();
+    pracOpen({
+      paperId: null, source: 'my-note', noteId: n.noteId, noteTitle: n.title,
+      subject: n.subject || 'My Notes', questions: built.questions
+    });
+    if(built.questions.length < count) toast('Built ' + built.questions.length + ' questions — that is all this note can support.');
+  }, function(err){
+    if(btn){ btn.disabled = false; btn.textContent = 'Build my questions'; }
+    notePracticeStatus((err && err.message) || 'That note could not be read just now.');
+  });
+}
+
+
+/* ================= TRY G.O.C — ANONYMOUS PREVIEW (Stage 10) =================
+   A five-question taster for visitors with no account. The server holds
+   the answers until submission (see /api/demo/*), so this client only
+   ever carries questions and the visitor's picks. Nothing is stored:
+   no account, no attempt, no XP — leaving or refreshing simply ends it. */
+var demoQs = [], demoAns = [], demoI = 0, demoToken = null;
+function demoOpen(){
+  go('demo');
+  var play = document.getElementById('demoPlay'), res = document.getElementById('demoResult'), intro = document.getElementById('demoIntro');
+  if(play) play.hidden = true;
+  if(res) res.hidden = true;
+  if(intro) intro.hidden = false;
+}
+function demoMsg(text){
+  var m = document.getElementById('demoMsg');
+  if(m){ m.style.display = text ? '' : 'none'; m.textContent = text || ''; }
+}
+function demoStart(){
+  var btn = document.getElementById('demoStartBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Setting up…'; }
+  demoMsg('');
+  fetch('api/demo/questions').then(function(r){
+    return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'The preview is not available right now.'); return j; });
+  }).then(function(j){
+    demoToken = j.token;
+    demoQs = j.questions || [];
+    demoAns = demoQs.map(function(){ return null; });
+    demoI = 0;
+    document.getElementById('demoIntro').hidden = true;
+    document.getElementById('demoResult').hidden = true;
+    document.getElementById('demoPlay').hidden = false;
+    demoRender();
+  }).catch(function(e){
+    demoMsg((e && e.message) || 'The preview is not available right now. Please try again shortly.');
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.textContent = 'Try a free practice session'; }
+  });
+}
+function demoRender(){
+  var q = demoQs[demoI];
+  if(!q) return;
+  document.getElementById('demoNum').textContent = 'Question ' + (demoI + 1) + ' of ' + demoQs.length + ' · ' + q.subject + ' · ' + q.topic;
+  document.getElementById('demoQ').innerHTML = mth(q.text, { breaks: true });
+  var host = document.getElementById('demoOpts');
+  host.innerHTML = '';
+  (q.options || []).forEach(function(o, i){
+    var b = document.createElement('button');
+    b.className = 'opt' + (demoAns[demoI] === i ? ' sel' : '');
+    b.innerHTML = '<span class="key">' + OPT_KEYS[i] + '</span>' + mth(o);
+    b.onclick = function(){ demoAns[demoI] = i; demoRender(); };
+    host.appendChild(b);
+  });
+  var pal = document.getElementById('demoPalette');
+  pal.innerHTML = '';
+  demoQs.forEach(function(_, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'prac-pal' + (demoAns[i] !== null ? ' ans' : '') + (i === demoI ? ' cur' : '');
+    b.textContent = i + 1;
+    b.setAttribute('aria-label', 'Question ' + (i + 1) + (demoAns[i] !== null ? ' (answered)' : ' (unanswered)'));
+    b.onclick = function(){ demoI = i; demoRender(); };
+    pal.appendChild(b);
+  });
+  var answered = demoAns.filter(function(a){ return a !== null; }).length;
+  document.getElementById('demoCount').textContent = answered + ' of ' + demoQs.length + ' answered';
+  document.getElementById('demoPrevBtn').disabled = demoI <= 0;
+  document.getElementById('demoNextBtn').textContent = demoI < demoQs.length - 1 ? 'Next →' : 'Submit answers';
+}
+function demoPrev(){ if(demoI > 0){ demoI--; demoRender(); } }
+function demoNext(){
+  if(demoI < demoQs.length - 1){ demoI++; demoRender(); return; }
+  var unanswered = demoAns.filter(function(a){ return a === null; }).length;
+  if(unanswered && typeof confirm === 'function'
+     && !confirm('You still have ' + unanswered + ' unanswered question' + (unanswered === 1 ? '' : 's') + '. Submit anyway?')) return;
+  demoSubmit();
+}
+function demoSubmit(){
+  var btn = document.getElementById('demoNextBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Marking…'; }
+  fetch('api/demo/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: demoToken, answers: demoAns }) })
+  .then(function(r){
+    return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'That preview could not be marked.'); return j; });
+  }).then(function(res){
+    demoToken = null;
+    document.getElementById('demoPlay').hidden = true;
+    var host = document.getElementById('demoResult');
+    host.hidden = false;
+    host.innerHTML = '<div class="q-card"><div class="q-num">Your result</div>'
+      + '<div class="q-text">' + res.score + ' of ' + res.total + ' correct · ' + res.percent + '%</div>'
+      + '<p class="muted" style="line-height:1.6">' + (res.score >= 4 ? 'Excellent — that is real UTME pace. ' : res.score >= 2 ? 'A solid start. ' : 'Everyone starts somewhere. ')
+      + 'In the full academy, every answer comes with tutoring, your mistakes come back for review until they stick, and assessed sittings track your real progress.</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-red" type="button" onclick="demoStart()">Try again</button>'
+      + '<button class="btn btn-outline" type="button" onclick="go(\'signup\')">Unlock the full G.O.C experience</button></div>'
+      + '<p class="muted" style="font-size:12.5px;margin-top:10px">Registration comes first; the academy then confirms your programme access. Nothing was recorded from this preview.</p></div>'
+      + res.review.map(function(r){
+          var mine = r.given === null ? 'Not answered' : r.options[r.given];
+          return '<div class="wt-rev"><div class="rq">Question ' + r.n + ' · ' + esc(r.subject) + ' · ' + esc(r.topic) + '</div>'
+            + '<div class="rt">' + mth(r.text, { breaks: true }) + '</div>'
+            + '<div class="ra"><em>Your answer</em>' + mth(mine) + '</div>'
+            + '<div class="ra"><em>Correct answer</em>' + mth(r.options[r.answer]) + '</div>'
+            + '<div class="ra"><em>Why</em>' + mth(r.explanation, { breaks: true }) + '</div>'
+            + '<span class="verdict ' + (r.isCorrect ? 'ok' : 'no') + '">' + (r.isCorrect ? 'Correct' : 'Incorrect') + '</span></div>';
+        }).join('');
+  }).catch(function(e){
+    if(btn){ btn.disabled = false; btn.textContent = 'Submit answers'; }
+    toast((e && e.message) || 'That preview could not be marked.');
   });
 }
 

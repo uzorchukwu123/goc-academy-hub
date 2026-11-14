@@ -166,6 +166,7 @@
     var nSeq = notes.reduce(function (m, r) { return Math.max(m, r.id); }, 0);
     var passages = [];                     /* Comprehension passages (Phase 3) */
     var qImages = {};                      /* Question pictures (Phase 3): id -> { file, type, bytes } */
+    var myNotesDemo = {};                  /* My Notes (Stage 3) in the offline driver: Scholar ID -> [note], files held in memory only */
     function imageLinkError(rec) {
       return rec && rec.imageId && !qImages[rec.imageId] ? 'That picture is not on the server. Upload it again.' : null;
     }
@@ -2368,6 +2369,69 @@
       getResourceFile: function () {
         return fail('Resource downloads require a server connection.');
       },
+      /* My Notes (Stage 3), offline driver: metadata and files live in
+         memory for this session only, keyed by Scholar ID so one student's
+         notes are never listed for another — the same isolation the server
+         enforces with owner checks. */
+      listMyNotes: function () {
+        var e = requireStudent(); if (e) return e;
+        var mine = (myNotesDemo[session.id] || []).map(function (n) {
+          return { noteId: n.noteId, title: n.title, subject: n.subject, topic: n.topic,
+                   fileType: n.fileType, sizeBytes: n.sizeBytes, createdAt: n.createdAt };
+        });
+        return ok({ notes: mine });
+      },
+      uploadMyNote: function (formData) {
+        var e = requireStudent(); if (e) return e;
+        var f = formData && formData.get ? formData.get('file') : null;
+        if (!f) return fail('Please choose a note file to upload.');
+        var title = formData.get('title') ? String(formData.get('title')).trim() : '';
+        var subject = formData.get('subject') ? String(formData.get('subject')).trim() : '';
+        if (!title) return fail('Give your note a title.');
+        if (!subject) return fail('Choose the subject this note belongs to.');
+        var name = String(f.name || 'note');
+        var ext = name.indexOf('.') > -1 ? name.split('.').pop().toUpperCase() : '';
+        var note = { noteId: 'NOTE-DEMO-' + Date.now() + '-' + Math.floor(Math.random() * 1e6),
+          title: title, subject: subject,
+          topic: formData.get('topic') ? String(formData.get('topic')).trim() : '',
+          fileType: ext, sizeBytes: f.size || 0, createdAt: new Date().toISOString(), file: f };
+        (myNotesDemo[session.id] = myNotesDemo[session.id] || []).unshift(note);
+        return ok({ ok: true, note: { noteId: note.noteId, title: note.title, subject: note.subject,
+          topic: note.topic, fileType: note.fileType, sizeBytes: note.sizeBytes, createdAt: note.createdAt } });
+      },
+      replaceMyNote: function (id, formData) {
+        var e = requireStudent(); if (e) return e;
+        var mine = myNotesDemo[session.id] || [];
+        var n = null;
+        mine.forEach(function (x) { if (x.noteId === String(id)) n = x; });
+        if (!n) return fail('That note is not available.');
+        var f = formData && formData.get ? formData.get('file') : null;
+        if (!f) return fail('Please choose the replacement file.');
+        n.file = f;
+        n.fileType = String(f.name || 'note').indexOf('.') > -1 ? String(f.name).split('.').pop().toUpperCase() : n.fileType;
+        n.sizeBytes = f.size || 0;
+        if (formData.get('title')) n.title = String(formData.get('title')).trim();
+        if (formData.get('subject')) n.subject = String(formData.get('subject')).trim();
+        if (formData.get('topic')) n.topic = String(formData.get('topic')).trim();
+        return ok({ ok: true, note: { noteId: n.noteId, title: n.title, subject: n.subject,
+          topic: n.topic, fileType: n.fileType, sizeBytes: n.sizeBytes, createdAt: n.createdAt } });
+      },
+      deleteMyNote: function (id) {
+        var e = requireStudent(); if (e) return e;
+        var mine = myNotesDemo[session.id] || [];
+        var before = mine.length;
+        myNotesDemo[session.id] = mine.filter(function (x) { return x.noteId !== String(id); });
+        if (myNotesDemo[session.id].length === before) return fail('That note is not available.');
+        return ok({ ok: true });
+      },
+      getMyNoteFile: function (id) {
+        var e = requireStudent(); if (e) return e;
+        var mine = myNotesDemo[session.id] || [];
+        var n = null;
+        mine.forEach(function (x) { if (x.noteId === String(id)) n = x; });
+        if (!n || !n.file) return fail('That note is not available.');
+        return ok(n.file);
+      },
       setResourcePublished: function (id, published) {
         var e = requireUnlocked(); if (e) return e;
         return ok({ ok: true, demo: true, id: String(id), published: !!published });
@@ -2844,6 +2908,37 @@
   listPublishedResources: function () {
         return req('GET', '/resources');
       },
+      /* My Notes (Stage 3): the student's own private library. The server
+         owner-checks every one of these; storageFileId never reaches us. */
+      listMyNotes: function () {
+        return req('GET', '/me/mynotes');
+      },
+      uploadMyNote: function (formData) {
+        return uploadReq('/me/mynotes/upload', formData);
+      },
+      replaceMyNote: function (id, formData) {
+        return uploadReq('/me/mynotes/' + encodeURIComponent(String(id)) + '/replace', formData);
+      },
+      deleteMyNote: function (id) {
+        return req('DELETE', '/me/mynotes/' + encodeURIComponent(String(id)));
+      },
+      getMyNoteFile: function (id, opts) {
+        return fetch(base + '/me/mynotes/' + encodeURIComponent(String(id)) + '/file' + (opts && opts.download ? '?download=1' : ''), {
+          method: 'GET',
+          headers: { 'Accept': '*/*', 'Authorization': token ? 'Bearer ' + token : '' }
+        }).then(function (r) {
+          if (!r.ok) {
+            return r.text().then(function (txt) {
+              var data = null;
+              try { data = txt ? JSON.parse(txt) : null; } catch (e) {}
+              throw new Error((data && data.error) || 'Could not open this note (' + r.status + ').');
+            });
+          }
+          return r.blob();
+        }, function () {
+          throw new Error('Cannot reach the server. Check that it is running.');
+        });
+      },
       setResourcePublished: function (id, published) {
         return req('PUT', '/admin/resources/' + encodeURIComponent(String(id)) + '/published', {
           published: !!published
@@ -3203,6 +3298,11 @@ listPublishedVideos: function () {
     listResources: function () { return active.listResources(); },
     listPublishedResources: function () { return active.listPublishedResources(); },
     getResourceFile: function (id, opts) { return active.getResourceFile(id, opts); },
+    listMyNotes: function () { return active.listMyNotes(); },
+    uploadMyNote: function (formData) { return active.uploadMyNote(formData); },
+    replaceMyNote: function (id, formData) { return active.replaceMyNote(id, formData); },
+    deleteMyNote: function (id) { return active.deleteMyNote(id); },
+    getMyNoteFile: function (id, opts) { return active.getMyNoteFile(id, opts); },
     setResourcePublished: function (id, published) {
       return active.setResourcePublished(id, published);
     },

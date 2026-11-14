@@ -24,6 +24,7 @@ const QUESTIONS = 'questions';
 const ATTEMPTS = 'attempts';
 const STUDENTS = 'students';
 const TUTORS = 'tutors';
+const STUDENT_NOTES = 'studentnotes';
 
 const bundle = createAppwriteClient();
 if (!bundle) {
@@ -111,6 +112,21 @@ async function ensureTutorAttributes() {
   await str(TUTORS, 'record', 1000000, true);
 }
 
+/* Stage 3 — student-owned private notes. Records only: the bytes live in the
+   existing Appwrite Storage bucket (APPWRITE_BUCKET_ID), never in the public
+   Academy Resources collection and never published. ownerId is the Scholar ID
+   every notes route filters and checks on. */
+async function ensureStudentNoteAttributes() {
+  await str(STUDENT_NOTES, 'noteId', 60);
+  await str(STUDENT_NOTES, 'ownerId', 60);
+  await str(STUDENT_NOTES, 'title', 255);
+  await str(STUDENT_NOTES, 'subject', 100);
+  await str(STUDENT_NOTES, 'topic', 200);
+  await str(STUDENT_NOTES, 'fileType', 10);
+  await str(STUDENT_NOTES, 'storageFileId', 80);
+  await int(STUDENT_NOTES, 'sizeBytes');
+}
+
 async function ensureAttemptAttributes() {
   await str(ATTEMPTS, 'scholarId', 60);
   await str(ATTEMPTS, 'studentName', 200);
@@ -153,6 +169,8 @@ async function ensureIndexes() {
   await index(ATTEMPTS, 'idx_scholar', ['scholarId']);
   await index(ATTEMPTS, 'idx_scholar_section_subject', ['scholarId', 'section', 'subject']);
   await index(ATTEMPTS, 'idx_status', ['status']);
+  // student notes — the owner's library list is the only query shape.
+  await index(STUDENT_NOTES, 'idx_owner', ['ownerId']);
 }
 
 /* Attributes must exist and be "available" before an index over them can be
@@ -196,6 +214,7 @@ async function ensureStudentAttributes() {
   await ensureCollection(ATTEMPTS, 'Attempts');
   // Tutor records contain password hashes: no public collection permissions.
   await ensureCollection(TUTORS, 'Tutors', []);
+  await ensureCollection(STUDENT_NOTES, 'Student Notes');
 
   console.log('Questions attributes:');
   await ensureQuestionAttributes();
@@ -203,10 +222,13 @@ async function ensureStudentAttributes() {
   await ensureAttemptAttributes();
   console.log('Tutors attributes:');
   await ensureTutorAttributes();
+  console.log('Student Notes attributes:');
+  await ensureStudentNoteAttributes();
 
   await waitForAttributes(QUESTIONS);
   await waitForAttributes(ATTEMPTS);
   await waitForAttributes(TUTORS);
+  await waitForAttributes(STUDENT_NOTES);
 
   console.log('Indexes:');
   await ensureIndexes();
@@ -216,7 +238,7 @@ async function ensureStudentAttributes() {
   await ensureStudentAttributes();
   await waitForAttributes(STUDENTS);
 
-  console.log('\nDone. Collections "questions", "attempts", "tutors" provisioned; "students" approval + tier fields migrated.');
+  console.log('\nDone. Collections "questions", "attempts", "tutors", "studentnotes" provisioned; "students" approval + tier fields migrated.');
   console.log('Next: trigger POST /api/admin/migrate-appwrite once from the running app.');
 })().catch(err => {
   console.error('\nProvisioning failed:', err.message || err);

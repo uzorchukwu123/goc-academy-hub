@@ -179,6 +179,11 @@ const APPWRITE_TUTORS_COLLECTION_ID = 'tutors';
 const APPWRITE_QUESTIONS_COLLECTION_ID = 'questions';
 const APPWRITE_ATTEMPTS_COLLECTION_ID = 'attempts';
 const APPWRITE_RESOURCES_COLLECTION_ID = 'resources';
+/* Stage 3: student-owned private notes. A SEPARATE collection from Academy
+   Resources on purpose — a student's notes are never published, never listed
+   for anyone else, and only ever served through the owner-checked routes
+   below. Provisioned by server/setup-appwrite.js (`studentnotes`). */
+const APPWRITE_STUDENT_NOTES_COLLECTION_ID = 'studentnotes';
 const APPWRITE_VIDEOS_COLLECTION_ID = 'videos';
 const APPWRITE_LIVECLASSES_COLLECTION_ID = 'liveclasses';
 const APPWRITE_COHORTS_COLLECTION_ID = 'cohorts';
@@ -2723,6 +2728,84 @@ async function handleResourceUpload(req, res) {
   }
 }
 
+/* ------------------------------------------------------- student notes */
+/* Stage 3 — My Notes. Student-owned study notes, stored exactly the way
+   Academy Resources are (Appwrite Storage file + Database record) but in
+   their own collection and behind owner checks on every route. When Appwrite
+   is not configured these routes answer 503: there is deliberately no local
+   fallback for a student's private files. */
+const NOTE_ALLOWED_EXT = new Set(['.pdf', '.txt', '.md', '.doc', '.docx', '.png', '.jpg', '.jpeg']);
+const NOTE_MAX_BYTES = 25 * 1024 * 1024;
+const NOTE_MIME = {
+  pdf: 'application/pdf', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg'
+};
+function noteOut(doc) {
+  return {
+    noteId: doc.noteId || doc.$id,
+    title: doc.title || '',
+    subject: doc.subject || '',
+    topic: doc.topic || '',
+    fileType: doc.fileType || '',
+    sizeBytes: Number(doc.sizeBytes) || 0,
+    createdAt: doc.$createdAt || null
+  };
+}
+async function getOwnedNote(noteId, ownerId) {
+  try {
+    const doc = await appwriteDatabases.getDocument(
+      APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, noteId);
+    if (!doc || doc.ownerId !== ownerId) return null;
+    return doc;
+  } catch (e) { return null; }
+}
+/* One multipart read for upload and replace. Resolves { fields, file } where
+   file = { path, dir, name, ext, bytes }; the caller always cleanup()s. */
+function readNoteMultipart(req) {
+  const os = require('os');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-note-'));
+  const state = { fields: {}, file: null, dir: tempDir, cleanup: function () {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
+  } };
+  return new Promise((resolve, reject) => {
+    let fileWrite = Promise.resolve();
+    let failed = false;
+    const fail = (e) => { if (!failed) { failed = true; reject(e); } };
+    const busboy = getBusboy()({ headers: req.headers,
+      limits: { files: 1, fileSize: NOTE_MAX_BYTES, fields: 10, fieldSize: 10 * 1024 } });
+    busboy.on('field', (name, value) => { state.fields[name] = String(value || '').trim(); });
+    busboy.on('file', (name, file, info) => {
+      const fileName = String(info.filename || 'note');
+      const ext = path.extname(fileName).toLowerCase();
+      if (!NOTE_ALLOWED_EXT.has(ext)) { file.resume(); return fail(new ClientError('That file type is not supported for notes. Use PDF, text, Word or an image.')); }
+      const filePath = path.join(tempDir, crypto.randomUUID() + ext);
+      const rec = { path: filePath, name: fileName, ext: ext, bytes: 0 };
+      state.file = rec;
+      const ws = fs.createWriteStream(filePath);
+      file.on('data', (chunk) => { rec.bytes += chunk.length; });
+      file.on('limit', () => fail(new ClientError('That note file is too large. Maximum size is 25 MB.')));
+      file.pipe(ws);
+      fileWrite = new Promise((res2, rej2) => { ws.on('finish', res2); ws.on('error', rej2); file.on('error', rej2); });
+    });
+    busboy.on('error', fail);
+    busboy.on('finish', async () => {
+      try { await fileWrite; if (!failed) resolve(state); }
+      catch (e) { fail(e); }
+    });
+    req.pipe(busboy);
+  });
+}
+async function storeNoteFile(state) {
+  const { InputFile } = require(
+    path.join(path.dirname(require.resolve('node-appwrite')), 'inputFile.js'));
+  const storageFileId = crypto.randomUUID();
+  await appwriteResourcesStorage.createFile(
+    APPWRITE_BUCKET_ID, storageFileId, InputFile.fromPath(state.file.path, state.file.name));
+  return storageFileId;
+}
+
 /* ------------------------------------------------------------------ videos */
 /*
  * Handles an admin video upload. Mirrors handleResourceUpload, with one
@@ -3247,6 +3330,21 @@ async function markTheoryScript(attemptId, marks, marker, guard) {
   });
 }
 
+/* Public preview attempts (Stage 10): in-memory only, single-use,
+   30-minute tokens, and a per-IP draw limit. Nothing here is ever
+   written to data.json or Appwrite. */
+const DEMO_TOKEN_MS = 30 * 60 * 1000;
+const demoAttempts = new Map();
+const demoIpHits = new Map();
+function demoRateLimited(ip) {
+  const now = Date.now();
+  const rec = demoIpHits.get(ip);
+  if (!rec || now - rec.first > 3600000) { demoIpHits.set(ip, { count: 1, first: now }); return false; }
+  rec.count++;
+  if (demoIpHits.size > 5000) { for (const [k, v] of demoIpHits) { if (now - v.first > 3600000) demoIpHits.delete(k); } }
+  return rec.count > 30;
+}
+
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
       const db = readData();
@@ -3261,12 +3359,11 @@ const ROUTES = [
         free2027: {
           on: fed.enabled === true,
           mode: fmode,
-          /* Where the edition keeps its records. Always the local data file:
-             the edition never reads or writes the Appwrite Database, even on a
-             deployment that has it configured. */
-          storage: 'local-json',
-          storageFile: DATA_FILE,
-          archiveDir: path.join(DATA_DIR, 'free2027-archives')
+          /* The storage MODEL only ('local-json': the edition never reads or
+             writes the Appwrite Database, even on a deployment that has it
+             configured). No filesystem path is ever reported here — this
+             endpoint is public, and absolute paths are deployment detail. */
+          storage: 'local-json'
         }
       });
     } },
@@ -4024,6 +4121,56 @@ const ROUTES = [
       okJson(res, { ok: true });
     } },
 
+  /* ---- Try G.O.C: anonymous five-question preview (Stage 10) ----
+     Fully isolated from student operations: the questions come only from
+     server/lib/demo-questions.js (a dedicated sample pool connected to
+     no bank), attempts live in an in-memory token map for 30 minutes,
+     and a submission writes nothing — no student record, no attempt,
+     no XP, no leaderboard, no analytics. Answers and explanations are
+     held server-side until the token is redeemed exactly once. */
+  { method: 'GET', path: /^\/api\/demo\/questions$/, need: null, handler: (req, res) => {
+      const ip = getClientIp(req);
+      if (demoRateLimited(ip)) return errJson(res, 429, 'Too many preview attempts from this connection. Please try again in a little while.');
+      const pool = require('./lib/demo-questions');
+      const shuffled = pool.slice();
+      for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+      const picked = shuffled.slice(0, 5).map(q => {
+        const order = q.options.map((_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = order[i]; order[i] = order[j]; order[j] = t; }
+        return { q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
+      });
+      const token = crypto.randomBytes(18).toString('hex');
+      demoAttempts.set(token, { at: Date.now(), picked });
+      if (demoAttempts.size > 5000) { for (const [k, v] of demoAttempts) { if (Date.now() - v.at > DEMO_TOKEN_MS) demoAttempts.delete(k); } }
+      okJson(res, { token, questions: picked.map((p, i) => ({
+        n: i + 1, subject: p.q.subject, topic: p.q.topic, text: p.q.text, options: p.options
+      })) });
+    } },
+
+  { method: 'POST', path: /^\/api\/demo\/submit$/, need: null, handler: (req, res, body) => {
+      const token = String((body && body.token) || '');
+      const attempt = demoAttempts.get(token);
+      if (!attempt || Date.now() - attempt.at > DEMO_TOKEN_MS) {
+        if (attempt) demoAttempts.delete(token);
+        return errJson(res, 410, 'That preview has expired. Start a fresh one.');
+      }
+      demoAttempts.delete(token);   /* single use, whatever happens next */
+      const answers = Array.isArray(body && body.answers) ? body.answers : null;
+      if (!answers || answers.length !== attempt.picked.length) return errJson(res, 400, 'Send one answer per question.');
+      for (const a of answers) {
+        if (a !== null && (!Number.isInteger(a) || a < 0 || a > 3)) return errJson(res, 400, 'Each answer must be one of the four options.');
+      }
+      let score = 0;
+      const review = attempt.picked.map((p, i) => {
+        const given = answers[i];
+        const isCorrect = given === p.answer;
+        if (isCorrect) score++;
+        return { n: i + 1, subject: p.q.subject, topic: p.q.topic, text: p.q.text, options: p.options,
+                 answer: p.answer, given, isCorrect, explanation: p.q.explanation };
+      });
+      okJson(res, { score, total: attempt.picked.length, percent: Math.round(score * 100 / attempt.picked.length), review });
+    } },
+
   /* The daily affirmation flyer is public (a student sees it before doing
      anything else), so GET has no auth requirement — same as GET /updates
      above. Only console may change the pool. */
@@ -4433,6 +4580,27 @@ const ROUTES = [
 
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
+
+  /* The tutor application itself, delivered only to an authenticated
+     tutor session ('tutor-setup', so a first-login password change can
+     still load it; subject APIs stay closed until then). The central
+     gate above has already re-read the tutor record for this request,
+     so a switched-off tutor is refused here like everywhere else. The
+     file lives outside the static root and is never cached. */
+  { method: 'GET', path: /^\/api\/tutor\/app$/, need: 'tutor-setup', handler: async (req, res, body, sess) => {
+      try {
+        const code = await fs.promises.readFile(path.join(ROOT, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+        res.writeHead(200, {
+          'Content-Type': 'text/javascript; charset=utf-8',
+          'Content-Length': Buffer.byteLength(code),
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff'
+        });
+        return res.end(code);
+      } catch (e) {
+        return errJson(res, 503, 'The tutor screens are not available right now.');
+      }
+    } },
 
   { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
       const ip = getClientIp(req);
@@ -7989,6 +8157,121 @@ const ROUTES = [
     }
   } },
 
+  /* ---- My Notes (Stage 3): the student's own private library. Every route
+     is need:'student' AND owner-checked: a note is only ever listed, read,
+     replaced or deleted by the Scholar ID that uploaded it. Another
+     student's note answers 404, so its existence is never revealed. ---- */
+  { method: 'GET', path: /^\/api\/me\/mynotes$/, need: 'student', handler: async (req, res, body, sess) => {
+    if (!appwriteDatabases) return errJson(res, 503, 'Note storage is not available right now.');
+    try {
+      const { Query } = require('node-appwrite');
+      const result = await appwriteDatabases.listDocuments(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID,
+        [Query.equal('ownerId', sess.data.id), Query.limit(500)]);
+      const notes = result.documents.map(noteOut);
+      notes.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      return okJson(res, { notes });
+    } catch (err) {
+      console.error('[goc] Student notes list failed:', err.message);
+      return errJson(res, 500, 'Could not load your notes.');
+    }
+  } },
+
+  { method: 'POST', path: /^\/api\/me\/mynotes\/upload$/, need: 'student', multipart: true, handler: async (req, res, body, sess) => {
+    if (!appwriteDatabases || !appwriteResourcesStorage) return errJson(res, 503, 'Note storage is not available right now.');
+    let state = null;
+    try {
+      state = await readNoteMultipart(req);
+      if (!state.file) return errJson(res, 400, 'Please choose a note file to upload.');
+      if (!state.fields.title) return errJson(res, 400, 'Give your note a title.');
+      if (!state.fields.subject) return errJson(res, 400, 'Choose the subject this note belongs to.');
+      if (state.file.bytes <= 0) return errJson(res, 400, 'The uploaded file is empty.');
+      const storageFileId = await storeNoteFile(state);
+      const noteId = 'NOTE-' + crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+      const doc = {
+        noteId, ownerId: sess.data.id,
+        title: clean(state.fields.title, 255),
+        subject: clean(state.fields.subject, 100),
+        topic: clean(state.fields.topic, 200),
+        fileType: state.file.ext.replace('.', '').toUpperCase(),
+        storageFileId, sizeBytes: state.file.bytes
+      };
+      const created = await appwriteDatabases.createDocument(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, noteId, doc);
+      return okJson(res, { ok: true, note: noteOut(Object.assign({}, doc, created)) });
+    } catch (err) {
+      return errJson(res, 400, safeClientMessage(err, 'Note upload failed. Please try again.'));
+    } finally { if (state) state.cleanup(); }
+  } },
+
+  { method: 'GET', path: /^\/api\/me\/mynotes\/([A-Za-z0-9._-]+)\/file$/, need: 'student', handler: async (req, res, body, sess, params) => {
+    if (!appwriteDatabases || !appwriteResourcesStorage) return errJson(res, 503, 'Note storage is not available right now.');
+    const doc = await getOwnedNote(params[0], sess.data.id);
+    if (!doc || !doc.storageFileId) return errJson(res, 404, 'That note is not available.');
+    try {
+      const fileData = await appwriteResourcesStorage.getFileView(APPWRITE_BUCKET_ID, doc.storageFileId);
+      const ext = String(doc.fileType || '').toLowerCase();
+      const wantsDownload = new URL(req.url, 'http://localhost').searchParams.get('download') === '1';
+      res.writeHead(200, {
+        'Content-Type': NOTE_MIME[ext] || 'application/octet-stream',
+        'Content-Disposition': wantsDownload ? 'attachment' : 'inline',
+        /* A private note is never cached and never shared: owner route only. */
+        'Cache-Control': 'private, no-store'
+      });
+      return res.end(Buffer.from(fileData));
+    } catch (err) {
+      console.error('[goc] Student note file failed:', err.message);
+      return errJson(res, 404, 'Could not open that note.');
+    }
+  } },
+
+  { method: 'POST', path: /^\/api\/me\/mynotes\/([A-Za-z0-9._-]+)\/replace$/, need: 'student', multipart: true, handler: async (req, res, body, sess, params) => {
+    if (!appwriteDatabases || !appwriteResourcesStorage) return errJson(res, 503, 'Note storage is not available right now.');
+    const doc = await getOwnedNote(params[0], sess.data.id);
+    if (!doc) return errJson(res, 404, 'That note is not available.');
+    let state = null;
+    try {
+      state = await readNoteMultipart(req);
+      if (!state.file) return errJson(res, 400, 'Please choose the replacement file.');
+      if (state.file.bytes <= 0) return errJson(res, 400, 'The replacement file is empty.');
+      const oldStorage = doc.storageFileId;
+      const storageFileId = await storeNoteFile(state);
+      const patch = {
+        fileType: state.file.ext.replace('.', '').toUpperCase(),
+        storageFileId, sizeBytes: state.file.bytes
+      };
+      if (state.fields.title) patch.title = clean(state.fields.title, 255);
+      if (state.fields.subject) patch.subject = clean(state.fields.subject, 100);
+      if (state.fields.topic !== undefined && state.fields.topic !== '') patch.topic = clean(state.fields.topic, 200);
+      const updated = await appwriteDatabases.updateDocument(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, doc.noteId || doc.$id, patch);
+      /* The old bytes go only after the record points at the new file. */
+      if (oldStorage && oldStorage !== storageFileId) {
+        try { await appwriteResourcesStorage.deleteFile(APPWRITE_BUCKET_ID, oldStorage); } catch (_) {}
+      }
+      return okJson(res, { ok: true, note: noteOut(Object.assign({}, doc, updated)) });
+    } catch (err) {
+      return errJson(res, 400, safeClientMessage(err, 'That note could not be replaced. Please try again.'));
+    } finally { if (state) state.cleanup(); }
+  } },
+
+  { method: 'DELETE', path: /^\/api\/me\/mynotes\/([A-Za-z0-9._-]+)$/, need: 'student', handler: async (req, res, body, sess, params) => {
+    if (!appwriteDatabases) return errJson(res, 503, 'Note storage is not available right now.');
+    const doc = await getOwnedNote(params[0], sess.data.id);
+    if (!doc) return errJson(res, 404, 'That note is not available.');
+    try {
+      await appwriteDatabases.deleteDocument(
+        APPWRITE_DATABASE_ID, APPWRITE_STUDENT_NOTES_COLLECTION_ID, doc.noteId || doc.$id);
+      if (doc.storageFileId && appwriteResourcesStorage) {
+        try { await appwriteResourcesStorage.deleteFile(APPWRITE_BUCKET_ID, doc.storageFileId); } catch (_) {}
+      }
+      return okJson(res, { ok: true });
+    } catch (err) {
+      console.error('[goc] Student note delete failed:', err.message);
+      return errJson(res, 500, 'That note could not be deleted.');
+    }
+  } },
+
   { method: 'GET', path: /^\/api\/admin\/resources$/, need: 'console', cap: 'resources.publish', handler: async (req, res) => {
     if (!appwriteDatabases) {
       return errJson(res, 503, 'Appwrite Database is not initialized.');
@@ -9415,43 +9698,72 @@ const ROUTES = [
 ];
 
 /* ------------------------------------------------------------ CRAWLER SHIELD
-   Phase 3D slice 1. The app is for enrolled students, not for search engines
-   or AI training sets. Three layers, all of them cheap:
-     1. /robots.txt disallows everything and names the known AI crawlers;
-     2. every response (pages, scripts, styles, the service worker, images and
-        the API alike) carries X-Robots-Tag, set once in the dispatcher;
-     3. index.html carries the same instruction as a <meta> tag.
-   There is deliberately no sitemap. Honest limit: these only bind crawlers
-   that obey them; slice 2 turns the rest away. */
+   Phase 3D slice 1, revised for pitch readiness (approved). The public
+   interface is meant to be opened and inspected — including by interactive
+   AI assistants and browser agents acting at a person's request — while AI
+   TRAINING crawlers, search indexers and scrapers stay out, and everything
+   private stays exactly as protected as before. Three layers:
+     1. /robots.txt explicitly ALLOWS the interactive agents below, disallows
+        the training crawlers by name, and disallows everything else;
+     2. every response carries X-Robots-Tag noindex EXCEPT responses to an
+        interactive agent (so a page fetched for a user is not self-blocked,
+        while nothing is offered up for indexing);
+     3. any request whose User-Agent names a known training crawler,
+        search-engine bot or scraping tool gets a plain 403 (robots.txt alone
+        stays readable, so a polite crawler can learn it is not welcome).
+   Allowing an interactive agent changes nothing about authorization: the API
+   still demands its tokens, server/ and test/ are still never served, and
+   only the app's public file types are ever handed out. There is deliberately
+   no sitemap. Honest limit: a scraper can fake its User-Agent — but a faked
+   interactive identity only reaches what any visitor's browser can reach. */
 const ROBOTS_DIRECTIVE = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
+
+/* Interactive, user-directed AI browsing agents: they fetch a public page at
+   a person's request so that person can read and inspect it. Allowed. */
+const INTERACTIVE_AGENTS = ['ChatGPT-User', 'Claude-Web', 'Claude-User', 'Perplexity-User'];
+
+/* AI training / indexing crawlers. Barred by name, in robots.txt and by 403. */
 const AI_CRAWLERS = [
-  'GPTBot', 'ChatGPT-User', 'OAI-SearchBot', 'ClaudeBot', 'Claude-Web', 'anthropic-ai',
-  'Google-Extended', 'CCBot', 'PerplexityBot', 'Perplexity-User', 'Bytespider',
+  'GPTBot', 'OAI-SearchBot', 'ClaudeBot', 'anthropic-ai',
+  'Google-Extended', 'CCBot', 'PerplexityBot', 'Bytespider',
   'Amazonbot', 'Applebot-Extended', 'Meta-ExternalAgent', 'Meta-ExternalFetcher',
   'FacebookBot', 'cohere-ai', 'Diffbot', 'ImagesiftBot', 'Omgilibot', 'YouBot',
   'Timpibot', 'PetalBot', 'AI2Bot', 'Scrapy'
 ];
-const ROBOTS_TXT = AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
+const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\n').join('\n')
+  + '\n' + AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
   + '\nUser-agent: *\nDisallow: /\n';
 
-/* Slice 2 — turn crawlers away. Slice 1 only asks politely; this refuses the
-   ones that announce themselves. Any request whose User-Agent names a known
-   AI crawler, search-engine bot or scraping tool gets a plain 403 (robots.txt
-   alone stays readable, so a polite crawler can learn it is not welcome).
-   Honest limit: a scraper can fake its User-Agent — a CDN's bot protection
-   is the stronger layer. Generic HTTP-library names (Go-http-client, node-fetch)
-   are deliberately NOT listed: hosting health checks use them. */
+/* Tutor entrance (Stage 8, owner-approved): a sign-in shell with NONE of
+   the tutor application in it. The shell signs in through the existing
+   POST /api/tutor/login, then — and only then — fetches the application
+   from GET /api/tutor/app with the session token and runs it. The tutor
+   screens therefore never appear in a public file or an unauthenticated
+   response; server/tutor/ stays outside the static root throughout. */
+const TUTOR_SHELL = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Tutor sign-in · G.O.C Academy Hub</title>\n<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}</style>\n</head>\n<body>\n<main class="card" id="tutorGate">\n<h1>G.O.C Tutor</h1>\n<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>\n<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">\n<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">\n<div class="err" id="tutorErr"></div>\n<button type="button" id="tutorGo">Sign in</button>\n</main>\n<script src="js/onboarding.js"></script>\n<script>\n(function(){\n  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");\n  function fail(m){ err.textContent = m; btn.disabled = false; btn.textContent = "Sign in"; }\n  btn.addEventListener("click", function(){\n    var id = document.getElementById("tutorId").value.trim(), pw = document.getElementById("tutorPw").value;\n    if(!id || !pw){ fail("Enter your tutor ID and password."); return; }\n    btn.disabled = true; btn.textContent = "Signing in\u2026"; err.textContent = "";\n    fetch("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, password: pw }) })\n    .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "Sign-in failed."); return j; }); })\n    .then(function(j){\n      return fetch("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })\n      .then(function(r){ if(!r.ok) throw new Error("The tutor screens could not be loaded."); return r.text(); })\n      .then(function(code){\n        window.__zxSession = { token: j.token, user: j.user };\n        var s = document.createElement("script");\n        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));\n        document.body.appendChild(s);\n        document.getElementById("tutorGate").style.display = "none";\n        if(window.GOCOnboarding && window.GOCTours){\n          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);\n          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);\n        }\n      });\n    })\n    .catch(function(e){ fail(e.message || "Sign-in failed."); });\n  });\n})();\n</script>\n</body>\n</html>';
+
+/* Turn barred crawlers away. The politeness layer above only binds crawlers
+   that obey it; this refuses the ones that announce themselves. Generic
+   HTTP-library names (Go-http-client, node-fetch) are deliberately NOT
+   listed: hosting health checks use them. */
 const OTHER_BOTS = [
   'Googlebot', 'AdsBot-Google', 'Google-InspectionTool', 'GoogleOther', 'bingbot', 'BingPreview',
   'Slurp', 'DuckDuckBot', 'Baiduspider', 'YandexBot', 'Sogou', 'Exabot', 'SeznamBot', 'facebookexternalhit',
   'AhrefsBot', 'SemrushBot', 'MJ12bot', 'DotBot', 'BLEXBot', 'DataForSeoBot', 'Barkrowler',
   'archive.org_bot', 'ia_archiver', 'HTTrack', 'wget', 'python-requests', 'aiohttp', 'libwww-perl'
 ];
-const BOT_RE = new RegExp(
-  AI_CRAWLERS.concat(OTHER_BOTS).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
+function uaRegExp(names) {
+  return new RegExp(names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
+}
+const BOT_RE = uaRegExp(AI_CRAWLERS.concat(OTHER_BOTS));
 function isCrawler(req) {
   const ua = String(req.headers['user-agent'] || '');
   return ua.length > 0 && BOT_RE.test(ua);
+}
+const INTERACTIVE_RE = uaRegExp(INTERACTIVE_AGENTS);
+function isInteractiveAgent(req) {
+  const ua = String(req.headers['user-agent'] || '');
+  return ua.length > 0 && INTERACTIVE_RE.test(ua);
 }
 
 /* Static files are public and unauthenticated, so they get a per-IP limit the
@@ -9543,9 +9855,26 @@ function serveStatic(req, res, urlPath) {
 const server = http.createServer(async (req, res) => {
   const urlPath = (req.url || '/').split('?')[0];
 
-  // Crawler shield: set before anything is written, so it rides on EVERY
-  // response below (writeHead merges these in), errors and redirects included.
-  res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
+  // Security/robots headers: set before anything is written, so they ride on
+  // EVERY response below (writeHead merges these in), errors included.
+  // X-Frame-Options stops other sites framing the hub (clickjacking) while
+  // leaving the app's own framing and top-level AI-browser visits untouched.
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Interactive AI agents are exempt from the noindex directive: a page they
+  // fetch at a user's request must not tell them to stay out. Everyone else
+  // (browsers, health checks, and the crawlers refused below) still gets it.
+  if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
+
+  if (urlPath === '/tutor') {
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': Buffer.byteLength(TUTOR_SHELL),
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    return res.end(req.method === 'HEAD' ? undefined : TUTOR_SHELL);
+  }
 
   if (urlPath === '/robots.txt') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }

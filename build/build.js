@@ -76,7 +76,7 @@ fs.mkdirSync(OUT, { recursive: true });
 /* The 2027 Free Tutorial Edition's three scripts are built beside the hub's own,
    and its stylesheet is minified with them. Deleting this line only stops the
    edition being built; the original hub is unaffected. */
-['js/goc-core.js', 'js/goc-free-2027.js', 'js/api.js', 'js/app.js',
+['js/goc-core.js', 'js/goc-free-2027.js', 'js/note-questions.js', 'js/api.js', 'js/app.js', 'js/onboarding.js',
  'js/free2027-api.js', 'js/free2027-ui.js', 'js/free2027-admin.js', 'js/pwa.js', 'sw.js'].forEach(minJs);
 
 write('css/styles.css', esbuild.transformSync(read('css/styles.css'), { loader: 'css', minify: true, legalComments: 'none' }).code);

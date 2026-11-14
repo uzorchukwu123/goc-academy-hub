@@ -1,12 +1,16 @@
-/* test-crawler-shield.js — Phase 3D slice 1: tell crawlers no.
+/* test-crawler-shield.js — Phase 3D slice 1, revised: invite interactive AI
+   assistants in, keep training crawlers out.
 
    Spawns its own server on a spare port against a throwaway copy of the app,
    then proves that:
-     1. /robots.txt disallows everything and names the known AI crawlers
+     1. /robots.txt ALLOWS the interactive AI agents by name, disallows the
+        known AI training crawlers by name, and disallows everything else
      2. there is no sitemap
-     3. EVERY kind of response carries X-Robots-Tag: pages, scripts, styles,
-        the service worker, the manifest, images, 404s, and the API
-     4. index.html carries the same instruction as a <meta> tag
+     3. EVERY kind of response carries X-Robots-Tag for an ordinary client:
+        pages, scripts, styles, the service worker, the manifest, images,
+        404s, and the API (interactive agents are exempt — see refusal suite)
+     4. index.html carries NO noindex <meta> tag (access is governed
+        server-side, so a page fetched for a user is not self-blocked)
    No dependencies.  Run:  node test/test-crawler-shield.js  */
 'use strict';
 var http = require('http');
@@ -77,19 +81,23 @@ function hasAll(v) {
   return NEEDED.every(function (w) { return v.indexOf(w) >= 0; });
 }
 
-var CRAWLERS = ['GPTBot', 'ChatGPT-User', 'OAI-SearchBot', 'ClaudeBot', 'Claude-Web', 'anthropic-ai',
+var CRAWLERS = ['GPTBot', 'OAI-SearchBot', 'ClaudeBot', 'anthropic-ai',
   'Google-Extended', 'CCBot', 'PerplexityBot', 'Bytespider', 'Amazonbot', 'Applebot-Extended'];
+var INTERACTIVE = ['ChatGPT-User', 'Claude-Web', 'Claude-User', 'Perplexity-User'];
 
 waitForBoot(100).then(function () {
   head('robots.txt');
   return call('GET', '/robots.txt');
 }).then(function (r) {
   ok('/robots.txt is served as plain text', r.status === 200 && /^text\/plain/.test(r.headers['content-type'] || ''), r.status + ' ' + r.headers['content-type']);
-  ok('  it disallows everything for every crawler', /User-agent: \*\s*\nDisallow: \/\s*(\n|$)/.test(r.raw));
+  ok('  it disallows everything for every unlisted crawler', /User-agent: \*\s*\nDisallow: \/\s*(\n|$)/.test(r.raw));
   CRAWLERS.forEach(function (n) {
     ok('  it names ' + n + ' and bars it', new RegExp('User-agent: ' + n + '\\s*\\nDisallow: /').test(r.raw));
   });
-  ok('  it offers no Allow rule', !/^\s*Allow:/mi.test(r.raw));
+  INTERACTIVE.forEach(function (n) {
+    ok('  it names ' + n + ' and allows it', new RegExp('User-agent: ' + n + '\\s*\\nAllow: /').test(r.raw));
+  });
+  ok('  Allow is offered to the interactive agents only', (r.raw.match(/^\s*Allow:/gm) || []).length === INTERACTIVE.length, r.raw);
   ok('  it points to no sitemap', !/sitemap/i.test(r.raw));
   ok('  /robots.txt itself carries X-Robots-Tag', hasAll(r.headers['x-robots-tag']), r.headers['x-robots-tag']);
   return call('HEAD', '/robots.txt');
@@ -139,9 +147,15 @@ waitForBoot(100).then(function () {
   return call('GET', '/');
 }).then(function (r) {
   var m = /<meta\s+name="robots"\s+content="([^"]*)"/i.exec(r.raw);
-  ok('index.html has a robots <meta> tag', !!m);
-  ok('  it says noindex, nofollow, noarchive, noimageindex', !!m && hasAll(m[1]), m && m[1]);
+  ok('index.html carries no noindex robots <meta> tag', !m || !/noindex/i.test(m[1]), m && m[1]);
+  ok('  it carries a description and Open Graph preview', /<meta\s+name="description"/i.test(r.raw) && /<meta\s+property="og:title"/i.test(r.raw));
   ok('  the page still serves normally', r.status === 200 && r.headers['content-type'].indexOf('text/html') === 0);
+  ok('  it is framed only by its own origin (X-Frame-Options)', r.headers['x-frame-options'] === 'SAMEORIGIN', r.headers['x-frame-options']);
+  return call('GET', '/api/health');
+}).then(function (r) {
+  var body = {};
+  try { body = JSON.parse(r.raw); } catch (e) {}
+  ok('health names no filesystem path or storage identifier', r.status === 200 && body.free2027 && body.free2027.storageFile === undefined && body.free2027.archiveDir === undefined && !/[/\\]/.test(String(body.free2027.storage || '')), r.raw);
 }).then(function () {
   stop();
   console.log('\n' + (fails ? fails + ' check(s) FAILED' : 'crawler shield: all checks passed'));

@@ -135,7 +135,7 @@
       if (sc.other) parts.push('<b>' + esc(sc.other) + '</b> other');
       statusRow = '<p style="margin:8px 0 0;font-size:12px;color:#6B7280">Status: ' + parts.join(' · ') + '</p>';
     }
-    return '<div class="zx-card"><h3>Questions and notes in ' + esc(st.subject) + '</h3>' +
+    return '<div class="zx-card" id="zxTourDepth"><h3>Questions and notes in ' + esc(st.subject) + '</h3>' +
       '<div class="zx-grid">' + s('Objective', d.objective) + s('Theory', d.theory) + s('JAMB-style', d.jamb) + s('Practice', d.practice) + s('Notes', d.notes) + '</div>' +
       statusRow + '</div>';
   }
@@ -146,7 +146,7 @@
   function snapshotCard() {
     var a = st.stats, sn = a && a.snapshot;
     if (st.statsError) return '<div class="zx-card"><h3>Class snapshot</h3><p>' + esc(st.statsError) + '</p></div>';
-    if (!sn) return '<div class="zx-card zx-soon"><h3>Class snapshot</h3><p>Loading…</p></div>';
+    if (!sn) return '<div class="zx-card zx-soon" id="zxTourSnap"><h3>Class snapshot</h3><p>Loading…</p></div>';
     function s(label, n) { return '<div class="zx-stat"><b>' + esc(n) + '</b>' + esc(label) + '</div>'; }
     var warn = [];
     if (sn.practice.average != null && sn.practice.small) warn.push('Practice average rests on only ' + sn.practice.answers + ' answer' + (sn.practice.answers === 1 ? '' : 's') + ' (under 10), so read it with care.');
@@ -233,7 +233,7 @@
     if (st.arError) return '<div class="zx-card"><h3>' + title + '</h3><p>' + esc(st.arError) + '</p></div>';
     if (!st.ar) return '<div class="zx-card zx-soon"><h3>' + title + '</h3><p>Loading…</p></div>';
     var r = st.ar, lim = r.limits || { inactiveDays: 7, lowAverage: 40 }, rows = r.students || [];
-    var out = '<div class="zx-card"><h3>' + title + ' in ' + esc(st.subject) + '</h3>' +
+    var out = '<div class="zx-card" id="zxTourRisk"><h3>' + title + ' in ' + esc(st.subject) + '</h3>' +
       '<p>GOC students who have not practised or sat a test for ' + esc(lim.inactiveDays) + ' days, or whose marked test average is under ' + esc(lim.lowAverage) + '%.</p>';
     if (!rows.length) return out + '<p class="zx-ok">Nobody is at risk right now.</p></div>';
     out += '<div class="zx-chips" role="group" aria-label="Order" style="margin:10px 0 8px">' +
@@ -418,7 +418,7 @@
     if (!st.qs) return '<div class="zx-card zx-soon"><h3>Your questions</h3><p>Loading…</p></div>';
     var c = st.qs.counts || {};
     function s2(label, n) { return '<div class="zx-stat"><b>' + esc(n || 0) + '</b>' + esc(label) + '</div>'; }
-    return '<div class="zx-card"><h3>Your questions in ' + esc(st.subject) + '</h3>' +
+    return '<div class="zx-card" id="zxTourQuestions"><h3>Your questions in ' + esc(st.subject) + '</h3>' +
       '<div class="zx-grid">' + s2('Awaiting approval', c.pending) + s2('Live', c.live) + s2('Returned', c.returned) + '</div>' +
       '<p style="margin-top:10px">New and changed questions wait for the admin before students see them.</p>' +
       '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="qopen">Manage questions</button>' +
@@ -443,7 +443,7 @@
         '<div class="zx-acts">' + acts + '</div></div>';
     }).join('');
     var empty = st.qError ? esc(st.qError) : (!st.qs ? 'Loading…' : (list.length ? 'Nothing with that status.' : 'You have not added any questions yet. Add one, or import a file.'));
-    return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Questions<b>' + esc(st.subject) + '</b></div>' +
+    return '<div class="zx-full" id="zxTourQView"><div class="zx-top"><div class="zx-who">Questions<b>' + esc(st.subject) + '</b></div>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="qback">Back</button></div>' +
       '<div class="zx-body">' + noteHTML() + errHTML() +
       '<div class="zx-acts" style="margin:0 0 14px"><button type="button" class="zx-btn zx-sm" data-act="qnew">Add a question</button>' +
@@ -593,7 +593,7 @@
     if (!st.ns) return '<div class="zx-card zx-soon"><h3>Your notes</h3><p>Loading…</p></div>';
     var c = st.ns.counts || {};
     function s2(label, n) { return '<div class="zx-stat"><b>' + esc(n || 0) + '</b>' + esc(label) + '</div>'; }
-    return '<div class="zx-card"><h3>Your notes in ' + esc(st.subject) + '</h3>' +
+    return '<div class="zx-card" id="zxTourNotes"><h3>Your notes in ' + esc(st.subject) + '</h3>' +
       '<div class="zx-grid">' + s2('Live', c.live) + s2('Held back', c.held) + '</div>' +
       '<p style="margin-top:10px">A note you save is readable by students straight away.</p>' +
       '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="nopen">Manage notes</button>' +
@@ -613,7 +613,7 @@
         '<div class="zx-acts">' + acts + '</div></div>';
     }).join('');
     var empty = st.nError ? esc(st.nError) : (!st.ns ? 'Loading…' : 'You have not written any notes yet.');
-    return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Notes<b>' + esc(st.subject) + '</b></div>' +
+    return '<div class="zx-full" id="zxTourNView"><div class="zx-top"><div class="zx-who">Notes<b>' + esc(st.subject) + '</b></div>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="nback">Back</button></div>' +
       '<div class="zx-body">' + noteHTML() + errHTML() +
       '<div class="zx-acts" style="margin:0 0 14px"><button type="button" class="zx-btn zx-sm" data-act="nnew">Write a note</button></div>' +
@@ -666,7 +666,7 @@
   function noticesCard() {
     if (st.ntError) return '<div class="zx-card"><h3>Class notices</h3><p>' + esc(st.ntError) + '</p></div>';
     if (!st.nt) return '<div class="zx-card zx-soon"><h3>Class notices</h3><p>Loading…</p></div>';
-    return '<div class="zx-card"><h3>Class notices in ' + esc(st.subject) + '</h3>' +
+    return '<div class="zx-card" id="zxTourNotices"><h3>Class notices in ' + esc(st.subject) + '</h3>' +
       '<div class="zx-grid"><div class="zx-stat"><b>' + esc(st.nt.count || 0) + '</b>Showing now</div></div>' +
       '<p style="margin-top:10px">GOC students taking ' + esc(st.subject) + ' see a notice as soon as you post it. It stays until you remove it.</p>' +
       '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="topen">Manage notices</button>' +
@@ -684,7 +684,7 @@
         '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="tremove" data-id="' + id + '">Remove</button></div></div>';
     }).join('');
     var empty = st.ntError ? esc(st.ntError) : (!st.nt ? 'Loading…' : 'You have no notices showing.');
-    return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Class notices<b>' + esc(st.subject) + '</b></div>' +
+    return '<div class="zx-full" id="zxTourNtView"><div class="zx-top"><div class="zx-who">Class notices<b>' + esc(st.subject) + '</b></div>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="tback">Back</button></div>' +
       '<div class="zx-body">' + noteHTML() + errHTML() +
       '<div class="zx-acts" style="margin:0 0 14px"><button type="button" class="zx-btn zx-sm" data-act="tnew">Post a notice</button></div>' +
@@ -787,7 +787,7 @@
     if (!st.sc) return '<div class="zx-card zx-soon"><h3>Theory scripts</h3><p>Loading…</p></div>';
     var c = st.sc.counts || {};
     function s3(label, n) { return '<div class="zx-stat"><b>' + esc(n || 0) + '</b>' + esc(label) + '</div>'; }
-    return '<div class="zx-card"><h3>Theory scripts in ' + esc(st.subject) + '</h3>' +
+    return '<div class="zx-card" id="zxTourScripts"><h3>Theory scripts in ' + esc(st.subject) + '</h3>' +
       '<div class="zx-grid">' + s3('Waiting for a mark', c.waiting) + s3('Marked', c.marked) + '</div>' +
       '<p style="margin-top:10px">A mark you save counts straight away. The admin is told when a script is fully marked.</p>' +
       '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="sopen">Mark scripts</button></div></div>';
@@ -804,7 +804,7 @@
         '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="sview" data-id="' + esc(x.id) + '">' + (done ? 'Open or change marks' : 'Mark') + '</button></div></div>';
     }).join('');
     var empty = st.scError ? esc(st.scError) : (!st.sc ? 'Loading…' : (st.scFilter === 'marked' ? 'No script has been marked yet.' : (st.scFilter === 'awaiting-marking' ? 'Nothing is waiting for a mark.' : 'No student has sat a theory paper in this subject yet.')));
-    return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Theory scripts<b>' + esc(st.subject) + '</b></div>' +
+    return '<div class="zx-full" id="zxTourSView"><div class="zx-top"><div class="zx-who">Theory scripts<b>' + esc(st.subject) + '</b></div>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="sback">Back</button></div>' +
       '<div class="zx-body">' + noteHTML() + errHTML() +
       '<div class="zx-chips" role="group" aria-label="Show">' + chip('awaiting-marking', 'Waiting (' + esc(c.waiting || 0) + ')') + chip('marked', 'Marked (' + esc(c.marked || 0) + ')') + chip('', 'All') + '</div>' +
@@ -1133,5 +1133,27 @@
     if (!st.token) { st.view = 'signin'; st.shown = false; setError(''); }
     open();
   };
+
+  /* Guided-tour bridge (Stage 8): the onboarding engine in the /tutor
+     shell moves between the real tutor views through here — the same
+     internal navigation the tutor's own buttons use, nothing new. */
+  window.__zxTourGo = function (view) {
+    if (!st.token) return;
+    if (view === 'questions') goQuestions();
+    else if (view === 'notes') goNotes();
+    else if (view === 'notices') goNotices();
+    else if (view === 'scripts') goScripts();
+    else { st.view = 'dash'; setError(''); draw(); }
+  };
+
+  /* Delivered by the /tutor shell after sign-in (Stage 8): a session the
+     shell authenticated is adopted instead of asking a second time. The
+     token stays memory-only; a reload returns to the shell's sign-in. */
+  if (window.__zxSession && window.__zxSession.token && window.__zxSession.user) {
+    st.token = window.__zxSession.token;
+    open();
+    enter(window.__zxSession.user);
+    return;
+  }
   window.__zxOpen();
 })();

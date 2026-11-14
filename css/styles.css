@@ -29,7 +29,13 @@ body{
   box-shadow:var(--sh-lg), 0 0 0 10px #1b1c20, 0 0 0 12px #34363d;
 }
 .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:150px;height:26px;background:#1b1c20;border-radius:0 0 16px 16px;z-index:60;pointer-events:none}
-@media (max-width:480px){
+/* Full-bleed on every viewport below the desktop layout (<900px): the app
+   fills the real browser viewport, with no simulated device frame around it.
+   This used to stop at 480px, which left landscape phones, large phones and
+   small tablets (481–899px) showing the site inside a phone mockup. The
+   declarations are exactly the former portrait-phone ones, widened to 899px;
+   the >=900px desktop layout above is untouched. */
+@media (max-width:899px){
   body{background:var(--bg)}
   .phone{width:100vw;height:100dvh;border-radius:0;box-shadow:none}
   .notch{display:none}
@@ -455,6 +461,23 @@ body.session-warning.previewing .ss-bar{top:40px}
 .q-prog span{flex:1;height:6px;border-radius:999px;background:#E7E9ED}
 .q-prog span.on{background:var(--green)}
 .q-prog span.cur{background:var(--red)}
+/* Practice question palette (Stage 2, #practice only — formal CBT has its own
+   palette and is untouched). Numbered buttons mirror the run's marks:
+   answered fills green, the current question is ringed in brand red. */
+#practice .prac-pal-wrap{margin:14px 18px 18px;padding:14px;background:#fff;border:1.5px solid var(--line);border-radius:16px}
+#practice .prac-pal-head{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:13px;color:var(--ink);margin-bottom:10px}
+#practice .prac-pal-head #pracNavCount{font-size:12px;color:var(--gray);font-weight:700}
+#practice .prac-pal-grid{display:flex;flex-wrap:wrap;gap:8px}
+#practice .prac-pal{min-width:44px;height:44px;padding:0 8px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-family:var(--font);font-weight:800;font-size:14px;color:var(--slate);cursor:pointer}
+#practice .prac-pal.ans{background:#EAF6EF;border-color:var(--green);color:var(--green)}
+#practice .prac-pal.cur{border-color:var(--red);color:var(--red);box-shadow:0 0 0 2px rgba(220,38,38,.25)}
+#practice .prac-pal.ans.cur{background:#EAF6EF;color:var(--green);border-color:var(--green);box-shadow:0 0 0 2px rgba(21,128,61,.3)}
+#practice .prac-pal-legend{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--gray);margin-top:10px}
+#practice .prac-pal-legend .lg{width:12px;height:12px;border-radius:4px;border:1.5px solid var(--line);display:inline-block;margin-left:8px}
+#practice .prac-pal-legend .lg:first-child{margin-left:0}
+#practice .prac-pal-legend .lg.ans{background:#EAF6EF;border-color:var(--green)}
+#practice .prac-pal-legend .lg.cur{border-color:var(--red);box-shadow:0 0 0 2px rgba(220,38,38,.25)}
+#practice #pracPrevBtn{flex:0 0 auto}
 .q-card{padding:18px}
 .q-num{font-size:12.5px;font-weight:800;color:var(--gray)}
 .q-text{font-size:18px;font-weight:800;line-height:1.4;margin:8px 0 18px;color:var(--ink)}
@@ -3417,3 +3440,54 @@ a.cv:hover{color:var(--red)}
 .jt-resume-t b { font-size: 14.5px; color: #9A3412; }
 .jt-resume-t span { font-size: 12.5px; color: #7C2D12; }
 .jt-resume-b { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ============ GUIDED TOUR (js/onboarding.js, Stage 6) ============
+   The spotlight ring marks the real element (fixed to the viewport, so
+   it is correct full-bleed on mobile and on desktop); the card floats
+   beside it and never traps the page — the overlay itself ignores
+   pointer events except on the card. */
+.goc-tour-overlay{ position:fixed; inset:0; z-index:99990; pointer-events:none; display:none; }
+.goc-tour-ring{ position:fixed; border:3px solid #DC2626; border-radius:14px;
+  box-shadow:0 0 0 9999px rgba(10,12,18,.45); pointer-events:none; transition:all .25s ease; }
+.goc-tour-card{ position:fixed; background:#fff; border-radius:16px; padding:18px 18px 14px;
+  box-shadow:0 16px 48px rgba(10,12,18,.28); pointer-events:auto; box-sizing:border-box; }
+.goc-tour-pips{ display:flex; gap:5px; margin-bottom:10px; }
+.goc-tour-pip{ width:6px; height:6px; border-radius:50%; background:#E5E7EB; }
+.goc-tour-pip.on{ background:#DC2626; width:18px; border-radius:3px; }
+.goc-tour-count{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#9CA3AF; margin-bottom:4px; }
+.goc-tour-title{ font-size:16px; font-weight:900; color:#111827; margin-bottom:6px; line-height:1.25; }
+.goc-tour-body{ font-size:13.5px; color:#4B5563; line-height:1.55; margin-bottom:14px; }
+.goc-tour-actions{ display:flex; align-items:center; gap:10px; }
+.goc-tour-back{ font-size:13px; font-weight:700; color:#374151; background:#F3F4F6; border:0; border-radius:10px; padding:10px 14px; cursor:pointer; font-family:inherit; }
+.goc-tour-back:disabled{ opacity:.4; cursor:default; }
+.goc-tour-skip{ font-size:13px; font-weight:600; color:#9CA3AF; background:none; border:0; cursor:pointer; padding:0; margin-left:auto; font-family:inherit; }
+.goc-tour-next{ background:#DC2626; color:#fff; border:0; border-radius:12px; padding:11px 20px; font-size:14px; font-weight:800; cursor:pointer; font-family:inherit; }
+.goc-tour-next:hover{ background:#B91C1C; }
+@media (max-width:480px){ .goc-tour-card{ padding:16px 16px 12px; } }
+
+/* ============ LANDING: announcements, Try GOC, parents (Stage 9) ============ */
+.lp-news-list{ display:grid; gap:10px; margin-top:16px; }
+.lp-news-card{ background:#fff; border:1px solid var(--line,#E5E7EB); border-radius:14px; padding:14px 16px; text-align:left; }
+.lp-news-card h3{ font-size:15px; margin:6px 0 4px; color:#111827; }
+.lp-news-card p{ font-size:13px; color:#4B5563; line-height:1.55; margin:0 0 8px; }
+.lp-news-meta{ display:flex; gap:8px; align-items:center; font-size:11.5px; color:#9CA3AF; }
+.lp-news-more{ background:none; border:0; color:#DC2626; font-weight:800; font-size:13px; cursor:pointer; padding:0; font-family:inherit; }
+.lp-news-empty{ font-size:13px; color:#9CA3AF; }
+.lp-try{ text-align:left; }
+.lp-try-btn{ margin-top:14px; }
+.lp-try-note{ font-size:12.5px; color:#9CA3AF; margin-top:10px; line-height:1.5; }
+@media (min-width:720px){ .lp-news-list{ grid-template-columns:repeat(3,1fr); } }
+
+/* ============ TRY G.O.C DEMO (Stage 10): real Practice components, second home ============ */
+#demo .prac-pal-wrap{margin:14px 18px 18px;padding:14px;background:#fff;border:1.5px solid var(--line);border-radius:16px}
+#demo .prac-pal-head{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:13px;color:var(--ink);margin-bottom:10px}
+#demo .prac-pal-grid{display:flex;flex-wrap:wrap;gap:8px}
+#demo .prac-pal{min-width:44px;height:44px;padding:0 8px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-family:var(--font);font-weight:800;font-size:14px;color:var(--slate);cursor:pointer}
+#demo .prac-pal.ans{background:#EAF6EF;border-color:var(--green);color:var(--green)}
+#demo .prac-pal.cur{border-color:var(--red);color:var(--red);box-shadow:0 0 0 2px rgba(220,38,38,.25)}
+#demo .prac-pal-legend{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--gray);margin-top:10px}
+#demo .prac-pal-legend .lg{width:12px;height:12px;border-radius:4px;border:1.5px solid var(--line);display:inline-block;margin-left:8px}
+#demo .prac-pal-legend .lg.ans{background:#EAF6EF;border-color:var(--green)}
+#demo .prac-pal-legend .lg.cur{border-color:var(--red)}
+#demo .opt.sel{border-color:var(--red);background:#FDECEC}
+#demo .opt.sel .key{background:var(--red);color:#fff}

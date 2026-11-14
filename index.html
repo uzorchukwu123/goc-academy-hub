@@ -4,7 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#DC2626">
-<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="description" content="G.O.C Academy Hub — Raising Smart Scholars for Academic Excellence. Expert tutoring, AI literacy and a gamified study app for JAMB, WAEC, NECO and Post-UTME, plus the Free UTME 2027 Tutorial.">
+<!-- Sharing preview (Open Graph / Twitter). No robots meta: crawler access is
+     governed server-side (robots.txt + User-Agent rules in server/server.js),
+     which allows interactive AI assistants while keeping training crawlers out. -->
+<meta property="og:title" content="G.O.C Academy Hub">
+<meta property="og:description" content="Raising Smart Scholars for Academic Excellence — expert tutoring, AI literacy and a gamified study app for JAMB, WAEC, NECO and Post-UTME, plus the Free UTME 2027 Tutorial.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://gocacademy.live/icons/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="G.O.C Academy Hub">
+<meta name="twitter:description" content="Raising Smart Scholars for Academic Excellence — tutoring, AI literacy and a gamified study app for Nigerian exams, plus the Free UTME 2027 Tutorial.">
+<meta name="twitter:image" content="https://gocacademy.live/icons/icon-512.png">
 <!-- PWA: installable, home-screen, offline (active when hosted over http/https) -->
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -81,6 +92,9 @@
                Mode; in Free Tutorial Mode it stands down (css/free2027.css) so
                a free-tutorial student is never sent to an account they never
                created. Nothing is deleted and the hub login page still works. -->
+          <button class="lp-link" onclick="dwGoTo('lpTiers')">Programmes</button>
+          <button class="lp-link" onclick="go('updates')">Updates &amp; News</button>
+          <button class="lp-link" onclick="dwGoTo('lpTry')">Try GOC free</button>
           <button class="lp-link dw-cbt-link" onclick="freeCbtPortal()">CBT Portal</button>
           <button class="lp-link dw-original dw-hub-login" onclick="go('login-v2')">Log in</button>
           <button class="lp-cta dw-original" onclick="go('signup')">Get started</button>
@@ -104,6 +118,7 @@
                    position and visibility in both modes; only its destination
                    is mode-aware (heroAccount): the hub login in Original Mode,
                    the edition's student login in Free Tutorial Mode. -->
+              <button class="lp-btn-light" onclick="dwGoTo('lpTry')">Try a free practice session</button>
               <button class="lp-btn-light hero-cbt" onclick="freeCbtPortal()">CBT Portal</button>
               <button class="lp-btn-light hero-original-cta" onclick="go('signup')">Get started</button>
               <button class="lp-btn-ghost" onclick="heroAccount()">I already have an account</button>
@@ -146,7 +161,7 @@
       </div>
 
       <div class="lp-sec" id="lpFeatures">
-        <div class="lp-eyebrow">One connected ecosystem</div>
+        <div class="lp-eyebrow">About G.O.C Academy Hub</div>
         <h2>Three parts working as one</h2>
         <p class="lead">Tutoring teaches. AI literacy builds understanding. The web app gives every student a structured place to learn, practise and track real progress.</p>
         <div class="lp-grid">
@@ -230,7 +245,7 @@
            js/app.js and the motion block in css/styles.css; without them this is
            still a working swipeable strip. -->
       <div class="lp-sec hw-sec" id="lpHow">
-        <div class="lp-eyebrow">How it works</div>
+        <div class="lp-eyebrow">The Independent Scholars System</div>
         <h2>From learner to independent scholar</h2>
         <p class="hw-hint">Swipe, or use the side dots, to move through the four steps</p>
         <div class="hw" id="hw">
@@ -316,6 +331,12 @@
         </div>
       </div>
 
+      <div class="lp-sec" id="lpParents">
+        <div class="lp-eyebrow">Parents, schools &amp; partners</div>
+        <h2>See the learning, not just the promise</h2>
+        <p class="lead">Students learn with expert tutors, practise in a structured app, and sit assessed tests whose results are reviewed question by question. Parents can follow every important announcement above, try the free preview, and talk to the academy directly — no account needed for any of that.</p>
+        <div class="hero-btns"><button class="lp-btn-light" type="button" onclick="dwGoTo('lpTry')">Try the free preview</button><button class="lp-btn-ghost" type="button" onclick="scrollToContact()">Contact the academy</button></div>
+      </div>
       <div class="lp-sec alt" id="contact">
         <div class="lp-eyebrow">Get in touch</div>
         <h2>Talk to G.O.C Academy</h2>
@@ -350,6 +371,14 @@
       </div>
 
       <!-- Updates & News intro — a calm teaser that invites visitors without blocking the page -->
+      <div class="lp-sec lp-try" id="lpTry">
+        <div class="lp-eyebrow">Try G.O.C</div>
+        <h2>Free JAMB Practice Preview</h2>
+        <p class="lead">Experience a JAMB-style practice session and discover how learning works at G.O.C Academy Hub. Five questions, real explanations — no account, no name, no email needed.</p>
+        <button class="lp-cta lp-try-btn" type="button" onclick="demoOpen()">Try a free practice session</button>
+        <p class="lp-try-note">Sample questions written for this preview. They are not official JAMB questions, and nothing you do here is recorded.</p>
+      </div>
+
       <div class="lp-sec lp-news-intro" id="lpNewsIntro">
         <div class="lp-news-intro-inner">
           <div class="lp-news-intro-icon" aria-hidden="true">
@@ -363,6 +392,7 @@
               Learn more
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
+            <div class="lp-news-list" id="lpNewsList"><p class="lp-news-empty">Loading the latest announcements…</p></div>
           </div>
         </div>
       </div>
@@ -579,6 +609,34 @@
       </div>
     </section>
     <!-- ============ LOG IN ============ -->
+    <!-- ============ TRY G.O.C — ANONYMOUS PREVIEW (Stage 10) ============ -->
+    <section class="screen" id="demo">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to homepage" onclick="go('landing')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">Try G.O.C — Free JAMB Practice Preview</div><div class="muted" style="font-size:12px">Five sample questions · no account needed · nothing is recorded</div></div></div></div>
+      <div class="scroll">
+        <div class="q-card" id="demoIntro">
+          <div class="q-text">Experience a JAMB-style practice session</div>
+          <p class="muted" style="line-height:1.6">Discover how learning works at G.O.C Academy Hub: five questions, the same look and navigation as real Practice, and an explanation for every answer at the end. These are sample questions written for this preview — not official JAMB questions.</p>
+          <button class="btn btn-red btn-block" type="button" id="demoStartBtn" onclick="demoStart()">Try a free practice session</button>
+          <div class="wt-none" id="demoMsg" style="display:none"></div>
+        </div>
+        <div id="demoPlay" hidden>
+          <div class="q-card">
+            <div class="q-num" id="demoNum">Question 1 of 5</div>
+            <div class="q-text" id="demoQ"></div>
+            <div id="demoOpts"></div>
+          </div>
+          <div class="prac-pal-wrap">
+            <div class="prac-pal-head"><span>Questions</span><span id="demoCount">0 of 5 answered</span></div>
+            <div class="prac-pal-grid" id="demoPalette"></div>
+            <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+          </div>
+          <div class="bottom-bar"><button class="btn btn-outline" id="demoPrevBtn" type="button" onclick="demoPrev()">← Prev</button><button class="btn btn-red btn-block" id="demoNextBtn" type="button" onclick="demoNext()">Next →</button></div>
+        </div>
+        <div id="demoResult" hidden></div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
     <section class="screen auth" id="login-v2">
       <div class="auth-aura" aria-hidden="true"><span class="au a"></span><span class="au b"></span><span class="au c"></span></div>
       <div class="auth-brandbar">
@@ -806,20 +864,20 @@
       <div class="dash-hero" id="tut-hero">
         <span class="hero-glow" aria-hidden="true"></span>
         <svg class="hero-mark" aria-hidden="true" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg>
-        <div class="statusbar"><span class="brandline"><svg class="gmark" style="width:22px;height:22px;color:#fff" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg><b>G.O.C Academy Hub</b></span><span id="dashExamLine">UTME 2027 · Sciences</span></div>
+        <div class="statusbar"><span class="brandline"><svg class="gmark" style="width:22px;height:22px;color:#fff" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg><b>G.O.C Academy Hub</b></span><span id="dashExamLine">UTME 2027</span></div>
         <div class="row between">
           <div>
-            <div class="hello" id="dashHello">Good afternoon,</div>
-            <div class="name" id="dashName">Amara 👋</div>
+            <div class="hello" id="dashHello">Welcome,</div>
+            <div class="name" id="dashName">Loading…</div>
           </div>
           <div class="row gap8">
-            <span class="chip" style="background:rgba(255,255,255,.16);color:#fff" id="dashStreakChip">🔥 12</span>
+            <span class="chip" style="background:rgba(255,255,255,.16);color:#fff" id="dashStreakChip">…</span>
           </div>
         </div>
         <div class="hero-stats">
-          <div class="hstat"><div class="v" id="dashLevel">Lv 8</div><div class="l">Scholar</div></div>
-          <div class="hstat"><div class="v gold" id="dashXp">1,240</div><div class="l">Academy XP</div></div>
-          <div class="hstat"><div class="v gold" id="dashStreak">12 🔥</div><div class="l">Day streak</div></div>
+          <div class="hstat"><div class="v" id="dashLevel">—</div><div class="l">Scholar</div></div>
+          <div class="hstat"><div class="v gold" id="dashXp">—</div><div class="l">Academy XP</div></div>
+          <div class="hstat"><div class="v gold" id="dashStreak">—</div><div class="l">Day streak</div></div>
         </div>
       </div>
 
@@ -894,8 +952,20 @@
           <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
         </div>
 
+        <div class="sec-head"><div class="section-t">Next Up</div></div>
+        <div class="card wrap dash-card"><div id="dashUp"><div class="wt-none">Working out your next step…</div></div></div>
+
         <div class="sec-head" id="tut-webtest"><div class="section-t">Waiting for you</div><button class="ss-link" onclick="openWebTest()">Open Web Test</button></div>
         <div class="card wrap dash-card"><div id="dashNext"><div class="wt-none">Checking your papers…</div></div></div>
+
+        <!-- JAMB / UTME: painted by dashPaintJamb() in js/app.js from the same
+             Web Test catalogue the server builds for this student. The sitting
+             appears here only when the server lists it (its dedicated bank is
+             deep enough in every one of the student's subjects); otherwise the
+             card says so honestly. The button starts through the exact same
+             instructions + start route as the Web Test screen. -->
+        <div class="sec-head"><div class="section-t">JAMB / UTME</div><button class="ss-link" onclick="openJambTest()">JAMB CBT</button></div>
+        <div class="card wrap dash-card"><div id="dashJamb"><div class="wt-none">Checking the JAMB-oriented sitting…</div></div></div>
 
         <div class="sec-head" id="tut-league"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
         <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
@@ -903,11 +973,17 @@
         <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
         <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
 
+                <div class="sec-head"><div class="section-t">Your subjects</div><button class="ss-link" onclick="go('study')">Study</button></div>
+        <div class="card wrap dash-card"><div id="dashSubjects"><div class="wt-none">Loading your subjects…</div></div></div>
+
         <div class="sec-head"><div class="section-t">Carry on</div></div>
         <div class="dash-jump" id="tut-jump">
           <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
           <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
           <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
+          <button class="dj" onclick="openMyNotes()"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>My Notes</b><s>Your private uploads</s></button>
+          <button class="dj" onclick="openCBT()"><span class="dj-i" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>Study CBT</b><s>Timed, marked at the end</s></button>
+          <button class="dj" onclick="go('resources')"><span class="dj-i" style="background:#475467"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg></span><b>Resources</b><s>Academy library</s></button>
           <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
         </div>
         <div class="spacer"></div>
@@ -992,39 +1068,49 @@
         <!-- PRIMARY ACTIONS — 2-col icon grid -->
         <div class="sec-head" style="margin-top:4px"><div class="section-t">Study tools</div></div>
         <div class="study-grid">
-          <button class="sg-cell" onclick="openReading()">
+          <button class="sg-cell" id="sg-reading" onclick="openReading()">
             <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg></div>
             <span class="sg-label">Read / Learn</span>
           </button>
-          <button class="sg-cell" onclick="openPractice()">
+          <button class="sg-cell" id="sg-practice" onclick="openPractice()">
             <div class="sg-icon" style="background:#DC2626"><svg class="icon" viewBox="0 0 24 24" fill="#fff"><rect x="2.5" y="9" width="3.5" height="6" rx="1.2"/><rect x="18" y="9" width="3.5" height="6" rx="1.2"/><rect x="6" y="10.6" width="12" height="2.8"/></svg></div>
             <span class="sg-label">Practice</span>
             <span class="sg-badge gold-badge">+XP</span>
           </button>
-          <button class="sg-cell" onclick="openWebTest()">
+          <button class="sg-cell" id="sg-webtest" onclick="openWebTest()">
             <div class="sg-icon" style="background:#141821"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/></svg></div>
             <span class="sg-label">Web Test</span>
             <span class="sg-badge red-badge">Assessed</span>
           </button>
+          <button class="sg-cell" id="sg-jamb" onclick="openJambTest()">
+            <div class="sg-icon" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="4.5" width="18" height="11.5" rx="1.6"/><path d="M2 20h20"/></svg></div>
+            <span class="sg-label">JAMB CBT</span>
+            <span class="sg-badge red-badge">UTME</span>
+          </button>
 
-          <button class="sg-cell" onclick="openResults()">
+          <button class="sg-cell" id="sg-results" onclick="openResults()">
             <div class="sg-icon" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 4v16h16"/><path d="M7 15l3-4 3 2 5-7"/></svg></div>
             <span class="sg-label">Results</span>
           </button>
-          <button class="sg-cell" onclick="go('resources')">
+          <button class="sg-cell" id="sg-resources" onclick="go('resources')">
             <div class="sg-icon" style="background:#E08600"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></div>
             <span class="sg-label">Resources</span>
+          </button>
+          <button class="sg-cell" id="sg-mynotes" onclick="openMyNotes()">
+            <div class="sg-icon" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4.3.8.8-4.3z"/></svg></div>
+            <span class="sg-label">My Notes</span>
+            <span class="sg-badge gold-badge">Private</span>
           </button>
         </div>
 
         <!-- REVIEW TOOLS — compact row -->
         <div class="sec-head" style="margin-top:20px"><div class="section-t">Review &amp; saves</div></div>
         <div class="review-row">
-          <button class="rv-chip" onclick="go('bookmarks')">
+          <button class="rv-chip" id="sg-bookmarks" onclick="go('bookmarks')">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
             <span>Saved</span><em id="bmCount"></em>
           </button>
-          <button class="rv-chip" onclick="go('mistakes')">
+          <button class="rv-chip" id="sg-mistakes" onclick="go('mistakes')">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             <span>Mistakes</span><em id="mkCount"></em>
           </button>
@@ -1189,8 +1275,18 @@
           <div id="pracOpts"></div>
           <div id="pracFb"></div>
         </div>
+        <!-- JAMB-style question palette (Stage 2): numbered navigation with
+             answered / unanswered / current states, painted by
+             pracPaintChrome() in js/app.js from the run's own marks.
+             Revisiting an answered question shows it as it was left —
+             answers are never lost or re-marked by moving around. -->
+        <div class="prac-pal-wrap">
+          <div class="prac-pal-head"><span>Questions</span><span id="pracNavCount">0 of 0 answered</span></div>
+          <div class="prac-pal-grid" id="pracPalette"></div>
+          <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+        </div>
       </div>
-      <div class="bottom-bar"><button class="btn btn-red btn-block" id="pracBtn" onclick="pracNext()" disabled>Select an answer</button></div>
+      <div class="bottom-bar"><button class="btn btn-outline" id="pracPrevBtn" onclick="pracPrev()" disabled>← Prev</button><button class="btn btn-red btn-block" id="pracBtn" onclick="pracNext()" disabled>Select an answer</button></div>
     </section>
 
     <!-- ============ CBT ============ -->
@@ -1424,6 +1520,11 @@
             <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 18h6"/></svg></div>
             <div class="lbl"><h4>Install app</h4><p>Add to home screen for one-tap access</p></div>
             <span id="installAction"></span>
+          </div>
+          <div class="set-row" id="tourHelpRow">
+            <div class="si"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3A2.6 2.6 0 1 1 12 12.5V13"/><path d="M12 16.8h.01"/></svg></div>
+            <div class="lbl"><h4>Help &amp; tutorial</h4><p id="tourHelpNote">A guided walk around your hub</p></div>
+            <button class="mini-link" id="tourHelpBtn" type="button" onclick="tourRestart()">Take the tour</button>
           </div>
         </div>
         <div class="ios-install-help" id="iosInstallHelp" style="display:none">
@@ -1834,6 +1935,7 @@
       <div class="adm-top">
         <button class="adm-back" aria-label="Lock console" onclick="admLock()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
         <div class="adm-top-t"><div class="adm-brand">Management Console</div><div class="adm-sub"><span id="admWho">Ernest Uzorchukwu · Founder</span> · <span style="color:#22C55E">● secure session</span></div></div>
+        <button class="adm-back" style="margin-left:auto" aria-label="Take the console tour" title="Guided tour" onclick="tourConsoleStart()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3A2.6 2.6 0 1 1 12 12.5V13"/><path d="M12 16.8h.01"/></svg></button>
       </div>
       <div class="scroll">
         <!-- KPI strip -->
@@ -1928,6 +2030,29 @@
         </div>
         <div id="resList"></div>
         <div class="rest" id="resEmpty" style="display:none">Nothing in this category yet.</div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ MY NOTES (Stage 3) ============
+         The student's own private library: uploaded study notes, organised by
+         subject and topic, read inside the app where the format allows.
+         Nothing here is shared: the list, the files and every action are
+         owner-checked on the server (/api/me/notes). Academy Resources is the
+         separate screen above; the two libraries never mix. -->
+    <section class="screen pad" id="mynotes">
+      <div class="hdr solid"><div class="row gap12"><button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button><div><div style="font-weight:800;font-size:15px">My Notes</div><div class="muted" style="font-size:12px">Your private study notes — only you can see these</div></div></div></div>
+      <div class="wrap">
+        <div class="card" style="margin-top:14px;padding:16px">
+          <div class="eyebrow">Add a note</div>
+          <div class="ad-field"><label for="myNoteTitle">Title</label><input id="myNoteTitle" type="text" maxlength="255" placeholder="e.g. Thermodynamics summary"></div>
+          <div class="ad-field"><label for="myNoteSubject">Subject</label><select id="myNoteSubject"></select></div>
+          <div class="ad-field"><label for="myNoteTopic">Topic (optional)</label><input id="myNoteTopic" type="text" maxlength="200" placeholder="e.g. Heat and temperature"></div>
+          <div class="ad-field"><label for="myNoteFile">File (PDF, text, Word or image, up to 25 MB)</label><input id="myNoteFile" type="file" accept=".pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg"></div>
+          <button type="button" class="btn btn-red btn-block" id="myNoteUploadBtn" onclick="myNoteUpload()">Upload note</button>
+        </div>
+        <div class="ad-field" style="margin-top:14px"><label for="myNoteSearch">Search your notes</label><input id="myNoteSearch" type="search" placeholder="Search title, subject or topic…" oninput="myNotesRender()"></div>
+        <div id="myNotesList"><div class="wt-none">Loading your notes…</div></div>
         <div class="spacer"></div>
       </div>
     </section>
@@ -2088,24 +2213,6 @@
 
   </div><!-- /screens -->
 
-  <!-- ============ DASHBOARD TUTORIAL OVERLAY ============
-       Direct child of .phone (not inside .screens) so it is not clipped
-       by the screens overflow and renders correctly on mobile.
-       Uses position:absolute relative to .phone. -->
-  <div id="tutOverlay" class="tut-overlay" aria-modal="true" role="dialog" aria-label="Dashboard tour" style="display:none">
-    <div id="tutBackdrop" class="tut-backdrop"></div>
-    <div id="tutCard" class="tut-card" role="document">
-      <div class="tut-step-pip" id="tutPips"></div>
-      <div class="tut-ico" id="tutIco"></div>
-      <div class="tut-title" id="tutTitle"></div>
-      <div class="tut-body" id="tutBody"></div>
-      <div class="tut-actions">
-        <button class="tut-skip" id="tutSkip" onclick="tutSkip()">Skip tour</button>
-        <button class="tut-next" id="tutNext" onclick="tutNext()">Next →</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ============ TABBAR ============ -->
   <!-- Mobile-only slide-out menu for the public homepage.
        Hidden entirely at >=900px, where the inline nav links are used. -->
@@ -2120,7 +2227,9 @@
         </div>
         <p class="dw-motto">Raising Smart Scholars for Academic Excellence</p>
         <nav class="dw-nav">
-          <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>The ecosystem</button>
+          <button onclick="dwGoTo('lpFeatures')"><span class="dwi">◇</span>About G.O.C</button>
+          <button onclick="dwGoTo('lpTiers')"><span class="dwi">◇</span>Programmes</button>
+          <button onclick="dwGoTo('lpTry')"><span class="dwi">◇</span>Try GOC — free practice</button>
           <button onclick="dwGoTo('lpSubjects')"><span class="dwi">◇</span>Subjects offered</button>
           <button onclick="dwGoTo('lpHow')"><span class="dwi">◇</span>How it works</button>
           <button onclick="dwGoTo('contact')"><span class="dwi">◇</span>Contact us</button>
@@ -2322,333 +2431,13 @@ window.__gocBootTimer = setTimeout(function() {
 </script>
 <script src="js/goc-core.js"></script>
 <script src="js/goc-free-2027.js"></script>
+<script src="js/note-questions.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/onboarding.js"></script>
 <script src="js/free2027-api.js"></script>
 <script src="js/free2027-ui.js"></script>
 <script src="js/free2027-admin.js"></script>
 <script src="js/pwa.js"></script>
-<!-- ============ TUTORIAL STYLES ============ -->
-<style>
-/* Overlay backdrop */
-.tut-overlay{
-  /* position:absolute so it sits inside .phone and is never clipped.
-     .phone is position:relative, so inset:0 covers it exactly. */
-  position:absolute;inset:0;z-index:9900;
-  pointer-events:all;
-}
-.tut-backdrop{
-  position:absolute;inset:0;
-  background:rgba(10,12,18,.72);
-  transition:clip-path .4s cubic-bezier(.4,0,.2,1);
-}
-/* Highlight ring around the target element */
-.tut-ring{
-  /* Also absolute within .tut-overlay / .phone */
-  position:absolute;
-  border-radius:16px;
-  box-shadow:0 0 0 4px rgba(220,38,38,.85), 0 0 0 8px rgba(220,38,38,.2);
-  pointer-events:none;
-  z-index:9901;
-  transition:left .35s cubic-bezier(.4,0,.2,1),top .35s cubic-bezier(.4,0,.2,1),width .35s,height .35s;
-  animation:tutPulse 2s ease-in-out infinite;
-}
-@keyframes tutPulse{
-  0%,100%{box-shadow:0 0 0 4px rgba(220,38,38,.85),0 0 0 8px rgba(220,38,38,.18)}
-  50%{box-shadow:0 0 0 4px rgba(220,38,38,1),0 0 0 14px rgba(220,38,38,.08)}
-}
-/* Tooltip card */
-.tut-card{
-  position:absolute;
-  left:50%;transform:translateX(-50%);
-  width:min(320px, calc(100% - 32px));
-  background:#fff;
-  border-radius:20px;
-  padding:20px 20px 16px;
-  box-shadow:0 16px 48px rgba(10,12,18,.28), 0 2px 8px rgba(10,12,18,.12);
-  z-index:9910;
-  transition:top .4s cubic-bezier(.4,0,.2,1), bottom .4s cubic-bezier(.4,0,.2,1);
-  animation:tutCardIn .3s cubic-bezier(.2,1.3,.4,1) both;
-}
-@keyframes tutCardIn{from{opacity:0;transform:translateX(-50%) scale(.93)}to{opacity:1;transform:translateX(-50%) scale(1)}}
-/* Step pips */
-.tut-step-pip{display:flex;gap:5px;margin-bottom:14px;justify-content:center}
-.tut-pip{width:6px;height:6px;border-radius:50%;background:#E5E7EB;transition:background .2s,width .2s}
-.tut-pip.on{background:#DC2626;width:18px;border-radius:3px}
-/* Icon */
-.tut-ico{
-  width:48px;height:48px;border-radius:14px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;margin-bottom:12px;
-  flex-shrink:0;
-}
-/* Text */
-.tut-title{font-size:16px;font-weight:900;color:#111827;margin-bottom:6px;line-height:1.25}
-.tut-body{font-size:13.5px;color:#4B5563;line-height:1.55;margin-bottom:16px}
-/* Actions */
-.tut-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.tut-skip{font-size:13px;font-weight:600;color:#9CA3AF;background:none;border:none;cursor:pointer;padding:0;font-family:inherit}
-.tut-skip:hover{color:#DC2626}
-.tut-next{
-  background:#DC2626;color:#fff;
-  border:none;border-radius:12px;
-  padding:11px 22px;font-size:14px;font-weight:800;
-  cursor:pointer;font-family:inherit;
-  transition:background .15s,transform .1s;
-}
-.tut-next:active{transform:scale(.96)}
-.tut-next:hover{background:#B91C1C}
-/* "Done" finish state */
-.tut-next.done{background:#15803D}
-/* Celebration flash */
-@keyframes tutDone{
-  0%{background:#15803D}50%{background:#166534;transform:translateX(-50%) scale(1.04)}100%{background:#15803D;transform:translateX(-50%) scale(1)}
-}
-.tut-card.finishing{animation:tutDone .5s ease both}
-</style>
-
-<!-- ============ TUTORIAL SCRIPT ============ -->
-<script>
-(function(){
-  /* ── Tutorial step definitions ── */
-  var STEPS = [
-    {
-      anchor: 'tut-hero',
-      ico: '👋', icoBg: '#DC2626',
-      title: 'Welcome to your Dashboard',
-      body: 'This is your G.O.C Academy Hub home. Your scholar level, XP, streak, and exam details all live up here at a glance.',
-      pos: 'below', scrollTo: 0
-    },
-    {
-      anchor: 'tut-focus',
-      ico: '⏱️', icoBg: '#0E7490',
-      title: 'Daily Study Window',
-      body: 'Your academy sets a daily study limit. The ring shows how much time remains today — use it wisely. Every minute counts towards JAMB/UTME success.',
-      pos: 'below', scrollTo: 0
-    },
-    {
-      anchor: 'dashJourney',
-      ico: '🗺️', icoBg: '#7C3AED',
-      title: 'Your Learning Journey',
-      body: 'This path tracks your progress topic by topic. Complete lessons and practice sessions to unlock the next stage. Tap Goc the owl to get a hint!',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-webtest',
-      ico: '📝', icoBg: '#141821',
-      title: 'Web Test',
-      body: 'Your Web Test is the official assessed paper set by your academy — it counts towards your record. Check here regularly for new papers and deadlines.',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-league',
-      ico: '🏆', icoBg: '#F59E0B',
-      title: 'League & Rankings',
-      body: 'See how you rank against other scholars. Practice and Web Tests earn you XP which moves you up the league. Compete, improve, and top the board!',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-jump',
-      ico: '⚡', icoBg: '#15803D',
-      title: 'Quick Access Shortcuts',
-      body: 'Jump straight into Practice, your Timetable, live Classes, or your Profile from here — one tap and you\'re in.',
-      pos: 'above', scrollTo: 'auto'
-    },
-    {
-      anchor: 'tut-nav-home',
-      ico: '🔖', icoBg: '#4F46E5',
-      title: 'Bottom Navigation',
-      body: 'Use the tabs at the bottom to move between Home, Classes, Study, League and Profile. The Study tab is where Practice, Web Test and past questions live.',
-      pos: 'above', scrollTo: 'auto',
-      last: true
-    }
-  ];
-
-  var TUT_KEY = 'goc_tut_done_v1';
-  var cur = 0;
-  var ring = null;
-
-  /* ── Public entry point called after login ── */
-  window.tutorialInit = function(){
-    try{ if(localStorage.getItem(TUT_KEY)) return; } catch(_){}
-    /* FIX: Close the affirmation flyer if it is open so it doesn't block the tour */
-    var flyer = document.getElementById('flyerOverlay');
-    if(flyer && flyer.classList.contains('show')) flyer.classList.remove('show');
-    cur = 0;
-    /* FIX: Lock home screen scroll so targets don't move while the tour is active */
-    var homeEl = document.getElementById('home');
-    if(homeEl) homeEl.style.overflowY = 'hidden';
-    show();
-  };
-
-  function getHomeEl(){ return document.getElementById('home'); }
-
-  function show(){
-    var overlay = document.getElementById('tutOverlay');
-    if(!overlay) return;
-    overlay.style.display = 'block';
-    renderStep(cur);
-  }
-
-  function renderStep(i){
-    var step = STEPS[i];
-    if(!step){ finish(); return; }
-
-    /* Pips */
-    var pips = '';
-    for(var p=0;p<STEPS.length;p++) pips += '<span class="tut-pip'+(p===i?' on':'')+'"></span>';
-    document.getElementById('tutPips').innerHTML = pips;
-
-    /* Icon */
-    var ico = document.getElementById('tutIco');
-    ico.textContent = step.ico;
-    ico.style.background = (step.icoBg || '#DC2626') + '22';
-
-    /* Text */
-    document.getElementById('tutTitle').textContent = step.title;
-    document.getElementById('tutBody').textContent = step.body;
-
-    /* Next button label */
-    var nxt = document.getElementById('tutNext');
-    if(step.last){ nxt.textContent = 'Done ✓'; nxt.className = 'tut-next done'; }
-    else { nxt.textContent = 'Next →'; nxt.className = 'tut-next'; }
-
-    /* Position highlight ring and card */
-    positionStep(step);
-  }
-
-  function positionStep(step){
-    var target = document.getElementById(step.anchor);
-    /* Remove old ring */
-    if(ring && ring.parentNode) ring.parentNode.removeChild(ring);
-    ring = null;
-
-    var card = document.getElementById('tutCard');
-    var PAD = 8;
-
-    if(target){
-      /* FIX: Scroll the home container (not the whole page) to bring the
-         target into view, then wait for scroll to fully settle before
-         measuring — prevents ring drift as the content moves. */
-      var homeEl = getHomeEl();
-      if(step.scrollTo === 0){
-        /* First steps: scroll home screen to top */
-        if(homeEl) homeEl.scrollTop = 0;
-      } else if(step.scrollTo === 'auto' && homeEl){
-        /* Later steps: scroll so the target is visible in the home container */
-        var containerRect = homeEl.getBoundingClientRect();
-        var targetRect    = target.getBoundingClientRect();
-        var targetRelTop  = targetRect.top - containerRect.top + homeEl.scrollTop;
-        var idealScroll   = targetRelTop - (homeEl.clientHeight / 2) + (targetRect.height / 2);
-        homeEl.scrollTop  = Math.max(0, idealScroll);
-      }
-
-      /* Wait for scroll to settle, then measure positions relative to .phone
-         (the overlay is absolute within .phone, not fixed to the viewport) */
-      setTimeout(function(){
-        var phoneEl = document.getElementById('phone');
-        var phoneRect = phoneEl ? phoneEl.getBoundingClientRect() : {left:0, top:0};
-        var r = target.getBoundingClientRect();
-
-        /* Translate viewport-relative rect into .phone-relative coords */
-        var relLeft = r.left - phoneRect.left;
-        var relTop  = r.top  - phoneRect.top;
-
-        /* Draw ring */
-        ring = document.createElement('div');
-        ring.className = 'tut-ring';
-        ring.style.cssText =
-          'left:'+(relLeft - PAD)+'px;'+
-          'top:'+(relTop - PAD)+'px;'+
-          'width:'+(r.width + PAD*2)+'px;'+
-          'height:'+(r.height + PAD*2)+'px;'+
-          'border-radius:'+(step.anchor==='tut-nav-home'?'12':'16')+'px;';
-        document.getElementById('tutOverlay').appendChild(ring);
-
-        /* Position card above or below — using .phone height as the container */
-        var containerH = phoneEl ? phoneEl.clientHeight : window.innerHeight;
-        var CARD_H = 240;
-        var MARGIN = 14;
-
-        card.style.removeProperty('top');
-        card.style.removeProperty('bottom');
-        card.style.transform = 'translateX(-50%)';
-
-        if(step.pos === 'above'){
-          var spaceAbove = relTop - PAD - MARGIN;
-          if(spaceAbove >= CARD_H){
-            var fromBottom = containerH - relTop + PAD + MARGIN;
-            card.style.bottom = fromBottom + 'px';
-          } else {
-            var fromTop = relTop + r.height + PAD + MARGIN;
-            if(fromTop < 8) fromTop = 8;
-            card.style.top = fromTop + 'px';
-          }
-        } else {
-          var fromTop2 = relTop + r.height + PAD + MARGIN;
-          var spaceBelow = containerH - fromTop2;
-          if(spaceBelow >= CARD_H){
-            card.style.top = fromTop2 + 'px';
-          } else {
-            var aboveTop = relTop - PAD - MARGIN - CARD_H;
-            if(aboveTop < 8) aboveTop = 8;
-            card.style.top = aboveTop + 'px';
-          }
-        }
-      }, 200);
-
-    } else {
-      /* No target — centre card vertically within .phone */
-      var phoneEl2 = document.getElementById('phone');
-      var ph = phoneEl2 ? phoneEl2.clientHeight : 600;
-      card.style.top = Math.max(8, (ph - 280) / 2) + 'px';
-      card.style.transform = 'translateX(-50%)';
-    }
-  }
-
-  window.tutNext = function(){
-    cur++;
-    if(cur >= STEPS.length){ finish(); return; }
-    /* Re-animate card */
-    var card = document.getElementById('tutCard');
-    card.style.animation = 'none';
-    void card.offsetWidth;
-    card.style.animation = '';
-    renderStep(cur);
-  };
-
-  window.tutSkip = function(){ finish(); };
-
-  function finish(){
-    try{ localStorage.setItem(TUT_KEY, '1'); } catch(_){}
-    /* FIX: Restore home screen scrolling */
-    var homeEl = getHomeEl();
-    if(homeEl){ homeEl.style.overflowY = ''; homeEl.scrollTop = 0; }
-    if(ring && ring.parentNode) ring.parentNode.removeChild(ring);
-    ring = null;
-    var overlay = document.getElementById('tutOverlay');
-    if(overlay){
-      var card = document.getElementById('tutCard');
-      card.classList.add('finishing');
-      setTimeout(function(){ overlay.style.display = 'none'; card.classList.remove('finishing'); }, 400);
-    }
-  }
-
-  /* ── Hook into go('home') so tour fires after first login ──
-     We patch renderDash: the original is called first, then we check.
-     FIX: Delay increased to 1200ms so the affirmation flyer has time to
-     appear and be dismissed naturally OR the tutorial waits and then
-     closes it itself. */
-  var _origRenderDash = window.renderDash;
-  window.renderDash = function(){
-    if(typeof _origRenderDash === 'function') _origRenderDash.apply(this, arguments);
-    setTimeout(function(){
-      if(typeof window.tutorialInit === 'function') window.tutorialInit();
-    }, 1200);
-  };
-
-})();
-</script>
-
 </body>
 </html>
