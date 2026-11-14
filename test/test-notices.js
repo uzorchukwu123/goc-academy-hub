@@ -67,9 +67,9 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
   async function tutorToken(name, subjects, pw) {
     var t = await call('POST', '/api/tutors', { name: name, subjects: subjects, password: 'start-pass-1' }, adm);
     var id = t.body.tutor.id;
-    var tk = (await call('POST', '/api/tutor/login', { id: id, password: 'start-pass-1' })).body.token;
+    var tk = (await call('POST', '/api/auth/login', { id: id, password: 'start-pass-1' })).body.token;
     await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: pw }, tk);
-    return { id: id, token: (await call('POST', '/api/tutor/login', { id: id, password: pw })).body.token };
+    return { id: id, token: (await call('POST', '/api/auth/login', { id: id, password: pw })).body.token };
   }
   var chem = await tutorToken('Mrs Ada Obi', ['Chemistry'], 'my-own-pass-1');
   var phys = await tutorToken('Mr Eze', ['Physics'], 'my-own-pass-2');

@@ -10,6 +10,7 @@ const ASSETS = [
   './js/goc-free-2027.js',
   './js/note-questions.js',
   './js/api.js',
+  './js/tutor-app.js',
   './js/app.js',
   './js/onboarding.js',
   './js/free2027-api.js',

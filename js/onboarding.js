@@ -411,7 +411,7 @@
     return steps;
   }
 
-  /* ---- Tutor tour (Stage 8): runs in the /tutor shell over the real
+  /* ---- Tutor tour: runs after the common login over the real
      tutor application, moving between its views through the app's own
      __zxTourGo bridge. A tutor only ever sees their own subjects —
      the tour inherits that scoping from the API, it has none of its own. ---- */

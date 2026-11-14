@@ -9,7 +9,7 @@ var vm = require('vm');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var md = require('./minidom.js');
 var app = fs.readFileSync(path.join(APP, 'js', 'app.js'), 'utf8');
-var bundle = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var bundle = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
@@ -59,7 +59,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   setField('some other word', 'x'); loggedIn = [];
   await vm.runInContext('login()', ctx); await tick();
   ok('a non-ID word is only an ordinary failed sign-in attempt', loggedIn.length === 1 && loggedIn[0][0] === 'some other word');
-  ok('the public app never says tutor in the log-in code', !/tutor/i.test(grab('login') + grab('loginNow')));
+  ok('the public login code routes the authenticated tutor role', /user.role === 'tutor'/.test(grab('loginNow')));
 
   /* ===================================================== the tutor screens */
   console.log('\nthe tutor screens');
@@ -126,7 +126,8 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
     var r = responses.shift() || { status: 200, body: {} };
     return Promise.resolve({ ok: r.status < 400, status: r.status, headers: { get: function () { return r.type || 'application/json'; } }, text: function () { return Promise.resolve(r.raw == null ? JSON.stringify(r.body) : r.raw); } });
   }
-  var win = { };
+  var navigated = '', lastToast = '';
+  var win = { go: function (s) { navigated = s; }, toast: function (s) { lastToast = s; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String });
   vm.runInContext(bundle, bctx);
   function root() { return doc.body.children[0]; }
@@ -136,35 +137,13 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   function btn(act) { return q('button[data-act=' + act + ']'); }
   function text() { return root() ? root().textContent : ''; }
 
-  ok('the sheet is drawn over the page', !!root() && !!q('#zxId') && !!q('#zxPw'));
-  ok('the sheet is a labelled dialog', /role="dialog"/.test(root().innerHTML) && /aria-modal="true"/.test(root().innerHTML));
-  ok('the overlay brings its own styles', !!doc.head.children.length || !!doc.getElementById('zxCss') || true);
-  ok('opening again does not draw a second overlay', (win.__zxOpen(), doc.body.children.length === 1));
-
-  click(btn('signin'));
-  ok('empty boxes are caught on the page, nothing is sent', calls.length === 0 && /Enter your ID and password/.test(text()));
-
-  responses.push({ status: 401, body: { error: 'That ID and password do not match.' } });
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'wrong';
-  click(btn('signin')); await tick();
-  ok('a wrong password shows the server message', /do not match/.test(text()), text());
-  ok('the sign-in went to the tutor route with the ID and password', calls[0].url === 'api/tutor/login' && calls[0].body.id === 'GOC-T-001' && calls[0].body.password === 'wrong');
-  ok('no token is sent before sign-in', !calls[0].auth);
-  ok('the ID the tutor typed is kept for the next try', /value="GOC-T-001"/.test(root().innerHTML), root().innerHTML.slice(0, 600));
-
-  responses.push({ status: 503, type: 'text/html', raw: '<html>Starting your app</html>' });
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'secret'; click(btn('signin')); await tick();
-  ok('the in-app sign-in also shows a waking screen without the password', /G.O.C is waking up/.test(text()) && !!btn('retry') && !q('#zxPw'));
-  var beforeRetry = calls.length;
-  responses.push({ status: 200, body: { service: 'goc-academy-hub', version: 1 } });
-  click(btn('retry')); await tick();
-  ok('retry uses health without credentials and restores the ID-only form', calls.length === beforeRetry + 1 && calls[beforeRetry].url === 'api/health' && !calls[beforeRetry].body && !!q('#zxId') && /value="GOC-T-001"/.test(root().innerHTML) && q('#zxPw').value === '');
-
-  responses.push({ status: 200, body: { token: 'tok-1', user: { id: 'GOC-T-001', name: 'Mrs <b>Ada</b> Obi', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: true } } });
-  var beforeSuccess = calls.length;
-  q('#zxPw').value = 'start-pass-1';
-  key(q('#zxPw'), 'Enter'); await tick();
-  ok('Enter signs in', calls.length === beforeSuccess + 1 && calls[beforeSuccess].body.password === 'start-pass-1');
+  ok('there is no separate sign-in screen', !root());
+  win.__zxOpen();
+  ok('no session cannot open the tutor dashboard', !root());
+  win.__zxOpen({ token: 'bad', user: { id: 'GOC-S-001', role: 'student' } });
+  ok('a student identity cannot open the tutor dashboard', !root());
+  win.__zxOpen({ token: 'tok-1', user: { id: 'GOC-T-001', name: 'Mrs <b>Ada</b> Obi', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: true } });
+  var beforeSuccess = -1;
   ok('a first sign-in goes to the password screen, not the dashboard', !!q('#zxCur') && !!q('#zxNew') && !q('button[data-act=subject]'), text());
   ok('the password screen explains why', /first sign-in/.test(text()));
 
@@ -234,21 +213,16 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
 
   responses.push({ status: 403, body: { error: 'This tutor account has been switched off by the academy.' } });
   click(q('button[data-subject=Chemistry]')); await tick(20);
-  ok('a switched-off account is sent back to sign-in with the reason', !!q('#zxId') && /switched off/.test(text()), text());
-  responses.push({ status: 200, body: { token: 'tok-1b', user: { id: 'GOC-T-001', name: 'Ada', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: false } } });
+  ok('a switched-off account returns to common login with the reason', !root() && navigated === 'login-v2' && /switched off/.test(lastToast), lastToast);
   responses.push({ status: 200, body: { subject: 'Chemistry', subjects: ['Chemistry', 'Physics'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } } });
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'a-better-pass'; click(btn('signin')); await tick(20);
-
+  win.__zxOpen({ token: 'tok-1b', user: { id: 'GOC-T-001', name: 'Ada', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: false } }); await tick(20);
   responses.push({ status: 401, body: { error: 'Your session has ended. Please sign in again.' } });
   click(q('button[data-subject=Physics]')); await tick(20);
-  ok('an ended session returns to the sign-in sheet with the reason', !!q('#zxId') && /session has ended/.test(text()), text());
-  ok('the old token is dropped', (function () { var n = calls.length; responses.push({ status: 401, body: { error: 'x' } }); q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'p'; click(btn('signin')); return !calls[n] ? false : !calls[n].auth; })());
-  await tick();
+  ok('an ended session returns to common login with the reason', !root() && navigated === 'login-v2' && /session has ended/.test(lastToast), lastToast);
+  ok('an empty session cannot reopen the dashboard', (win.__zxOpen(), !root()));
 
-  /* sign out */
-  responses.push({ status: 200, body: { token: 'tok-2', user: { id: 'GOC-T-002', name: 'Mr Bayo Ade', role: 'tutor', subjects: ['Mathematics'], mustChangePassword: false } } });
   responses.push({ status: 200, body: { subject: 'Mathematics', subjects: ['Mathematics'], depth: { objective: 1, theory: 1, jamb: 1, practice: 1, notes: 1 } } });
-  q('#zxId').value = 'GOC-T-002'; q('#zxPw').value = 'secret-pass'; click(btn('signin')); await tick(20);
+  win.__zxOpen({ token: 'tok-2', user: { id: 'GOC-T-002', name: 'Mr Bayo Ade', role: 'tutor', subjects: ['Mathematics'], mustChangePassword: false } }); await tick(20);
   ok('a tutor with one subject goes straight to the dashboard', /Mathematics/.test(text()) && !q('button[data-act=subject]'));
   ok('one subject shows no switcher', !q('button[data-subject=Mathematics]'));
   var before = calls.length;
@@ -256,11 +230,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('sign out tells the server', calls.slice(before).some(function (c) { return c.url === 'api/auth/logout' && c.auth === 'Bearer tok-2'; }));
   ok('sign out removes everything from the page', doc.body.children.length === 0);
   win.__zxOpen();
-  ok('reopening the retained tutor overlay starts again at the sign-in sheet', !!q('#zxId') && !q('#zxCur') && !/GOC-T-002/.test(text()));
-  click(btn('close'));
-  ok('Cancel closes the sheet', doc.body.children.length === 0);
-  win.__zxOpen(); key(q('#zxId'), 'Escape');
-  ok('Escape closes the sheet', doc.body.children.length === 0);
+  ok('reopening without authentication never opens the dashboard', !root());
 
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');
   process.exit(fails ? 1 : 0);

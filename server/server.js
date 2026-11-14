@@ -57,6 +57,9 @@ const reminders = require('./lib/reminders');
    `free2027` block further down) leaves the original hub exactly as it was. */
 const free2027Lib = require('./lib/free2027');
 const founderContact = require('./lib/founder-contact');
+/* Workstream A — the temporary maintenance switch. One module owns the page,
+   the switch and the gate; see server/lib/maintenance.js and
+   MAINTENANCE-MODE.md. Turning the variable off restores the app unchanged. */
 const mailstatus = require('./lib/mailstatus');
 /* The temporary full-platform maintenance switch. Off unless
    GOC_MAINTENANCE_MODE is set to a truthy value; see server/lib/maintenance.js. */
@@ -91,6 +94,11 @@ function setEnvSecret(key, value) {
   process.env[cleanKey] = cleanValue;
 }
 
+
+/* Read once, at boot, from the deployment environment (or .env via loadEnv).
+   Nothing else in the server caches it, so disabling it cannot leave a stale
+   half-on state: unset the variable and restart. */
+const MAINTENANCE_MODE = maintenance.enabled(process.env);
 
 const ROOT = path.resolve(__dirname, '..');          // the GOC-Web-App folder
 /* The service-worker cache name is the deployment identifier this build
@@ -2626,6 +2634,7 @@ const reminderService = reminders.createReminderService({
   log: m => console.warn(m)
 });
 function startReminderSchedule() {
+  if (MAINTENANCE_MODE) { console.log('[goc] study reminders paused: the platform is in maintenance mode.'); return; }
   if (process.env.GOC_REMINDERS === '0') { console.log('[goc] study reminders disabled (GOC_REMINDERS=0).'); return; }
   if (!reminderPublicUrl()) { console.log('[goc] study reminders idle: set GOC_PUBLIC_URL (the address students open the hub at) so every message can carry its opt-out link.'); return; }
   if (!reminderDelivery().email) { console.log('[goc] study reminders idle: SMTP is not configured (GOC_SMTP_HOST / GOC_SMTP_USER / GOC_SMTP_PASS).'); return; }
@@ -3552,6 +3561,52 @@ const ROUTES = [
       const password = String(body.password == null ? '' : body.password);
       const db = readData();
 
+      // Tutors use the same public login endpoint, with their existing verifier and throttles.
+      if (/^GOC-T-/i.test(id)) {
+        if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+
+        let t = null;
+        if (core.validTutorId(id)) {
+          if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
+            t = await getAppwriteTutor(id);
+          } else {
+            t = db.tutors.find(x => x.id === id) || null;
+          }
+        }
+
+        /* Keep identical failure responses and dummy-hash work for unknown,
+           incorrect-password, and inactive tutor accounts. */
+        if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
+        const pwOk = verifyPassword(password.slice(0, 300), t ? t.pwHash : TUTOR_DUMMY_HASH);
+        if (!t || !pwOk || t.active === false) {
+          noteFailure(ip);
+          if (id) tutorIdFailed(id);
+          return errJson(res, 401, 'That ID and password do not match.');
+        }
+
+        attempts.delete(ip);
+        tutorFails.delete(id);
+
+        t.lastLogin = new Date().toISOString();
+        if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
+          await saveAppwriteTutor(t);
+        } else {
+          const local = db.tutors.find(x => x.id === t.id);
+          if (local) local.lastLogin = t.lastLogin;
+          writeData(db);
+        }
+
+
+        return newSession(t, 'tutor', db).then(token => {
+          const d = sessions.get(token);
+          okJson(res, { token, user: {
+            id: t.id, name: t.name, role: 'tutor',
+            subjects: t.subjects.slice(),
+            mustChangePassword: !!t.mustChangePassword,
+            sessionMinutes: d.sessionMinutes, expiresAt: d.expires
+          } });
+        });
+      }
       const isStaff = /^GOC-A-\d+$/.test(id);
       const isStudent = /^GOC-S-\d+$/.test(id);
       let account = isStaff ? db.staff.find(s => s.id === id) : null;
@@ -4912,81 +4967,6 @@ const ROUTES = [
 
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
-
-  /* The tutor application itself, delivered only to an authenticated
-     tutor session ('tutor-setup', so a first-login password change can
-     still load it; subject APIs stay closed until then). The central
-     gate above has already re-read the tutor record for this request,
-     so a switched-off tutor is refused here like everywhere else. The
-     file lives outside the static root and is never cached. */
-  { method: 'GET', path: /^\/api\/tutor\/app$/, need: 'tutor-setup', handler: async (req, res, body, sess) => {
-      try {
-        const code = await fs.promises.readFile(path.join(ROOT, 'server', 'tutor', 'tutor-app.js'), 'utf8');
-        res.writeHead(200, {
-          'Content-Type': 'text/javascript; charset=utf-8',
-          'Content-Length': Buffer.byteLength(code),
-          'Cache-Control': 'private, no-store',
-          'X-Content-Type-Options': 'nosniff'
-        });
-        return res.end(code);
-      } catch (e) {
-        return errJson(res, 503, 'The tutor screens are not available right now.');
-      }
-    } },
-
-  { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
-      const ip = getClientIp(req);
-      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      const id = core.cleanTutorId(clean(body.id, 20));
-      const password = String(body.password == null ? '' : body.password).slice(0, 300);
-      if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-
-      const db = readData();
-      let t = null;
-      if (core.validTutorId(id)) {
-        if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
-          t = await getAppwriteTutor(id);
-        } else {
-          t = db.tutors.find(x => x.id === id) || null;
-        }
-      }
-
-      /* Keep identical failure responses and dummy-hash work for unknown,
-         incorrect-password, and inactive tutor accounts. */
-      if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
-      const pwOk = verifyPassword(password, t ? t.pwHash : TUTOR_DUMMY_HASH);
-      if (!t || !pwOk || t.active === false) {
-        noteFailure(ip);
-        if (id) tutorIdFailed(id);
-        return errJson(res, 401, 'That ID and password do not match.');
-      }
-
-      attempts.delete(ip);
-      tutorFails.delete(id);
-
-      t.lastLogin = new Date().toISOString();
-      if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
-        await saveAppwriteTutor(t);
-      } else {
-        const local = db.tutors.find(x => x.id === t.id);
-        if (local) local.lastLogin = t.lastLogin;
-        else db.tutors.push(t);
-        writeData(db);
-      }
-
-      if (!Array.isArray(db.tutors)) db.tutors = [];
-      if (!db.tutors.some(x => x.id === t.id)) db.tutors.push(t);
-
-      return newSession(t, 'tutor', db).then(token => {
-        const d = sessions.get(token);
-        okJson(res, { token, user: {
-          id: t.id, name: t.name, role: 'tutor',
-          subjects: t.subjects.slice(),
-          mustChangePassword: !!t.mustChangePassword,
-          sessionMinutes: d.sessionMinutes, expiresAt: d.expires
-        } });
-      });
-    } },
 
   { method: 'GET', path: /^\/api\/tutor\/me$/, need: 'tutor-setup', handler: (req, res, body, sess) => {
       const t = sess.tutor;
@@ -9912,135 +9892,6 @@ const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\
   + '\n' + AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
   + '\nUser-agent: *\nDisallow: /\n';
 
-/* Tutor entrance (Stage 8, owner-approved): a sign-in shell with NONE of
-   the tutor application in it. The shell signs in through the existing
-   POST /api/tutor/login, then — and only then — fetches the application
-   from GET /api/tutor/app with the session token and runs it. The tutor
-   screens therefore never appear in a public file or an unauthenticated
-   response; server/tutor/ stays outside the static root throughout. */
-const TUTOR_SHELL = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tutor sign-in · G.O.C Academy Hub</title>
-<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}[hidden]{display:none}</style>
-</head>
-<body>
-<main class="card" id="tutorGate">
-<div id="tutorForm">
-<h1>G.O.C Tutor</h1>
-<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>
-<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">
-<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">
-<div class="err" id="tutorErr" role="alert"></div>
-<button type="button" id="tutorGo">Sign in</button>
-</div>
-<div id="tutorUnavailable" role="status" hidden>
-<h1 id="tutorUnavailableHeading"></h1>
-<p id="tutorUnavailableMessage"></p>
-<button type="button" id="tutorRetry">Retry Connection</button>
-</div>
-</main>
-<script src="js/onboarding.js"></script>
-<script>
-(function(){
-  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");
-  var idInput = document.getElementById("tutorId"), pwInput = document.getElementById("tutorPw");
-  var form = document.getElementById("tutorForm"), unavailable = document.getElementById("tutorUnavailable");
-  var heading = document.getElementById("tutorUnavailableHeading"), message = document.getElementById("tutorUnavailableMessage");
-  var retry = document.getElementById("tutorRetry"), busy = false;
-  function problem(kind, text, status){ var e = new Error(text); e.kind = kind; e.status = status; return e; }
-  function network(){ return problem("network", "Cannot reach the server. Check your connection and try again."); }
-  function unexpected(){ return problem("unexpected", "The service returned an unexpected response. Please try again later."); }
-  function request(url, options){
-    return fetch(url, options).catch(function(){ throw network(); });
-  }
-  function jsonResponse(r){
-    var type = r.headers.get("content-type") || "";
-    var isJson = /^application\\/(?:[a-z0-9.+-]*\\+)?json(?:\\s*;|\\s*$)/i.test(type);
-    if (!isJson) {
-      if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
-      throw unexpected();
-    }
-    return r.text().then(function(text){
-      var data;
-      try { data = JSON.parse(text); } catch (e) {
-        if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
-        throw unexpected();
-      }
-      if (!data || typeof data !== "object" || Array.isArray(data)) throw unexpected();
-      if (data.maintenance === true) throw problem("maintenance", typeof data.error === "string" ? data.error : "G.O.C Academy Hub is temporarily under maintenance. Please check back later.");
-      if (r.status === 502 || r.status === 503 || r.status === 504) throw problem("waking", "");
-      if (!r.ok) {
-        if (typeof data.error !== "string" || !data.error) throw unexpected();
-        throw problem("api", data.error, r.status);
-      }
-      return data;
-    }, function(){ throw network(); });
-  }
-  function showProblem(e){
-    pwInput.value = "";
-    if (e.kind === "api") { form.hidden = false; unavailable.hidden = true; err.textContent = e.message; return; }
-    form.hidden = true; unavailable.hidden = false; err.textContent = "";
-    if (e.kind === "waking") {
-      heading.textContent = "G.O.C is waking up";
-      message.textContent = "Our server is temporarily starting up after a period of inactivity. Your tutor account is safe. Please wait a little and try again.";
-    } else if (e.kind === "maintenance") {
-      heading.textContent = "G.O.C is under maintenance"; message.textContent = e.message;
-    } else if (e.kind === "network") {
-      heading.textContent = "Connection problem"; message.textContent = "Cannot reach the server. Check your connection and try again.";
-    } else {
-      heading.textContent = "Temporary service error"; message.textContent = "The service returned an unexpected response. Please try again later.";
-    }
-  }
-  function finish(){ busy = false; btn.disabled = false; btn.textContent = "Sign in"; retry.disabled = false; retry.textContent = "Retry Connection"; }
-  btn.addEventListener("click", function(){
-    if (busy) return;
-    var id = idInput.value.trim(), pw = pwInput.value;
-    if (!id || !pw) { err.textContent = "Enter your tutor ID and password."; return; }
-    busy = true; btn.disabled = true; btn.textContent = "Signing in…"; err.textContent = "";
-    pwInput.value = "";
-    var body = JSON.stringify({ id: id, password: pw }); pw = "";
-    request("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: body })
-    .then(jsonResponse).then(function(j){
-      if (typeof j.token !== "string" || !j.token || !j.user || j.user.role !== "tutor" || !j.user.id) throw unexpected();
-      return request("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })
-      .then(function(r){
-        var type = r.headers.get("content-type") || "";
-        if (!r.ok || !/^(?:text|application)\\/javascript(?:\\s*;|\\s*$)/i.test(type)) {
-          if (r.status === 502 || r.status === 503 || r.status === 504 || /json/i.test(type)) return jsonResponse(r).then(function(){ throw unexpected(); });
-          throw unexpected();
-        }
-        return r.text().catch(function(){ throw network(); });
-      })
-      .then(function(code){
-        window.__zxSession = { token: j.token, user: j.user };
-        var s = document.createElement("script");
-        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
-        document.body.appendChild(s);
-        document.getElementById("tutorGate").style.display = "none";
-        if(window.GOCOnboarding && window.GOCTours){
-          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);
-          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);
-        }
-      });
-    }).catch(function(e){ showProblem(e); }).then(finish);
-  });
-  retry.addEventListener("click", function(){
-    if (busy) return;
-    busy = true; retry.disabled = true; retry.textContent = "Checking…";
-    request("api/health", { headers: { "Accept": "application/json" }, cache: "no-store" })
-      .then(jsonResponse).then(function(data){
-        if (data.service !== "goc-academy-hub") throw unexpected();
-        unavailable.hidden = true; form.hidden = false; err.textContent = "Connection restored. Please sign in again.";
-      }).catch(function(e){ showProblem(e); }).then(finish);
-  });
-})();
-</script>
-</body>
-</html>`;
-
 /* Turn barred crawlers away. The politeness layer above only binds crawlers
    that obey it; this refuses the ones that announce themselves. Generic
    HTTP-library names (Go-http-client, node-fetch) are deliberately NOT
@@ -10105,7 +9956,6 @@ const TYPES = {
 const PUBLIC_ROOT = process.env.GOC_PUBLIC_DIR ? path.resolve(ROOT, process.env.GOC_PUBLIC_DIR) : ROOT;
 /* Read once at boot, like the other deployment switches: changing it needs a
    restart so a running process cannot half-enter or half-leave maintenance. */
-const MAINTENANCE_ON = maintenance.enabled(process.env);
 const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico']);
 
 function serveStatic(req, res, urlPath) {
@@ -10167,21 +10017,12 @@ const server = http.createServer(async (req, res) => {
   // (browsers, health checks, and the crawlers refused below) still gets it.
   if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
 
-  /* The maintenance gate runs before the tutor shell, the setup link, static
-     files, sessions and every API route. It answers the request itself and
-     returns true, so nothing below can serve the application while it is on. */
-  if (MAINTENANCE_ON && maintenance.intercept(req, res, urlPath)) return;
-
-  if (urlPath === '/tutor') {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
-    res.writeHead(200, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Content-Length': Buffer.byteLength(TUTOR_SHELL),
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff'
-    });
-    return res.end(req.method === 'HEAD' ? undefined : TUTOR_SHELL);
-  }
+  /* MAINTENANCE GATE (Workstream A) — before the password
+     setup link, static files, any session lookup and every API route. See
+     server/lib/maintenance.js for what stays open (health, robots, the
+     cache-clearing service worker) and why. Returning here means the
+     application below is untouched, not deleted. */
+  if (MAINTENANCE_MODE && maintenance.intercept(req, res, urlPath)) return;
 
   if (urlPath === '/robots.txt') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
@@ -10673,6 +10514,13 @@ function start() {
     console.log('  Open:  http://localhost:' + PORT);
     console.log('  Stop:  press Ctrl+C');
     console.log('');
+    if (MAINTENANCE_MODE) {
+      console.log('  ⚠  MAINTENANCE MODE IS ON (GOC_MAINTENANCE_MODE). The application is NOT reachable:');
+      console.log('     every page and every /api/ route answers with the maintenance announcement.');
+      console.log('     Only /api/health, /robots.txt and the cache-clearing /sw.js stay available.');
+      console.log('     Unset GOC_MAINTENANCE_MODE and restart to restore the full application.');
+      console.log('');
+    }
     if (HOST === '127.0.0.1') {
       console.log('  Bound to 127.0.0.1, so only this computer can reach it.');
     } else {

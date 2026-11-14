@@ -1,17 +1,7 @@
-/* test-tutor-access.js — Stage 8: the approved tutor entrance + tutor tour.
-
-   The route, as approved: GET /tutor serves a sign-in shell holding none
-   of the tutor application; the shell signs in through the existing
-   POST /api/tutor/login; only then does GET /api/tutor/app (need:
-   'tutor-setup', private + no-store) deliver server/tutor/tutor-app.js.
-   Proves the shell is code-free, unauthenticated and wrong-role delivery
-   is refused, a switched-off tutor is refused mid-session, the
-   password-change gate is unchanged, static serving still refuses the
-   file, and the tutor tour maps onto real tutor views through the
-   app's own navigation bridge.
-   Run:  node test/test-tutor-access.js  */
+/* Shared tutor login, dashboard handoff and server-side authorization. */
 'use strict';
 var http = require('http');
+var vm = require('vm');
 var path = require('path');
 var fs = require('fs');
 var os = require('os');
@@ -19,8 +9,9 @@ var spawn = require('child_process').spawn;
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var PORT = Number(process.env.GOC_TUTOR_ACCESS_PORT) || 8183;
 var mod = require(path.join(APP, 'js', 'onboarding.js'));
-var tutorSrc = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var tutorSrc = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var serverSrc = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
+var appSrc = fs.readFileSync(path.join(APP, 'js', 'app.js'), 'utf8');
 
 var fails = 0;
 function ok(n, c, x) { if (c) console.log('  pass  ' + n); else { fails++; console.log('  FAIL  ' + n + (x ? '   (' + String(x).slice(0, 160) + ')' : '')); } }
@@ -62,57 +53,82 @@ function waitForBoot(port, n) {
   });
 }
 
+async function browserTutorLogin(port, id, password) {
+  var elements = {}, requests = [], opened = [], errors = [];
+  ['loginId','loginPw','loginBtn','loginForm','tutorConnection','tutorConnectionTitle','tutorConnectionMessage','tutorRetry'].forEach(function (key) {
+    elements[key] = {value:'', textContent:'', hidden:false, disabled:false, dataset:{}};
+  });
+  elements.loginId.value = id; elements.loginPw.value = password; elements.loginBtn.textContent = 'Log in';
+  var storage = {getItem:function(){return null;},setItem:function(){},removeItem:function(){}};
+  var win = {console:console, document:{getElementById:function(id){return elements[id];}}, location:{protocol:'https:'}, navigator:{userAgent:'test'}, sessionStorage:storage,
+    fetch:function(url, opts){requests.push({url:url,opts:opts});return fetch('http://127.0.0.1:'+port+'/'+url,opts);},
+    toast:function(s){errors.push(s);},setTimeout:function(){},clearTimeout:function(){},Promise:Promise,
+    __zxOpen:function(session){opened.push(session);}};
+  win.window=win; win.self=win;
+  var ctx=vm.createContext(win);
+  vm.runInContext(fs.readFileSync(path.join(APP,'js','goc-core.js'),'utf8'),ctx);
+  vm.runInContext(fs.readFileSync(path.join(APP,'js','api.js'),'utf8'),ctx);
+  vm.runInContext(appSrc.slice(appSrc.indexOf('var pendingTutor = null;'),appSrc.indexOf('/* ===== Management preview =====')),ctx);
+  await win.GOC.api.ready; await win.login();
+  return {opened:opened,requests:requests,errors:errors,elements:elements,api:win.GOC.api};
+}
+
 var inst = boot(PORT);
 process.on('exit', function () { inst.stop(); });
 
 (async function () {
   await waitForBoot(PORT, 150);
 
-  head('the shell holds no tutor application');
-  var shell = await call(PORT, 'GET', '/tutor');
-  ok('GET /tutor serves the sign-in shell', shell.status === 200 && /id="tutorGate"/.test(shell.raw), shell.status);
-  ok('the shell contains none of the tutor screens', shell.raw.indexOf('__zxOpen') < 0 && shell.raw.indexOf('zx-sheet') < 0 && shell.raw.indexOf('__zxTourGo') < 0);
-  ok('the shell is never cached', /no-store/.test(shell.headers['cache-control'] || ''), shell.headers['cache-control']);
-  ok('the shell signs in first, then fetches the app with the token',
-    /api\/tutor\/login/.test(shell.raw) && /api\/tutor\/app/.test(shell.raw) && /Authorization.*Bearer/.test(shell.raw) && shell.raw.indexOf('api/tutor/login') < shell.raw.indexOf('api/tutor/app'));
-  ok('the shell passes the session to the app in memory only', /window\.__zxSession = \{ token: j\.token, user: j\.user \}/.test(shell.raw) && !/localStorage|document\.cookie/.test(shell.raw));
+  head('one shared entry point');
+  var homepage = await call(PORT, 'GET', '/');
+  ok('normal homepage offers the shared login', homepage.status === 200 && /id="login-v2"/.test(homepage.raw));
+  ok('the separate tutor page is gone', (await call(PORT, 'GET', '/tutor')).status === 404);
+  ok('the separate tutor login endpoint is gone', (await call(PORT, 'POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'x' })).status === 404);
   ok('the old hidden door is still gone', (await call(PORT, 'POST', '/api/door', { word: 'x' })).status === 404);
-  ok('static serving still refuses the tutor file', (await call(PORT, 'GET', '/server/tutor/tutor-app.js')).status === 404);
-
-  head('delivery is authenticated, tutor-only, uncached');
-  ok('no token, no app', (await call(PORT, 'GET', '/api/tutor/app')).status === 401);
+  ok('the dashboard is a normal static asset', (await call(PORT, 'GET', '/js/tutor-app.js')).status === 200);
+  ok('the app delivery gate is gone', (await call(PORT, 'GET', '/api/tutor/app')).status === 404);
+  head('tutor API authorization remains enforced');
+  ok('no token, no tutor data', (await call(PORT, 'GET', '/api/tutor/me')).status === 401);
   var adm = await call(PORT, 'POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
   var admAuth = { Authorization: 'Bearer ' + adm.body.token };
   await call(PORT, 'POST', '/api/auth/unlock', { passcode: '2027' }, admAuth);
-  ok('a management token cannot take the tutor app', (await call(PORT, 'GET', '/api/tutor/app', null, admAuth)).status === 403);
+  ok('a management token cannot access tutor data', (await call(PORT, 'GET', '/api/tutor/me', null, admAuth)).status === 403);
   var mk = await call(PORT, 'POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Chemistry'], password: 'start-pass-1' }, admAuth);
   ok('the console still creates the tutor', mk.status === 200, mk.raw);
-  var tl = await call(PORT, 'POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' });
+  var before = JSON.parse(fs.readFileSync(path.join(inst.box, 'server', 'data.json'), 'utf8')).tutors[0];
+  head('browser-to-server shared login');
+  var browser = await browserTutorLogin(PORT, 'goc-t-001', 'start-pass-1');
+  ok('existing tutor reaches dashboard with the original ID, subjects and required password change', browser.opened.length === 1 && browser.opened[0].user.id === 'GOC-T-001' && browser.opened[0].user.subjects.join() === 'Chemistry' && browser.opened[0].user.mustChangePassword === true);
+  ok('browser uses only the common login, not an app delivery request', browser.requests.filter(function(r){return r.url === 'api/auth/login';}).length === 1 && !browser.requests.some(function(r){return /tutor\/(?:app|login)/.test(r.url);}));
+  ok('browser clears password after submitting', browser.elements.loginPw.value === '');
+  var existing = await call(PORT, 'GET', '/api/tutors', null, admAuth);
+  ok('logging in did not create a duplicate tutor', existing.body.tutors.length === 1 && existing.body.tutors[0].id === 'GOC-T-001');
+  var after = JSON.parse(fs.readFileSync(path.join(inst.box, 'server', 'data.json'), 'utf8')).tutors[0];
+  ok('login preserves the existing password verifier and subjects', before.pwHash === after.pwHash && JSON.stringify(before.subjects) === JSON.stringify(after.subjects));
+  await browser.api.logout();
+  var tl = await call(PORT, 'POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' });
   var tAuth = { Authorization: 'Bearer ' + tl.body.token };
-  var appRes = await call(PORT, 'GET', '/api/tutor/app', null, tAuth);
-  ok('a tutor in password-change state can load the app', appRes.status === 200, appRes.status);
-  ok('the delivered bytes are the tutor application', appRes.raw === tutorSrc);
-  ok('delivery is private and never stored', /private/.test(appRes.headers['cache-control'] || '') && /no-store/.test(appRes.headers['cache-control'] || ''), appRes.headers['cache-control']);
   ok('subject APIs stay closed until the password is changed', (await call(PORT, 'GET', '/api/tutor/subject?subject=Chemistry', null, tAuth)).status === 403);
   var pw = await call(PORT, 'POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'a-better-pass' }, tAuth);
   ok('the password change still works', pw.status === 200, pw.raw);
-  ok('then the app still loads and the subject opens', (await call(PORT, 'GET', '/api/tutor/app', null, tAuth)).status === 200
-    && (await call(PORT, 'GET', '/api/tutor/subject?subject=Chemistry', null, tAuth)).status === 200);
+  ok('after password change the assigned subject opens', (await call(PORT, 'GET', '/api/tutor/subject?subject=Chemistry', null, tAuth)).status === 200);
   ok('another subject is still refused', (await call(PORT, 'GET', '/api/tutor/subject?subject=Biology', null, tAuth)).status === 403);
 
   head('switching a tutor off closes the door at once');
   var off = await call(PORT, 'PUT', '/api/tutors/GOC-T-001/active', { active: false }, admAuth);
   ok('the console can switch the tutor off', off.status === 200, off.raw);
-  var afterOff = await call(PORT, 'GET', '/api/tutor/app', null, tAuth);
-  ok('app delivery is refused from that moment', afterOff.status === 403 || afterOff.status === 401, afterOff.status);
-  ok('and sign-in refuses with the same words as any bad login', (await call(PORT, 'POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'a-better-pass' })).status === 401);
+  var afterOff = await call(PORT, 'GET', '/api/tutor/me', null, tAuth);
+  ok('tutor data is refused from that moment', afterOff.status === 403 || afterOff.status === 401, afterOff.status);
+  var inactive = await call(PORT, 'POST', '/api/auth/login', { id: 'GOC-T-001', password: 'a-better-pass' });
+  var unknown = await call(PORT, 'POST', '/api/auth/login', { id: 'GOC-T-099', password: 'a-better-pass' });
+  var wrong = await call(PORT, 'POST', '/api/auth/login', { id: 'GOC-T-001', password: 'wrong' });
+  ok('inactive, unknown and incorrect credentials have the same refusal', [inactive, unknown, wrong].every(function(r){return r.status === 401 && r.body.error === inactive.body.error;}));
 
-  head('the tutor app adopts the shell session');
-  ok('a pre-authenticated session is adopted, not re-asked', /window\.__zxSession && window\.__zxSession\.token/.test(tutorSrc) && /enter\(window\.__zxSession\.user\)/.test(tutorSrc));
-  ok('the tour bridge moves through the app\u2019s own views', /window\.__zxTourGo = function \(view\)/.test(tutorSrc)
-    && /goQuestions\(\)/.test(tutorSrc) && /goScripts\(\)/.test(tutorSrc));
-  ok('the shell starts the tutor tour after loading the app', /register\("tutor", window\.GOCTours\.tutor\)/.test(serverSrc) && /maybeAutoStart\("tutor", j\.user\.id\)/.test(serverSrc));
-  ok('Founder\u2019s Tutors section gives the sign-in address', /Tutors sign in at <b>\/tutor<\/b>/.test(fs.readFileSync(path.join(APP, 'js', 'app.js'), 'utf8')));
+  head('the tutor app adopts the shared session');
+  ok('a pre-authenticated tutor session is adopted, not re-asked', /window\.__zxOpen\(\{ token: token, user: user \}\)/.test(appSrc) && /session\.user\.role !== 'tutor'/.test(tutorSrc));
+  ok('the tour bridge moves through the app’s own views', /window\.__zxTourGo = function \(view\)/.test(tutorSrc) && /goQuestions\(\)/.test(tutorSrc) && /goScripts\(\)/.test(tutorSrc));
+  ok('the shared login starts the tutor tour', /register\('tutor', window\.GOCTours\.tutor\)/.test(appSrc) && /maybeAutoStart\('tutor', user\.id\)/.test(appSrc));
+  ok('Founder’s Tutors section directs tutors to the normal login', /normal login page with their tutor ID/.test(appSrc));
 
   head('the tutor tour maps onto real views');
   ok('every tutor step target exists in the tutor app', mod.TUTOR_STEPS.every(function (s) {

@@ -96,9 +96,9 @@ function total(stats, subject, which) {
   async function newTutor(name, subjects, pw) {
     var c = await call('POST', '/api/tutors', { name: name, subjects: subjects, password: pw }, adm);
     var tid = 'GOC-T-00' + (++tutorN);
-    var t = (await call('POST', '/api/tutor/login', { id: tid, password: pw })).body.token;
+    var t = (await call('POST', '/api/auth/login', { id: tid, password: pw })).body.token;
     await call('POST', '/api/tutor/password', { currentPassword: pw, newPassword: pw + '-own' }, t);
-    return { id: tid, token: (await call('POST', '/api/tutor/login', { id: tid, password: pw + '-own' })).body.token };
+    return { id: tid, token: (await call('POST', '/api/auth/login', { id: tid, password: pw + '-own' })).body.token };
   }
   var tp = await newTutor('Mrs Ada Obi', ['Physics'], 'start-pass-1');
   var tc = await newTutor('Mr Chike Eze', ['Chemistry'], 'start-pass-2');

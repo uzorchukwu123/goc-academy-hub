@@ -401,7 +401,7 @@ async function main() {
     subjects: ['Use of English', 'Physics', 'Chemistry', 'Mathematics']
   });
   SID2 = reg2.student.id;
-  
+
   await api('login')(SID2, SPW2);
   var objPaper = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' });
   var objResponses = {};

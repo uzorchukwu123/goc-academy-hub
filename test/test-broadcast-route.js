@@ -65,7 +65,7 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
   var gocBio = await student('Gabe Goc', noChem, 'goc', 2);
   var openChem = await student('Opal Open', withChem, 'open', 3);
   var t = await call('POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Chemistry'], password: 'start-pass-1' }, adm);
-  var tk = (await call('POST', '/api/tutor/login', { id: t.body.tutor.id, password: 'start-pass-1' })).body.token;
+  var tk = (await call('POST', '/api/auth/login', { id: t.body.tutor.id, password: 'start-pass-1' })).body.token;
   var good = { audience: { kind: 'subject', subject: 'Chemistry' }, title: 'Mock exam on Friday', body: 'ZQXBROADCAST The Chemistry mock holds on Friday at 10am.' };
 
   console.log('\nwho may use the console routes');

@@ -518,7 +518,7 @@ async function main() {
   }
   await run('GOC.api.logout')();
   await run('GOC.api.login')(SID, PW);
-  
+
 
   head('a self-directed CBT run uses the same screen but never the record');
   run('openCBT')();

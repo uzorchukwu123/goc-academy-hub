@@ -39,7 +39,7 @@ ok('no name or ID in the result', !/S1|S2|scholar/i.test(JSON.stringify(a)));
 var late = core.tutorActivity('Chemistry', students, { S1: [{ ts: Date.UTC(2026, 9, 7, 23, 30), review: rows(2, 'Chemistry'), subject: 'Chemistry' }] }, [], NOW);
 ok('11:30pm UTC counts as the next day (Nigerian time)', late.days[6].answers === 2 && late.days[5].answers === 0);
 console.log('\nwiring');
-var srv = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8'), ui = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var srv = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8'), ui = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 ok('analytics route returns activity', /activity: core\.tutorActivity\(subject/.test(srv));
 ok('dashboard draws the activity card after the snapshot', ui.indexOf('snapshotCard() +') < ui.indexOf('activityCard() +') && ui.indexOf('activityCard() +') < ui.indexOf('weakCard() + hardCard()'));
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed'); process.exit(fails ? 1 : 0);

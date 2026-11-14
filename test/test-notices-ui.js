@@ -132,7 +132,7 @@ function N(id, extra) { return Object.assign({ id: id, subject: 'Chemistry', tit
   var r = await activeStudent.demo(mock, { signupCode: CODE, name: 'Opal Student', password: 'secret123', goal: 'JAMB / UTME 2027', subjects: COMBO });
   var open = await mock.listMyNotices();
   ok('every student reads notices unlocked (no tier gate)', open.locked === false && Array.isArray(open.notices));
-  
+
   var goc = await mock.listMyNotices();
   ok('a GOC student gets an empty list (the offline demo has no tutors)', goc.locked === false && goc.notices.length === 0);
   await mock.logout();

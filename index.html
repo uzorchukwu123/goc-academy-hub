@@ -641,11 +641,16 @@
             <!-- Why the student is back here, when they did not click Log out
                  (Priority 9). Filled in and shown by js/app.js. -->
             <div class="auth-notice" id="loginNotice" style="display:none"></div>
-            <form onsubmit="login();return false" style="margin-top:24px">
+            <div class="auth-notice" id="tutorConnection" role="status" hidden>
+              <strong id="tutorConnectionTitle"></strong>
+              <p id="tutorConnectionMessage"></p>
+              <button type="button" class="btn btn-red btn-block" id="tutorRetry" onclick="retryTutorConnection()">Retry Connection</button>
+            </div>
+            <form id="loginForm" onsubmit="login();return false" style="margin-top:24px">
               <div class="field">
-                <label for="loginId">Scholar ID</label>
-                <input type="text" id="loginId" placeholder="GOC-S-…" value="">
-                <p class="field-hint">Log in with the Scholar ID you were issued when your account was created (GOC-S-…). The ID and password must both match a registered account.</p>
+                <label for="loginId">Account ID</label>
+                <input type="text" id="loginId" placeholder="GOC-S-… / GOC-T-… / GOC-A-…" autocomplete="username" value="">
+                <p class="field-hint">Use the Scholar, tutor or management ID issued by the academy.</p>
               </div>
               <div class="field">
                 <label for="loginPw">Password</label>
@@ -2352,6 +2357,7 @@ window.__gocBootTimer = setTimeout(function() {
   </div>
 
 <script src="js/api.js"></script>
+<script src="js/tutor-app.js"></script>
 <script src="js/app.js"></script>
 <script src="js/onboarding.js"></script>
 <script src="js/free2027-api.js"></script>

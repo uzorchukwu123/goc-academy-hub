@@ -648,20 +648,78 @@ function go(id){
   window.scrollTo(0,0);
 }
 
-/* The ID and password are checked by GOC.api — in demo mode against the local
-   roster, in server mode against a password hash. Either way this function only
-   ever sees the answer, never the stored password. The old secret-word tutor
-   entrance has been removed; the Scholar ID box is only for account IDs. */
+/* All account types sign in through the same form and API. */
+var pendingTutor = null;
+function tutorConnectionError(err){
+  var panel = document.getElementById('tutorConnection');
+  var form = document.getElementById('loginForm');
+  var title = document.getElementById('tutorConnectionTitle');
+  var message = document.getElementById('tutorConnectionMessage');
+  var pw = document.getElementById('loginPw');
+  if(pw) pw.value = '';
+  if(err.kind === 'api') {
+    if(pendingTutor) { pendingTutor = null; GOC.api.logout(); }
+    if(panel) panel.hidden = true;
+    if(form) form.hidden = false;
+    toast(err.message || 'Could not log you in'); return;
+  }
+  if(!panel || !form || !title || !message) { toast(err.message || 'Could not connect to the server'); return; }
+  if(err.kind === 'waking'){
+    title.textContent = 'G.O.C is waking up';
+    message.textContent = 'Our server is temporarily starting up after a period of inactivity. Your tutor account is safe. Please wait a little and try again.';
+  } else if(err.kind === 'maintenance'){
+    title.textContent = 'G.O.C is under maintenance'; message.textContent = err.message;
+  } else if(err.kind === 'network'){
+    title.textContent = 'Connection problem'; message.textContent = 'Cannot reach the server. Check your connection and try again.';
+  } else {
+    title.textContent = 'Temporary service error'; message.textContent = 'The service returned an unexpected response. Please try again later.';
+  }
+  form.hidden = true; panel.hidden = false;
+}
+function showTutorDashboard(user){
+  return Promise.resolve().then(function(){
+    var token = GOC.api.tutorToken();
+    if(!token || typeof window.__zxOpen !== 'function') {
+      var e = new Error('The tutor dashboard could not be loaded.'); e.kind = 'unexpected'; throw e;
+    }
+    window.__zxOpen({ token: token, user: user });
+  }).then(function(){
+    pendingTutor = null;
+    var panel = document.getElementById('tutorConnection'); if(panel) panel.hidden = true;
+    var form = document.getElementById('loginForm'); if(form) form.hidden = false;
+    if(window.GOCOnboarding && window.GOCTours){
+      window.GOCOnboarding.register('tutor', window.GOCTours.tutor);
+      setTimeout(function(){ window.GOCOnboarding.maybeAutoStart('tutor', user.id); }, 1200);
+    }
+  });
+}
+function retryTutorConnection(){
+  var btn = document.getElementById('tutorRetry');
+  if(btn && btn.disabled) return;
+  busy(btn, true);
+  return GOC.api.tutorHealth().then(function(){
+    if(pendingTutor) return showTutorDashboard(pendingTutor);
+    var panel = document.getElementById('tutorConnection'); if(panel) panel.hidden = true;
+    var form = document.getElementById('loginForm'); if(form) form.hidden = false;
+    toast('Connection restored. Please log in.');
+  }).catch(tutorConnectionError).then(function(){ busy(btn, false); });
+}
 function login(){
   var raw = ((document.getElementById('loginId')||{}).value||'').trim();
   var pw  = ((document.getElementById('loginPw')||{}).value||'');
-  if(!raw){ toast('Enter your Scholar ID'); return; }
+  if(!raw){ toast('Enter your account ID'); return; }
   return loginNow(raw, pw);
 }
 function loginNow(raw, pw){
   var btn = document.getElementById('loginBtn');
+  if(btn && btn.disabled) return;
+  if(/^GOC-T-/i.test(raw)) { var field = document.getElementById('loginPw'); if(field) field.value = ''; }
   busy(btn, true);
   return GOC.api.ready.then(function(){ return GOC.api.login(raw, pw); }).then(function(user){
+    if(user && user.role === 'tutor'){
+      pendingTutor = user;
+      return showTutorDashboard(user).then(function(){ busy(btn, false); });
+    }
     busy(btn, false);
     /* Priority 1.2 — the transition is set up only once the credentials have
        actually been accepted, so a refused login never animates as though it
@@ -705,7 +763,8 @@ function loginNow(raw, pw){
     setTimeout(function(){ deployFetch().then(function(){ maybeOpenFlyer(); }); }, 350);
   }).catch(function(err){
     busy(btn, false);
-    toast(err.message || 'Could not log you in');
+    if(/^GOC-T-/i.test(raw)) tutorConnectionError(err);
+    else toast(err.message || 'Could not log you in');
   });
 }
 /* Disables a button while a request is in flight, so a slow network cannot be
@@ -3541,7 +3600,7 @@ function admOpen(section){
       '<div id="admChkOut"><div class="ad-empty">Press Check to list them.</div></div></div>'
     ); },
     tutors: function(){ return (
-      '<div class="ad-card"><div class="ad-h">New tutor</div><p class="ad-p">A tutor sees only the subjects you give them. The starting password must be changed at their first sign-in. Tutors sign in at <b>/tutor</b> — give them that address with their tutor ID.</p>'+
+      '<div class="ad-card"><div class="ad-h">New tutor</div><p class="ad-p">A tutor sees only the subjects you give them. The starting password must be changed at their first sign-in. Tutors sign in on the normal login page with their tutor ID.</p>'+
       '<div class="ad-field"><label>Name</label><input id="admTutName" placeholder="e.g. Mrs Ada Obi"></div>'+
       '<div class="ad-field"><label>Subjects</label><div id="admTutSubjNew">'+admTutSubjectBoxes('admTutNew', [])+'</div></div>'+
       '<div class="ad-field"><label>Starting password</label><input id="admTutPw" type="text" autocomplete="off" placeholder="at least 8 characters"></div>'+

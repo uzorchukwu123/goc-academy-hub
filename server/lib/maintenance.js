@@ -14,8 +14,11 @@
      · server/server.js calls enabled(process.env) once at boot and, when on,
        calls intercept() before ANY other dispatching — before the tutor
        shell, the setup link, static files, sessions and every API route.
-     · This branch serves through the Node process only, so this module is
-       the single gate. There is no separate static-build or Function gate.
+     · build/build.js reads the same variable and, when on, emits only the
+       announcement page and the kill-switch service worker (for static
+       hosting such as Appwrite Sites, where there is no Node gate).
+     · functions/goc-api reads it through config.js and refuses every route
+       except a minimal health answer (for the Appwrite Functions API).
 
    WHAT STAYS OPEN IN MAINTENANCE
      GET/HEAD /api/health   a minimal 200 so hosting health checks still pass.
@@ -31,9 +34,7 @@
    Everything else — homepage, sign-up, login, dashboards, console, tutor
    shell, password-setup links, Free UTME 2027, practice, Web Test, CBT,
    resources, videos, classes, every /api/ route, any deep link — gets the
-   announcement page as HTTP 200 (or a 503 JSON refusal for /api/). The page
-   is 200 on purpose: OneBit substitutes its own wake screen for origin 503s,
-   which would otherwise hide the announcement.
+   200 announcement page (or a 503 JSON refusal for /api/).
 
    The page is deliberately self-contained: inline CSS and inline SVG, no
    scripts, no fonts or images from the network, no navigation, no login or
@@ -375,10 +376,9 @@ function intercept(req, res, urlPath) {
   }
 
   /* Every user-facing page: /, /index.html, /tutor, /setup/<token>, a
-     /free2027 deep link, a static asset, or anything else typed in.
-     HTTP 200 is deliberate: OneBit's edge replaces origin 503s with its own
-     wake page, so a 503 announcement would never reach the visitor. */
+     /free2027 deep link, a static asset, or anything else typed in. */
   const headers = htmlHeaders();
+  /* OneBit substitutes its own wake page for origin 503 responses. */
   res.writeHead(200, headers);
   if (method === 'HEAD') res.end();
   else res.end(page());

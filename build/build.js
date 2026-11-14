@@ -16,6 +16,28 @@ var path = require('path');
 var ROOT = path.resolve(__dirname, '..');
 var OUT = path.resolve(ROOT, process.argv[2] || 'dist');
 
+// Never build into the source or a folder that holds it.
+if (OUT === ROOT || ROOT.startsWith(OUT + path.sep) || OUT === path.join(ROOT, 'js') || OUT === path.join(ROOT, 'css')) {
+  console.error('Refusing to build into ' + OUT); process.exit(1);
+}
+
+/* Workstream A — a maintenance build for STATIC hosting (Appwrite Sites,
+   where there is no Node process to gate requests). GOC_MAINTENANCE_MODE=1
+   emits ONLY the announcement page and the cache-clearing service worker;
+   the source tree is untouched and unsetting the variable rebuilds the full
+   application exactly as before. No esbuild needed for this path. */
+var maintenance = require(path.join(ROOT, 'server', 'lib', 'maintenance.js'));
+if (maintenance.enabled(process.env)) {
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'index.html'), maintenance.page());
+  fs.writeFileSync(path.join(OUT, 'sw.js'), maintenance.serviceWorker());
+  console.log('Maintenance build: ' + path.relative(ROOT, OUT) + '/index.html and sw.js only.');
+  console.log('GOC_MAINTENANCE_MODE is on — no application asset was copied.');
+  console.log('Unset GOC_MAINTENANCE_MODE and rebuild to restore the full app.');
+  process.exit(0);
+}
+
 var esbuild;
 try { esbuild = require('esbuild'); } catch (e) {
   try { esbuild = require(path.join(ROOT, 'node_modules', 'esbuild')); } catch (e2) {
@@ -24,12 +46,7 @@ try { esbuild = require('esbuild'); } catch (e) {
   }
 }
 
-// Never build into the source or a folder that holds it.
-if (OUT === ROOT || ROOT.startsWith(OUT + path.sep) || OUT === path.join(ROOT, 'js') || OUT === path.join(ROOT, 'css')) {
-  console.error('Refusing to build into ' + OUT); process.exit(1);
-}
-
-var TEST_HOOKS = ['_setJambReadyMin', '_grantXp', '_setupTokenFor'];
+var TEST_HOOKS = ['_setJambReadyMin', '_setTier', '_grantXp', '_setupTokenFor'];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
 function write(rel, data) {
@@ -76,7 +93,7 @@ fs.mkdirSync(OUT, { recursive: true });
 /* The 2027 Free Tutorial Edition's three scripts are built beside the hub's own,
    and its stylesheet is minified with them. Deleting this line only stops the
    edition being built; the original hub is unaffected. */
-['js/goc-core.js', 'js/goc-free-2027.js', 'js/note-questions.js', 'js/api.js', 'js/app.js', 'js/onboarding.js',
+['js/goc-core.js', 'js/goc-free-2027.js', 'js/note-questions.js', 'js/api.js', 'js/tutor-app.js', 'js/app.js', 'js/onboarding.js',
  'js/free2027-api.js', 'js/free2027-ui.js', 'js/free2027-admin.js', 'js/pwa.js', 'sw.js'].forEach(minJs);
 
 write('css/styles.css', esbuild.transformSync(read('css/styles.css'), { loader: 'css', minify: true, legalComments: 'none' }).code);

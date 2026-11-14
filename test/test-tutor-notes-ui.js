@@ -7,7 +7,7 @@ var path = require('path');
 var vm = require('vm');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var md = require('./minidom.js');
-var bundle = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var bundle = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
@@ -33,7 +33,6 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   function fetchStub(url, opts) {
     var method = (opts && opts.method) || 'GET', body = opts && opts.body ? JSON.parse(opts.body) : null;
     calls.push({ url: url, method: method, body: body, auth: opts && opts.headers && opts.headers.Authorization });
-    if (/^api\/tutor\/login/.test(url)) return reply(200, { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } });
     if (/^api\/tutor\/subject/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: notes.length } });
     if (/^api\/tutor\/analytics/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], snapshot: { gocStudents: 0, openStudents: 0, active: 0, activeDays: 7, practice: { answers: 0, correct: 0, average: null, small: false }, tests: { papers: 0, average: null, small: false } }, weakTopics: { items: [], hidden: 0, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } });
     if (/^api\/tutor\/questions/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], counts: { live: 0, pending: 0, returned: 0 }, questions: [] });
@@ -44,7 +43,9 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     }
     return reply(200, {});
   }
-  var win = {};
+  var tutorSession = { token: 'tok-9', user: { id: 'GOC-T-001', name: 'Mrs Ada Obi', role: 'tutor', subjects: ['Chemistry'], mustChangePassword: false } };
+  var navigated = '', lastToast = '';
+  var win = { go: function (where) { navigated = where; }, toast: function (msg) { lastToast = msg; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String, Number: Number, Object: Object, Array: Array });
   bctx.window.confirm = function () { return confirmAnswer; };
   bctx.window.FileReader = undefined;
@@ -62,8 +63,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     { id: 21, topic: 'Acids', title: 'Strong <b>acids</b>', body: 'Acids donate protons. '.repeat(10), active: true },
     { id: 22, topic: 'Salts', title: 'Soluble salts', body: 'Most nitrates dissolve in water. '.repeat(8), active: false }
   ];
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'whatever-123';
-  click(btn('signin')); await tick(40);
+  win.__zxOpen(tutorSession); await tick(40);
 
   console.log('\nthe dashboard card');
   ok('the notes are asked for with the subject and the token', ncalls()[0] && ncalls()[0].url === 'api/tutor/notes?subject=Chemistry' && ncalls()[0].auth === 'Bearer tok-9', JSON.stringify(ncalls()[0]));

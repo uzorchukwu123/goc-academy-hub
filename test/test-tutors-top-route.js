@@ -86,9 +86,9 @@ function total(stats, subject, which) {
   var tok1 = (await call('POST', '/api/auth/login', { id: ID1, password: g1.body.temporaryPassword })).body.token;
   ok('setup: three Physics students and one who never took Physics', !!ID1 && !!ID2 && !!ID3 && !!IDO);
   await call('POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Physics'], password: 'start-pass-1' }, adm);
-  var tk = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' })).body.token;
+  var tk = (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' })).body.token;
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'my-own-pass-1' }, tk);
-  tk = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'my-own-pass-1' })).body.token;
+  tk = (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'my-own-pass-1' })).body.token;
   ok('setup: a Physics tutor is signed in', !!tk);
 
   console.log('\nwho may ask');

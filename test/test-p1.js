@@ -193,7 +193,7 @@ ok('html.anim-on appears only once on the element',
 /* ------------------------------------------- the hand-off into the app ----- */
 head('Priorities 1.2 and 1.3 — the hand-off into the app');
 ok('the richer entrance is armed in the login\'s resolved branch only',
-   /GOC\.api\.login\(raw, pw\)[\s\S]{0,400}?animEnter\(\)/.test(appSrc));
+   /GOC\.api\.login\(raw, pw\)[\s\S]{0,600}?animEnter\(\)/.test(appSrc));
 ok('it is not armed in the login\'s failure branch',
    !/catch\(function\(err\)\{[\s\S]{0,200}?animEnter\(\)/.test(appSrc));
 ok('the sign-up\'s resolved branch shows the application-received screen, not the app',
