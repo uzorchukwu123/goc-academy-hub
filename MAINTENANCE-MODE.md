@@ -15,7 +15,7 @@ single switch. This is a presentation layer, not a second application.
 ## What visitors get
 
 Every user-facing page is replaced by one announcement (HTTP **503**, with
-`Retry-After: 3600` and `X-Robots-Tag: noindex, nofollow`):
+`Retry-After: 3600`). Crawlers are not blocked:
 
 > **G.O.C Academy Hub is Under Several Improvements**
 >
@@ -38,7 +38,7 @@ login, registration, navigation or reopening date.
 | Path | Answer | Why |
 | --- | --- | --- |
 | `GET/HEAD /api/health` | `200 {"service":"goc-academy-hub","version":1,"maintenance":true}` | Hosting health checks must still pass. It reveals no passcode length, programme state or version detail. |
-| `GET/HEAD /robots.txt` | `Disallow: /` | Keep crawlers out of the maintenance notice. |
+| `GET/HEAD /robots.txt` | `Allow: /` | Crawler access stays open, including AI assistants. |
 | `GET/HEAD /sw.js` | A self-destroying service worker | Clears the app's offline cache and unregisters itself so a cached copy of the app cannot be navigated into while the platform is down. |
 
 Everything else — homepage, sign-up, login, dashboards, Management Console,

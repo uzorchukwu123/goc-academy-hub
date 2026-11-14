@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Public files only. server/, test/, readme.md and every authenticated API
+     stay out: they are protected by the application, never by this listing. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://gocacademy.live/</loc></url>
+  <url><loc>https://gocacademy.live/index.html</loc></url>
+  <url><loc>https://gocacademy.live/css/styles.css</loc></url>
+  <url><loc>https://gocacademy.live/css/free2027.css</loc></url>
+  <url><loc>https://gocacademy.live/js/app.js</loc></url>
+  <url><loc>https://gocacademy.live/js/goc-core.js</loc></url>
+  <url><loc>https://gocacademy.live/js/goc-free-2027.js</loc></url>
+  <url><loc>https://gocacademy.live/js/note-questions.js</loc></url>
+  <url><loc>https://gocacademy.live/js/api.js</loc></url>
+  <url><loc>https://gocacademy.live/js/tutor-app.js</loc></url>
+  <url><loc>https://gocacademy.live/js/onboarding.js</loc></url>
+  <url><loc>https://gocacademy.live/js/free2027-api.js</loc></url>
+  <url><loc>https://gocacademy.live/js/free2027-ui.js</loc></url>
+  <url><loc>https://gocacademy.live/js/free2027-admin.js</loc></url>
+  <url><loc>https://gocacademy.live/js/pwa.js</loc></url>
+  <url><loc>https://gocacademy.live/js/vendor/pdfjs/pdf.min.mjs</loc></url>
+  <url><loc>https://gocacademy.live/js/vendor/pdfjs/pdf.worker.min.mjs</loc></url>
+  <url><loc>https://gocacademy.live/sw.js</loc></url>
+  <url><loc>https://gocacademy.live/manifest.webmanifest</loc></url>
+  <url><loc>https://gocacademy.live/icons/icon-192.png</loc></url>
+  <url><loc>https://gocacademy.live/icons/icon-512.png</loc></url>
+  <url><loc>https://gocacademy.live/icons/icon-maskable-512.png</loc></url>
+  <url><loc>https://gocacademy.live/icons/goc-app-icon.png</loc></url>
+</urlset>

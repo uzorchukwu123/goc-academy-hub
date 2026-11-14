@@ -737,29 +737,40 @@ body.session-warning.previewing .ss-bar{top:40px}
 .lp-link{background:none;border:none;font-family:var(--font);font-weight:700;font-size:13.5px;color:var(--slate);cursor:pointer;padding:9px 10px}
 .lp-cta{font-family:var(--font);font-weight:800;font-size:13.5px;color:#fff;background:var(--red);border:none;border-radius:11px;padding:9px 15px;cursor:pointer;box-shadow:0 5px 14px rgba(220,38,38,.28)}
 /* ===== Mobile slide-out drawer (public homepage only) ===== */
-.lp-burger{display:flex;flex-direction:column;justify-content:center;gap:4px;width:38px;height:38px;padding:0 9px;
+.lp-burger{display:flex;flex-direction:column;justify-content:center;gap:4px;width:42px;height:42px;padding:0 10px;
   border:1px solid var(--line);background:#fff;border-radius:11px;cursor:pointer;flex:0 0 auto;margin-right:10px}
 .lp-burger span{display:block;height:2px;border-radius:2px;background:var(--ink)}
 .lp-burger span:nth-child(2){width:72%}
 .lp-scrim{position:absolute;inset:0;z-index:70;background:rgba(15,18,25,.5);opacity:0;visibility:hidden;transition:opacity .26s ease}
 .lp-scrim.on{opacity:1;visibility:visible}
-.lp-drawer{position:absolute;top:0;left:0;bottom:0;z-index:71;width:82%;max-width:320px;background:#fff;
-  display:flex;flex-direction:column;padding:16px 16px 18px;overflow-y:auto;
+.lp-drawer{position:absolute;top:0;left:0;bottom:0;z-index:71;width:min(88%,340px);max-width:calc(100vw - 44px);background:#fff;
+  display:flex;flex-direction:column;min-height:0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
   transform:translateX(-102%);transition:transform .28s cubic-bezier(.22,.61,.36,1);box-shadow:14px 0 40px rgba(15,18,25,.22)}
+html.drawer-open #landing{overflow:hidden}
 .lp-drawer.on{transform:translateX(0)}
 .dw-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .dw-head .lp-brand .bt{font-size:13.5px}
-.dw-x{border:none;background:#F2F4F7;color:var(--ink);width:32px;height:32px;border-radius:9px;font-size:20px;line-height:1;cursor:pointer;flex:none}
+.dw-x{border:none;background:#F2F4F7;color:var(--ink);width:40px;height:40px;border-radius:10px;font-size:22px;line-height:1;cursor:pointer;flex:none}
 .dw-motto{margin:12px 0 4px;font-size:11.5px;font-weight:700;color:var(--red);letter-spacing:.2px;line-height:1.5}
 .dw-nav{display:flex;flex-direction:column;margin-top:12px;border-top:1px solid var(--line)}
-.dw-nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font-family:var(--font);
-  font-size:14.5px;font-weight:700;color:var(--ink);background:none;border:none;border-bottom:1px solid var(--line);
-  padding:14px 2px;cursor:pointer}
+.dw-nav button{display:flex;align-items:center;gap:10px;width:100%;min-height:50px;text-align:left;font-family:var(--font);
+  font-size:14.5px;font-weight:700;line-height:1.25;color:var(--ink);background:none;border:none;border-bottom:1px solid var(--line);
+  padding:14px 6px;cursor:pointer}
 .dw-nav button:active{background:#FAFAFB}
 .dw-nav .dwi{color:var(--red);font-size:11px}
 .dw-btns{margin-top:18px}
+.dw-btns .btn{min-height:48px}
 .dw-foot{margin-top:auto;padding-top:18px;display:flex;flex-direction:column;gap:5px}
-.dw-foot a{font-size:12px;color:var(--slate);text-decoration:none}
+.dw-foot a{font-size:12px;color:var(--slate);text-decoration:none;padding:6px 0}
+.lp-drawer button:focus-visible,.lp-drawer a:focus-visible{outline:3px solid rgba(220,38,38,.45);outline-offset:2px}
+@media (max-width:360px){
+  .lp-drawer{padding:14px 14px calc(14px + env(safe-area-inset-bottom));width:calc(100vw - 36px);max-width:none}
+  .dw-head .lp-brand .bt{font-size:12.5px}
+  .dw-nav button{font-size:14px;padding:13px 4px}
+  .dw-btns .btn{font-size:14px;padding:12px 14px}
+  .dw-motto{font-size:11px}
+}
 /* Mobile: the drawer carries these links, so the top bar keeps only the brand and menu button */
 .lp-nav .lp-actions .lp-link{display:none}
 .lp-hero{position:relative;overflow:hidden;padding:44px 20px 48px;text-align:center;
@@ -3476,13 +3487,24 @@ a.cv:hover{color:var(--red)}
    The start button belongs to the layout, not to a scrolling column: the
    screen fills the phone, the card is centred, and the only way on is the
    button. The run itself opens the shared CBT runner (#cbt). */
+/* The card starts directly beneath the header. It used to be vertically
+   centred in the remaining viewport (`align-items:center`), which put a large
+   empty band above it on a desktop screen. The middle area may scroll only if
+   a very short phone cannot fit the card; the page itself still never scrolls. */
 #demo.demo-screen{ overflow:hidden; }
-#demo .demo-pre{ flex:1 1 0; min-height:0; display:flex; align-items:center; justify-content:center; padding:14px 16px; overflow:hidden; }
-#demo .demo-card{ width:100%; max-width:640px; margin:0 auto; max-height:100%; overflow:hidden; padding:18px; }
+#demo .demo-pre{ flex:1 1 0; min-height:0; display:flex; align-items:flex-start; justify-content:center;
+  padding:18px 16px calc(20px + env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain; }
+#demo .demo-card{ width:100%; max-width:640px; margin:0 auto; padding:18px; flex:0 0 auto; }
 #demo .demo-points{ display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 4px; }
 #demo .demo-points span{ font-size:11.5px; font-weight:700; color:#5E1212; background:#FEF8F8; border:1px solid #F3D6D6; border-radius:999px; padding:5px 9px; }
 #demo .demo-start{ position:relative; margin-top:14px; flex:0 0 auto; }
 @media (max-height:620px){ #demo .demo-card{ padding:13px 15px; } #demo .demo-card .q-text{ font-size:18px; } #demo .demo-points{ display:none; } }
+@media (min-width:900px){
+  #demo .demo-pre{ padding:32px 24px 40px; }
+  #demo .demo-card{ max-width:720px; padding:28px 32px; }
+  #demo .demo-card .q-text{ font-size:26px; }
+  #demo .demo-points span{ font-size:12.5px; padding:6px 11px; }
+}
 
 /* ---- One-time redeployment notice ------------------------------------------ */
 .deploy-notice{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:120; width:min(420px,calc(100vw - 24px)); display:none; }
@@ -3495,3 +3517,138 @@ a.cv:hover{color:var(--red)}
 .deploy-notice .btn{ padding:10px 14px; font-size:13.5px; }
 .deploy-notice .btn-ghost{ background:rgba(255,255,255,.12); color:#fff; }
 .deploy-notice .dn-id{ font-size:10px; color:#8B95A5; margin-top:9px; letter-spacing:.3px; }
+
+/* ============================================================
+   DESKTOP FREE PRACTICE / CBT RUNNER
+   The anonymous preview and the student practice runner share #cbt. On a
+   desktop this turns the runner into a proper two-column CBT workspace:
+   question area on the left, persistent question navigator on the right and
+   one always-visible action bar. Every rule is scoped to desktop widths and
+   to the non-JAMB runner, so JAMB exam mode and the mobile runner are untouched.
+   ============================================================ */
+@media (min-width:900px){
+  /* Free practice is a full workspace, not a narrow reading column. */
+  .phone:not(.is-login) #cbt > *{ max-width:none; width:auto; margin-left:0; margin-right:0; }
+
+  #cbt:not(.jamb-mode){
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 320px;
+    grid-template-rows:auto auto minmax(0,1fr) auto;
+    min-height:0;
+    background:#F3F4F6;
+  }
+  #cbt:not(.jamb-mode) > .cbt-top{
+    grid-column:1 / -1; grid-row:1;
+    padding:18px 28px;
+  }
+  #cbt:not(.jamb-mode) > .cbt-top .timer{ font-size:18px; padding:8px 14px; }
+  #cbt:not(.jamb-mode) > #cbtSubjects{
+    grid-column:1 / -1; grid-row:2;
+    padding-left:28px; padding-right:28px;
+  }
+  #cbt:not(.jamb-mode) > .cbt-main{ display:contents; }
+  #cbt:not(.jamb-mode) > .cbt-main > .exam-body{
+    grid-column:1; grid-row:3;
+    min-width:0; min-height:0;
+    padding:30px clamp(28px,4vw,64px) 22px;
+    background:#fff;
+    border-right:1px solid var(--line);
+  }
+  #cbt:not(.jamb-mode) #cbtNum{
+    font-size:13px; padding:7px 13px;
+  }
+  #cbt:not(.jamb-mode) .exam-q,
+  #cbt:not(.jamb-mode) .q-text{
+    font-size:clamp(21px,2vw,27px);
+    line-height:1.45;
+    margin:14px 0 22px;
+    max-height:48%;
+  }
+  #cbt:not(.jamb-mode) .exam-opts{ padding-bottom:6px; }
+  #cbt:not(.jamb-mode) .exam-opts .opt{
+    min-height:56px;
+    padding:15px 18px;
+    margin-bottom:12px;
+    border-radius:14px;
+    font-size:16px;
+    line-height:1.4;
+  }
+  #cbt:not(.jamb-mode) .exam-opts .opt .key{
+    width:32px; height:32px; font-size:13px; border-radius:9px;
+  }
+
+  /* The palette is the existing #cbtNav list, moved beside the question. */
+  #cbt:not(.jamb-mode) > #cbtNav{
+    display:grid!important;
+    grid-column:2; grid-row:3;
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    grid-auto-rows:40px;
+    align-content:start;
+    gap:9px;
+    min-height:0;
+    padding:20px 18px;
+    background:#FBFBFC;
+    border-left:0;
+    overflow-y:auto;
+  }
+  #cbt:not(.jamb-mode) > #cbtNav::before{
+    content:"Question navigator";
+    grid-column:1 / -1;
+    display:flex;
+    align-items:center;
+    height:auto;
+    padding-bottom:2px;
+    font-size:11.5px;
+    font-weight:900;
+    letter-spacing:.8px;
+    text-transform:uppercase;
+    color:var(--gray);
+  }
+  #cbt:not(.jamb-mode) > #cbtNav .qn{
+    width:100%;
+    height:40px;
+    font-size:13.5px;
+    border-radius:9px;
+  }
+  #cbt:not(.jamb-mode) > #cbtNav::after{
+    content:"Green = answered · red = current";
+    grid-column:1 / -1;
+    margin-top:4px;
+    font-size:11px;
+    line-height:1.45;
+    color:var(--gray);
+  }
+
+  #cbt:not(.jamb-mode) > .exam-bar{
+    grid-column:1 / -1; grid-row:4;
+    gap:12px;
+    padding:14px clamp(20px,3vw,40px);
+    background:#fff;
+    border-top:1px solid var(--line);
+    box-shadow:0 -8px 22px rgba(17,24,39,.04);
+  }
+  #cbt:not(.jamb-mode) .exam-nav-btn{
+    height:48px;
+    padding:0 22px;
+    font-size:14px;
+  }
+  #cbt:not(.jamb-mode) .exam-qnum-btn{
+    flex:1 1 0;
+    max-width:260px;
+    height:48px;
+    margin:0 auto;
+    font-size:13.5px;
+  }
+  #cbt:not(.jamb-mode) .exam-bar .btn-red{
+    min-width:128px;
+    box-shadow:0 6px 16px rgba(220,38,38,.24);
+  }
+}
+
+/* Very wide screens: keep the question measure readable while the navigation
+   column stays aligned to the right edge of the workspace. */
+@media (min-width:1500px){
+  #cbt:not(.jamb-mode){ grid-template-columns:minmax(0,1fr) 340px; }
+  #cbt:not(.jamb-mode) > .cbt-main > .exam-body{ padding-left:max(64px,calc((100% - 980px)/2)); padding-right:max(64px,calc((100% - 980px)/2)); }
+  #cbt:not(.jamb-mode) > #cbtNav{ grid-template-columns:repeat(5,minmax(0,1fr)); }
+}
