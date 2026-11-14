@@ -34,6 +34,13 @@ function grab(name) {
 head('the JAMB sitting is gone from the website');
 ok('no dashboard JAMB card', !/id="dashJamb"/.test(index) && !/<div class="section-t">JAMB \/ UTME<\/div>/.test(index));
 ok('no JAMB CBT Study tile', !/onclick="openJambTest\(\)"/.test(index) && !/>JAMB CBT</.test(index));
+ok('no JAMB Study card survives under any retired id', !/id="sg-jamb"/.test(index) && !/id="dashJamb"/.test(index));
+var wtDef = app.slice(app.indexOf('var WT_SECTIONS = ['), app.indexOf('];', app.indexOf('var WT_SECTIONS = [')));
+ok('the Study/Web Test catalogue offers only theory and objective sessions',
+  /key:'theory'/.test(wtDef) && /key:'objective'/.test(wtDef) && !/key:'jamb'/.test(wtDef), wtDef.slice(0, 120));
+ok('the legitimate Study features remain after the JAMB removal',
+  /id="sg-practice"/.test(index) && /id="pracHist"/.test(index)
+  && /id="sg-bookmarks"/.test(index) && /onclick="atMyOpen\(\)"/.test(index));
 ['dashPaintJamb', 'dashJambSit', 'openJambTest', 'dashPaintUp', 'dashPaintSubjects'].forEach(function (n) {
   ok(n + ' is no longer defined', app.indexOf('function ' + n + '(') < 0);
 });
