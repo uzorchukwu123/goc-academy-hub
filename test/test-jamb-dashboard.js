@@ -42,9 +42,12 @@ function grab(name) {
 }
 
 head('entry points exist');
-ok('the dashboard carries a JAMB / UTME card painted from the catalogue',
-  /<div class="section-t">JAMB \/ UTME<\/div>/.test(index) && /id="dashJamb"/.test(index));
-ok('the Study tools grid carries a JAMB CBT tile', /onclick="openJambTest\(\)"[\s\S]{0,400}?JAMB CBT/.test(index));
+/* UI reimagination: the JAMB card left the (decluttered) dashboard; the
+   catalogue painter remains and now no-ops safely without its card, and
+   the sitting is reached through Web Test / Study CBT as before. */
+ok('Home no longer carries a JAMB card, but the catalogue painter remains',
+  !/id="dashJamb"/.test(index) && /function dashPaintJamb\(/.test(app));
+ok('the Study tools grid carries the Study CBT tile', /onclick="openStudyCbt\(\)"[\s\S]{0,400}?Study CBT/.test(index));
 ok('openJambTest, dashPaintJamb and dashJambSit are defined',
   /function openJambTest\(\)/.test(app) && /function dashPaintJamb\(/.test(app) && /function dashJambSit\(/.test(app));
 ok('the dashboard start goes through the Web Test instructions/start route',

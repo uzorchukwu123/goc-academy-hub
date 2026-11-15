@@ -156,9 +156,9 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 10); }
   var w4 = makeWorld();
   var tour4 = mod.create(w4.env);
   tour4.register('mixed', [
-    { go: 'home', target: 'dashUp', title: 'Real', body: 'exists' },
+    { go: 'home', target: 'tut-hero', title: 'Real', body: 'exists' },
     { go: 'home', target: 'no-such-element', title: 'Ghost', body: 'missing' },
-    { go: 'home', target: 'dashJamb', title: 'Real 2', body: 'exists' }
+    { go: 'home', target: 'jnPath', title: 'Real 2', body: 'exists' }
   ]);
   await tour4.start('mixed', { userId: 'u1' });
   await tour4.next(); await tick(5);

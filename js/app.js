@@ -541,6 +541,7 @@ function dwGoTo(secId){
 
 function go(id){
   if(typeof closeDrawer === 'function') closeDrawer();
+  if(typeof menuClose === 'function') menuClose();
   /* Priority 9 — no in-app screen may be reached once the session has run out,
      so a tab left open cannot be clicked back into the dashboard. The server
      refuses the data anyway; this stops the empty shell being shown at all.
@@ -621,8 +622,9 @@ function go(id){
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   }
   var tabbar = document.getElementById('tabbar');
-  var tabScreens = ['home','timetable','classes','study','league','profile','webtest'];
+  var tabScreens = ['home','timetable','classes','study','league','profile','webtest','studycbt','cbtGuide'];
   var showTabs = tabScreens.indexOf(id) > -1;
+  document.getElementById('phone').classList.toggle('hub-chrome', showTabs);
   // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
   tabbar.style.display = showTabs ? 'flex' : 'none';
@@ -643,7 +645,7 @@ function go(id){
   list(document.querySelectorAll('.tab')).forEach(function(t){
     var on = t.getAttribute('data-t') === active;
     t.classList.toggle('on', on);
-    t.querySelector('.icon').setAttribute('stroke', on ? '#DC2626' : '#9AA3AF');
+    var ic = t.querySelector('.icon'); if(ic) ic.setAttribute('stroke', on ? '#DC2626' : '#9AA3AF');
     // Keep the accessible "current page" state in sync with the visual one —
     // the .on class alone is invisible to screen readers.
     if(on) t.setAttribute('aria-current', 'page'); else t.setAttribute('aria-current', 'false');
@@ -2198,11 +2200,26 @@ function updateFocus(){
   var frac = limitSec ? Math.max(0, Math.min(1, leftSec / limitSec)) : 0;
   var r=40, c=2*Math.PI*r;
   var arc = document.getElementById('focusArc');
-  arc.setAttribute('stroke-dasharray', c);
-  arc.setAttribute('stroke-dashoffset', c*(1-frac));
-  arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
-  document.getElementById('focusMin').textContent = leftMin;
-  document.getElementById('focusText').textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
+  if(arc){
+    arc.setAttribute('stroke-dasharray', c);
+    arc.setAttribute('stroke-dashoffset', c*(1-frac));
+    arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
+  }
+  var fm = document.getElementById('focusMin'); if(fm) fm.textContent = leftMin;
+  var ft = document.getElementById('focusText'); if(ft) ft.textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
+  /* Home no longer carries the study-window card: instead, when the window
+     is nearly spent (the same <=15-minute point where the ring used to turn
+     amber), a slim warning banner appears. Dismissing it hides it until the
+     remaining time drops further. */
+  var banner = document.getElementById('swBanner');
+  if(banner){
+    var show = leftSec > 0 && leftMin <= 15 && swBannerDismissedFor !== leftMin;
+    banner.style.display = show ? 'flex' : 'none';
+    if(show){
+      var bt = document.getElementById('swBannerText');
+      if(bt) bt.textContent = 'Study window: ' + leftMin + ' minute' + (leftMin === 1 ? '' : 's') + ' left today \u2014 time to wrap up';
+    }
+  }
   // The wind-down card is the whole point of the daily limit, so show it when it is spent —
   // exhausted comes from the server whenever it's known, never guessed client-side.
   var exhausted = state.studyExhausted || (state.studyLeftSec != null && leftSec <= 0);
@@ -2240,6 +2257,85 @@ function paintStudyWindow(win){
   if(activeId === 'studySet' && typeof renderStudySet === 'function') renderStudySet();
   if(activeId === 'webtest' && typeof renderWebTest === 'function') renderWebTest();
 }
+/* ============ TOP-RIGHT MENU (student chrome) ============
+   One toggle, grouped drop-downs, floating over a dimmed page — the content
+   underneath is never blanked out. Every destination already existed; this
+   only changes how the student reaches it. */
+function menuToggle(){
+  var p = document.getElementById('menuPanel');
+  var b = document.getElementById('menuToggle');
+  if(!p) return;
+  var open = p.classList.toggle('show');
+  var sc = document.getElementById('menuScrim'); if(sc) sc.classList.toggle('show', open);
+  if(b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function menuClose(){
+  var p = document.getElementById('menuPanel'); if(p) p.classList.remove('show');
+  var sc = document.getElementById('menuScrim'); if(sc) sc.classList.remove('show');
+  var b = document.getElementById('menuToggle'); if(b) b.setAttribute('aria-expanded', 'false');
+}
+function menuGroup(btn){
+  var g = btn && btn.parentElement; if(!g) return;
+  var open = g.classList.toggle('open');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+/* Study-window warning banner: dismiss remembers the minute it was dismissed
+   at, so a later, lower remainder can warn again. */
+var swBannerDismissedFor = null;
+function swBannerDismiss(){
+  var banner = document.getElementById('swBanner'); if(banner) banner.style.display = 'none';
+  var limitSec = Math.max(0, Number(state.limit) || 0) * 60;
+  var leftSec = (state.studyLeftSec != null) ? Math.max(0, Number(state.studyLeftSec) || 0)
+    : Math.max(0, limitSec - (Number(state.used) || 0) * 60);
+  swBannerDismissedFor = Math.ceil(leftSec / 60);
+}
+/* Practice palette: display / undisplay, exactly like Exam mode's panel. */
+function pracPalToggle(){
+  var body = document.getElementById('pracPalBody');
+  var btn = document.getElementById('pracPalToggle');
+  if(!body) return;
+  var hide = body.style.display !== 'none';
+  body.style.display = hide ? 'none' : '';
+  if(btn){ btn.textContent = hide ? 'Show' : 'Hide'; btn.setAttribute('aria-expanded', hide ? 'false' : 'true'); }
+}
+/* ============ STUDY CBT: hub -> instructions -> existing set-up ============ */
+var scMode = 'cbt';
+function openStudyCbt(){ go('studycbt'); }
+function scGuide(mode){
+  scMode = (mode === 'practice') ? 'practice' : 'cbt';
+  go('cbtGuide');
+  var prac = scMode === 'practice';
+  var pill = document.getElementById('scgPill');
+  if(pill){ pill.textContent = prac ? 'Practice mode' : 'Exam Mode'; pill.classList.toggle('alt', prac); }
+  var sub = document.getElementById('scgSub');
+  if(sub) sub.textContent = prac ? 'Untimed \u00b7 explanations as you go' : 'Timed \u00b7 marked at the end';
+  var who = (typeof studentFirst !== 'undefined' && studentFirst) ? studentFirst : 'Scholar';
+  var sum = document.getElementById('scgSummary');
+  if(sum) sum.textContent = who + (studentId ? ' \u00b7 ' + studentId : '') + (prac
+    ? ' \u00b7 no time limit \u00b7 explanations on'
+    : ' \u00b7 timed sitting \u00b7 calculator on screen');
+  var rules = prac ? [
+    'No timer \u2014 take as long as you need; the clock only shows time spent.',
+    'After each answer you see whether you are right, with the full working.',
+    'The question palette shows answered, current and unanswered questions \u2014 tap any number to jump, and Hide folds it away.',
+    'An on-screen calculator is provided for calculation subjects.',
+    'You can revisit questions and try again before you finish.',
+    'Finish practice whenever you are done to see your score.'
+  ] : [
+    'The timer counts down and submits automatically at 0:00.',
+    'Use the subject tabs at the top to move between subjects anytime.',
+    'The question palette shows answered, current, not answered and marked-for-review questions \u2014 tap any number to jump.',
+    'An on-screen calculator is provided, just like exam day.',
+    'Use Previous and Next; you can change any answer before you submit.',
+    'No explanations during the exam \u2014 your result is marked at the end.'
+  ];
+  var host = document.getElementById('scgRules');
+  if(host) host.innerHTML = rules.map(function(r){ return '<li>' + esc(r) + '</li>'; }).join('');
+  var start = document.getElementById('scgStart');
+  if(start) start.textContent = prac ? 'Continue \u2014 choose your practice paper' : 'Continue \u2014 choose your exam paper';
+}
+function scGuideStart(){ openStudySet(scMode); }
+
 function showWinddown(){
   paintWinddownText();
   var o=document.getElementById('windOverlay'); if(o) o.classList.add('show');

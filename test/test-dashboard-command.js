@@ -46,7 +46,10 @@ ok('no placeholder level, XP or streak', !/Lv 8/.test(dashHtml) && !/1,240/.test
   && /id="dashLevel">—</.test(index) && /id="dashXp">—</.test(index) && /id="dashStreak">—</.test(index));
 ok('the status line makes no subject claim before the account loads', /id="dashExamLine">UTME 2027</.test(index));
 ok('signing out blanks the hero stats as well as the name', /'dashLevel','dashXp','dashStreak','dashStreakChip'/.test(app));
-ok('Next Up starts from a neutral loading card', /id="dashUp"><div class="wt-none">Working out your next step…<\/div>/.test(index));
+/* UI reimagination: Next Up left Home (it lives in the menu now); the
+   painter remains and is guarded, so the decision logic below is unchanged. */
+ok('Next Up is no longer a Home card, and its painter is guarded',
+  !/id="dashUp"/.test(index) && /if\(!document\.getElementById\('dashUp'\)\) return;/.test(app));
 
 /* ---- pure decision logic ---- */
 function fakeEl() {
@@ -136,11 +139,17 @@ setTimeout(function () {
     ok('the subjects card lists only the signed-in combination', /Physics/.test(els.dashSubjects.innerHTML) && /Chemistry/.test(els.dashSubjects.innerHTML) && !/Biology/.test(els.dashSubjects.innerHTML), els.dashSubjects.innerHTML.slice(0, 160));
 
     head('command-centre surfaces, no redesign');
-    ['dashNext', 'dashJamb', 'dashStand', 'dashLast', 'dashUp', 'dashSubjects', 'dashJourney'].forEach(function (id) {
+    /* Home (reimagined) carries exactly: Waiting for you, Where you stand,
+       Your last result and the Journey. Next Up / JAMB / Your subjects /
+       Carry on moved into the top-right menu. */
+    ['dashNext', 'dashStand', 'dashLast', 'dashJourney'].forEach(function (id) {
       ok('#' + id + ' is on the dashboard', index.indexOf('id="' + id + '"') >= 0);
     });
-    ok('formal CBT and Resources are reachable from Carry on', /onclick="openCBT\(\)"/.test(index) && /onclick="go\('resources'\)"/.test(index));
-    ok('notes and practice stay reachable', /onclick="openMyNotes\(\)"/.test(index) && /onclick="openPractice\(\)"/.test(index));
+    ['dashJamb', 'dashUp', 'dashSubjects'].forEach(function (id) {
+      ok('#' + id + ' moved off Home into the menu', index.indexOf('id="' + id + '"') < 0);
+    });
+    ok('Study CBT and Resources are reachable from the menu', /openStudyCbt\(\)/.test(index) && /go\('resources'\)/.test(index));
+    ok('notes and practice stay reachable', /openMyNotes\(\)/.test(index) && /openPractice\(\)/.test(index));
     ok('renderDash paints Next Up and subjects with the rest', /dashPaintUp\(\);\s*\n\s*dashPaintSubjects\(\);/.test(app));
     ok('formal CBT engine and screens are untouched by the dashboard work', /id="cbt"/.test(index) && /onclick="submitCBT\(\)"/.test(index));
 

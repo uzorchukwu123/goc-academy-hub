@@ -845,20 +845,14 @@
         <button onclick="copyId()">Copy</button>
       </div>
 
-      <!-- SIGNATURE: daily study window (limit set by management) -->
-      <div class="focus-card" id="tut-focus">
-        <div class="ring" id="focusRing">
-          <svg width="96" height="96" viewBox="0 0 96 96">
-            <circle class="rc" cx="48" cy="48" r="40" stroke="#EEF0F3"/>
-            <circle class="rc" id="focusArc" cx="48" cy="48" r="40" stroke="#DC2626"/>
-          </svg>
-          <div class="rt"><b id="focusMin">—</b><s>min left</s></div>
-        </div>
-        <div class="focus-info">
-          <span class="focus-tag">Set by your academy</span>
-          <h4>Daily study window</h4>
-          <p id="focusText">Learn here, then read on your own, apply it, and bring questions to your tutor.</p>
-        </div>
+      <!-- Daily study window: no card any more. When the window is nearly
+           spent, updateFocus() in js/app.js shows this slim warning banner
+           (threshold: the academy's configured warning minutes); the
+           wind-down overlay + guardian-PIN flow are untouched. -->
+      <div class="sw-banner" id="swBanner" style="display:none" role="status" aria-live="polite">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <div class="sw-txt"><b id="swBannerText">Study window: time is almost up today</b><span>Set by your academy</span></div>
+        <button type="button" class="sw-x" onclick="swBannerDismiss()" aria-label="Dismiss study window warning">&#215;</button>
       </div>
 
       <!-- Everything below is drawn by js/app.js from this account's own record:
@@ -910,9 +904,6 @@
           <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
         </div>
 
-        <div class="sec-head"><div class="section-t">Next Up</div></div>
-        <div class="card wrap dash-card"><div id="dashUp"><div class="wt-none">Working out your next step…</div></div></div>
-
         <div class="sec-head" id="tut-webtest"><div class="section-t">Waiting for you</div><button class="ss-link" onclick="openWebTest()">Open Web Test</button></div>
         <div class="card wrap dash-card"><div id="dashNext"><div class="wt-none">Checking your papers…</div></div></div>
 
@@ -922,28 +913,12 @@
              deep enough in every one of the student's subjects); otherwise the
              card says so honestly. The button starts through the exact same
              instructions + start route as the Web Test screen. -->
-        <div class="sec-head"><div class="section-t">JAMB / UTME</div><button class="ss-link" onclick="openJambTest()">JAMB CBT</button></div>
-        <div class="card wrap dash-card"><div id="dashJamb"><div class="wt-none">Checking the JAMB-oriented sitting…</div></div></div>
-
         <div class="sec-head" id="tut-league"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
         <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
 
         <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
         <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
 
-                <div class="sec-head"><div class="section-t">Your subjects</div><button class="ss-link" onclick="go('study')">Study</button></div>
-        <div class="card wrap dash-card"><div id="dashSubjects"><div class="wt-none">Loading your subjects…</div></div></div>
-
-        <div class="sec-head"><div class="section-t">Carry on</div></div>
-        <div class="dash-jump" id="tut-jump">
-          <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
-          <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
-          <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
-          <button class="dj" onclick="openMyNotes()"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 4a2 2 0 012-2h8l4 4v14a2 2 0 01-2 2H7a2 2 0 01-2-2z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>My Notes</b><s>Your private uploads</s></button>
-          <button class="dj" onclick="openCBT()"><span class="dj-i" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>Study CBT</b><s>Timed, marked at the end</s></button>
-          <button class="dj" onclick="go('resources')"><span class="dj-i" style="background:#475467"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg></span><b>Resources</b><s>Academy library</s></button>
-          <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
-        </div>
         <div class="spacer"></div>
       </div>
     </section>
@@ -1040,9 +1015,9 @@
             <span class="sg-label">Web Test</span>
             <span class="sg-badge red-badge">Assessed</span>
           </button>
-          <button class="sg-cell" id="sg-jamb" onclick="openJambTest()">
+          <button class="sg-cell" id="sg-jamb" onclick="openStudyCbt()">
             <div class="sg-icon" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="4.5" width="18" height="11.5" rx="1.6"/><path d="M2 20h20"/></svg></div>
-            <span class="sg-label">JAMB CBT</span>
+            <span class="sg-label">Study CBT</span>
             <span class="sg-badge red-badge">UTME</span>
           </button>
 
@@ -1081,6 +1056,54 @@
         <!-- RECENT PRACTICE -->
         <div class="sec-head" style="margin-top:20px"><div class="section-t">Recent practice</div></div>
         <div class="card wrap dash-card"><div id="pracHist"><div class="wt-none">Loading your recent runs…</div></div></div>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ STUDY CBT (hub) ============
+         One page, two modes. Choosing a mode shows its instructions screen
+         first (cbtGuide); starting from there opens the existing set-up, and
+         entering a run is full-screen UTME — no app chrome around it. -->
+    <section class="screen pad" id="studycbt">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Study" onclick="go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px">Study CBT</div><div class="muted" style="font-size:12px">Practice mode or Exam Mode — the real UTME screen</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="sec-head"><div class="section-t">Choose how to sit</div></div>
+        <button class="sc-mode" onclick="scGuide('practice')">
+          <span class="sc-ic" style="background:#DC2626"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4.3.8.8-4.3z"/></svg></span>
+          <span class="sc-tx"><b>Practice mode</b><s>Untimed \u00b7 explanations as you go \u00b7 learn while you answer</s></span>
+          <span class="sc-go">Instructions \u2192</span>
+        </button>
+        <button class="sc-mode" onclick="scGuide('cbt')">
+          <span class="sc-ic" style="background:#7F1D1D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="sc-tx"><b>Exam Mode</b><s>Timed \u00b7 calculator \u00b7 marked at the end \u00b7 exactly like exam day</s></span>
+          <span class="sc-go">Instructions \u2192</span>
+        </button>
+        <p class="muted" style="font-size:12.5px;line-height:1.55;margin-top:14px">Whichever you choose, the sitting itself fills the whole screen — the real UTME examination room, with nothing of the app around it.</p>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- ============ STUDY CBT — INSTRUCTIONS (per mode) ============ -->
+    <section class="screen pad" id="cbtGuide">
+      <div class="hdr solid">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to Study CBT" onclick="go('studycbt')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <div><div style="font-weight:800;font-size:15px">Before you begin</div><div class="muted" style="font-size:12px" id="scgSub">Read these instructions first</div></div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="card wrap" style="padding:16px">
+          <span class="scg-pill" id="scgPill">Exam Mode</span>
+          <div id="scgSummary" style="margin-top:10px;font-weight:700;line-height:1.5"></div>
+          <ol class="scg-rules" id="scgRules"></ol>
+        </div>
+        <button class="btn btn-red btn-block" id="scgStart" style="margin-top:16px" onclick="scGuideStart()">Continue \u2014 choose your paper</button>
+        <button class="btn btn-ghost btn-block" style="margin-top:10px" onclick="go('studycbt')">Not yet \u2014 go back</button>
         <div class="spacer"></div>
       </div>
     </section>
@@ -1239,9 +1262,11 @@
              Revisiting an answered question shows it as it was left —
              answers are never lost or re-marked by moving around. -->
         <div class="prac-pal-wrap">
-          <div class="prac-pal-head"><span>Questions</span><span id="pracNavCount">0 of 0 answered</span></div>
-          <div class="prac-pal-grid" id="pracPalette"></div>
-          <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+          <div class="prac-pal-head"><span>Question palette</span><span id="pracNavCount">0 of 0 answered</span><button type="button" class="prac-pal-toggle" id="pracPalToggle" onclick="pracPalToggle()" aria-expanded="true">Hide</button></div>
+          <div id="pracPalBody">
+            <div class="prac-pal-grid" id="pracPalette"></div>
+            <div class="prac-pal-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
+          </div>
         </div>
       </div>
       <div class="bottom-bar"><button class="btn btn-outline" id="pracPrevBtn" onclick="pracPrev()" disabled>← Prev</button><button class="btn btn-red btn-block" id="pracBtn" onclick="pracNext()" disabled>Select an answer</button></div>
@@ -2219,21 +2244,25 @@
       <span class="ss-count" id="ssCount">Automatic logout in 05:00</span>
     </span>
   </div>
-  <nav class="tabbar" id="tabbar" style="display:none" aria-label="Main">
-    <div class="side-brand">
-      <span class="bmk"><svg viewBox="0 0 100 100" style="width:22px;height:22px" aria-hidden="true" focusable="false"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
-      <span class="bwrap"><span class="bt">G.O.C Academy Hub</span><span class="bs">Independent Scholars</span></span>
+  <nav class="tabbar appbar" id="tabbar" style="display:none" aria-label="Main">
+    <button class="tab app-brand" data-t="home" onclick="menuClose();go('home')" id="tut-nav-home">
+      <span class="bmk"><svg viewBox="0 0 100 100" style="width:22px;height:22px" aria-hidden="true"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
+      <span class="bt">G.O.C Academy Hub</span>
+    </button>
+    <span class="app-sp"></span>
+    <button type="button" class="app-bell" onclick="menuClose();go('updates')" aria-label="Updates and news">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 21a2 2 0 003.4 0"/></svg>
+    </button>
+    <button type="button" class="menu-toggle" id="menuToggle" onclick="menuToggle()" aria-expanded="false" aria-haspopup="true" aria-label="Open menu">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="menu-scrim" id="menuScrim" onclick="menuClose()"></div>
+    <div class="menu-panel" id="menuPanel" role="menu">
+<div class="mgroup open"><button type="button" class="mg-head" onclick="menuGroup(this)" aria-expanded="true">Learn<span class="mg-chev">&#9662;</span></button><div class="mg-body"><button class="tab mi" data-t="study" onclick="menuClose();go('study')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg><span>Study</span></button><button class="tab mi" data-t="study" onclick="menuClose();openPractice()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg><span>Practice</span></button><button class="tab mi" data-t="study" onclick="menuClose();openMyNotes()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4.3.8.8-4.3z"/></svg><span>My Notes</span></button><button class="tab mi" data-t="study" onclick="menuClose();openReading()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg><span>Reading</span></button><button class="tab mi" data-t="study" onclick="menuClose();go('bookmarks')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>Bookmarks</span></button></div></div><div class="mgroup"><button type="button" class="mg-head" onclick="menuGroup(this)" aria-expanded="false">Tests &amp; Exams<span class="mg-chev">&#9662;</span></button><div class="mg-body"><button class="tab mi" data-t="study" onclick="menuClose();openWebTest()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/></svg><span>Web Test</span></button><button class="tab mi" data-t="study" onclick="menuClose();openStudyCbt()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Study CBT</span></button><button class="tab mi" data-t="home" onclick="menuClose();go('timetable')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg><span>Timetable</span></button></div></div><div class="mgroup"><button type="button" class="mg-head" onclick="menuGroup(this)" aria-expanded="false">My Progress<span class="mg-chev">&#9662;</span></button><div class="mg-body"><button class="tab mi" data-t="study" onclick="menuClose();openResults()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M4 4v16h16"/><path d="M7 15l3-4 3 2 5-7"/></svg><span>Results</span></button><button class="tab mi" data-t="league" onclick="menuClose();go('league')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M17 5h3v1.5a3 3 0 01-3 3M7 5H4v1.5a3 3 0 003 3"/><path d="M9 18h6M12 13v5"/></svg><span>League</span></button><button class="tab mi" data-t="study" onclick="menuClose();go('mistakes')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><span>Mistakes</span></button><button class="tab mi" data-t="study" onclick="menuClose();go('review')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 109-9"/><path d="M3 5v4h4"/></svg><span>Review</span></button></div></div><div class="mgroup"><button type="button" class="mg-head" onclick="menuGroup(this)" aria-expanded="false">Academy<span class="mg-chev">&#9662;</span></button><div class="mg-body"><button class="tab mi" data-t="classes" onclick="menuClose();go('classes')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z"/></svg><span>Classes</span></button><button class="tab mi" data-t="study" onclick="menuClose();go('resources')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg><span>Resources</span></button><button class="tab mi" data-t="home" onclick="menuClose();go('updates')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Updates &amp; News</span></button></div></div>      <div class="mfoot">
+        <button class="tab mi" data-t="profile" onclick="menuClose();go('profile')"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg><span>Profile &amp; Settings</span></button>
+        <button class="mi logout" onclick="menuClose();logout()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg><span>Log out</span></button>
+      </div>
     </div>
-    <button class="tab on" data-t="home" onclick="go('home')" aria-current="page" id="tut-nav-home">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
-    <button class="tab" data-t="classes" onclick="go('classes')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z" stroke-linejoin="round"/></svg>Classes</button>
-    <button class="tab" data-t="study" onclick="go('study')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg>Study</button>
-    <button class="tab" data-t="league" onclick="go('league')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M17 5h3v1.5a3 3 0 01-3 3M7 5H4v1.5a3 3 0 003 3"/><path d="M9 18h6M12 13v5"/></svg>League</button>
-    <button class="tab" data-t="profile" onclick="go('profile')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>Profile</button>
   </nav>
 
   <!-- ============ AFFIRMATION FLYER ============ -->
