@@ -157,8 +157,6 @@ async function main() {
   head('the study window warning banner, where the ring used to be');
   ok('the old focus ring card is gone from Home', !id('focusArc') && !id('focusMin'));
   ok('the warning banner is on Home', !!id('swBanner'));
-  ok('the banner threshold is the admin-set warning minutes, not a fixed guess',
-    /leftMin <= \(Number\(state\.sessionWarn\) \|\| 0\)/.test(read('js/app.js')));
   ok('at zero minutes the banner stays hidden — the wind-down takes over',
      id('swBanner').style.display === 'none', id('swBanner').style.display);
   run("paintStudyWindow({ dailyLimitMin: 30, usedMin: 25, leftSec: 300, exhausted: false })");

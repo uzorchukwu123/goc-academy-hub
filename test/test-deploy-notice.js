@@ -78,7 +78,7 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 5); })
   ok('a refresh on the same deployment does not auto-repeat the tour',
     (await tour.maybeAutoStart('student', 'GOC-S-1')) === false);
   ok('the same deployment still reads as done', tour.state('student', 'GOC-S-1').status === 'done');
-  w.env.deployId = 'goc-v227';
+  w.env.deployId = 'goc-v225';
   ok('a later deployment makes the saved completion stale', tour.state('student', 'GOC-S-1') === null,
     JSON.stringify(tour.state('student', 'GOC-S-1')));
   ok('and the new deployment auto-starts the tour again',
@@ -113,7 +113,7 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 5); })
   ok('the tour completion event feeds the flyer', /goc:tour-done/.test(app) && /maybeOpenFlyer/.test(fs.readFileSync(path.join(APP, 'js', 'onboarding.js'), 'utf8')) === false);
 
   head('deployment id is one identifier, reported by health');
-  ok('the service worker cache is the id source', /const CACHE = 'goc-v227';/.test(sw) && /const DEPLOY_ID = \(\(\) =>/.test(server)
+  ok('the service worker cache is the id source', /const CACHE = 'goc-v225';/.test(sw) && /const DEPLOY_ID = \(\(\) =>/.test(server)
     && /deployId: DEPLOY_ID/.test(server));
 
   head('one-time redeployment notice');
@@ -162,11 +162,11 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 5); })
   ok('dismissing hides it and records this id', n1.box.hidden === true && n1.store['goc.deployNotice.v1'] === 'goc-v223');
   n1.sandbox.deployNoticeCheck('goc-v223');
   ok('a refresh on the same deployment does not show it again', n1.box.hidden === true);
-  var n2 = noticeRun('goc-v223', 'goc-v227');
-  n2.sandbox.deployNoticeCheck('goc-v227');
-  ok('a later deployment arms it again', n2.box.hidden === false && n2.idEl.textContent === 'goc-v227');
+  var n2 = noticeRun('goc-v223', 'goc-v225');
+  n2.sandbox.deployNoticeCheck('goc-v225');
+  ok('a later deployment arms it again', n2.box.hidden === false && n2.idEl.textContent === 'goc-v225');
   n2.sandbox.refreshDeployNotice();
-  ok('Refresh records the id and reloads', n2.store['goc.deployNotice.v1'] === 'goc-v227' && n2.reloads() === 1);
+  ok('Refresh records the id and reloads', n2.store['goc.deployNotice.v1'] === 'goc-v225' && n2.reloads() === 1);
   ok('no preferences or app data are cleared', !/localStorage\.clear\(\)/.test(app));
   ok('the notice never touches the data API', !/deployNotice[\s\S]{0,900}?GOC\.api/.test(app));
 
