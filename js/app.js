@@ -327,7 +327,7 @@ function jnTalk(){
 function jnTap(n){
   var lvText = document.getElementById('dashLevel');
   var lv = parseInt(String(lvText ? lvText.textContent : '').replace(/[^\d]/g, ''), 10) || 1;
-  if(n === lv){ openPractice(); return; }
+  if(n === lv){ scGuide('practice'); return; }
   if(n < lv){ toast('Level ' + n + ' cleared — well done!'); return; }
   toast('Keep going — Level ' + n + ' is ahead of you.');
 }
@@ -2401,17 +2401,17 @@ function updateFocus(){
   if(arc){
     arc.setAttribute('stroke-dasharray', c);
     arc.setAttribute('stroke-dashoffset', c*(1-frac));
-    arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
+    arc.setAttribute('stroke', leftMin <= (Number(state.sessionWarn) || 0) ? '#D97706' : '#DC2626');
   }
   var fm = document.getElementById('focusMin'); if(fm) fm.textContent = leftMin;
   var ft = document.getElementById('focusText'); if(ft) ft.textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
   /* Home no longer carries the study-window card: instead, when the window
-     is nearly spent (the same <=15-minute point where the ring used to turn
-     amber), a slim warning banner appears. Dismissing it hides it until the
-     remaining time drops further. */
+     is nearly spent (inside the admin-set warning threshold,
+     cfg.sessionWarnMinutes -> state.sessionWarn), a slim warning banner
+     appears. Dismissing it hides it until the remaining time drops further. */
   var banner = document.getElementById('swBanner');
   if(banner){
-    var show = leftSec > 0 && leftMin <= 15 && swBannerDismissedFor !== leftMin;
+    var show = leftSec > 0 && leftMin <= (Number(state.sessionWarn) || 0) && swBannerDismissedFor !== leftMin;
     banner.style.display = show ? 'flex' : 'none';
     if(show){
       var bt = document.getElementById('swBannerText');
@@ -2530,9 +2530,43 @@ function scGuide(mode){
   var host = document.getElementById('scgRules');
   if(host) host.innerHTML = rules.map(function(r){ return '<li>' + esc(r) + '</li>'; }).join('');
   var start = document.getElementById('scgStart');
-  if(start) start.textContent = prac ? 'Continue \u2014 choose your practice paper' : 'Continue \u2014 choose your exam paper';
+  if(start) start.textContent = prac ? 'Continue \u2014 choose your practice paper' : 'Continue \u2014 sit the JAMB-oriented exam';
+  /* The acknowledge checkbox starts unticked, and Start stays disabled
+     until it is ticked — every time the guide is shown, for either mode. */
+  var ack = document.getElementById('scgAck');
+  if(ack) ack.checked = false;
+  scGuideGate();
 }
-function scGuideStart(){ openStudySet(scMode); }
+function scGuideGate(){
+  var ack = document.getElementById('scgAck');
+  var start = document.getElementById('scgStart');
+  if(start) start.disabled = !(ack && ack.checked);
+}
+function scGuideStart(){
+  if(scMode === 'practice'){ openStudySet('practice'); return; }
+  scExamStart();
+}
+/* Exam Mode is the JAMB-oriented sitting, not a study run: it is read from
+   the same Web Test catalogue the academy publishes (section 'jamb', held
+   back until its bank is ready in every subject of the combination) and
+   started through the same instructions + start route as Web Test, which
+   lands it in the UTME examination room (cbtOpenPaper) as a real, marked
+   attempt. Practice mode, by contrast, draws only on the practice bank
+   (core.studyPool keeps section 'practice' exclusive). */
+function scExamStart(){
+  if(state.studyExhausted){ showWinddown(); return; }
+  if(!GOC.api || !GOC.api.listMyTests){ openWebTest(); return; }
+  GOC.api.listMyTests().then(function(r){
+    var rows = (r && r.tests) || [], j = null;
+    rows.forEach(function(t){ if(t.section === 'jamb') j = t; });
+    if(j && !j.locked){ wtConfirmStart(j, null); return; }
+    toast(j ? 'The JAMB-oriented sitting is not open for you yet — your Web Test papers are here meanwhile.'
+            : 'The JAMB-oriented sitting opens once its question bank is ready in all of your subjects.');
+    openWebTest();
+  }, function(){ openWebTest(); });
+}
+/* The one Practice entry point students are offered: inside Study CBT. */
+function openPracticeGuide(){ scGuide('practice'); }
 
 function showWinddown(){
   paintWinddownText();
@@ -11367,6 +11401,25 @@ function openResults(){
   });
 }
 function rsSetFilter(s){ rsFilter = s; renderResults(); }
+/* Score trend: the student's own marked attempts, oldest to newest. Fewer
+   than two marked attempts means no line is drawn — never an invented one. */
+function rsPaintTrend(all){
+  var card = document.getElementById('rsTrendCard');
+  var host = document.getElementById('rsTrend');
+  if(!card || !host) return;
+  var pts = (all || []).filter(function(a){ return a.status === 'marked' && a.percent != null; })
+    .slice(-12).map(function(a){ return Math.max(0, Math.min(100, Number(a.percent) || 0)); });
+  if(pts.length < 2){ card.style.display = 'none'; host.innerHTML = ''; return; }
+  card.style.display = '';
+  var w = 320, h = 72, pad = 8, step = (w - pad * 2) / (pts.length - 1);
+  var d = pts.map(function(p, i){
+    return (i ? 'L' : 'M') + (pad + i * step).toFixed(1) + ' ' + (h - pad - (p / 100) * (h - pad * 2)).toFixed(1);
+  }).join(' ');
+  var last = pts[pts.length - 1];
+  host.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;display:block" role="img" aria-label="Score trend, latest '
+    + last + '%"><path d="' + d + '" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round"/></svg>'
+    + '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--gray);font-weight:700"><span>Earlier</span><span>Latest ' + last + '%</span></div>';
+}
 /* Only the papers of the type currently being looked at. */
 function rsRows(){
   var rows = (rsData && rsData.attempts) || [];
@@ -11380,6 +11433,7 @@ function renderResults(){
   var perf = (rsData && rsData.performance) || null;
   var rows = rsRows();
   var all = (rsData && rsData.attempts) || [];
+  rsPaintTrend(all);
   var marked = rows.filter(function(a){ return a.status === 'marked' && typeof a.percent === 'number'; });
 
   /* The ring shows the figure that belongs to the filter: the weighted overall

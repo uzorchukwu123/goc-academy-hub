@@ -51,7 +51,7 @@ function makeWorld(storageData) {
   var navLog = [];
   var screenOf = {};   /* targetId -> screen that shows it */
   mod.STUDENT_STEPS.forEach(function (s) {
-    var screen = s.go || (s.call === 'openPractice' || s.call === 'openCBT' ? 'studySet' : s.call === 'openMyNotes' ? 'mynotes' : 'home');
+    var screen = s.go || (s.call === 'openPracticeGuide' ? 'cbtGuide' : s.call === 'openPractice' || s.call === 'openCBT' ? 'studySet' : s.call === 'openMyNotes' ? 'mynotes' : 'home');
     screenOf[s.target] = screen;
     var el = fakeEl();
     el._screen = screen;
@@ -73,7 +73,8 @@ function makeWorld(storageData) {
     go: function (id) { navLog.push('go:' + id); show(id); },
     call: function (name) {
       navLog.push('call:' + name);
-      if (name === 'openPractice' || name === 'openCBT') show('studySet');
+      if (name === 'openPracticeGuide') show('cbtGuide');
+      else if (name === 'openPractice' || name === 'openCBT') show('studySet');
       else if (name === 'openMyNotes') show('mynotes');
     },
     viewportWidth: function () { return 390; }, viewportHeight: function () { return 844; }
@@ -108,7 +109,7 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 10); }
   ok('every step was visited in order', seen.join(',') === mod.STUDENT_STEPS.map(function (s) { return s.target; }).join(','), seen.join(','));
   ok('navigation really happened (go + openers, in step order)',
     w.navLog.filter(function (n) { return n.indexOf('go:home') === 0; }).length >= 3
-    && w.navLog.indexOf('call:openPractice') > -1
+    && w.navLog.indexOf('call:openPracticeGuide') > -1
     && w.navLog.indexOf('call:openCBT') < 0 && w.navLog.indexOf('call:openMyNotes') < 0
     && w.navLog.indexOf('go:profile') === w.navLog.length - 1,
     w.navLog.join(' '));
