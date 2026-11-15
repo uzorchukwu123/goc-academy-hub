@@ -19,6 +19,7 @@ behaviour are preserved; nothing here was renamed by the migration.
 | `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY` | Existing project |
 | `GOC_SMTP_*`, `GOC_FREE_2027_OTP_SECRET` | Existing email/OTP; secret ≥ 32 chars |
 | `GOC_APPWRITE_OFF` | Leave **unset** for normal operation |
+| `GOC_MAINTENANCE_MODE` | Leave **unset** (or `0`) for normal operation. `1` serves only the maintenance page. See **MAINTENANCE-MODE.md** |
 | `GOC_API_BASE` | Leave **unset** so the build keeps the relative `api` base |
 | `GOC_JOB_OWNER=onebit` | Default. OneBit owns the scheduled jobs |
 
@@ -65,6 +66,7 @@ so the same values can be copied across.
 | `GOC_STUDENT_SESSION_MINUTES` | `90` | Server default; per-cohort settings still apply once ported |
 | `GOC_JOB_OWNER` | `onebit` | Set to `appwrite` **only** when cutting jobs over |
 | `GOC_APPWRITE_OFF` | unset | When set, the Function refuses Appwrite work |
+| `GOC_MAINTENANCE_MODE` | unset | `1` closes every route except a minimal `GET /api/health`. See **MAINTENANCE-MODE.md** |
 
 ### Least-privilege API key scopes
 

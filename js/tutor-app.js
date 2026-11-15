@@ -1,15 +1,11 @@
-/* Tutor screens (Phase 3C). This file is NOT part of the public app bundle: it lives in
-   server/tutor/, which the static server never serves. The old hidden door route that used
-   to deliver it has been removed; tutor account authentication and the tutor API remain on
-   the server. It is plain ES5 like the rest of the app and draws its own overlay and its own
-   styles, so nothing here touches the student screens.
-   The session token is held in memory only: a reload ends the session on purpose. */
+/* Tutor dashboard. The UI is public; all data and operations remain server-authorized.
+   The session token is held in memory only. */
 (function () {
   'use strict';
-  if (window.__zxOpen) { window.__zxOpen(); return; }
+  if (window.__zxOpen) return;
 
   var PW_MIN = 8;
-  var st = { view: 'signin', token: null, user: null, subject: '', info: null, stats: null, statsError: '', busy: false, error: '', note: '', idDraft: '', shown: false,
+  var st = { view: 'dash', token: null, user: null, subject: '', info: null, stats: null, statsError: '', busy: false, error: '', note: '',
     qs: null, qError: '', qFilter: 'all', form: null, imp: null,
     ns: null, nError: '', nForm: null,
     sc: null, scError: '', scFilter: 'awaiting-marking', script: null, scriptError: '',
@@ -18,6 +14,8 @@
     stu: null, stuError: '', stuId: '', stuContact: null, stuContactError: '', stuContactBusy: false,
     audit: null, auditError: '' };
   var root = null;
+  var refreshTimer = null;
+  var loadVersions = { stats: 0, ar: 0, top: 0, audit: 0 };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -26,30 +24,41 @@
   }
 
   /* ------------------------------------------------------------ server calls */
+  function connectionError(kind, message) {
+    var e = new Error(message); e.kind = kind; return e;
+  }
   function call(method, path, body) {
     var opts = { method: method, headers: { 'Accept': 'application/json' } };
     if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     if (st.token) opts.headers.Authorization = 'Bearer ' + st.token;
-    return fetch('api' + path, opts).then(function (r) {
+    return fetch((window.GOC && window.GOC.apiBase || 'api') + path, opts).then(function (r) {
+      var type = r.headers ? (r.headers.get('content-type') || '') : '';
+      var isJson = /^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|\s*$)/i.test(type);
+      var unavailable = r.status === 502 || r.status === 503 || r.status === 504;
+      function badResponse() {
+        return connectionError(unavailable ? 'waking' : 'unexpected', unavailable ? 'G.O.C is waking up. Please wait a little and try again.' : 'The service returned an unexpected response. Please try again later.');
+      }
+      if (!isJson) throw badResponse();
       return r.text().then(function (txt) {
-        var data = null;
-        try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
+        var data;
+        try { data = JSON.parse(txt); } catch (e) { throw badResponse(); }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw badResponse();
+        if (data.maintenance === true) throw connectionError('maintenance', typeof data.error === 'string' ? data.error : 'G.O.C Academy Hub is temporarily under maintenance. Please check back later.');
+        if (unavailable) throw badResponse();
         if (!r.ok) {
-          var err = new Error((data && data.error) || 'The server could not complete that (' + r.status + ').');
+          if (typeof data.error !== 'string' || !data.error) throw badResponse();
+          var err = new Error(data.error);
           err.status = r.status;
           throw err;
         }
         return data;
-      });
-    }, function () { throw new Error('Cannot reach the server. Check your connection.'); });
+      }, function () { throw connectionError('network', 'Cannot reach the server. Check your connection.'); });
+    }, function () { throw connectionError('network', 'Cannot reach the server. Check your connection.'); });
   }
 
   /* ------------------------------------------------------------------ styles */
   var CSS = [
     '.zx-wrap{position:fixed;inset:0;z-index:99999;font-family:inherit;color:#1c1c1e}',
-    '.zx-back{position:absolute;inset:0;background:rgba(15,15,20,.55)}',
-    '.zx-sheet{position:absolute;left:0;right:0;bottom:0;max-width:460px;margin:0 auto;background:#fff;border-radius:18px 18px 0 0;padding:22px 20px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.25);transform:translateY(100%);transition:transform .28s ease}',
-    '.zx-wrap.zx-in .zx-sheet{transform:translateY(0)}',
     '.zx-full{position:absolute;inset:0;background:#f5f5f7;overflow:auto;-webkit-overflow-scrolling:touch}',
     '.zx-h{margin:0 0 4px;font-size:20px;font-weight:700}',
     '.zx-p{margin:0 0 14px;font-size:14px;color:#555;line-height:1.45}',
@@ -95,18 +104,6 @@
   /* ----------------------------------------------------------------- drawing */
   function errHTML() { return st.error ? '<div class="zx-err" role="alert">' + esc(st.error) + '</div>' : ''; }
   function noteHTML() { return st.note ? '<div class="zx-note" role="status">' + esc(st.note) + '</div>' : ''; }
-
-  function signinHTML() {
-    return '<div class="zx-back" data-act="close"></div>' +
-      '<div class="zx-sheet" role="dialog" aria-modal="true" aria-label="Sign in">' +
-      '<h2 class="zx-h">Sign in</h2><p class="zx-p">Enter your ID and password.</p>' +
-      errHTML() +
-      '<div class="zx-f"><label for="zxId">ID</label><input id="zxId" type="text" autocomplete="username" autocapitalize="characters" placeholder="GOC-T-001" value="' + esc(st.idDraft) + '"></div>' +
-      '<div class="zx-f"><label for="zxPw">Password</label><div class="zx-row"><input id="zxPw" type="password" autocomplete="current-password"><button type="button" class="zx-btn zx-ghost zx-sm" data-act="show" data-for="zxPw">Show</button></div></div>' +
-      '<button type="button" class="zx-btn" data-act="signin"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Please wait…' : 'Sign in') + '</button>' +
-      '<button type="button" class="zx-btn zx-ghost" style="margin-top:8px" data-act="close">Cancel</button>' +
-      '</div>';
-  }
 
   function passwordHTML() {
     return '<div class="zx-full"><div class="zx-body" style="max-width:460px;padding-top:40px">' +
@@ -184,23 +181,16 @@
       '</div>';
   }
 
-  /* Slice 5.4: the Weak topics and Hardest questions cards. The server has already applied the
-     10-answer floor; here we only draw what it sent, and say plainly when there is not enough yet.
-     Everything from the server is written escaped. */
+  /* Objective, practice and marked theory answers contribute to these rankings. */
   function rankedCard(title, what, list, rowHTML) {
     if (st.statsError) return '<div class="zx-card"><h3>' + esc(title) + '</h3><p>' + esc(st.statsError) + '</p></div>';
     if (!list) return '<div class="zx-card zx-soon"><h3>' + esc(title) + '</h3><p>Loading…</p></div>';
-    var items = list.items || [], min = list.minAnswers || 10, hidden = list.hidden || 0, out = '<div class="zx-card"><h3>' + esc(title) + '</h3>';
-    if (!items.length) {
-      out += '<p>Not enough answers yet. A ' + what + ' appears here once it has at least ' + esc(min) + ' answers from your GOC students.</p>';
-    } else {
-      out += '<ol class="zx-rank">' + items.map(rowHTML).join('') + '</ol>';
-    }
-    if (hidden && items.length) out += '<p class="zx-warn">' + esc(hidden) + ' more ' + what + (hidden === 1 ? ' has' : 's have') + ' fewer than ' + esc(min) + ' answers, so ' + (hidden === 1 ? 'it is' : 'they are') + ' not ranked yet.</p>';
-    else if (hidden) out += '<p class="zx-warn">' + esc(hidden) + ' ' + what + (hidden === 1 ? ' has' : 's have') + ' some answers, but fewer than ' + esc(min) + '.</p>';
+    var items = list.items || [], out = '<div class="zx-card"><h3>' + esc(title) + '</h3><p>Average score per recorded answer, including marked theory. Older objective counters may include retired test answers.</p>';
+    if (!items.length) out += '<p>No recorded marked answers for this ' + esc(what) + ' yet.</p>';
+    else out += '<ol class="zx-rank">' + items.map(rowHTML).join('') + '</ol>';
     return out + '</div>';
   }
-  function pctLine(x) { return esc(x.percent) + '% right · ' + esc(x.answers) + ' answers'; }
+  function pctLine(x) { return esc(x.percent) + '% average score · ' + esc(x.answers) + ' answers'; }
   function weakCard() {
     return rankedCard('Weak topics', 'topic', st.stats && st.stats.weakTopics, function (x) {
       return '<li><b>' + esc(x.topic) + '</b><span>' + pctLine(x) + '</span></li>';
@@ -249,22 +239,24 @@
     return out + '</div>';
   }
   function loadAtRisk() {
+    var version = ++loadVersions.ar, token = st.token;
     var want = st.subject, sort = st.arSort;
     st.ar = null; st.arError = '';
     return call('GET', '/tutor/atrisk?subject=' + encodeURIComponent(want) + '&sort=' + encodeURIComponent(sort)).then(function (r) {
+      if (version !== loadVersions.ar || token !== st.token || !root) return;
       if (st.subject !== want || st.arSort !== sort) return;
-      st.ar = r; draw();
+      st.ar = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.ar || token !== st.token || !root) return;
       if (st.subject !== want) return;
       if (sessionProblem(e)) return;
-      st.arError = (e && e.message) || 'The at-risk list could not be loaded.'; draw();
+      st.arError = (e && e.message) || 'The at-risk list could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
   /* Top performers, slice 3: one card, two tabs (Web Tests / Practice), never blended. The server ranks and drops
-     students under the evidence floor (GET /tutor/top); here we only draw it. Only the top three rows carry a rank
-     number. Ten rows show at first, the rest sit behind Show all. Students held back for too little evidence are
-     shown as a count only. Everything from the server is written escaped. */
+     students with recorded evidence (GET /tutor/top); here we only draw it. Only the top three rows carry a rank
+     number. Ten rows show at first, the rest sit behind Show all. Everything from the server is written escaped. */
   var TOP_SHOW = 10;
   function topCard() {
     var title = 'Top performers';
@@ -294,15 +286,18 @@
     return out + '</div>';
   }
   function loadTop() {
+    var version = ++loadVersions.top, token = st.token;
     var want = st.subject;
-    st.top = null; st.topError = ''; st.topAll = false;
+    st.top = null; st.topError = '';
     return call('GET', '/tutor/top?subject=' + encodeURIComponent(want)).then(function (r) {
+      if (version !== loadVersions.top || token !== st.token || !root) return;
       if (st.subject !== want) return;
-      st.top = r; draw();
+      st.top = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.top || token !== st.token || !root) return;
       if (st.subject !== want) return;
       if (sessionProblem(e)) return;
-      st.topError = (e && e.message) || 'The top performers could not be loaded.'; draw();
+      st.topError = (e && e.message) || 'The top performers could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
@@ -318,7 +313,7 @@
     if (!x) {
       body = '<div class="zx-card"><p>' + esc(st.stuError || 'Loading…') + '</p></div>';
     } else {
-      var t = x.tests || {}, p = x.practice || {}, w = x.weakTopics || { items: [], hidden: 0, minAnswers: 3 };
+      var t = x.tests || {}, p = x.practice || {}, w = x.weakTopics || { items: [], hidden: 0, minAnswers: 1 };
       var contact;
       if (st.stuContact) contact = '<div class="zx-kv"><span>Email</span><span>' + esc(st.stuContact.email || 'None on file') + '</span></div><div class="zx-kv"><span>Phone</span><span>' + esc(st.stuContact.phone || 'None on file') + '</span></div><p>Showing these was recorded in your views.</p>';
       else contact = (st.stuContactError ? '<p class="zx-warn">' + esc(st.stuContactError) + '</p>' : '') + '<p>Email and phone are hidden. Showing them is recorded in your views.</p><button type="button" class="zx-btn zx-ghost zx-sm" data-act="stucontact"' + (st.stuContactBusy ? ' disabled' : '') + '>' + (st.stuContactBusy ? 'Loading…' : 'Show contact') + '</button>';
@@ -333,11 +328,11 @@
         '<div class="zx-card"><h3>Recent attempts</h3>' + ((x.recent || []).length ? '<ul class="zx-ar">' + x.recent.map(function (r) {
           return '<li><b>' + (r.kind === 'test' ? 'Test' + (r.section ? ' (' + esc(r.section) + ')' : '') : 'Practice') + '</b> <span class="zx-arid">' + esc(whenText(r.at)) + '</span><span class="zx-topfig">' +
             (r.kind === 'practice' ? esc(r.percent) + '% right over ' + esc(r.answers) + ' answer' + (r.answers === 1 ? '' : 's') :
-              (r.percent === null ? 'Waiting for a mark' : esc(r.percent) + '%' + (r.score !== null && r.maxScore !== null ? ' (' + esc(r.score) + '/' + esc(r.maxScore) + ')' : ''))) + '</span></li>';
+              (r.percent === null ? (r.status === 'marked' ? 'Score unavailable' : 'Waiting for a mark') : esc(r.percent) + '%' + (r.score !== null && r.maxScore !== null ? ' (' + esc(r.score) + '/' + esc(r.maxScore) + ')' : ''))) + '</span></li>';
         }).join('') + '</ul>' : '<p>No attempts yet in this subject.</p>') + '</div>' +
         '<div class="zx-card"><h3>Weak topics</h3>' + (w.items.length ? '<ul class="zx-ar">' + w.items.map(function (r) {
-          return '<li><b>' + esc(r.topic) + '</b><span class="zx-topfig">' + esc(r.percent) + '% right over ' + esc(r.answers) + ' answers</span></li>';
-        }).join('') + '</ul>' : '<p>No topic has ' + esc(w.minAnswers) + '+ answers from this student yet.</p>') +
+          return '<li><b>' + esc(r.topic) + '</b><span class="zx-topfig">' + esc(r.percent) + '% average score over ' + esc(r.answers) + ' answers</span></li>';
+        }).join('') + '</ul>' : '<p>No recorded practice or marked test answers by topic from this student yet.</p>') +
         (w.hidden > 0 ? '<p>' + esc(w.hidden) + ' topic' + (w.hidden === 1 ? ' has' : 's have') + ' too few answers to show.</p>' : '') + '</div>';
     }
     return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Student<b>' + esc(st.subject) + '</b></div>' +
@@ -381,7 +376,7 @@
     if (st.auditError) return '<div class="zx-card"><h3>' + title + '</h3><p>' + esc(st.auditError) + '</p></div>';
     if (!st.audit) return '<div class="zx-card zx-soon"><h3>' + title + '</h3><p>Loading…</p></div>';
     var rows = st.audit.entries || [];
-    var out = '<div class="zx-card"><h3>' + title + '</h3><p>Every time you open a student\'s page or show their contact details, the academy keeps a record for ' + esc(Math.round((st.audit.keptDays || 365) / 365 * 12)) + ' months. Only you and the academy can see yours.</p>';
+    var out = '<div class="zx-card"><h3>' + title + '</h3><p>Every time you open a student\'s page or show their contact details, the record is available here for ' + esc(Math.round((st.audit.keptDays || 365) / 365 * 12)) + ' months. Only you and the academy can see yours.</p>';
     if (!rows.length) return out + '<p class="zx-ok">You have not opened a student yet.</p></div>';
     out += '<p>Your last ' + esc(Math.min(rows.length, AUDIT_SHOWN)) + (rows.length > AUDIT_SHOWN ? ' of ' + esc(rows.length) : '') + ':</p><ul class="zx-ar">' + rows.slice(0, AUDIT_SHOWN).map(function (r) {
       return '<li><b>' + esc(r.studentName || r.studentId) + '</b> <span class="zx-arid">' + esc(r.studentId) + ' · ' + esc(r.subject) + '</span><span class="zx-topfig">' +
@@ -390,12 +385,15 @@
     return out + '</div>';
   }
   function loadAudit() {
+    var version = ++loadVersions.audit, token = st.token;
     st.audit = null; st.auditError = '';
     return call('GET', '/tutor/audit').then(function (r) {
-      st.audit = r; draw();
+      if (version !== loadVersions.audit || token !== st.token || !root) return;
+      st.audit = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.audit || token !== st.token || !root) return;
       if (sessionProblem(e)) return;
-      st.auditError = (e && e.message) || 'Your views could not be loaded.'; draw();
+      st.auditError = (e && e.message) || 'Your views could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
@@ -897,6 +895,7 @@
       '<div class="zx-body">' + noteHTML() + errHTML() +
       '<h2 class="zx-h">' + esc(st.subject || 'Dashboard') + '</h2>' +
       '<p class="zx-p">' + (subs.length > 1 ? 'Pick a subject. Each one has its own dashboard.' : 'Your subject dashboard.') + '</p>' +
+      '<p class="zx-p">Dashboard updates every minute while visible. <button type="button" class="zx-btn zx-ghost zx-sm" data-act="refresh">Refresh now</button></p>' +
       chips + depthCard() +
       questionsCard() +
       notesCard() +
@@ -914,14 +913,11 @@
 
   function draw() {
     if (!root) return;
-    root.className = 'zx-wrap' + (st.view !== 'signin' || st.shown ? ' zx-in' : '');
-    root.innerHTML = st.view === 'signin' ? signinHTML() : (st.view === 'password' ? passwordHTML() :
-      (st.view === 'questions' ? questionsHTML() : (st.view === 'qform' ? formHTML() : (st.view === 'qimport' ? importHTML() : (st.view === 'notes' ? notesHTML() : (st.view === 'nform' ? noteFormHTML() : (st.view === 'notices' ? noticesHTML() : (st.view === 'ntform' ? noticeFormHTML() : (st.view === 'scripts' ? scriptsHTML() : (st.view === 'script' ? scriptHTML() : (st.view === 'student' ? studentHTML() : dashHTML())))))))))));
-    if (st.view === 'signin') {
-      /* the sheet slides in once; later redraws (an error message) keep it in place */
-      if (!st.shown) setTimeout(function () { st.shown = true; if (root) root.className = 'zx-wrap zx-in'; }, 20);
-      var f = root.querySelector(st.idDraft ? '#zxPw' : '#zxId'); if (f && f.focus) f.focus();
-    }
+    root.className = 'zx-wrap zx-in';
+    var views = { password: passwordHTML, questions: questionsHTML, qform: formHTML, qimport: importHTML, notes: notesHTML, nform: noteFormHTML, notices: noticesHTML, ntform: noticeFormHTML, scripts: scriptsHTML, script: scriptHTML, student: studentHTML };
+    var oldView = root.querySelector('.zx-full'), scroll = oldView ? oldView.scrollTop : 0;
+    root.innerHTML = (views[st.view] || dashHTML)();
+    var newView = root.querySelector('.zx-full'); if (newView) newView.scrollTop = scroll;
   }
 
   function val(id) { var e = root && root.querySelector('#' + id); return e ? e.value : ''; }
@@ -931,15 +927,18 @@
   /* Slice 5.2: the numbers for the open subject. A late answer for a subject the tutor has
      since left is thrown away, and a failure here shows on the snapshot card only. */
   function loadStats() {
+    var version = ++loadVersions.stats, token = st.token;
     var want = st.subject;
     st.stats = null; st.statsError = '';
     return call('GET', '/tutor/analytics?subject=' + encodeURIComponent(want)).then(function (r) {
+      if (version !== loadVersions.stats || token !== st.token || !root) return;
       if (st.subject !== want) return;
-      st.stats = r; draw();
+      st.stats = r; if (st.view === 'dash') draw();
     }).catch(function (e) {
+      if (version !== loadVersions.stats || token !== st.token || !root) return;
       if (st.subject !== want) return;
       if (sessionProblem(e)) return;
-      st.statsError = (e && e.message) || 'The numbers could not be loaded.'; draw();
+      st.statsError = (e && e.message) || 'The numbers could not be loaded.'; if (st.view === 'dash') draw();
     });
   }
 
@@ -957,6 +956,11 @@
     });
   }
 
+  function refreshDashboard() {
+    if (!root || !st.token || st.view !== 'dash' || !st.subject) return;
+    loadStats(); loadAtRisk(); loadTop(); loadAudit(); draw();
+  }
+
   function loadSubject(back, keepError) {
     st.info = null;
     draw();
@@ -966,6 +970,9 @@
       loadAtRisk();
       loadTop();
       loadAudit();
+      if (!refreshTimer && typeof window.setInterval === 'function') refreshTimer = window.setInterval(function () {
+        if (!document.hidden) refreshDashboard();
+      }, 60000);
       loadQuestions();
       loadNotes();
       loadNotices();
@@ -987,8 +994,10 @@
     var m = (e && e.message) || '';
     if (e && e.status === 403 && /new password/i.test(m)) { st.view = 'password'; st.busy = false; setError(m); draw(); return true; }
     if (e && (e.status === 401 || (e.status === 403 && /switched off|no longer available|accounts only/i.test(m)))) {
-      st.token = null; st.user = null; st.info = null; st.stats = null; st.statsError = ''; st.qs = null; st.qError = ''; st.form = null; st.imp = null; st.ns = null; st.nError = ''; st.nForm = null; st.nt = null; st.ntError = ''; st.ntForm = null; st.sc = null; st.scError = ''; st.script = null; st.scriptError = ''; st.ar = null; st.arError = ''; st.arSort = 'inactive'; st.arAll = false; st.top = null; st.topError = ''; st.topTab = 'tests'; st.topAll = false; st.stu = null; st.stuError = ''; st.stuId = ''; st.stuContact = null; st.stuContactError = ''; st.stuContactBusy = false; st.audit = null; st.auditError = ''; st.view = 'signin'; st.busy = false;
-      setError(m); draw(); return true;
+      st.token = null; st.user = null; st.info = null; st.stats = null; st.statsError = ''; st.qs = null; st.qError = ''; st.form = null; st.imp = null; st.ns = null; st.nError = ''; st.nForm = null; st.nt = null; st.ntError = ''; st.ntForm = null; st.sc = null; st.scError = ''; st.script = null; st.scriptError = ''; st.ar = null; st.arError = ''; st.arSort = 'inactive'; st.arAll = false; st.top = null; st.topError = ''; st.topTab = 'tests'; st.topAll = false; st.stu = null; st.stuError = ''; st.stuId = ''; st.stuContact = null; st.stuContactError = ''; st.stuContactBusy = false; st.audit = null; st.auditError = ''; st.view = 'dash'; st.busy = false;
+      signout();
+      if (typeof window.toast === 'function') window.toast(m);
+      return true;
     }
     return false;
   }
@@ -999,16 +1008,6 @@
     if (user.mustChangePassword) { st.view = 'password'; setError(''); draw(); return; }
     st.view = 'dash'; setError(''); draw();
     loadSubject();
-  }
-
-  function signin() {
-    var id = val('zxId').trim(), pw = val('zxPw');
-    st.idDraft = id;
-    if (!id || !pw) { setError('Enter your ID and password.'); draw(); return; }
-    st.busy = true; setError(''); draw();
-    call('POST', '/tutor/login', { id: id, password: pw }).then(function (r) {
-      st.busy = false; st.token = r.token; st.idDraft = ''; enter(r.user);
-    }).catch(function (e) { st.busy = false; setError(e.message); draw(); });
   }
 
   function setpw() {
@@ -1026,16 +1025,19 @@
   }
 
   function close() {
+    if (refreshTimer) { window.clearInterval(refreshTimer); refreshTimer = null; }
     if (root && root.parentNode) root.parentNode.removeChild(root);
-    root = null; st.shown = false; st.idDraft = '';
+    root = null;
     var f = document.getElementById('loginId'); if (f && f.focus) f.focus();
   }
 
   function signout() {
     var t = st.token;
     st.token = null; st.user = null; st.info = null; st.stats = null; st.statsError = ''; st.note = ''; st.qs = null; st.qError = ''; st.form = null; st.imp = null; st.ns = null; st.nError = ''; st.nForm = null; st.sc = null; st.scError = ''; st.script = null; st.scriptError = ''; st.ar = null; st.arError = ''; st.arSort = 'inactive'; st.arAll = false; st.top = null; st.topError = ''; st.topTab = 'tests'; st.topAll = false; st.stu = null; st.stuError = ''; st.stuId = ''; st.stuContact = null; st.stuContactError = ''; st.stuContactBusy = false; st.audit = null; st.auditError = '';
-    if (t) { try { fetch('api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } }); } catch (e) { /* best effort; the session also expires */ } }
+    if (window.GOC && window.GOC.api) window.GOC.api.logout();
+    else if (t) { try { fetch('api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } }); } catch (e) {} }
     close();
+    if (typeof window.go === 'function') window.go('login-v2');
   }
 
   function onClick(ev) {
@@ -1043,10 +1045,9 @@
     while (t && t !== root) { if (t.getAttribute && t.getAttribute('data-act')) { act = t; break; } t = t.parentNode; }
     if (!act) return;
     var a = act.getAttribute('data-act');
-    if (a === 'close') close();
-    else if (a === 'signin') signin();
-    else if (a === 'setpw') setpw();
+    if (a === 'setpw') setpw();
     else if (a === 'signout') signout();
+    else if (a === 'refresh') refreshDashboard();
     else if (a === 'arsort') { var so = act.getAttribute('data-sort') === 'score' ? 'score' : 'inactive'; if (so !== st.arSort || !st.ar) { st.arSort = so; loadAtRisk(); draw(); } }
     else if (a === 'arall') { st.arAll = !st.arAll; draw(); }
     else if (a === 'toptab') { var tb = act.getAttribute('data-tab') === 'practice' ? 'practice' : 'tests'; if (tb !== st.topTab) { st.topTab = tb; st.topAll = false; draw(); } }
@@ -1108,10 +1109,7 @@
     }
   }
   function onKey(ev) {
-    if (ev.key === 'Escape' && st.view === 'signin') close();
-    else if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT') {
-      if (st.view === 'signin') signin(); else if (st.view === 'password') setpw();
-    }
+    if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT' && st.view === 'password' && !st.busy) setpw();
   }
 
   function open() {
@@ -1127,14 +1125,13 @@
     draw();
   }
 
-  /* Opening again (a second knock) resumes where the tutor was, or starts at sign-in. */
-  window.__zxOpen = function () {
-    if (!st.token) { st.view = 'signin'; st.shown = false; setError(''); }
-    open();
+  /* The common login passes only a server-verified tutor session. */
+  window.__zxOpen = function (session) {
+    if (!session || !session.token || !session.user || session.user.role !== 'tutor') return;
+    st.token = session.token; open(); enter(session.user);
   };
 
-  /* Guided-tour bridge (Stage 8): the onboarding engine in the /tutor
-     shell moves between the real tutor views through here — the same
+  /* Guided-tour bridge (Stage 8): the shared onboarding engine moves between the real tutor views through here — the same
      internal navigation the tutor's own buttons use, nothing new. */
   window.__zxTourGo = function (view) {
     if (!st.token) return;
@@ -1145,14 +1142,4 @@
     else { st.view = 'dash'; setError(''); draw(); }
   };
 
-  /* Delivered by the /tutor shell after sign-in (Stage 8): a session the
-     shell authenticated is adopted instead of asking a second time. The
-     token stays memory-only; a reload returns to the shell's sign-in. */
-  if (window.__zxSession && window.__zxSession.token && window.__zxSession.user) {
-    st.token = window.__zxSession.token;
-    open();
-    enter(window.__zxSession.user);
-    return;
-  }
-  window.__zxOpen();
 })();

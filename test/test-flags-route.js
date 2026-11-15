@@ -86,12 +86,12 @@ waitForBoot(20).then(async function (h) {
   head('a Chemistry tutor replies; a Physics tutor cannot');
   await call('POST', '/api/tutors', { name: 'Ada Chem', subjects: ['Chemistry'], password: 'start-pass-1' }, adm);
   await call('POST', '/api/tutors', { name: 'Eze Phys', subjects: ['Physics'], password: 'start-pass-2' }, adm);
-  var tl = await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' });
+  var tl = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' });
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'brand-new-pass' }, tl.body.token);
-  chemTok = (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).body.token;
-  var pl = await call('POST', '/api/tutor/login', { id: 'GOC-T-002', password: 'start-pass-2' });
+  chemTok = (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).body.token;
+  var pl = await call('POST', '/api/auth/login', { id: 'GOC-T-002', password: 'start-pass-2' });
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-2', newPassword: 'brand-new-pass2' }, pl.body.token);
-  var physTok = (await call('POST', '/api/tutor/login', { id: 'GOC-T-002', password: 'brand-new-pass2' })).body.token;
+  var physTok = (await call('POST', '/api/auth/login', { id: 'GOC-T-002', password: 'brand-new-pass2' })).body.token;
   var tChem = await call('GET', '/api/tutor/flags?subject=Chemistry', undefined, chemTok);
   ok('the Chemistry tutor sees the Chemistry flag', tChem.status === 200 && tChem.body.flags.some(function (f) { return f.id === flagId; }), tChem.raw.slice(0, 200));
   var tPhys = await call('GET', '/api/tutor/flags', undefined, physTok);
@@ -134,7 +134,7 @@ function demoParity() {
   var mock = vm.runInContext('GOC.api._drivers', ctx).mock;
   var dflag = null;
   activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Demo Flag', password: 'secret123', goal: 'JAMB / UTME 2027', subjects: COMBO }).then(function (r) {
-    
+
     var all = vm.runInContext('GOC.core.seedQuestions()', ctx);
     var q = all.filter(function (x) { return x.subject === 'Chemistry' && x.active !== false; })[0];
     return mock.askTutor({ questionId: q && q.id, reason: 'wrong-answer', note: 'demo note here' });

@@ -98,6 +98,30 @@ function createHandler(deps) {
         return { status: 403, body: { error: 'This origin is not allowed to call this API.' }, headers };
       }
 
+      /* Maintenance mode (GOC_MAINTENANCE_MODE): decided here, before the body
+         is parsed and before any session is resolved, so no route below can
+         see the request. Health stays available so a monitor can tell the
+         Function is up, but it names nothing beyond the service and the fact
+         of maintenance. Matches server/lib/maintenance.js. */
+      const reqPath = String(req.path || '/').split('?')[0];
+      if (cfg.maintenanceMode) {
+        if (method === 'GET' && reqPath === '/api/health') {
+          return {
+            status: 200,
+            body: { service: 'goc-academy-hub', version: 1, maintenance: true },
+            headers
+          };
+        }
+        return {
+          status: 503,
+          body: {
+            error: 'G.O.C Academy Hub is temporarily unavailable while improvements are completed. Please check back later.',
+            maintenance: true
+          },
+          headers: Object.assign({}, headers, { 'retry-after': '3600' })
+        };
+      }
+
       try {
         const raw = req.bodyRaw !== undefined && req.bodyRaw !== null
           ? String(req.bodyRaw)

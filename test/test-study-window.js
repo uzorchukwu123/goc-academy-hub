@@ -5,8 +5,8 @@
    (see js/app.js's sw.timer / STUDY_PING_MS) — this suite calls it directly,
    enough times through the mock driver to cross a deliberately low daily
    limit, and checks that the exact same things a real student would see
-   actually update: state.studyExhausted flips, the low-time warning banner
-   behaves, the wind-down overlay is shown, and a screen whose Start
+   actually update: state.studyExhausted flips, the focus ring reads zero
+   and turns red, the wind-down overlay is shown, and a screen whose Start
    button depends on the window repaints itself without a fresh navigation.
    Run:  node test/test-study-window.js  */
 'use strict';

@@ -2,7 +2,7 @@
 
    Real HTTP against a disposable server. Proves:
      1. the draw is exactly five questions with answers/explanations
-        withheld, from the dedicated 15-question sample pool only;
+        withheld, drawn from the real Question Bank through studyPool();
      2. submission marks exactly, returns score/percent/full review, and
         the token is single-use;
      3. validation and the per-IP draw limit engage;
@@ -17,10 +17,16 @@ var path = require('path');
 var fs = require('fs');
 var os = require('os');
 var crypto = require('crypto');
+var vm = require('vm');
 var spawn = require('child_process').spawn;
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var PORT = Number(process.env.GOC_DEMO_PORT) || 8185;
-var pool = require(path.join(APP, 'server', 'lib', 'demo-questions.js'));
+var core = require(path.join(APP, 'js', 'goc-core.js'));
+var BANK = core.seedQuestions();
+var FREE = core.studyPool(BANK, null, null)
+  .filter(function (q) { return q && Array.isArray(q.options) && q.options.length === 4 && Number.isInteger(Number(q.answer)); })
+  .sort(function (a, b) { return String(a.id).localeCompare(String(b.id), 'en', { numeric: true }); })
+  .slice(0, 5);
 var app = fs.readFileSync(path.join(APP, 'js', 'app.js'), 'utf8');
 var index = fs.readFileSync(path.join(APP, 'index.html'), 'utf8');
 var serverSrc = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
@@ -54,7 +60,7 @@ function call(method, urlPath, body) {
 }
 function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 function correctIndex(q) {
-  var src = pool.filter(function (p) { return p.text === q.text; })[0];
+  var src = BANK.filter(function (p) { return p.text === q.text && p.options.join('|') === q.options.join('|'); })[0];
   return q.options.indexOf(src.options[src.answer]);
 }
 function dataHash() {
@@ -67,12 +73,11 @@ function dataHash() {
   ok('the server boots', log.indexOf('is running') >= 0, log.slice(-200));
   var before = dataHash();
 
-  head('the pool itself');
-  ok('fifteen original sample questions, four options each, one answer, an explanation',
-    pool.length === 15 && pool.every(function (q) { return q.options.length === 4 && q.answer >= 0 && q.answer < 4 && q.explanation.length > 20; }));
-  ok('pool ids are demo-only and unique', pool.every(function (q) { return /^demo-/.test(q.id); })
-    && new Set(pool.map(function (q) { return q.id; })).size === 15);
-  ok('the pool file connects to no bank', !/questions\b.*(db|data)|readData|writeData/.test(fs.readFileSync(path.join(APP, 'server', 'lib', 'demo-questions.js'), 'utf8')));
+  head('the designated free set');
+  ok('the bank has at least five live practice questions to offer', FREE.length === 5
+    && FREE.every(function (q) { return q.section === 'practice' && q.active !== false && q.kind === 'objective'; }));
+  ok('the preview route draws through the same studyPool() as Practice', /core\.studyPool\(bank/.test(serverSrc)
+    && serverSrc.indexOf('demoAttempts') >= 0);
 
   head('an anonymous draw');
   var draw = await call('GET', '/api/demo/questions');
@@ -80,10 +85,13 @@ function dataHash() {
   ok('no answer or explanation is ever sent in the draw', draw.body.questions.every(function (q) {
     return q.answer === undefined && q.explanation === undefined && q.id === undefined;
   }), draw.raw.slice(0, 200));
-  ok('every drawn question is from the sample pool', draw.body.questions.every(function (q) {
-    return pool.some(function (p) { return p.text === q.text; });
+  ok('every drawn question is from the designated free set', draw.body.questions.every(function (q) {
+    return FREE.some(function (p) { return p.text === q.text; });
   }));
   ok('numbering and subjects travel with the questions', draw.body.questions[0].n === 1 && !!draw.body.questions[0].subject);
+  var drawAgain = await call('GET', '/api/demo/questions');
+  ok('the same designated five come back on a later draw', drawAgain.status === 200
+    && drawAgain.body.questions.map(function (q) { return q.text; }).join('\u0000') === draw.body.questions.map(function (q) { return q.text; }).join('\u0000'));
 
   head('marking, review, single use');
   var perfect = draw.body.questions.map(correctIndex);
@@ -118,14 +126,58 @@ function dataHash() {
 
   head('client journey wiring');
   ok('the homepage Try button opens the demo', /onclick="demoOpen\(\)"/.test(index) && /function demoOpen\(\)/.test(app));
-  ok('the demo screen carries intro, play and result states', /id="demoIntro"/.test(index) && /id="demoPlay"/.test(index) && /id="demoResult"/.test(index));
-  ok('navigation, palette and answer states mirror real Practice', /id="demoPalette"/.test(index) && /function demoRender\(\)/.test(app) && /demoAns\[demoI\] = i/.test(app));
-  ok('submission confirms when questions are unanswered', /unanswered question/.test(app) && /demoSubmit\(\)/.test(app));
-  ok('results offer Try again and an honest Unlock path', /onclick="demoStart\(\)">Try again<\/button>/.test(app) && /Unlock the full G\.O\.C experience/.test(app) && /Registration comes first/.test(app));
+  var tryBlock = index.slice(index.indexOf('id="lpTry"'), index.indexOf('id="lpNewsIntro"'));
+  ok('the homepage Try GOC button is the one wired to the preview',
+    /class="lp-cta lp-try-btn"[^>]*onclick="demoOpen\(\)"/.test(tryBlock)
+    && /Try a free practice session/.test(tryBlock));
+  ok('the preview is a public screen, not an authenticated dashboard route',
+    /var openScreens = \[[^\]]*'demo'/.test(app) && /var publicScreens = \[[^\]]*'demo'/.test(app));
+  function grab(name) {
+    var i = app.indexOf('function ' + name + '(');
+    var depth = 0, j = app.indexOf('{', i);
+    for (var k = j; k < app.length; k++) {
+      if (app[k] === '{') depth++;
+      else if (app[k] === '}') { depth--; if (depth === 0) return app.slice(i, k + 1); }
+    }
+    throw new Error('missing ' + name);
+  }
+  var demoState = { cbtDemo: null, srLast: null };
+  var dctx = vm.createContext(demoState);
+  vm.runInContext(grab('isDemoSurface'), dctx);
+  ok('the public preview surface is recognised from the homepage',
+    demoState.isDemoSurface('demo') === true);
+  ok('the shared CBT runner is public only while the preview owns it',
+    demoState.isDemoSurface('cbt') === false);
+  demoState.cbtDemo = { token: 'x' };
+  ok('the preview run keeps the public shell', demoState.isDemoSurface('cbt') === true);
+  demoState.cbtDemo = null;
+  demoState.srLast = { mode: 'practice' };
+  ok('an authenticated practice result keeps the student shell',
+    demoState.isDemoSurface('studyRes') === false);
+  demoState.srLast = { mode: 'demo' };
+  ok('the preview result keeps the public shell', demoState.isDemoSurface('studyRes') === true);
+  ok('ordinary student screens are never marked public', demoState.isDemoSurface('home') === false
+    && demoState.isDemoSurface('study') === false && demoState.isDemoSurface('profile') === false);
+  ok('the page toggles the public layout for the preview surfaces',
+    /classList\.toggle\('is-login', publicScreens\.indexOf\(id\) > -1 \|\| demoSurface\)/.test(app));
+  var demoCss = fs.readFileSync(path.join(APP, 'css', 'styles.css'), 'utf8');
+  ok('the authenticated sidebar and tabbar cannot render over the preview',
+    /\.phone\.is-login \.tabbar\{display:none!important\}/.test(demoCss)
+    && /\.phone\.is-login \.screens\{left:0\}/.test(demoCss));
+  ok('the preview keeps its public header and back-to-home action',
+    /id="demo"/.test(index) && /Try G\.O\.C — Free Practice Preview/.test(index)
+    && /aria-label="Back to homepage"[^>]*onclick="go\('landing'\)"/.test(index));
+  ok('the demo intro is a fixed pre-exam page, not a scrolling form', /id="demoIntro"/.test(index)
+    && /class="screen demo-screen"/.test(index) && /#demo\.demo-screen\{ overflow:hidden; }/.test(fs.readFileSync(path.join(APP, 'css', 'styles.css'), 'utf8')));
+  ok('the real CBT runner is reused, not a second exam interface', /function cbtOpenDemo\(/.test(app)
+    && /cbtOpenDemo\(\{ token: j\.token/.test(app) && /id="cbt"/.test(index) && !/id="demoPlay"/.test(index));
+  ok('one initialisation guards a double tap on Start', /demoLoading/.test(app) && /if\(demoLoading\) return;/.test(app));
+  ok('the result is the shared study-result screen with a signup invitation', /function demoResult\(/.test(app)
+    && /srShow\(\{/.test(app) && /Create a free account/.test(index) && /srDemoCta/.test(index));
   var demoCode = app.slice(app.indexOf('TRY G.O.C — ANONYMOUS PREVIEW'));
   demoCode = demoCode.slice(0, demoCode.indexOf('function setResFilter'));
-  ok('the client stores nothing and awards nothing', !/localStorage|sessionStorage|xpAward|awardXp|XP earned/.test(demoCode));
-  ok('the client never touches an authenticated API helper', !/GOC\.api/.test(demoCode));
+  ok('the client stores nothing and awards nothing', !/localStorage|sessionStorage|xpAward|awardXp/.test(demoCode));
+  ok('the client never touches an authenticated API helper for the preview', !/GOC\.api/.test(demoCode));
 
   child.kill();
   console.log('\n' + (fails ? fails + ' check(s) FAILED' : 'demo preview: all checks passed'));

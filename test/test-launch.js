@@ -31,8 +31,12 @@ ok('the Scholar ID field is not pre-filled',
    !/value="[^"]+"/.test(idField), idField);
 ok('the password field is not pre-filled',
    !/value="[^"]+"/.test(pwField), pwField);
-ok('the ID field still shows the format as a placeholder, so the student knows the shape',
+ok('the ID field still shows the Scholar format as a placeholder, so the student knows the shape',
    /placeholder="GOC-S-/.test(idField));
+var loginForm = (html.match(/<form id="loginForm"[\s\S]*?<\/form>/) || [''])[0];
+ok('the login ID space does not advertise tutor or management ID formats',
+   !/GOC-T-|GOC-A-/.test(idField) && !/tutor|management|admin/i.test(loginForm),
+   idField + ' ' + loginForm.slice(0, 220));
 
 /* ------------------------------------------------ no credentials on show --- */
 head('no credential is printed anywhere on the page');

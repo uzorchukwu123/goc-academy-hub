@@ -9,7 +9,7 @@ var vm = require('vm');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 var md = require('./minidom.js');
 var app = fs.readFileSync(path.join(APP, 'js', 'app.js'), 'utf8');
-var bundle = fs.readFileSync(path.join(APP, 'server', 'tutor', 'tutor-app.js'), 'utf8');
+var bundle = fs.readFileSync(path.join(APP, 'js', 'tutor-app.js'), 'utf8');
 var fails = 0;
 function ok(name, cond, extra) {
   if (cond) console.log('  pass  ' + name);
@@ -59,7 +59,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   setField('some other word', 'x'); loggedIn = [];
   await vm.runInContext('login()', ctx); await tick();
   ok('a non-ID word is only an ordinary failed sign-in attempt', loggedIn.length === 1 && loggedIn[0][0] === 'some other word');
-  ok('the public app never says tutor in the log-in code', !/tutor/i.test(grab('login') + grab('loginNow')));
+  ok('the public login code routes the authenticated tutor role', /user.role === 'tutor'/.test(grab('loginNow')));
 
   /* ===================================================== the tutor screens */
   console.log('\nthe tutor screens');
@@ -88,45 +88,46 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   /* Slice 6.2: the questions list has its own route too (covered in test-tutor-questions-ui.js). */
   function fetchStub(url, opts) {
     if (/^api\/tutor\/questions/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, pending: 0, returned: 0 }, questions: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, pending: 0, returned: 0 }, questions: [] })); } });
     }
     if (/^api\/tutor\/notes/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, held: 0 }, notes: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { live: 0, held: 0 }, notes: [] })); } });
     }
     /* Slice 7: the class notices list has its own route too (covered in test-notices-tutor-ui.js). */
     if (/^api\/tutor\/notices/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', count: 0, notices: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', count: 0, notices: [] })); } });
     }
     /* At-risk list, slice 3: its own route too (covered in test-tutors-atrisk-ui.js). */
     if (/^api\/tutor\/atrisk/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', sort: 'inactive', limits: { inactiveDays: 7, lowAverage: 40 }, count: 0, students: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', sort: 'inactive', limits: { inactiveDays: 7, lowAverage: 40 }, count: 0, students: [] })); } });
     }
     /* Student page and My views: their own routes too (covered in test-tutors-student-ui.js). */
     if (/^api\/tutor\/audit/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ keptDays: 365, count: 0, entries: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ keptDays: 365, count: 0, entries: [] })); } });
     }
     /* Top performers, slice 3: its own route too (covered in test-tutors-top-ui.js). */
     if (/^api\/tutor\/top/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', subjects: [], tests: { items: [], hidden: 0, minPapers: 2 }, practice: { items: [], hidden: 0, minAnswers: 20 } })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', subjects: [], tests: { items: [], hidden: 0, minPapers: 2 }, practice: { items: [], hidden: 0, minAnswers: 20 } })); } });
     }
     /* Phase 4.A slice 6: the question flags list has its own route too (covered in test-flags-route.js). */
     if (/^api\/tutor\/flags/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subjects: [], count: 0, flags: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subjects: [], count: 0, flags: [] })); } });
     }
     /* Slice 6.6: the theory scripts list has its own route too (covered in test-tutor-marking-ui.js). */
     if (/^api\/tutor\/scripts/.test(url)) {
-      return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { waiting: 0, marked: 0 }, scripts: [] })); } });
+      return Promise.resolve({ ok: true, status: 200, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify({ subject: '', counts: { waiting: 0, marked: 0 }, scripts: [] })); } });
     }
     if (/^api\/tutor\/analytics/.test(url)) {
       analyticsCalls.push({ url: url, auth: opts && opts.headers && opts.headers.Authorization });
       var ar = analyticsQueue.shift() || { status: 200, body: snapFor(decodeURIComponent((url.split('subject=')[1] || ''))) };
-      return Promise.resolve({ ok: ar.status < 400, status: ar.status, text: function () { return Promise.resolve(JSON.stringify(ar.body)); } });
+      return Promise.resolve({ ok: ar.status < 400, status: ar.status, headers: { get: function () { return 'application/json'; } }, text: function () { return Promise.resolve(JSON.stringify(ar.body)); } });
     }
     calls.push({ url: url, method: (opts && opts.method) || 'GET', auth: opts && opts.headers && opts.headers.Authorization, body: opts && opts.body ? JSON.parse(opts.body) : null });
     var r = responses.shift() || { status: 200, body: {} };
-    return Promise.resolve({ ok: r.status < 400, status: r.status, text: function () { return Promise.resolve(JSON.stringify(r.body)); } });
+    return Promise.resolve({ ok: r.status < 400, status: r.status, headers: { get: function () { return r.type || 'application/json'; } }, text: function () { return Promise.resolve(r.raw == null ? JSON.stringify(r.body) : r.raw); } });
   }
-  var win = { };
+  var navigated = '', lastToast = '';
+  var win = { go: function (s) { navigated = s; }, toast: function (s) { lastToast = s; } };
   var bctx = vm.createContext({ window: win, document: doc, fetch: fetchStub, setTimeout: setTimeout, Promise: Promise, JSON: JSON, encodeURIComponent: encodeURIComponent, String: String });
   vm.runInContext(bundle, bctx);
   function root() { return doc.body.children[0]; }
@@ -136,37 +137,24 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   function btn(act) { return q('button[data-act=' + act + ']'); }
   function text() { return root() ? root().textContent : ''; }
 
-  ok('the sheet is drawn over the page', !!root() && !!q('#zxId') && !!q('#zxPw'));
-  ok('the sheet is a labelled dialog', /role="dialog"/.test(root().innerHTML) && /aria-modal="true"/.test(root().innerHTML));
-  ok('the overlay brings its own styles', !!doc.head.children.length || !!doc.getElementById('zxCss') || true);
-  ok('opening again does not draw a second overlay', (win.__zxOpen(), doc.body.children.length === 1));
-
-  click(btn('signin'));
-  ok('empty boxes are caught on the page, nothing is sent', calls.length === 0 && /Enter your ID and password/.test(text()));
-
-  responses.push({ status: 401, body: { error: 'That ID and password do not match.' } });
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'wrong';
-  click(btn('signin')); await tick();
-  ok('a wrong password shows the server message', /do not match/.test(text()), text());
-  ok('the sign-in went to the tutor route with the ID and password', calls[0].url === 'api/tutor/login' && calls[0].body.id === 'GOC-T-001' && calls[0].body.password === 'wrong');
-  ok('no token is sent before sign-in', !calls[0].auth);
-  ok('the ID the tutor typed is kept for the next try', /value="GOC-T-001"/.test(root().innerHTML), root().innerHTML.slice(0, 600));
-
-  responses.push({ status: 200, body: { token: 'tok-1', user: { id: 'GOC-T-001', name: 'Mrs <b>Ada</b> Obi', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: true } } });
-  q('#zxPw').value = 'start-pass-1';
-  key(q('#zxPw'), 'Enter'); await tick();
-  ok('Enter signs in', calls.length === 2 && calls[1].body.password === 'start-pass-1');
+  ok('there is no separate sign-in screen', !root());
+  win.__zxOpen();
+  ok('no session cannot open the tutor dashboard', !root());
+  win.__zxOpen({ token: 'bad', user: { id: 'GOC-S-001', role: 'student' } });
+  ok('a student identity cannot open the tutor dashboard', !root());
+  win.__zxOpen({ token: 'tok-1', user: { id: 'GOC-T-001', name: 'Mrs <b>Ada</b> Obi', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: true } });
+  var beforeSuccess = -1;
   ok('a first sign-in goes to the password screen, not the dashboard', !!q('#zxCur') && !!q('#zxNew') && !q('button[data-act=subject]'), text());
   ok('the password screen explains why', /first sign-in/.test(text()));
 
   click(btn('setpw'));
-  ok('empty boxes on the password screen are caught', calls.length === 2 && /Fill in all three/.test(text()));
+  ok('empty boxes on the password screen are caught', calls.length === beforeSuccess + 1 && /Fill in all three/.test(text()));
   q('#zxCur').value = 'start-pass-1'; q('#zxNew').value = 'short'; q('#zxNew2').value = 'short';
   click(btn('setpw'));
-  ok('a short new password is caught on the page', calls.length === 2 && /at least 8/.test(text()));
+  ok('a short new password is caught on the page', calls.length === beforeSuccess + 1 && /at least 8/.test(text()));
   q('#zxCur').value = 'start-pass-1'; q('#zxNew').value = 'a-better-pass'; q('#zxNew2').value = 'a-different-one';
   click(btn('setpw'));
-  ok('two different new passwords are caught', calls.length === 2 && /do not match/.test(text()));
+  ok('two different new passwords are caught', calls.length === beforeSuccess + 1 && /do not match/.test(text()));
 
   responses.push({ status: 400, body: { error: 'Your current password is not right.' } });
   q('#zxCur').value = 'nope'; q('#zxNew').value = 'a-better-pass'; q('#zxNew2').value = 'a-better-pass';
@@ -191,9 +179,9 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('the snapshot card shows the class numbers', /Class snapshot/.test(text()) && /GOC students/.test(text()) && /14/.test(text()) && /65%/.test(text()) && /71\.5%/.test(text()) && /Active in the last 7 days/.test(text()), text());
   ok('no Open-student count exists any more (one student category)', !/Open students/.test(text()), text());
   ok('a small test sample carries a plain warning, the practice average (120 answers) does not', /only 2 marked papers/.test(text()) && !/Practice average rests on only/.test(text()), text());
-  ok('the Weak topics card lists topics weakest first with percent and answers', /Weak topics/.test(text()) && /Acids/.test(text()) && /10% right · 40 answers/.test(text()) && text().indexOf('Acids') < text().indexOf('Salts'), text());
-  ok('and says how many topics are held back for too few answers', /2 more topics have fewer than 10 answers/.test(text()), text());
-  ok('the Hardest questions card shows the question, its topic and the figures', /Hardest questions/.test(text()) && /Which unit/.test(text()) && /Electricity · 10% right · 40 answers/.test(text()), text());
+  ok('the Weak topics card lists topics weakest first with percent and answers', /Weak topics/.test(text()) && /Acids/.test(text()) && /10% average score · 40 answers/.test(text()) && text().indexOf('Acids') < text().indexOf('Salts'), text());
+  ok('the cards no longer require a minimum sample', !/fewer than 10 answers/.test(text()), text());
+  ok('the Hardest questions card shows the question, its topic and the figures', /Hardest questions/.test(text()) && /Which unit/.test(text()) && /Electricity · 10% average score · 40 answers/.test(text()), text());
   ok('question and topic text is escaped, never markup', root().__raw.indexOf('<script>') < 0 && root().__raw.indexOf('&lt;script&gt;') > -1 && root().__raw.indexOf('<i>') < 0, root().__raw.slice(0, 200));
 
   responses.push({ status: 200, body: { subject: 'Physics', subjects: ['Chemistry', 'Physics'], depth: { subject: 'Physics', objective: 7, theory: 2, jamb: 1, practice: 9, notes: 0 } } });
@@ -205,7 +193,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   analyticsQueue.push({ status: 200, body: { subject: 'Chemistry', subjects: [], snapshot: snapFor('Chemistry').snapshot, weakTopics: { items: [], hidden: 3, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } } });
   responses.push({ status: 200, body: { subject: 'Chemistry', subjects: ['Chemistry', 'Physics'], depth: { subject: 'Chemistry', objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } } });
   click(q('button[data-subject=Chemistry]')); await tick(20);
-  ok('with nothing ranked, each card says why instead of staying blank', (text().match(/Not enough answers yet/g) || []).length === 2 && /3 topics have some answers, but fewer than 10/.test(text()), text());
+  ok('with nothing ranked, each card says why instead of staying blank', (text().match(/No recorded marked answers for this/g) || []).length === 2 && !/fewer than 10/.test(text()), text());
   responses.push({ status: 200, body: { subject: 'Physics', subjects: ['Chemistry', 'Physics'], depth: { subject: 'Physics', objective: 7, theory: 2, jamb: 1, practice: 9, notes: 0 } } });
   click(q('button[data-subject=Physics]')); await tick(20);
 
@@ -225,21 +213,16 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
 
   responses.push({ status: 403, body: { error: 'This tutor account has been switched off by the academy.' } });
   click(q('button[data-subject=Chemistry]')); await tick(20);
-  ok('a switched-off account is sent back to sign-in with the reason', !!q('#zxId') && /switched off/.test(text()), text());
-  responses.push({ status: 200, body: { token: 'tok-1b', user: { id: 'GOC-T-001', name: 'Ada', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: false } } });
+  ok('a switched-off account returns to common login with the reason', !root() && navigated === 'login-v2' && /switched off/.test(lastToast), lastToast);
   responses.push({ status: 200, body: { subject: 'Chemistry', subjects: ['Chemistry', 'Physics'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } } });
-  q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'a-better-pass'; click(btn('signin')); await tick(20);
-
+  win.__zxOpen({ token: 'tok-1b', user: { id: 'GOC-T-001', name: 'Ada', role: 'tutor', subjects: ['Chemistry', 'Physics'], mustChangePassword: false } }); await tick(20);
   responses.push({ status: 401, body: { error: 'Your session has ended. Please sign in again.' } });
   click(q('button[data-subject=Physics]')); await tick(20);
-  ok('an ended session returns to the sign-in sheet with the reason', !!q('#zxId') && /session has ended/.test(text()), text());
-  ok('the old token is dropped', (function () { var n = calls.length; responses.push({ status: 401, body: { error: 'x' } }); q('#zxId').value = 'GOC-T-001'; q('#zxPw').value = 'p'; click(btn('signin')); return !calls[n] ? false : !calls[n].auth; })());
-  await tick();
+  ok('an ended session returns to common login with the reason', !root() && navigated === 'login-v2' && /session has ended/.test(lastToast), lastToast);
+  ok('an empty session cannot reopen the dashboard', (win.__zxOpen(), !root()));
 
-  /* sign out */
-  responses.push({ status: 200, body: { token: 'tok-2', user: { id: 'GOC-T-002', name: 'Mr Bayo Ade', role: 'tutor', subjects: ['Mathematics'], mustChangePassword: false } } });
   responses.push({ status: 200, body: { subject: 'Mathematics', subjects: ['Mathematics'], depth: { objective: 1, theory: 1, jamb: 1, practice: 1, notes: 1 } } });
-  q('#zxId').value = 'GOC-T-002'; q('#zxPw').value = 'secret-pass'; click(btn('signin')); await tick(20);
+  win.__zxOpen({ token: 'tok-2', user: { id: 'GOC-T-002', name: 'Mr Bayo Ade', role: 'tutor', subjects: ['Mathematics'], mustChangePassword: false } }); await tick(20);
   ok('a tutor with one subject goes straight to the dashboard', /Mathematics/.test(text()) && !q('button[data-act=subject]'));
   ok('one subject shows no switcher', !q('button[data-subject=Mathematics]'));
   var before = calls.length;
@@ -247,11 +230,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 8); }); 
   ok('sign out tells the server', calls.slice(before).some(function (c) { return c.url === 'api/auth/logout' && c.auth === 'Bearer tok-2'; }));
   ok('sign out removes everything from the page', doc.body.children.length === 0);
   win.__zxOpen();
-  ok('reopening the retained tutor overlay starts again at the sign-in sheet', !!q('#zxId') && !q('#zxCur') && !/GOC-T-002/.test(text()));
-  click(btn('close'));
-  ok('Cancel closes the sheet', doc.body.children.length === 0);
-  win.__zxOpen(); key(q('#zxId'), 'Escape');
-  ok('Escape closes the sheet', doc.body.children.length === 0);
+  ok('reopening without authentication never opens the dashboard', !root());
 
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');
   process.exit(fails ? 1 : 0);

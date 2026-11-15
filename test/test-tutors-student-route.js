@@ -96,9 +96,9 @@ function total(stats, subject, which) {
   async function newTutor(name, subjects, pw) {
     var c = await call('POST', '/api/tutors', { name: name, subjects: subjects, password: pw }, adm);
     var tid = 'GOC-T-00' + (++tutorN);
-    var t = (await call('POST', '/api/tutor/login', { id: tid, password: pw })).body.token;
+    var t = (await call('POST', '/api/auth/login', { id: tid, password: pw })).body.token;
     await call('POST', '/api/tutor/password', { currentPassword: pw, newPassword: pw + '-own' }, t);
-    return { id: tid, token: (await call('POST', '/api/tutor/login', { id: tid, password: pw + '-own' })).body.token };
+    return { id: tid, token: (await call('POST', '/api/auth/login', { id: tid, password: pw + '-own' })).body.token };
   }
   var tp = await newTutor('Mrs Ada Obi', ['Physics'], 'start-pass-1');
   var tc = await newTutor('Mr Chike Eze', ['Chemistry'], 'start-pass-2');
@@ -213,7 +213,7 @@ function total(stats, subject, which) {
 
   console.log('\nwiring');
   var srv = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
-  ok('the route uses the scope guard, the core rules and writes the log before answering', /api\\\/tutor\\\/student/.test(srv) && /core\.tutorMayOpenStudent\(subject/.test(srv) && /core\.tutorStudentDetail\(subject/.test(srv) && srv.indexOf('writeData(db); } catch (e) { console.error(\'[goc] Audit log not written') > -1);
+  ok('the route uses the scope guard, the core rules and writes the log before answering', /api\\\/tutor\\\/student/.test(srv) && /core\.tutorMayOpenStudent\(subject/.test(srv) && /core\.tutorStudentDetail\(subject/.test(srv) && srv.indexOf('await appendTutorAudit(db, entry); } catch (e)') > -1);
   console.log(fails ? '\n' + fails + ' FAILED' : '\nall passed');
   stop(); process.exit(fails ? 1 : 0);
 })().catch(function (e) { console.log('  FAIL  crashed: ' + (e && e.stack || e)); console.log(serverLog.slice(-800)); stop(); process.exit(1); });

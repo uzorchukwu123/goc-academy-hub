@@ -2,7 +2,7 @@
    Makes deploy/ (or the folder given) holding ONLY what a live host needs:
      public/            the minified app (node build/build.js writes it here)
      js/goc-core.js     the shared rules; the server loads this file (readable, never served)
-     server/            server.js, lib/, tutor/, setup-appwrite.js, verify-media.js, export-questions.js
+     server/            server.js, lib/, setup-appwrite.js, verify-media.js, export-questions.js
      package.json, package-lock.json
    Nothing else is copied. Anything on the REFUSE list found where a copy would read it
    (server/backups, any .bak, .env*, data.json*, test/, .git, outbox logs, question pictures)
@@ -21,7 +21,7 @@ var ALLOW_FILES = [
   'js/goc-free-2027.js',
   'server/server.js', 'server/setup-appwrite.js', 'server/verify-media.js', 'server/export-questions.js'
 ];
-var ALLOW_DIRS = ['server/lib', 'server/tutor'];
+var ALLOW_DIRS = ['server/lib'];
 var BUILT_DIR = 'public';
 
 // Returns why a path must never be deployed, or '' when it is fine. rel uses forward slashes.

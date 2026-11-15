@@ -25,6 +25,7 @@ const ATTEMPTS = 'attempts';
 const STUDENTS = 'students';
 const TUTORS = 'tutors';
 const STUDENT_NOTES = 'studentnotes';
+const TUTOR_LEDGER = 'tutorledger';
 
 const bundle = createAppwriteClient();
 if (!bundle) {
@@ -127,6 +128,15 @@ async function ensureStudentNoteAttributes() {
   await int(STUDENT_NOTES, 'sizeBytes');
 }
 
+/* Sensitive practice history and view logs: server API key access only. */
+async function ensureTutorLedgerAttributes() {
+  await str(TUTOR_LEDGER, 'kind', 30, true);
+  await str(TUTOR_LEDGER, 'owner', 60);
+  await str(TUTOR_LEDGER, 'subject', 100);
+  await int(TUTOR_LEDGER, 'at', true);
+  await str(TUTOR_LEDGER, 'payload', 1000000, true);
+}
+
 async function ensureAttemptAttributes() {
   await str(ATTEMPTS, 'scholarId', 60);
   await str(ATTEMPTS, 'studentName', 200);
@@ -171,6 +181,10 @@ async function ensureIndexes() {
   await index(ATTEMPTS, 'idx_status', ['status']);
   // student notes — the owner's library list is the only query shape.
   await index(STUDENT_NOTES, 'idx_owner', ['ownerId']);
+  await index(TUTOR_LEDGER, 'idx_kind_owner_subject', ['kind', 'owner', 'subject']);
+  await index(TUTOR_LEDGER, 'idx_kind_owner', ['kind', 'owner']);
+  await index(TUTOR_LEDGER, 'idx_kind_subject', ['kind', 'subject']);
+  await index(TUTOR_LEDGER, 'idx_kind', ['kind']);
 }
 
 /* Attributes must exist and be "available" before an index over them can be
@@ -207,6 +221,9 @@ async function ensureStudentAttributes() {
   // Tutor records contain password hashes: no public collection permissions.
   await ensureCollection(TUTORS, 'Tutors', []);
   await ensureCollection(STUDENT_NOTES, 'Student Notes');
+  await ensureCollection(TUTOR_LEDGER, 'Tutor analytics ledger', []);
+  const ledgerInfo = await databases.getCollection(DATABASE_ID, TUTOR_LEDGER);
+  if (!Array.isArray(ledgerInfo.$permissions) || ledgerInfo.$permissions.length || ledgerInfo.documentSecurity !== false) throw new Error('tutorledger must be private and have document security disabled. Refusing to change existing permissions.');
 
   console.log('Questions attributes:');
   await ensureQuestionAttributes();
@@ -216,11 +233,14 @@ async function ensureStudentAttributes() {
   await ensureTutorAttributes();
   console.log('Student Notes attributes:');
   await ensureStudentNoteAttributes();
+  console.log('Tutor ledger attributes:');
+  await ensureTutorLedgerAttributes();
 
   await waitForAttributes(QUESTIONS);
   await waitForAttributes(ATTEMPTS);
   await waitForAttributes(TUTORS);
   await waitForAttributes(STUDENT_NOTES);
+  await waitForAttributes(TUTOR_LEDGER);
 
   console.log('Indexes:');
   await ensureIndexes();

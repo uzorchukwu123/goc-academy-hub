@@ -2767,6 +2767,48 @@
       });
     }
 
+    /* Tutor entry shares /auth/login but never falls back to demo credentials.
+       Classify host wake pages and malformed responses without trusting HTML. */
+    function tutorProblem(kind, message) {
+      var e = new Error(message); e.kind = kind; return e;
+    }
+    function tutorResponse(r) {
+      var type = r.headers.get('content-type') || '';
+      var unavailable = r.status === 502 || r.status === 503 || r.status === 504;
+      if (!/^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|\s*$)/i.test(type)) {
+        throw tutorProblem(unavailable ? 'waking' : 'unexpected', 'The service is temporarily unavailable.');
+      }
+      return r.text().then(function (txt) {
+        var d;
+        try { d = JSON.parse(txt); } catch (e) { throw tutorProblem(unavailable ? 'waking' : 'unexpected', 'The service is temporarily unavailable.'); }
+        if (!d || typeof d !== 'object' || Array.isArray(d)) throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+        if (d.maintenance === true) throw tutorProblem('maintenance', typeof d.error === 'string' ? d.error : 'G.O.C Academy Hub is temporarily under maintenance.');
+        if (unavailable) throw tutorProblem('waking', 'The server is starting up.');
+        if (!r.ok) {
+          if (typeof d.error !== 'string' || !d.error) throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+          throw tutorProblem('api', d.error);
+        }
+        return d;
+      }, function () { throw tutorProblem('network', 'Cannot reach the server. Check your connection.'); });
+    }
+    function tutorFetch(url, opts) {
+      return fetch(url, opts).catch(function () { throw tutorProblem('network', 'Cannot reach the server. Check your connection.'); });
+    }
+    function tutorLogin(id, password) {
+      return tutorFetch(base + '/auth/login', { method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: norm(id), password: String(password) }) })
+        .then(tutorResponse).then(function (d) {
+          if (typeof d.token !== 'string' || !d.token || !d.user || d.user.role !== 'tutor' || !d.user.id) throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+          token = d.token;
+          writeStoredStudentToken(null);
+          return d.user;
+        });
+    }
+    function tutorHealth() {
+      return tutorFetch(base + '/health', { headers: { 'Accept': 'application/json' }, cache: 'no-store' }).then(tutorResponse).then(function (d) {
+        if (d.service !== 'goc-academy-hub') throw tutorProblem('unexpected', 'The service returned an unexpected response.');
+        return d;
+      });
+    }
     function uploadReq(uploadPath, formData) {
     var opts = {
       method: 'POST',
@@ -2808,6 +2850,8 @@
       _setPasscodeLength: function (n) { passLen = Number(n) || 4; },
       /* Read-only view of the token this driver holds in memory. */
       _token: function () { return token; },
+      _tutorLogin: tutorLogin,
+      _tutorHealth: tutorHealth,
 
       login: function (id, password) {
         return req('POST', '/auth/login', { id: norm(id), password: String(password) })
@@ -2820,9 +2864,11 @@
           });
       },
       logout: function () {
-        var t = token; token = null;
+        // Build the request while the bearer token is still available.
+        var pending = token ? req('POST', '/auth/logout').catch(function () { return true; }) : ok(true);
+        token = null;
         writeStoredStudentToken(null);
-        return t ? req('POST', '/auth/logout').catch(function () { return true; }) : ok(true);
+        return pending;
       },
       session: function () {
         // No in-memory token yet on this load — before giving up, check for
@@ -3286,7 +3332,15 @@ listPublishedVideos: function () {
     mode: function () { return active.name; },
     isDemo: function () { return active === mock; },
 
-    login:          function (id, pw) { return active.login(id, pw); },
+    login: function (id, pw) {
+      // A sleeping server must never silently turn a tutor login into a demo login.
+      if (/^GOC-T-/i.test(norm(id)) && global.location && /^https?:/.test(String(global.location.protocol)) && typeof fetch === 'function') {
+        return http._tutorLogin(id, pw).then(function (user) { active = http; return user; });
+      }
+      return active.login(id, pw);
+    },
+    tutorHealth: function () { return http._tutorHealth().then(function (d) { active = http; return d; }); },
+    tutorToken: function () { return active === http ? http._token() : null; },
     logout:         function ()       { return active.logout(); },
     session:        function ()       { return active.session(); },
     /* Synchronous, no network: lets the boot sequence decide — before it

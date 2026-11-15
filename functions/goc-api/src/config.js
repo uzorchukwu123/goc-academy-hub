@@ -60,6 +60,12 @@ function load(env) {
        Appwrite work rather than silently contacting a project it was told to
        leave alone. */
     appwriteOff: bool(env, 'GOC_APPWRITE_OFF'),
+    /* Same name and same truthy values as the Node server's maintenance
+       switch. When on, every route except a minimal GET /api/health answers
+       503, so a stale static Site shell can never reach student data or
+       perform an action while the platform is under maintenance.
+       See MAINTENANCE-MODE.md. */
+    maintenanceMode: bool(env, 'GOC_MAINTENANCE_MODE'),
     staffSessionMinutes: int(env, 'GOC_STAFF_SESSION_MINUTES', 8 * 60),
     studentSessionMinutes: int(env, 'GOC_STUDENT_SESSION_MINUTES', 90)
   };

@@ -47,7 +47,7 @@ function makeApp(overrides) {
 
   /* ---------------------------------------------------------- route accounting */
   console.log('\n— route accounting —');
-  check('inventory is the verified 262-route table (Stage B added 11 registration routes)', inventory.total === 262, String(inventory.total));
+  check('inventory is the verified 266-route table after reconciliation and tutor entry removal', inventory.total === 266, String(inventory.total));
   check('router compiles every inventoried route', app.router.total === inventory.total);
   const coverage = app.router.coverage();
   check('coverage report accounts for every route', coverage.length === inventory.total);

@@ -9,7 +9,7 @@ var fs = require('fs');
 var path = require('path');
 var APP = process.env.GOC_DIR || path.join(__dirname, '..');
 function read(f) { return fs.readFileSync(path.join(APP, f), 'utf8'); }
-var app = read('js/app.js'), html = read('index.html'), tutor = read('server/tutor/tutor-app.js'), core = read('js/goc-core.js');
+var app = read('js/app.js'), html = read('index.html'), tutor = read('js/tutor-app.js'), core = read('js/goc-core.js');
 var fails = 0;
 function ok(name, cond, extra) { if (cond) console.log('  pass  ' + name); else { fails++; console.log('  FAIL  ' + name + (extra ? '   (' + String(extra).slice(0, 160) + ')' : '')); } }
 function head(t) { console.log('\n' + t); }

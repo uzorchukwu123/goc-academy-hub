@@ -56,9 +56,9 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, adm);
   var t = await call('POST', '/api/tutors', { name: 'Mrs Ada Obi', subjects: ['Chemistry'], password: 'start-pass-1' }, adm);
   var tid = t.body.tutor.id;
-  var tk = (await call('POST', '/api/tutor/login', { id: tid, password: 'start-pass-1' })).body.token;
+  var tk = (await call('POST', '/api/auth/login', { id: tid, password: 'start-pass-1' })).body.token;
   await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'my-own-pass-1' }, tk);
-  tk = (await call('POST', '/api/tutor/login', { id: tid, password: 'my-own-pass-1' })).body.token;
+  tk = (await call('POST', '/api/auth/login', { id: tid, password: 'my-own-pass-1' })).body.token;
 
   var good = { subject: 'Chemistry', section: 'objective', topic: 'Acids', text: 'ZQXEDIT which of these is a strong acid?', options: ['Ethanoic acid', 'Hydrochloric acid', 'Citric acid', 'Carbonic acid'], answer: 1, difficulty: 'medium' };
   var q = (await call('POST', '/api/tutor/questions', good, tk)).body.question;

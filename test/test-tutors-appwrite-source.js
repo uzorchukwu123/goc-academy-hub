@@ -111,7 +111,7 @@ function call(method, url, body, token) {
   var local = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'data.json'), 'utf8'));
   ok('the local question cache is empty (fresh-deploy premise)', Array.isArray(local.questions) && local.questions.length === 0, JSON.stringify(local.questions));
 
-  var tl = await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: TPW });
+  var tl = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: TPW });
   ok('the tutor signs in from the Appwrite tutor record', tl.status === 200 && tl.body && tl.body.token, tl.status + ' ' + tl.raw);
   var tt = tl.body && tl.body.token;
 

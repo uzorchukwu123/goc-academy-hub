@@ -4641,7 +4641,31 @@
   var ANALYTICS_MIN_ANSWERS = 10;
   var ANALYTICS_MIN_PAPERS = 3;
 
+  /* Project a mixed Objective paper onto one subject. A score is based on all
+     questions in that subject, including unanswered ones, just like marking.
+     Old papers without usable answer subjects/marks cannot be attributed safely. */
+  function tutorSubjectAttempts(subject, attempts) {
+    return (attempts || []).map(function (a) {
+      if (!a || a.section === 'jamb') return null;
+      if (a.subject === subject) return a;
+      if (a.subject !== OBJECTIVE_SUBJECT || a.section !== 'objective' || !Array.isArray(a.answers)) return null;
+      var rows = a.answers.filter(function (r) { return r && r.subject === subject && r.kind === 'objective'; });
+      if (!rows.length) return null;
+      var score = 0, max = 0, valid = a.answers.every(function (r) { return r && typeof r.subject === 'string' && r.subject && r.kind === 'objective'; });
+      rows.forEach(function (r) {
+        if (r.maxMark == null || r.maxMark === '' || r.markAwarded == null || r.markAwarded === '' ||
+            !isFinite(Number(r.maxMark)) || !isFinite(Number(r.markAwarded)) ||
+            Number(r.maxMark) <= 0 || Number(r.markAwarded) < 0 || Number(r.markAwarded) > Number(r.maxMark)) { valid = false; return; }
+        max += Number(r.maxMark); score += Number(r.markAwarded);
+      });
+      var marked = a.status === 'marked' && valid && max > 0;
+      return Object.assign({}, a, { subject: subject, score: marked ? score : null,
+        maxScore: marked ? max : null, percent: marked ? round1(score / max * 100) : null });
+    }).filter(Boolean);
+  }
+
   function tutorSnapshot(subject, students, runsByStudent, attempts, now) {
+    attempts = tutorSubjectAttempts(subject, attempts);
     var at = Number(now); if (!isFinite(at) || at <= 0) at = Date.now();
     var cutoff = at - ANALYTICS_ACTIVE_DAYS * 86400000;
     var runsOf = runsByStudent || {};
@@ -4703,6 +4727,7 @@
   var ANALYTICS_DAY_OFFSET_MS = 3600000;
 
   function tutorActivity(subject, students, runsByStudent, attempts, now) {
+    attempts = tutorSubjectAttempts(subject, attempts);
     var at = Number(now); if (!isFinite(at) || at <= 0) at = Date.now();
     var DAY = 86400000, n = ANALYTICS_ACTIVE_DAYS;
     var todayIdx = Math.floor((at + ANALYTICS_DAY_OFFSET_MS) / DAY);
@@ -4769,6 +4794,7 @@
   var ATRISK_LOW_AVERAGE = 40;
 
   function tutorAtRisk(subject, students, runsByStudent, attempts, now) {
+    attempts = tutorSubjectAttempts(subject, attempts);
     var at = Number(now); if (!isFinite(at) || at <= 0) at = Date.now();
     var DAY = 86400000, runsOf = runsByStudent || {};
     var info = {}, ids = [], i, j, st, runs, run, rows, row, a, t, pct;
@@ -4862,17 +4888,17 @@
      Phase 3C, top performers, slice 1: WHO tops the class. Owner's decisions, 9 Oct 2026:
      - TWO lists, never blended: Web Tests (average of marked papers in the subject) and Practice (percent right
        over answered questions in the subject). Theory awaiting marking, drafts and open papers are left out.
-     - A student needs 2 marked papers (tests list) or 20 answers (practice list) before they can be ranked.
-       Someone with some evidence but under the floor is counted in `hidden`, never ranked.
+     - A student with a marked paper or an answered practice question can be ranked.
      - Highest first. Ties: more evidence first (papers / answers), then name, then Scholar ID, so the order
        never shuffles. Every ranked student is returned; the screen shows ten and offers Show all.
      - Same class as the other tutor cards: GOC students taking the subject, not deactivated, each once.
      Rows carry name, Scholar ID and the figures only. No email, phone or other subject's data. The caller
      passes runs already trimmed with dropOldRuns, as for the snapshot. */
-  var TOP_MIN_PAPERS = 2;
-  var TOP_MIN_ANSWERS = 20;
+  var TOP_MIN_PAPERS = 1;
+  var TOP_MIN_ANSWERS = 1;
 
   function tutorTopPerformers(subject, students, runsByStudent, attempts) {
+    attempts = tutorSubjectAttempts(subject, attempts);
     var runsOf = runsByStudent || {}, info = {}, ids = [], i, j, r, st, runs, run, rows, row, a, pct;
     for (i = 0; i < (students || []).length; i++) {
       st = students[i];
@@ -4927,12 +4953,11 @@
        account has since been switched off. A student who never took the subject is not openable.
      - The page holds name, Scholar ID and, for the OPEN SUBJECT ONLY: test scores, practice
        figures, the last ten attempts and the student's weakest topics. Nothing from another subject, never a password hash.
-     - Weak topics are this student's own practice answers in the subject; a topic needs 3+ answers to be listed (thinner ones are
-       counted in `hidden`, never ranked); weakest five, lowest percent first, ties to more answers then topic name.
+     - Weak topics are this student's practice and marked test answers in the subject; topics with any answers are listed; weakest five, lowest percent first, ties to more answers then topic name.
      - Every successful open is written to the audit log (who, which student, which subject, when) and kept one year.
        A tutor reads only their own entries; management reads all. */
   var STUDENT_RECENT = 10;
-  var STUDENT_TOPIC_MIN = 3;
+  var STUDENT_TOPIC_MIN = 1;
   var STUDENT_TOPICS_SHOWN = 5;
   var AUDIT_KEEP_DAYS = 365;
 
@@ -4942,9 +4967,10 @@
   }
 
   function tutorStudentDetail(subject, student, runs, attempts, now) {
+    attempts = tutorSubjectAttempts(subject, attempts);
     if (!tutorMayOpenStudent(subject, student)) return null;
     var at = Number(now); if (!isFinite(at) || at <= 0) at = Date.now();
-    var DAY = 86400000, id = String(student.id), recent = [], topics = {}, last = 0;
+    var DAY = 86400000, id = String(student.id), recent = [], topics = Object.create(null), last = 0;
     var answers = 0, correct = 0, sum = 0, papers = 0, lastScore = null, lastScoreAt = 0, i, j, run, rows, row, a, t, pct;
     function num(v) { return v === null || v === undefined || v === '' || !isFinite(Number(v)) ? null : Number(v); }
     for (i = 0; i < (runs || []).length; i++) {
@@ -4957,7 +4983,7 @@
         if (!row || row.given == null || (row.subject || run.subject || '') !== subject) continue;
         n++; if (row.isCorrect === true) c++;
         var tp = String(row.topic || '').trim();
-        if (tp) { topics[tp] = topics[tp] || { n: 0, c: 0 }; topics[tp].n++; if (row.isCorrect === true) topics[tp].c++; }
+        if (statKeyOk(tp)) { topics[tp] = topics[tp] || { n: 0, c: 0 }; topics[tp].n++; if (row.isCorrect === true) topics[tp].c++; }
       }
       if (!n) continue;
       answers += n; correct += c;
@@ -4971,6 +4997,14 @@
       t = Number(a.submittedAt); if (!isFinite(t) || t <= 0) t = 0;
       if (t > last) last = t;
       pct = a.status === 'marked' ? num(a.percent) : null;
+      if (a.status === 'marked' && Array.isArray(a.answers)) a.answers.forEach(function (r) {
+        if (!r || (r.subject || a.subject) !== subject || r.given == null || r.given === '') return;
+        var fraction = tutorAnswerFraction(r);
+        var topic = String(r.topic || '').trim();
+        if (fraction === null || !statKeyOk(topic)) return;
+        topics[topic] = topics[topic] || { n: 0, c: 0 };
+        topics[topic].n++; topics[topic].c += fraction;
+      });
       if (pct !== null) { sum += pct; papers++; if (t >= lastScoreAt) { lastScore = pct; lastScoreAt = t; } }
       recent.push({ kind: 'test', at: t, section: String(a.section || ''), status: String(a.status || ''), percent: pct === null ? null : round1(pct),
         score: num(a.score), maxScore: num(a.maxScore) });
@@ -5291,8 +5325,7 @@
      n = answers given, c = answers right. Counts only: no student ID, name or time is kept,
      so a counter can never point back at a person. Only GOC students' answers are counted
      (the caller decides), matching who the snapshot counts. Unanswered rows and theory rows
-     (no right/wrong yet) are never counted. Ranking lists need 10+ answers (the owner's
-     choice); anything thinner is not ranked, only counted so the screen can say so. */
+     (no right/wrong yet) are never counted. Ranking lists include every topic or question with at least one answer. */
   var ANALYTICS_WEAK_TOPICS = 5;
   var ANALYTICS_HARDEST_QUESTIONS = 10;
   var ANALYTICS_BAD_KEYS = { '__proto__': 1, 'constructor': 1, 'prototype': 1 };
@@ -5329,33 +5362,62 @@
     return st;
   }
 
+  /* A marked answer contributes its fraction of the available marks. */
+  function tutorAnswerFraction(row) {
+    if (!row || row.maxMark == null || row.maxMark === '' || row.markAwarded == null || row.markAwarded === '') return null;
+    var max = Number(row.maxMark), score = Number(row.markAwarded);
+    if (!isFinite(max) || !isFinite(score) || max <= 0 || score < 0 || score > max) return null;
+    return score / max;
+  }
+
+  /* Objective/practice counters are already stored. Add marked theory on a
+     copy, so repeated reads cannot mutate or double-count the saved counters. */
+  function tutorTheoryStats(subject, stats, students, attempts) {
+    var source = stats || {}, out = { q: {}, t: {} }, allowed = Object.create(null);
+    ['q', 't'].forEach(function (key) {
+      Object.keys(source[key] || {}).forEach(function (k) {
+        if (statKeyOk(k) && source[key][k] && typeof source[key][k] === 'object') out[key][k] = { n: source[key][k].n, c: source[key][k].c };
+      });
+    });
+    (students || []).forEach(function (st) {
+      if (st && st.id && st.active !== false && Array.isArray(st.subjects) && st.subjects.indexOf(subject) >= 0) allowed[st.id] = true;
+    });
+    (attempts || []).forEach(function (a) {
+      if (!a || a.section !== 'theory' || a.subject !== subject || a.status !== 'marked' || !allowed[a.scholarId] || !Array.isArray(a.answers)) return;
+      a.answers.forEach(function (row) {
+        if (!row || row.kind !== 'theory' || (row.subject || a.subject) !== subject || row.given == null || row.given === '') return;
+        var fraction = tutorAnswerFraction(row), id = String(row.questionId == null ? '' : row.questionId), topic = String(row.topic || '').trim();
+        if (fraction === null) return;
+        if (statKeyOk(id)) { var q = ownBucket(out.q, id); q.n++; q.c += fraction; }
+        if (statKeyOk(topic)) { var t = ownBucket(out.t, topic); t.n++; t.c += fraction; }
+      });
+    });
+    return out;
+  }
+
   function statPercent(n, c) { return n ? round1((c / n) * 100) : null; }
 
   /* The weakest topics for one subject: lowest percent right first (more answers wins a tie,
-     then the topic name), at least ANALYTICS_MIN_ANSWERS answers, at most `limit` shown.
-     `hidden` is how many topics have answers but fewer than that, so the screen can say
-     "N more topics need more answers". Counts and percentages only. */
+     then the topic name), at least one answer, at most `limit` shown. Counts and percentages only. */
   function rankWeakTopics(subjectStats, limit) {
     var t = subjectStats && subjectStats.t && typeof subjectStats.t === 'object' ? subjectStats.t : {};
     var cap = limit == null ? ANALYTICS_WEAK_TOPICS : Math.max(0, Math.floor(Number(limit) || 0));
     var list = [], hidden = 0;
     Object.keys(t).forEach(function (k) {
-      var n = Math.floor(Number(t[k] && t[k].n) || 0), c = Math.floor(Number(t[k] && t[k].c) || 0);
+      var n = Math.floor(Number(t[k] && t[k].n) || 0), c = Number(t[k] && t[k].c) || 0;
       if (n <= 0 || c < 0 || c > n) return;
-      if (n < ANALYTICS_MIN_ANSWERS) { hidden++; return; }
       list.push({ topic: k, answers: n, correct: c, percent: statPercent(n, c) });
     });
     list.sort(function (a, b) {
       return a.percent - b.percent || b.answers - a.answers || (a.topic < b.topic ? -1 : a.topic > b.topic ? 1 : 0);
     });
-    return { items: list.slice(0, cap), hidden: hidden, minAnswers: ANALYTICS_MIN_ANSWERS };
+    return { items: list.slice(0, cap), hidden: hidden, minAnswers: 1 };
   }
 
   /* The hardest questions for one subject: the ones students most often get wrong.
-     Needs the bank to say what each question is, and only live objective questions of THIS
+     Needs the bank to say what each question is, and only live objective or theory questions of THIS
      subject can appear (a deleted, switched-off, pending or other-subject question is dropped
-     whatever its counter says, so nothing leaks across subjects). Same ordering and the same
-     10-answer floor as topics. The text is shortened to 240 characters. */
+     whatever its counter says, so nothing leaks across subjects). Same ordering as topics, with at least one answer. The text is shortened to 240 characters. */
   function rankHardestQuestions(subjectStats, subject, bank, limit) {
     var q = subjectStats && subjectStats.q && typeof subjectStats.q === 'object' ? subjectStats.q : {};
     var cap = limit == null ? ANALYTICS_HARDEST_QUESTIONS : Math.max(0, Math.floor(Number(limit) || 0));
@@ -5363,13 +5425,12 @@
     for (i = 0; i < (bank || []).length; i++) {
       b = bank[i];
       if (!b || b.subject !== subject || (b.status && b.status !== 'live') || b.active === false) continue;
-      if (b.kind && b.kind !== 'objective') continue;
+      if (b.section === 'jamb' || (b.kind && b.kind !== 'objective' && b.kind !== 'theory')) continue;
       byId[b.id] = b;
     }
     Object.keys(q).forEach(function (id) {
-      var n = Math.floor(Number(q[id] && q[id].n) || 0), c = Math.floor(Number(q[id] && q[id].c) || 0);
+      var n = Math.floor(Number(q[id] && q[id].n) || 0), c = Number(q[id] && q[id].c) || 0;
       if (n <= 0 || c < 0 || c > n || !Object.prototype.hasOwnProperty.call(byId, id)) return;
-      if (n < ANALYTICS_MIN_ANSWERS) { hidden++; return; }
       var row = byId[id], text = String(row.text == null ? (row.question == null ? '' : row.question) : row.text);
       if (text.length > 240) text = text.slice(0, 237) + '...';
       list.push({ id: id, text: text, topic: row.topic || '', section: row.section || '', answers: n, correct: c, percent: statPercent(n, c) });
@@ -5377,7 +5438,7 @@
     list.sort(function (a, b) {
       return a.percent - b.percent || b.answers - a.answers || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     });
-    return { items: list.slice(0, cap), hidden: hidden, minAnswers: ANALYTICS_MIN_ANSWERS };
+    return { items: list.slice(0, cap), hidden: hidden, minAnswers: 1 };
   }
 
   /* The console's "Subjects & tutors" view (slice 3): for each subject, how deep the
@@ -6701,6 +6762,7 @@
     ANALYTICS_ACTIVE_DAYS: ANALYTICS_ACTIVE_DAYS,
     ANALYTICS_MIN_ANSWERS: ANALYTICS_MIN_ANSWERS,
     ANALYTICS_MIN_PAPERS: ANALYTICS_MIN_PAPERS,
+    tutorTheoryStats: tutorTheoryStats,
     tutorSnapshot: tutorSnapshot,
     tutorActivity: tutorActivity,
     tutorAtRisk: tutorAtRisk,

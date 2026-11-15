@@ -81,16 +81,17 @@ function flat(r) { return r.raw || ''; }
   console.log('\ntutor sign-in');
   var anon = await call('GET', '/api/tutor/me');
   ok('no session is refused', anon.status === 401, anon.status);
-  var unknown = await call('POST', '/api/tutor/login', { id: 'GOC-T-099', password: 'start-pass-1' });
-  var wrong = await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'not-the-one' });
+  var unknown = await call('POST', '/api/auth/login', { id: 'GOC-T-099', password: 'start-pass-1' });
+  var wrong = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'not-the-one' });
   ok('unknown ID and wrong password get the same status and words', unknown.status === 401 && wrong.status === 401 && unknown.body.error === wrong.body.error, flat(unknown) + flat(wrong));
-  var asStudentId = await call('POST', '/api/tutor/login', { id: 'GOC-S-001', password: 'secret123' });
+  var asStudentId = await call('POST', '/api/auth/login', { id: 'GOC-S-001', password: 'secret123' });
   ok('a student ID cannot sign in here', asStudentId.status === 401);
-  var t1 = await call('POST', '/api/tutor/login', { id: 'goc-t-001', password: 'start-pass-1' });
+  var t1 = await call('POST', '/api/auth/login', { id: 'goc-t-001', password: 'start-pass-1' });
   var tok1 = t1.body && t1.body.token;
   ok('the right ID and password sign in (ID case ignored)', t1.status === 200 && tok1 && t1.body.user.role === 'tutor', flat(t1));
   ok('the reply says a password change is due', t1.body.user.mustChangePassword === true && t1.body.user.subjects.join() === 'Chemistry');
-  ok('the staff login does not accept a tutor ID', (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' })).status === 401);
+  ok('the retired tutor login route is unavailable', (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' })).status === 404);
+  ok('the tutor session cannot unlock the console', (await call('POST', '/api/auth/unlock', { passcode: '2027' }, tok1)).status === 403);
 
   console.log('\nforced password change');
   ok('/me works before the change', (await call('GET', '/api/tutor/me', null, tok1)).status === 200);
@@ -100,8 +101,8 @@ function flat(r) { return r.raw || ''; }
   ok('a short new password is refused', (await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'short' }, tok1)).status === 400);
   ok('the same password is refused', (await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'start-pass-1' }, tok1)).status === 400);
   ok('a good change is accepted', (await call('POST', '/api/tutor/password', { currentPassword: 'start-pass-1', newPassword: 'brand-new-pass' }, tok1)).status === 200);
-  ok('the old password no longer signs in', (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'start-pass-1' })).status === 401);
-  var again = await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'brand-new-pass' });
+  ok('the old password no longer signs in', (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'start-pass-1' })).status === 401);
+  var again = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'brand-new-pass' });
   ok('the new password signs in and nothing is due', again.status === 200 && again.body.user.mustChangePassword === false, flat(again));
   tok1 = again.body.token;
 
@@ -136,16 +137,16 @@ function flat(r) { return r.raw || ''; }
   ok('switching off works', off.status === 200 && off.body.tutor.active === false, flat(off));
   var dead = await call('GET', '/api/tutor/subject', null, tok1);
   ok('the open session ends at once', dead.status === 401 || dead.status === 403, dead.status);
-  ok('and they cannot sign in', (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).status === 401);
+  ok('and they cannot sign in', (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).status === 401);
   ok('"on or off" must be a real yes or no', (await call('PUT', '/api/tutors/GOC-T-001/active', { active: 'no' }, adm)).status === 400);
   await call('PUT', '/api/tutors/GOC-T-001/active', { active: true }, adm);
-  var back = await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'brand-new-pass' });
+  var back = await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'brand-new-pass' });
   ok('switched back on, they sign in again', back.status === 200);
   var reset = await call('PUT', '/api/tutors/GOC-T-001/password', { password: 'reset-pass-77' }, adm);
   ok('the console can reset the password', reset.status === 200 && reset.body.tutor.mustChangePassword === true && !/reset-pass/.test(flat(reset)), flat(reset));
   ok('a reset ends the open session', [401, 403].indexOf((await call('GET', '/api/tutor/me', null, back.body.token)).status) > -1);
-  ok('the old password is dead, the reset one works and must be changed', (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).status === 401
-     && (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'reset-pass-77' })).body.user.mustChangePassword === true);
+  ok('the old password is dead, the reset one works and must be changed', (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'brand-new-pass' })).status === 401
+     && (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'reset-pass-77' })).body.user.mustChangePassword === true);
   ok('a short reset password is refused', (await call('PUT', '/api/tutors/GOC-T-001/password', { password: 'abc' }, adm)).status === 400);
 
   console.log('\nsubjects & tutors');
@@ -161,8 +162,8 @@ function flat(r) { return r.raw || ''; }
 
   console.log('\nguessing is slowed down');
   var codes = [];
-  for (var i = 0; i < 9; i++) codes.push((await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'guess-' + i })).status);
-  ok('after repeated misses even the right password waits', (await call('POST', '/api/tutor/login', { id: 'GOC-T-001', password: 'reset-pass-77' })).status === 429, codes.join());
+  for (var i = 0; i < 9; i++) codes.push((await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'guess-' + i })).status);
+  ok('after repeated misses even the right password waits', (await call('POST', '/api/auth/login', { id: 'GOC-T-001', password: 'reset-pass-77' })).status === 429, codes.join());
 
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
   stop(); process.exit(fails ? 1 : 0);

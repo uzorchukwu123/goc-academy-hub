@@ -32,6 +32,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { loadEnv, createAppwriteClient, hasAppwriteConfig } = require('./lib/appwrite');
+const { createLedger, idFor: tutorLedgerId, COLLECTION: TUTOR_LEDGER_COLLECTION } = require('./lib/tutor-ledger');
 
 /* busboy is only needed by the two multipart file-upload endpoints below.
    Loading it lazily (on first actual upload) keeps the rest of the server
@@ -57,7 +58,13 @@ const reminders = require('./lib/reminders');
    `free2027` block further down) leaves the original hub exactly as it was. */
 const free2027Lib = require('./lib/free2027');
 const founderContact = require('./lib/founder-contact');
+/* Workstream A — the temporary maintenance switch. One module owns the page,
+   the switch and the gate; see server/lib/maintenance.js and
+   MAINTENANCE-MODE.md. Turning the variable off restores the app unchanged. */
 const mailstatus = require('./lib/mailstatus');
+/* The temporary full-platform maintenance switch. Off unless
+   GOC_MAINTENANCE_MODE is set to a truthy value; see server/lib/maintenance.js. */
+const maintenance = require('./lib/maintenance');
 
 function setEnvSecret(key, value) {
   const cleanKey = String(key || '').trim();
@@ -89,7 +96,24 @@ function setEnvSecret(key, value) {
 }
 
 
+/* Read once, at boot, from the deployment environment (or .env via loadEnv).
+   Nothing else in the server caches it, so disabling it cannot leave a stale
+   half-on state: unset the variable and restart. */
+const MAINTENANCE_MODE = maintenance.enabled(process.env);
+
 const ROOT = path.resolve(__dirname, '..');          // the GOC-Web-App folder
+/* The service-worker cache name is the deployment identifier this build
+   ships. It is bumped in sw.js on every release, so /api/health can tell a
+   browser which deployment it is actually talking to without any extra
+   environment variable. Read once at boot; a missing file fails safe to
+   'unknown' rather than inventing a fresh id every boot. */
+const DEPLOY_ID = (() => {
+  try {
+    const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+    const m = sw.match(/const CACHE = '([^']+)'/);
+    return m ? m[1] : 'unknown';
+  } catch (e) { return 'unknown'; }
+})();
 /* Where data.json (and its backups) physically live. Defaults to this same
    server/ folder exactly as before — nothing changes for an existing install
    that doesn't set this. GOC_DATA_DIR exists so a production deploy can point
@@ -189,6 +213,8 @@ const APPWRITE_LIVECLASSES_COLLECTION_ID = 'liveclasses';
 const APPWRITE_COHORTS_COLLECTION_ID = 'cohorts';
 let appwriteResourcesStorage = null;
 let appwriteDatabases = null;
+const TUTOR_LEDGER_ENABLED = process.env.APPWRITE_TUTOR_LEDGER === '1';
+let tutorLedger = null;
 let appwriteUsers = null;
 let appwriteSaveChain = Promise.resolve();
 /* Set by hydrateBlobFromStorage() when the durable blob could not be READ
@@ -2049,6 +2075,10 @@ function practiceXpToday(s) {
    they agree. */
 async function practiceRunsOf(db, id) {
   const cap = core.studentLimits().practiceHistory;
+  if (tutorLedger) {
+    const docs = await tutorLedger.list('practice', id);
+    return core.capList(core.dropOldRuns(docs.map(d => d.payload).sort((a, b) => Number(b.ts) - Number(a.ts))), cap);
+  }
   const all = Array.isArray(db.practiceRuns && db.practiceRuns[id]) ? db.practiceRuns[id] : [];
   const kept = core.capList(core.dropOldRuns(all), cap);
   if (kept.length !== all.length) { db.practiceRuns[id] = kept; writeData(db); }
@@ -2611,6 +2641,7 @@ const reminderService = reminders.createReminderService({
   log: m => console.warn(m)
 });
 function startReminderSchedule() {
+  if (MAINTENANCE_MODE) { console.log('[goc] study reminders paused: the platform is in maintenance mode.'); return; }
   if (process.env.GOC_REMINDERS === '0') { console.log('[goc] study reminders disabled (GOC_REMINDERS=0).'); return; }
   if (!reminderPublicUrl()) { console.log('[goc] study reminders idle: set GOC_PUBLIC_URL (the address students open the hub at) so every message can carry its opt-out link.'); return; }
   if (!reminderDelivery().email) { console.log('[goc] study reminders idle: SMTP is not configured (GOC_SMTP_HOST / GOC_SMTP_USER / GOC_SMTP_PASS).'); return; }
@@ -3414,6 +3445,65 @@ function tutorRow(t) {
    were actually given, and nothing but counts is stored: no ID, no name, no time. Changes
    `db` in place and writes it. Never allowed to break a submit: any failure is logged and
    the student's own result carries on. */
+/* The ledger stores immutable events, not read/modify/write counters. Web-test
+   events are counted only when their corresponding attempt actually exists. */
+async function saveTutorAnswerEvents(kind, paper, rows) {
+  if (!tutorLedger || paper.section === 'jamb') return;
+  const grouped = core.recordAnswerStats({}, paper.subject, rows);
+  for (const subject of Object.keys(grouped)) {
+    await tutorLedger.append(kind, String(paper.id) + ':' + subject, String(paper.id), subject, Number(paper.startedAt) || 0, grouped[subject]);
+  }
+}
+async function tutorRunsByStudent(db, students) {
+  const out = {};
+  if (tutorLedger) {
+    const allowed = new Set((students || []).filter(s => s && s.id).map(s => s.id));
+    const docs = await tutorLedger.list('practice');
+    for (const d of docs) if (allowed.has(d.owner)) (out[d.owner] || (out[d.owner] = [])).push(d.payload);
+    Object.keys(out).forEach(id => { out[id] = core.capList(core.dropOldRuns(out[id].sort((a, b) => Number(b.ts) - Number(a.ts))), core.studentLimits().practiceHistory); });
+  } else {
+    (students || []).forEach(st => {
+      if (!st || !st.id) return;
+      const runs = db.practiceRuns && db.practiceRuns[st.id];
+      if (Array.isArray(runs)) out[st.id] = core.dropOldRuns(runs);
+    });
+  }
+  return out;
+}
+async function tutorRecordedStats(db, subject, attempts) {
+  if (!tutorLedger) return (db.answerStats && db.answerStats[subject]) || {};
+  const result = { q: {}, t: {} };
+  const attemptIds = new Set((attempts || []).filter(a => a && a.section !== 'jamb').map(a => String(a.id)));
+  const groups = await Promise.all(['baseline', 'answer-study', 'answer-web'].map(kind => tutorLedger.list(kind, null, subject)));
+  function merge(bucket) {
+    for (const key of ['q', 't']) for (const id of Object.keys(bucket && bucket[key] || {})) {
+      if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue;
+      const v = bucket[key][id], n = Number(v && v.n), c = Number(v && v.c);
+      if (!Number.isFinite(n) || !Number.isFinite(c) || n < 0 || c < 0 || c > n) throw new Error('Invalid tutor answer counter');
+      if (!Object.prototype.hasOwnProperty.call(result[key], id)) result[key][id] = { n: 0, c: 0 };
+      result[key][id].n += n; result[key][id].c += c;
+    }
+  }
+  groups[0].concat(groups[1], groups[2].filter(d => attemptIds.has(String(d.owner)))).forEach(d => merge(d.payload));
+  return result;
+}
+async function appendTutorAudit(db, entry) {
+  if (tutorLedger) {
+    entry.id = 'AU-' + crypto.randomUUID();
+    await tutorLedger.append('audit', entry.id, entry.tutorId, '', entry.at, entry);
+  } else {
+    db.settings.auditSeq = (db.settings.auditSeq || 0) + 1;
+    entry.id = 'AU-' + db.settings.auditSeq;
+    db.tutorAudit = core.addTutorView(db.tutorAudit, entry, entry.at);
+    writeData(db);
+  }
+}
+async function readTutorAudit(db, tutorId) {
+  if (!tutorLedger) return db.tutorAudit;
+  const cutoff = Date.now() - core.AUDIT_KEEP_DAYS * 86400000;
+  return (await tutorLedger.list('audit', tutorId || null)).filter(d => d.at >= cutoff).map(d => d.payload);
+}
+
 function noteAnswerStats(db, stu, subject, rows) {
   try {
     if (!stu) return false;
@@ -3506,6 +3596,24 @@ function demoRateLimited(ip) {
   return rec.count > 30;
 }
 
+/* Fetch subject-specific papers and the combined Objective papers separately.
+   Projection to the tutor's subject happens in core; retired JAMB papers are
+   never included as a replacement for a removed CBT product. */
+async function tutorAttempts(subject, db) {
+  const results = await Promise.all([
+    listAttempts({ subject }, db),
+    listAttempts({ subject: core.OBJECTIVE_SUBJECT, section: 'objective' }, db)
+  ]);
+  const seen = new Set();
+  return results[0].concat(results[1]).filter(a => {
+    if (!a || a.section === 'jamb') return false;
+    if (a.id && seen.has(a.id)) return false;
+    if (a.id) seen.add(a.id);
+    return true;
+  });
+}
+
+
 const ROUTES = [
   { method: 'GET', path: /^\/api\/health$/, need: null, handler: (req, res) => {
       const db = readData();
@@ -3515,7 +3623,7 @@ const ROUTES = [
       const fed = db.free2027 || {};
       const fmode = fed.enabled === true ? entryFor(req) : FREE2027.MODE_ORIGINAL;
       okJson(res, {
-        service: 'goc-academy-hub', version: 1,
+        service: 'goc-academy-hub', version: 1, deployId: DEPLOY_ID,
         passcodeLength: Number(db.settings.consolePasscodeLength) || 4,
         free2027: {
           on: fed.enabled === true,
@@ -3537,6 +3645,52 @@ const ROUTES = [
       const password = String(body.password == null ? '' : body.password);
       const db = readData();
 
+      // Tutors use the same public login endpoint, with their existing verifier and throttles.
+      if (/^GOC-T-/i.test(id)) {
+        if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
+
+        let t = null;
+        if (core.validTutorId(id)) {
+          if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
+            t = await getAppwriteTutor(id);
+          } else {
+            t = db.tutors.find(x => x.id === id) || null;
+          }
+        }
+
+        /* Keep identical failure responses and dummy-hash work for unknown,
+           incorrect-password, and inactive tutor accounts. */
+        if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
+        const pwOk = verifyPassword(password.slice(0, 300), t ? t.pwHash : TUTOR_DUMMY_HASH);
+        if (!t || !pwOk || t.active === false) {
+          noteFailure(ip);
+          if (id) tutorIdFailed(id);
+          return errJson(res, 401, 'That ID and password do not match.');
+        }
+
+        attempts.delete(ip);
+        tutorFails.delete(id);
+
+        t.lastLogin = new Date().toISOString();
+        if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
+          await saveAppwriteTutor(t);
+        } else {
+          const local = db.tutors.find(x => x.id === t.id);
+          if (local) local.lastLogin = t.lastLogin;
+          writeData(db);
+        }
+
+
+        return newSession(t, 'tutor', db).then(token => {
+          const d = sessions.get(token);
+          okJson(res, { token, user: {
+            id: t.id, name: t.name, role: 'tutor',
+            subjects: t.subjects.slice(),
+            mustChangePassword: !!t.mustChangePassword,
+            sessionMinutes: d.sessionMinutes, expiresAt: d.expires
+          } });
+        });
+      }
       const isStaff = /^GOC-A-\d+$/.test(id);
       const isStudent = /^GOC-S-\d+$/.test(id);
       let account = isStaff ? db.staff.find(s => s.id === id) : null;
@@ -4426,28 +4580,40 @@ const ROUTES = [
       okJson(res, { ok: true });
     } },
 
-  /* ---- Try G.O.C: anonymous five-question preview (Stage 10) ----
-     Fully isolated from student operations: the questions come only from
-     server/lib/demo-questions.js (a dedicated sample pool connected to
-     no bank), attempts live in an in-memory token map for 30 minutes,
-     and a submission writes nothing — no student record, no attempt,
-     no XP, no leaderboard, no analytics. Answers and explanations are
-     held server-side until the token is redeemed exactly once. */
-  { method: 'GET', path: /^\/api\/demo\/questions$/, need: null, handler: (req, res) => {
+  /* ---- Try G.O.C: anonymous five-question preview ----
+     Fully isolated from student operations: the questions are drawn from the
+     real Question Bank through core.studyPool() (the same designated free set
+     on every attempt), attempts live in an in-memory token map for 30 minutes,
+     and a submission writes nothing — no student record, no attempt, no XP, no
+     leaderboard, no analytics. Answers and explanations are held server-side
+     until the token is redeemed exactly once. */
+  { method: 'GET', path: /^\/api\/demo\/questions$/, need: null, handler: async (req, res) => {
       const ip = getClientIp(req);
       if (demoRateLimited(ip)) return errJson(res, 429, 'Too many preview attempts from this connection. Please try again in a little while.');
-      const pool = require('./lib/demo-questions');
-      const shuffled = pool.slice();
-      for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-      const picked = shuffled.slice(0, 5).map(q => {
-        const order = q.options.map((_, i) => i);
-        for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = order[i]; order[i] = order[j]; order[j] = t; }
-        return { q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
-      });
+      /* Reuse the academy's real question bank, not a separate sample file.
+         The designated free set is the first five live, active, objective
+         practice questions in stable id order. It is the same five on every
+         attempt, so a visitor cannot keep refreshing for a different set, and
+         it is drawn through the same studyPool() the signed-in Practice
+         screen uses. No bank record is copied, changed or exposed. */
+      const db = readData();
+      const bank = await listQuestions({}, db);
+      const pool = core.studyPool(bank, null, null)
+        .filter(q => q && Array.isArray(q.options) && q.options.length === 4
+          && Number.isInteger(Number(q.answer)) && q.answer >= 0 && q.answer < 4)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+      if (pool.length < 5) {
+        return errJson(res, 503, 'The free practice set is not ready yet. Please try again shortly.');
+      }
+      const picked = pool.slice(0, 5).map(q => ({
+        q,
+        options: q.options.slice(),
+        answer: Number(q.answer)
+      }));
       const token = crypto.randomBytes(18).toString('hex');
       demoAttempts.set(token, { at: Date.now(), picked });
       if (demoAttempts.size > 5000) { for (const [k, v] of demoAttempts) { if (Date.now() - v.at > DEMO_TOKEN_MS) demoAttempts.delete(k); } }
-      okJson(res, { token, questions: picked.map((p, i) => ({
+      okJson(res, { token, durationSec: 600, questions: picked.map((p, i) => ({
         n: i + 1, subject: p.q.subject, topic: p.q.topic, text: p.q.text, options: p.options
       })) });
     } },
@@ -4886,81 +5052,6 @@ const ROUTES = [
 
   /* ---- Phase 3C: tutor sign-in and the tutor's own account ---- */
 
-  /* The tutor application itself, delivered only to an authenticated
-     tutor session ('tutor-setup', so a first-login password change can
-     still load it; subject APIs stay closed until then). The central
-     gate above has already re-read the tutor record for this request,
-     so a switched-off tutor is refused here like everywhere else. The
-     file lives outside the static root and is never cached. */
-  { method: 'GET', path: /^\/api\/tutor\/app$/, need: 'tutor-setup', handler: async (req, res, body, sess) => {
-      try {
-        const code = await fs.promises.readFile(path.join(ROOT, 'server', 'tutor', 'tutor-app.js'), 'utf8');
-        res.writeHead(200, {
-          'Content-Type': 'text/javascript; charset=utf-8',
-          'Content-Length': Buffer.byteLength(code),
-          'Cache-Control': 'private, no-store',
-          'X-Content-Type-Options': 'nosniff'
-        });
-        return res.end(code);
-      } catch (e) {
-        return errJson(res, 503, 'The tutor screens are not available right now.');
-      }
-    } },
-
-  { method: 'POST', path: /^\/api\/tutor\/login$/, need: null, handler: async (req, res, body) => {
-      const ip = getClientIp(req);
-      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-      const id = core.cleanTutorId(clean(body.id, 20));
-      const password = String(body.password == null ? '' : body.password).slice(0, 300);
-      if (id && tutorIdLocked(id)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-
-      const db = readData();
-      let t = null;
-      if (core.validTutorId(id)) {
-        if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
-          t = await getAppwriteTutor(id);
-        } else {
-          t = db.tutors.find(x => x.id === id) || null;
-        }
-      }
-
-      /* Keep identical failure responses and dummy-hash work for unknown,
-         incorrect-password, and inactive tutor accounts. */
-      if (!TUTOR_DUMMY_HASH) TUTOR_DUMMY_HASH = hashPassword('goc-tutor-dummy-' + crypto.randomBytes(8).toString('hex'));
-      const pwOk = verifyPassword(password, t ? t.pwHash : TUTOR_DUMMY_HASH);
-      if (!t || !pwOk || t.active === false) {
-        noteFailure(ip);
-        if (id) tutorIdFailed(id);
-        return errJson(res, 401, 'That ID and password do not match.');
-      }
-
-      attempts.delete(ip);
-      tutorFails.delete(id);
-
-      t.lastLogin = new Date().toISOString();
-      if (appwriteDatabases && APPWRITE_TUTORS_COLLECTION_ID) {
-        await saveAppwriteTutor(t);
-      } else {
-        const local = db.tutors.find(x => x.id === t.id);
-        if (local) local.lastLogin = t.lastLogin;
-        else db.tutors.push(t);
-        writeData(db);
-      }
-
-      if (!Array.isArray(db.tutors)) db.tutors = [];
-      if (!db.tutors.some(x => x.id === t.id)) db.tutors.push(t);
-
-      return newSession(t, 'tutor', db).then(token => {
-        const d = sessions.get(token);
-        okJson(res, { token, user: {
-          id: t.id, name: t.name, role: 'tutor',
-          subjects: t.subjects.slice(),
-          mustChangePassword: !!t.mustChangePassword,
-          sessionMinutes: d.sessionMinutes, expiresAt: d.expires
-        } });
-      });
-    } },
-
   { method: 'GET', path: /^\/api\/tutor\/me$/, need: 'tutor-setup', handler: (req, res, body, sess) => {
       const t = sess.tutor;
       okJson(res, { tutor: tutorRow(t), subject: core.tutorSubjectFor(t, '').subject || null });
@@ -5028,29 +5119,24 @@ const ROUTES = [
 
   /* Slice 5, parts 2 and 3: the tutor dashboard's numbers for ONE subject. The subject goes
      through the same scope guard as every tutor route. The reply is counts, averages and
-     questions only: never a student's name, ID, email or phone. `snapshot` comes from
-     core.tutorSnapshot; `weakTopics` and `hardestQuestions` come from the per-question and
-     per-topic counters (10+ answers to be ranked). */
+     questions only: never a student's name, ID, email or phone. Weak topics and hardest
+     questions use objective/practice counters and marked theory answers. */
   { method: 'GET', path: /^\/api\/tutor\/analytics$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, new URL(req.url, 'http://x').searchParams.get('subject'));
       if (!subject) return;
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : (db.students || []);
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
-      });
-      const attempts = await listAttempts({ subject }, db);
+      const runsByStudent = await tutorRunsByStudent(db, students);
+      const attempts = await tutorAttempts(subject, db);
       const snapshot = core.tutorSnapshot(subject, students, runsByStudent, attempts, Date.now());
-      const mine = (db.answerStats && Object.prototype.hasOwnProperty.call(db.answerStats, subject)) ? db.answerStats[subject] : {};
+      const mine = await tutorRecordedStats(db, subject, attempts);
       const bank = await listQuestions({ subject }, db);
+      const stats = core.tutorTheoryStats(subject, mine, students, attempts);
       okJson(res, {
         subject, subjects: sess.tutor.subjects.slice(), snapshot,
         activity: core.tutorActivity(subject, students, runsByStudent, attempts, Date.now()),
-        weakTopics: core.rankWeakTopics(mine),
-        hardestQuestions: core.rankHardestQuestions(mine, subject, bank)
+        weakTopics: core.rankWeakTopics(stats),
+        hardestQuestions: core.rankHardestQuestions(stats, subject, bank)
       });
     } },
 
@@ -5069,14 +5155,7 @@ const ROUTES = [
         ? await listAppwriteStudents()
         : (db.students || []);
 
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) {
-          runsByStudent[st.id] = core.dropOldRuns(runs);
-        }
-      });
+      const runsByStudent = await tutorRunsByStudent(db, students);
 
       /* The subject list comes from the data-access layer, not the local blob:
          in Appwrite mode db.questions is a cache that can be empty on a fresh
@@ -5091,15 +5170,12 @@ const ROUTES = [
       const reports = [];
 
       for (const subject of subjects) {
-        const attempts = await listAttempts({ subject }, db);
+        const attempts = await tutorAttempts(subject, db);
         const snapshot = core.tutorSnapshot(
           subject, students, runsByStudent, attempts, Date.now()
         );
 
-        const stats = db.answerStats &&
-          Object.prototype.hasOwnProperty.call(db.answerStats, subject)
-          ? db.answerStats[subject]
-          : {};
+        const stats = await tutorRecordedStats(db, subject, attempts);
 
         reports.push({
           subject,
@@ -5107,7 +5183,7 @@ const ROUTES = [
           activity: core.tutorActivity(
             subject, students, runsByStudent, attempts, Date.now()
           ),
-          weakTopics: core.rankWeakTopics(stats)
+          weakTopics: core.rankWeakTopics(core.tutorTheoryStats(subject, stats, students, attempts))
         });
       }
 
@@ -5128,13 +5204,8 @@ const ROUTES = [
       const sort = q.get('sort') === 'score' ? 'score' : 'inactive';
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : (db.students || []);
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
-      });
-      const attempts = await listAttempts({ subject }, db);
+      const runsByStudent = await tutorRunsByStudent(db, students);
+      const attempts = await tutorAttempts(subject, db);
       const rows = core.sortAtRisk(core.tutorAtRisk(subject, students, runsByStudent, attempts, Date.now()), sort);
       okJson(res, {
         subject, subjects: sess.tutor.subjects.slice(), sort,
@@ -5144,8 +5215,7 @@ const ROUTES = [
     } },
 
   /* Phase 3C, top performers, slice 2: GET /api/tutor/top?subject=. The tutor's own subject only (same scope
-     guard as every tutor route). Two lists, never blended (core.tutorTopPerformers): Web Test average (2+ marked
-     papers) and Practice percent right (20+ answers), highest first, every ranked student returned so the screen
+     guard as every tutor route). Two lists, never blended (core.tutorTopPerformers): Web Test average and Practice percent right, highest first, every ranked student returned so the screen
      can show ten and offer Show all. Each row: Scholar ID, name and the figures; never an email, phone or hash.
      Practice runs are trimmed with core.dropOldRuns, as for the snapshot. */
   { method: 'GET', path: /^\/api\/tutor\/top$/, need: 'tutor', handler: async (req, res, body, sess) => {
@@ -5153,13 +5223,8 @@ const ROUTES = [
       if (!subject) return;
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : (db.students || []);
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) runsByStudent[st.id] = core.dropOldRuns(runs);
-      });
-      const attempts = await listAttempts({ subject }, db);
+      const runsByStudent = await tutorRunsByStudent(db, students);
+      const attempts = await tutorAttempts(subject, db);
       const top = core.tutorTopPerformers(subject, students, runsByStudent, attempts);
       okJson(res, { subject, subjects: sess.tutor.subjects.slice(), tests: top.tests, practice: top.practice });
     } },
@@ -5182,16 +5247,13 @@ const ROUTES = [
         let student = null;
         try { student = appwriteDatabases ? await getAppwriteStudent(sid) : (db.students || []).find(s => s && s.id === sid); } catch (_) { student = null; }
         if (!core.tutorMayOpenStudent(subject, student)) return errJson(res, 404, gone);
-        const runs = db.practiceRuns && Array.isArray(db.practiceRuns[sid]) ? core.dropOldRuns(db.practiceRuns[sid]) : [];
+        const runs = await practiceRunsOf(db, sid);
         const attempts = await attemptsFor(db, sid);
         const now = Date.now();
         const detail = core.tutorStudentDetail(subject, student, runs, Array.isArray(attempts) ? attempts : [], now);
         if (!detail) return errJson(res, 404, gone);
         const entry = core.makeTutorViewEntry(sess.tutor, student, subject, now);
-        db.settings.auditSeq = (db.settings.auditSeq || 0) + 1;
-        entry.id = 'AU-' + db.settings.auditSeq;
-        db.tutorAudit = core.addTutorView(db.tutorAudit, entry, now);
-        try { writeData(db); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The student page could not be opened right now.'); }
+        try { await appendTutorAudit(db, entry); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The student page could not be opened right now.'); }
         okJson(res, { subject, subjects: sess.tutor.subjects.slice(), student: detail });
       });
     } },
@@ -5213,17 +5275,14 @@ const ROUTES = [
         if (!contact) return errJson(res, 404, gone);
         const now = Date.now();
         const entry = core.makeTutorViewEntry(sess.tutor, student, subject, now, 'contact-view');
-        db.settings.auditSeq = (db.settings.auditSeq || 0) + 1;
-        entry.id = 'AU-' + db.settings.auditSeq;
-        db.tutorAudit = core.addTutorView(db.tutorAudit, entry, now);
-        try { writeData(db); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The contact details could not be shown right now.'); }
+        try { await appendTutorAudit(db, entry); } catch (e) { console.error('[goc] Audit log not written:', e.message); return errJson(res, 500, 'The contact details could not be shown right now.'); }
         okJson(res, { subject, contact });
       });
     } },
 
   /* A tutor reads ONLY their own entries (the tutor record comes from the session, never from the request). */
-  { method: 'GET', path: /^\/api\/tutor\/audit$/, need: 'tutor', handler: (req, res, body, sess) => {
-      const mine = core.tutorOwnViews(readData().tutorAudit, sess.tutor.id);
+  { method: 'GET', path: /^\/api\/tutor\/audit$/, need: 'tutor', handler: async (req, res, body, sess) => {
+      const mine = core.tutorOwnViews(await readTutorAudit(readData(), sess.tutor.id), sess.tutor.id);
       okJson(res, { keptDays: core.AUDIT_KEEP_DAYS, count: mine.length, entries: mine });
     } },
 
@@ -5238,9 +5297,9 @@ const ROUTES = [
       okJson(res, { count: entries.length, keep: core.MANAGER_LOG_KEEP, entries });
     } },
 
-  { method: 'GET', path: /^\/api\/audit\/tutor-views$/, need: 'console', cap: 'tutors.audit', handler: (req, res) => {
+  { method: 'GET', path: /^\/api\/audit\/tutor-views$/, need: 'console', cap: 'tutors.audit', handler: async (req, res) => {
       const q = new URL(req.url, 'http://x').searchParams;
-      const rows = core.auditViews(readData().tutorAudit, { tutorId: q.get('tutorId'), studentId: q.get('studentId'), kind: q.get('kind'), from: q.get('from'), to: q.get('to') });
+      const rows = core.auditViews(await readTutorAudit(readData()), { tutorId: q.get('tutorId'), studentId: q.get('studentId'), kind: q.get('kind'), from: q.get('from'), to: q.get('to') });
       okJson(res, { keptDays: core.AUDIT_KEEP_DAYS, count: rows.length, entries: rows });
     } },
 
@@ -6310,9 +6369,14 @@ const ROUTES = [
       const rec = sanitizePracticeRun(body);
       if (!rec) return errJson(res, 400, 'A practice run needs a review with at least one question.');
       const db = readData();
+      if (tutorLedger) {
+        const key = sess.data.id + ':' + crypto.createHash('sha256').update(JSON.stringify(rec)).digest('hex');
+        await tutorLedger.append('practice', key, sess.data.id, '', rec.ts, rec);
+        return okJson(res, { ok: true, saved: rec, runs: await practiceRunsOf(db, sess.data.id) });
+      }
       if (!db.practiceRuns || typeof db.practiceRuns !== 'object') db.practiceRuns = {};
       const list = Array.isArray(db.practiceRuns[sess.data.id]) ? db.practiceRuns[sess.data.id] : [];
-      list.unshift(rec);
+      if (!list.some(run => JSON.stringify(run) === JSON.stringify(rec))) list.unshift(rec);
       const keep = core.studentLimits().practiceHistory;
       db.practiceRuns[sess.data.id] = core.capList(core.dropOldRuns(list), keep);
       writeData(db);
@@ -6558,6 +6622,7 @@ const ROUTES = [
           percent: marked.percent, status: marked.status,
           answers: marked.answers, xpAwarded: 0
         };
+        if (tutorLedger) await saveTutorAnswerEvents('answer-web', paper, marked.answers);
         let stu;
         if (appwriteDatabases) {
           stu = await getAppwriteStudentOrNull(rec.scholarId);
@@ -6587,7 +6652,7 @@ const ROUTES = [
           }
         }
 
-        if (stu) {
+        if (stu && !tutorLedger && paper.section !== 'jamb') {
           if (!db.answerStats || typeof db.answerStats !== 'object') db.answerStats = {};
           core.recordAnswerStats(db.answerStats, paper.subject, marked.answers);
         }
@@ -6989,6 +7054,11 @@ const ROUTES = [
         } else {
           stu = db.students.find(x => x.id === sess.data.id);
         }
+        if (!stu) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+        if (tutorLedger) {
+          try { await saveTutorAnswerEvents('answer-study', paper, marked.answers); }
+          catch (err) { openStudy.set(String(paper.id), paper); throw err; }
+        }
 
         let gain = 0, left = 0, earned = 0, questBonus = 0, questClaimed = false, questDone = false;
         let weekAfter = null, weekDirty = false, weekReward = null, finalFreezes = null;
@@ -7182,7 +7252,7 @@ const ROUTES = [
             writeData(db);
           }
         }
-      noteAnswerStats(db, stu, paper.subject, marked.answers);
+      if (!tutorLedger) noteAnswerStats(db, stu, paper.subject, marked.answers);
       okJson(res, {
         mode, subject: paper.subject, assessed: false,
         total: marked.total, answered: marked.answered, unanswered: marked.unanswered,
@@ -9848,74 +9918,26 @@ const ROUTES = [
 
 ];
 
-/* ------------------------------------------------------------ CRAWLER SHIELD
-   Phase 3D slice 1, revised for pitch readiness (approved). The public
-   interface is meant to be opened and inspected — including by interactive
-   AI assistants and browser agents acting at a person's request — while AI
-   TRAINING crawlers, search indexers and scrapers stay out, and everything
-   private stays exactly as protected as before. Three layers:
-     1. /robots.txt explicitly ALLOWS the interactive agents below, disallows
-        the training crawlers by name, and disallows everything else;
-     2. every response carries X-Robots-Tag noindex EXCEPT responses to an
-        interactive agent (so a page fetched for a user is not self-blocked,
-        while nothing is offered up for indexing);
-     3. any request whose User-Agent names a known training crawler,
-        search-engine bot or scraping tool gets a plain 403 (robots.txt alone
-        stays readable, so a polite crawler can learn it is not welcome).
-   Allowing an interactive agent changes nothing about authorization: the API
-   still demands its tokens, server/ and test/ are still never served, and
-   only the app's public file types are ever handed out. There is deliberately
-   no sitemap. Honest limit: a scraper can fake its User-Agent — but a faked
-   interactive identity only reaches what any visitor's browser can reach. */
-const ROBOTS_DIRECTIVE = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
-
-/* Interactive, user-directed AI browsing agents: they fetch a public page at
-   a person's request so that person can read and inspect it. Allowed. */
-const INTERACTIVE_AGENTS = ['ChatGPT-User', 'Claude-Web', 'Claude-User', 'Perplexity-User'];
-
-/* AI training / indexing crawlers. Barred by name, in robots.txt and by 403. */
-const AI_CRAWLERS = [
-  'GPTBot', 'OAI-SearchBot', 'ClaudeBot', 'anthropic-ai',
-  'Google-Extended', 'CCBot', 'PerplexityBot', 'Bytespider',
-  'Amazonbot', 'Applebot-Extended', 'Meta-ExternalAgent', 'Meta-ExternalFetcher',
-  'FacebookBot', 'cohere-ai', 'Diffbot', 'ImagesiftBot', 'Omgilibot', 'YouBot',
-  'Timpibot', 'PetalBot', 'AI2Bot', 'Scrapy'
+/* ------------------------------------------------------------ CRAWLER ACCESS
+   The public site is deliberately open to crawlers, search engines and
+   user-directed AI assistants. There is no bot User-Agent gate: a crawler may
+   fetch the homepage and every public static file (HTML, CSS, JS, manifest,
+   images) one by one, exactly as a browser can. Private routes remain private:
+   /server/ and /test/ are never served, the static allow-list below still
+   refuses source documents and unknown file types, and every API keeps its
+   normal authorization checks. */
+const CRAWLER_AGENTS = [
+  'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-Web', 'Claude-User',
+  'anthropic-ai', 'Google-Extended', 'PerplexityBot', 'Perplexity-User',
+  'Googlebot', 'bingbot', 'DuckDuckBot', 'Baiduspider', 'YandexBot',
+  'CCBot', 'Bytespider', 'Amazonbot', 'Applebot', 'Applebot-Extended',
+  'Meta-ExternalAgent', 'Meta-ExternalFetcher', 'FacebookBot', 'cohere-ai',
+  'Diffbot', 'ImagesiftBot', 'Omgilibot', 'YouBot', 'Timpibot', 'PetalBot',
+  'AI2Bot', 'Scrapy', 'AhrefsBot', 'SemrushBot', 'archive.org_bot', 'ia_archiver'
 ];
-const ROBOTS_TXT = INTERACTIVE_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\n').join('\n')
-  + '\n' + AI_CRAWLERS.map(n => 'User-agent: ' + n + '\nDisallow: /\n').join('\n')
-  + '\nUser-agent: *\nDisallow: /\n';
-
-/* Tutor entrance (Stage 8, owner-approved): a sign-in shell with NONE of
-   the tutor application in it. The shell signs in through the existing
-   POST /api/tutor/login, then — and only then — fetches the application
-   from GET /api/tutor/app with the session token and runs it. The tutor
-   screens therefore never appear in a public file or an unauthenticated
-   response; server/tutor/ stays outside the static root throughout. */
-const TUTOR_SHELL = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Tutor sign-in · G.O.C Academy Hub</title>\n<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#141821;color:#20242C;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}.card{background:#fff;border-radius:18px;max-width:400px;width:100%;padding:26px 24px;box-sizing:border-box}h1{font-size:19px;margin:0 0 6px}p{font-size:13.5px;color:#5B6472;line-height:1.55}label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #C9CDD4;border-radius:10px}button{width:100%;margin-top:18px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#C8102E;color:#fff;cursor:pointer}button:disabled{opacity:.6}.err{color:#B91C1C;font-size:13.5px;min-height:18px;margin-top:10px}.goc-tour-overlay{z-index:100010 !important}</style>\n</head>\n<body>\n<main class="card" id="tutorGate">\n<h1>G.O.C Tutor</h1>\n<p>Sign in with the tutor ID the academy gave you. You will only ever see the subjects you teach.</p>\n<label for="tutorId">Tutor ID</label><input id="tutorId" autocomplete="username" placeholder="e.g. GOC-T-001">\n<label for="tutorPw">Password</label><input id="tutorPw" type="password" autocomplete="current-password">\n<div class="err" id="tutorErr"></div>\n<button type="button" id="tutorGo">Sign in</button>\n</main>\n<script src="js/onboarding.js"></script>\n<script>\n(function(){\n  var btn = document.getElementById("tutorGo"), err = document.getElementById("tutorErr");\n  function fail(m){ err.textContent = m; btn.disabled = false; btn.textContent = "Sign in"; }\n  btn.addEventListener("click", function(){\n    var id = document.getElementById("tutorId").value.trim(), pw = document.getElementById("tutorPw").value;\n    if(!id || !pw){ fail("Enter your tutor ID and password."); return; }\n    btn.disabled = true; btn.textContent = "Signing in\u2026"; err.textContent = "";\n    fetch("api/tutor/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, password: pw }) })\n    .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "Sign-in failed."); return j; }); })\n    .then(function(j){\n      return fetch("api/tutor/app", { headers: { "Authorization": "Bearer " + j.token } })\n      .then(function(r){ if(!r.ok) throw new Error("The tutor screens could not be loaded."); return r.text(); })\n      .then(function(code){\n        window.__zxSession = { token: j.token, user: j.user };\n        var s = document.createElement("script");\n        s.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));\n        document.body.appendChild(s);\n        document.getElementById("tutorGate").style.display = "none";\n        if(window.GOCOnboarding && window.GOCTours){\n          window.GOCOnboarding.register("tutor", window.GOCTours.tutor);\n          setTimeout(function(){ window.GOCOnboarding.maybeAutoStart("tutor", j.user.id); }, 1200);\n        }\n      });\n    })\n    .catch(function(e){ fail(e.message || "Sign-in failed."); });\n  });\n})();\n</script>\n</body>\n</html>';
-
-/* Turn barred crawlers away. The politeness layer above only binds crawlers
-   that obey it; this refuses the ones that announce themselves. Generic
-   HTTP-library names (Go-http-client, node-fetch) are deliberately NOT
-   listed: hosting health checks use them. */
-const OTHER_BOTS = [
-  'Googlebot', 'AdsBot-Google', 'Google-InspectionTool', 'GoogleOther', 'bingbot', 'BingPreview',
-  'Slurp', 'DuckDuckBot', 'Baiduspider', 'YandexBot', 'Sogou', 'Exabot', 'SeznamBot', 'facebookexternalhit',
-  'AhrefsBot', 'SemrushBot', 'MJ12bot', 'DotBot', 'BLEXBot', 'DataForSeoBot', 'Barkrowler',
-  'archive.org_bot', 'ia_archiver', 'HTTrack', 'wget', 'python-requests', 'aiohttp', 'libwww-perl'
-];
-function uaRegExp(names) {
-  return new RegExp(names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
-}
-const BOT_RE = uaRegExp(AI_CRAWLERS.concat(OTHER_BOTS));
-function isCrawler(req) {
-  const ua = String(req.headers['user-agent'] || '');
-  return ua.length > 0 && BOT_RE.test(ua);
-}
-const INTERACTIVE_RE = uaRegExp(INTERACTIVE_AGENTS);
-function isInteractiveAgent(req) {
-  const ua = String(req.headers['user-agent'] || '');
-  return ua.length > 0 && INTERACTIVE_RE.test(ua);
-}
+const ROBOTS_TXT = ['User-agent: *', 'Allow: /', '']
+  .concat(CRAWLER_AGENTS.map(n => 'User-agent: ' + n + '\nAllow: /\n'))
+  .join('\n') + '\nSitemap: https://gocacademy.live/sitemap.xml\n';
 
 /* Static files are public and unauthenticated, so they get a per-IP limit the
    way login does: a fixed one-minute window. The app itself fetches about a
@@ -9945,6 +9967,7 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.xml': 'application/xml; charset=utf-8',
   '.md': 'text/plain; charset=utf-8'
 };
 
@@ -9955,7 +9978,9 @@ const TYPES = {
 /* Phase 3D slice 3: GOC_PUBLIC_DIR serves the built (minified) app from a folder such as
    dist/ made by `node build/build.js`. Unset, the readable source is served as before. */
 const PUBLIC_ROOT = process.env.GOC_PUBLIC_DIR ? path.resolve(ROOT, process.env.GOC_PUBLIC_DIR) : ROOT;
-const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico']);
+/* Read once at boot, like the other deployment switches: changing it needs a
+   restart so a running process cannot half-enter or half-leave maintenance. */
+const SERVE_EXT = new Set(['.html', '.css', '.js', '.mjs', '.webmanifest', '.png', '.svg', '.ico', '.xml']);
 
 function serveStatic(req, res, urlPath) {
   let rel;
@@ -10011,21 +10036,15 @@ const server = http.createServer(async (req, res) => {
   // X-Frame-Options stops other sites framing the hub (clickjacking) while
   // leaving the app's own framing and top-level AI-browser visits untouched.
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  // Interactive AI agents are exempt from the noindex directive: a page they
-  // fetch at a user's request must not tell them to stay out. Everyone else
-  // (browsers, health checks, and the crawlers refused below) still gets it.
-  if (!isInteractiveAgent(req)) res.setHeader('X-Robots-Tag', ROBOTS_DIRECTIVE);
+  // No X-Robots-Tag: the public site is indexable and crawlable, including by
+  // AI assistants. Private paths are protected by their normal auth/404 rules.
 
-  if (urlPath === '/tutor') {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
-    res.writeHead(200, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Content-Length': Buffer.byteLength(TUTOR_SHELL),
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff'
-    });
-    return res.end(req.method === 'HEAD' ? undefined : TUTOR_SHELL);
-  }
+  /* MAINTENANCE GATE (Workstream A) — before the password
+     setup link, static files, any session lookup and every API route. See
+     server/lib/maintenance.js for what stays open (health, robots, the
+     cache-clearing service worker) and why. Returning here means the
+     application below is untouched, not deleted. */
+  if (MAINTENANCE_MODE && maintenance.intercept(req, res, urlPath)) return;
 
   if (urlPath === '/robots.txt') {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
@@ -10036,11 +10055,6 @@ const server = http.createServer(async (req, res) => {
       'X-Content-Type-Options': 'nosniff'
     });
     return res.end(req.method === 'HEAD' ? undefined : ROBOTS_TXT);
-  }
-
-  if (isCrawler(req)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end('Forbidden');
   }
 
   if (urlPath.indexOf('/api/') !== 0) {
@@ -10322,6 +10336,17 @@ async function initAppwrite() {
   appwriteResourcesStorage = storage;
   appwriteDatabases = databases;
   appwriteUsers = users;
+  if (TUTOR_LEDGER_ENABLED) {
+    const info = await databases.getCollection(APPWRITE_DATABASE_ID, TUTOR_LEDGER_COLLECTION);
+    if (!Array.isArray(info.$permissions) || info.$permissions.length || info.documentSecurity !== false) throw new Error('Tutor ledger is not private');
+    const snapshot = await databases.getDocument(APPWRITE_DATABASE_ID, TUTOR_LEDGER_COLLECTION, tutorLedgerId('migration', 'snapshot'));
+    const complete = await databases.getDocument(APPWRITE_DATABASE_ID, TUTOR_LEDGER_COLLECTION, tutorLedgerId('migration', 'complete'));
+    const snapshotHash = JSON.parse(snapshot.payload).hash;
+    const receipt = JSON.parse(complete.payload);
+    if (!/^[a-f0-9]{64}$/.test(snapshotHash) || receipt.hash !== snapshotHash || !Number.isSafeInteger(receipt.count) || receipt.count < 0) throw new Error('Tutor ledger migration is incomplete');
+    tutorLedger = createLedger(databases, appwriteQuery());
+    console.log('[goc] Private Appwrite tutor ledger enabled.');
+  }
 
   /* Accurate wording: this is client construction, not verified connectivity. */
   console.log('[goc] Appwrite SDK clients constructed; using local data.json for unmigrated data.');
@@ -10517,6 +10542,13 @@ function start() {
     console.log('  Open:  http://localhost:' + PORT);
     console.log('  Stop:  press Ctrl+C');
     console.log('');
+    if (MAINTENANCE_MODE) {
+      console.log('  ⚠  MAINTENANCE MODE IS ON (GOC_MAINTENANCE_MODE). The application is NOT reachable:');
+      console.log('     every page and every /api/ route answers with the maintenance announcement.');
+      console.log('     Only /api/health, /robots.txt and the cache-clearing /sw.js stay available.');
+      console.log('     Unset GOC_MAINTENANCE_MODE and restart to restore the full application.');
+      console.log('');
+    }
     if (HOST === '127.0.0.1') {
       console.log('  Bound to 127.0.0.1, so only this computer can reach it.');
     } else {
@@ -10611,7 +10643,7 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
          seed()/start() below, so a bad key or an unreachable Appwrite can never
          degrade into a freshly seeded local academy. Only a non-secret status
          code / error type is reported, never the raw error or stack. */
-      if (isProductionRun()) {
+      if (isProductionRun() || TUTOR_LEDGER_ENABLED) {
         const awCode = err && (err.code != null ? err.code : err.status);
         const awType = err && typeof err.type === 'string' && /^[a-z0-9_]+$/i.test(err.type) ? err.type : '';
         failClosedAppwriteStartup('Appwrite initialization failed'
@@ -10633,6 +10665,7 @@ if (hasAppwriteConfig() && !APPWRITE_OFF) {
       start();
     });
 } else {
+  if (TUTOR_LEDGER_ENABLED) failClosedAppwriteStartup('The tutor ledger is enabled but Appwrite is not configured.');
   /* Unconfigured is a legitimate local install, so the control flow is exactly
      as before. In production it is called out loudly rather than passed over in
      silence, because "no Appwrite" there is almost always a misconfiguration. */
