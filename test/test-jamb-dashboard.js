@@ -32,6 +32,21 @@ function grab(name) {
 }
 
 head('the JAMB sitting is gone from the website');
+/* Study CBT wiring (owner request): Practice mode draws on the practice
+   bank only; Exam Mode is the one place the JAMB-oriented sitting is
+   offered, read from the same catalogue and started through the same
+   instructions + start route as Web Test. */
+ok('Study CBT Practice mode is set up from the practice bank',
+  /if\(scMode === 'practice'\)\{ openStudySet\('practice'\); return; \}/.test(app)
+  && /if \(r.section !== 'practice'\) return false;/.test(core));
+ok('the instructions screen requires acknowledgement before Start enables',
+  /<input type="checkbox" id="scgAck"/.test(index) && /function scGuideGate/.test(app)
+  && /start.disabled = !\(ack && ack.checked\)/.test(app));
+ok('Study CBT Exam Mode sits the JAMB-oriented sitting, not a study run',
+  /function scExamStart\(\)/.test(app)
+  && /t.section === 'jamb'/.test(app.slice(app.indexOf('function scExamStart'), app.indexOf('function scExamStart') + 900))
+  && /wtConfirmStart\(j, null\)/.test(app)
+  && !/openStudySet\(scMode\)/.test(app));
 ok('no dashboard JAMB card', !/id="dashJamb"/.test(index) && !/<div class="section-t">JAMB \/ UTME<\/div>/.test(index));
 ok('no JAMB CBT Study tile', !/onclick="openJambTest\(\)"/.test(index) && !/>JAMB CBT</.test(index));
 ok('no JAMB Study card survives under any retired id', !/id="sg-jamb"/.test(index) && !/id="dashJamb"/.test(index));
@@ -39,7 +54,8 @@ var wtDef = app.slice(app.indexOf('var WT_SECTIONS = ['), app.indexOf('];', app.
 ok('the Study/Web Test catalogue offers only theory and objective sessions',
   /key:'theory'/.test(wtDef) && /key:'objective'/.test(wtDef) && !/key:'jamb'/.test(wtDef), wtDef.slice(0, 120));
 ok('the legitimate Study features remain after the JAMB removal',
-  /id="sg-practice"/.test(index) && /id="pracHist"/.test(index)
+  /* Practice as a standalone tile is gone by design — it lives inside Study CBT now */
+  /id="sg-cbt"/.test(index) && !/id="sg-practice"/.test(index) && /id="pracHist"/.test(index)
   && /id="sg-bookmarks"/.test(index) && /onclick="atMyOpen\(\)"/.test(index));
 ['dashPaintJamb', 'dashJambSit', 'openJambTest', 'dashPaintUp', 'dashPaintSubjects'].forEach(function (n) {
   ok(n + ' is no longer defined', app.indexOf('function ' + n + '(') < 0);
