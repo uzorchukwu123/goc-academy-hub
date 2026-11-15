@@ -69,7 +69,7 @@ body.f27-mode.goc-original-area .tabbar,
 body.f27-mode.goc-original-area #pvBar { display: flex !important; }
 @media (min-width: 900px) {
   body.f27-mode.goc-original-area .phone:not(.is-login) .tabbar { display: flex !important; }
-  body.f27-mode.goc-original-area .phone:not(.is-login) .screens { left: 0 !important; } /* hub chrome is a top bar now, no sidebar offset */
+  body.f27-mode.goc-original-area .phone:not(.is-login) .screens { left: 256px !important; }
 }
 
 /* On a wide screen the hub draws a sidebar for everything except its public
