@@ -41,6 +41,18 @@ function head(t) { console.log('\n' + t); }
 /* ------------------------------------------------------- 1. the chrome --- */
 head('the examination chrome is on the page');
 ok('candidate bar exists', /id="cbtCandidate"/.test(html));
+ok('candidate strip carries the initials avatar and EXAM MODE pill (approved design)',
+  /class="cc-av" id="cbtCandAv"/.test(html) && /<span class="cc-mode">EXAM MODE<\/span>/.test(html)
+  && /getElementById\('cbtCandAv'\)/.test(appSrc));
+ok('the A\u2013D answer strip exists and is painted from the chosen answer',
+  /id="cbtLetterbar"/.test(html) && /function cbtPaintStrip/.test(appSrc));
+ok('the 8-key hint strip exists for the desktop exam room',
+  /id="cbtKeys"/.test(html) && /A&ndash;D<\/b> Answer/.test(html));
+ok('the exam room is white and deep red, answered palette squares red',
+  /#cbt\.jamb-mode \.cbt-top\{ background:#D92323/.test(css)
+  && /#cbt \.qn\.ans\{ background:var\(--red\)/.test(css));
+ok('the desktop palette heading names the subject on screen',
+  /id="cbtSideHead"/.test(html) && /hd\.textContent = 'Question palette'/.test(appSrc));
 ok('candidate bar shows name, Scholar ID and paper slots',
    /id="cbtCandName"/.test(html) && /id="cbtCandId"/.test(html) && /id="cbtCandPaper"/.test(html));
 ok('candidate bar carries the calculator button', /onclick="jambCalcToggle\(\)"/.test(html));

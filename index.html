@@ -1231,11 +1231,16 @@
       <!-- JAMB exam mode only: candidate identity + calculator access.
            Hidden outside a real JAMB paper; study/practice CBT never sees it. -->
       <div class="cbt-candidate" id="cbtCandidate" hidden>
+        <span class="cc-av" id="cbtCandAv" aria-hidden="true"></span>
         <div class="cc-who"><span class="cc-name" id="cbtCandName">Candidate</span><span class="cc-id" id="cbtCandId"></span></div>
         <div class="cc-paper" id="cbtCandPaper"></div>
+        <span class="cc-mode">EXAM MODE</span>
         <button class="cc-calc" type="button" onclick="jambCalcToggle()" aria-label="Open calculator"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7.5h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01"/></svg><span>Calculator</span></button>
       </div>
       <div class="cbt-main">
+      <!-- A–D answer strip from the hall interface: the letter filled red
+           is the answer chosen for the question on screen. -->
+      <div class="exam-letterbar" id="cbtLetterbar" hidden aria-hidden="true"></div>
       <!-- Fixed exam body — no page scroll; question text auto-sizes to fit -->
       <div class="exam-body">
         <div class="q-num" id="cbtNum">Question 1 of 40</div>
@@ -1243,11 +1248,12 @@
         <div class="q-image" id="cbtImage" hidden></div>
         <div class="q-text exam-q" id="cbtQ"></div>
         <div class="exam-opts" id="cbtOpts"></div>
+        <div class="exam-keys" id="cbtKeys" hidden><span><b>A&ndash;D</b> Answer</span><span><b>P</b> Previous</span><span><b>N</b> Next</span><span><b>&larr;&rarr;</b> Move</span><span><b>S</b> Submit</span></div>
       </div>
       <!-- JAMB exam mode only: persistent desktop question palette.
            On smaller screens the slide-up question panel is used instead. -->
       <aside class="cbt-side" id="cbtSide" hidden>
-        <div class="cbt-side-head">Question palette</div>
+        <div class="cbt-side-head" id="cbtSideHead">Question palette</div>
         <div class="cbt-side-grid" id="cbtSideGrid"></div>
         <div class="cbt-side-legend"><span class="lg cur"></span>Current<span class="lg ans"></span>Answered<span class="lg"></span>Unanswered</div>
         <div class="cbt-side-count" id="cbtSideCount"></div>

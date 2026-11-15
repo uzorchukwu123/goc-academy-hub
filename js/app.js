@@ -10966,7 +10966,22 @@ function renderCBTQ(){
     b.onclick=function(){ cbtAns[cbtCur]=i; renderCBTQ(); buildCBTNav(); cbtPaintSubjects(); };
     host.appendChild(b);
   });
+  cbtPaintStrip(d);
   jambSaveSession();
+}
+/* The A–D strip beside the question: one cell per option letter, the
+   chosen one filled red — the hall's at-a-glance answer tracker. */
+function cbtPaintStrip(d){
+  var bar = document.getElementById('cbtLetterbar');
+  if(!bar || bar.hidden) return;
+  var n = Math.min(((d && (d.options || d.opts)) || []).length, 8);
+  bar.innerHTML = '';
+  for(var i = 0; i < n; i++){
+    var c = document.createElement('span');
+    c.textContent = OPT_KEYS[i];
+    if(cbtAns[cbtCur] === i) c.className = 'on';
+    bar.appendChild(c);
+  }
 }
 function cbtMove(d){
   cbtCur=Math.max(0,Math.min(cbtN-1,cbtCur+d));
@@ -11067,11 +11082,17 @@ function jambModeOn(p){
     var full = (document.getElementById('profName') || {}).textContent
       || (document.getElementById('idName') || {}).textContent || studentFirst || 'Candidate';
     if(nm) nm.textContent = full;
+    var av = document.getElementById('cbtCandAv');
+    if(av) av.textContent = full.split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
     if(idEl) idEl.textContent = studentId ? ('Scholar ID · ' + studentId) : '';
     if(pp) pp.textContent = 'JAMB Test · UTME practice examination';
   }
   var side = document.getElementById('cbtSide');
   if(side) side.hidden = false;
+  ['cbtLetterbar', 'cbtKeys'].forEach(function(id){
+    var e = document.getElementById(id); if(e) e.hidden = false;
+  });
   jambPaintSide();
   jambSaveSession();
 }
@@ -11081,7 +11102,7 @@ function jambModeOff(){
   jambDeadline = 0;
   var scr = document.getElementById('cbt');
   if(scr) scr.classList.remove('jamb-mode');
-  ['cbtCandidate', 'cbtSide', 'jambCalc'].forEach(function(id){
+  ['cbtCandidate', 'cbtSide', 'jambCalc', 'cbtLetterbar', 'cbtKeys'].forEach(function(id){
     var e = document.getElementById(id); if(e) e.hidden = true;
   });
   jambSubmitReturn();
@@ -11107,6 +11128,8 @@ function jambPaintSide(){
       grid.appendChild(b);
     })(i);
   }
+  var hd = document.getElementById('cbtSideHead');
+  if(hd) hd.textContent = 'Question palette' + (g ? ' \u00b7 ' + g.subject : '');
   var cnt = document.getElementById('cbtSideCount');
   if(cnt){
     var done = 0;
