@@ -46,7 +46,7 @@ ok('Review & saves is still on the Study hub', /Review &amp; saves/.test(index)
   && /id="sg-bookmarks"/.test(index) && /id="sg-mistakes"/.test(index) && /id="sg-review"/.test(index)
   && /onclick="atMyOpen\(\)"/.test(index));
 ok('Recent practice is still on the Study hub', />Recent practice</.test(index) && /id="pracHist"/.test(index));
-ok('Study CBT (Practice inside it), Web Test, Results and Resources remain', /id="sg-cbt"/.test(index) && !/id="sg-practice"/.test(index)
+ok('Practice, Web Test, Results and Resources remain', /id="sg-practice"/.test(index)
   && /id="sg-webtest"/.test(index) && /id="sg-results"/.test(index) && /id="sg-resources"/.test(index));
 ok('the live dashboard cards remain', /id="dashNext"/.test(index) && /id="dashStand"/.test(index) && /id="dashLast"/.test(index));
 ok('renderDash paints the surviving cards only',

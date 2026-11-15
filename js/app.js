@@ -327,7 +327,7 @@ function jnTalk(){
 function jnTap(n){
   var lvText = document.getElementById('dashLevel');
   var lv = parseInt(String(lvText ? lvText.textContent : '').replace(/[^\d]/g, ''), 10) || 1;
-  if(n === lv){ scGuide('practice'); return; }
+  if(n === lv){ openPractice(); return; }
   if(n < lv){ toast('Level ' + n + ' cleared — well done!'); return; }
   toast('Keep going — Level ' + n + ' is ahead of you.');
 }
@@ -609,7 +609,6 @@ function isDemoSurface(id){
 }
 function go(id){
   if(typeof closeDrawer === 'function') closeDrawer();
-  if(typeof menuClose === 'function') menuClose();
   /* Priority 9 — no in-app screen may be reached once the session has run out,
      so a tab left open cannot be clicked back into the dashboard. The server
      refuses the data anyway; this stops the empty shell being shown at all.
@@ -688,8 +687,7 @@ function go(id){
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   }
   var tabbar = document.getElementById('tabbar');
-  var tabScreens = ['home','timetable','classes','study','league','profile','webtest','studycbt','cbtGuide'];
-  document.getElementById('phone').classList.toggle('hub-chrome', tabScreens.indexOf(id) > -1);
+  var tabScreens = ['home','timetable','classes','study','league','profile','webtest'];
   var showTabs = tabScreens.indexOf(id) > -1;
   // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
@@ -711,7 +709,7 @@ function go(id){
   list(document.querySelectorAll('.tab')).forEach(function(t){
     var on = t.getAttribute('data-t') === active;
     t.classList.toggle('on', on);
-    var ic = t.querySelector('.icon'); if(ic) ic.setAttribute('stroke', on ? '#DC2626' : '#9AA3AF');
+    t.querySelector('.icon').setAttribute('stroke', on ? '#DC2626' : '#9AA3AF');
     // Keep the accessible "current page" state in sync with the visual one —
     // the .on class alone is invisible to screen readers.
     if(on) t.setAttribute('aria-current', 'page'); else t.setAttribute('aria-current', 'false');
@@ -2398,26 +2396,11 @@ function updateFocus(){
   var frac = limitSec ? Math.max(0, Math.min(1, leftSec / limitSec)) : 0;
   var r=40, c=2*Math.PI*r;
   var arc = document.getElementById('focusArc');
-  if(arc){
-    arc.setAttribute('stroke-dasharray', c);
-    arc.setAttribute('stroke-dashoffset', c*(1-frac));
-    arc.setAttribute('stroke', leftMin <= (Number(state.sessionWarn) || 0) ? '#D97706' : '#DC2626');
-  }
-  var fm = document.getElementById('focusMin'); if(fm) fm.textContent = leftMin;
-  var ft = document.getElementById('focusText'); if(ft) ft.textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
-  /* Home no longer carries the study-window card: instead, when the window
-     is nearly spent (inside the admin-set warning threshold,
-     cfg.sessionWarnMinutes -> state.sessionWarn), a slim warning banner
-     appears. Dismissing it hides it until the remaining time drops further. */
-  var banner = document.getElementById('swBanner');
-  if(banner){
-    var show = leftSec > 0 && leftMin <= (Number(state.sessionWarn) || 0) && swBannerDismissedFor !== leftMin;
-    banner.style.display = show ? 'flex' : 'none';
-    if(show){
-      var bt = document.getElementById('swBannerText');
-      if(bt) bt.textContent = 'Study window: ' + leftMin + ' minute' + (leftMin === 1 ? '' : 's') + ' left today \u2014 time to wrap up';
-    }
-  }
+  arc.setAttribute('stroke-dasharray', c);
+  arc.setAttribute('stroke-dashoffset', c*(1-frac));
+  arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
+  document.getElementById('focusMin').textContent = leftMin;
+  document.getElementById('focusText').textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
   // The wind-down card is the whole point of the daily limit, so show it when it is spent —
   // exhausted comes from the server whenever it's known, never guessed client-side.
   var exhausted = state.studyExhausted || (state.studyLeftSec != null && leftSec <= 0);
@@ -2455,119 +2438,6 @@ function paintStudyWindow(win){
   if(activeId === 'studySet' && typeof renderStudySet === 'function') renderStudySet();
   if(activeId === 'webtest' && typeof renderWebTest === 'function') renderWebTest();
 }
-/* ============ TOP-RIGHT MENU (student chrome) ============
-   One toggle, grouped drop-downs, floating over a dimmed page — the content
-   underneath is never blanked out. Every destination already existed; this
-   only changes how the student reaches it. */
-function menuToggle(){
-  var p = document.getElementById('menuPanel');
-  var b = document.getElementById('menuToggle');
-  if(!p) return;
-  var open = p.classList.toggle('show');
-  var sc = document.getElementById('menuScrim'); if(sc) sc.classList.toggle('show', open);
-  if(b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-function menuClose(){
-  var p = document.getElementById('menuPanel'); if(p) p.classList.remove('show');
-  var sc = document.getElementById('menuScrim'); if(sc) sc.classList.remove('show');
-  var b = document.getElementById('menuToggle'); if(b) b.setAttribute('aria-expanded', 'false');
-}
-function menuGroup(btn){
-  var g = btn && btn.parentElement; if(!g) return;
-  var open = g.classList.toggle('open');
-  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-/* Study-window warning banner: dismiss remembers the minute it was dismissed
-   at, so a later, lower remainder can warn again. */
-var swBannerDismissedFor = null;
-function swBannerDismiss(){
-  var banner = document.getElementById('swBanner'); if(banner) banner.style.display = 'none';
-  var limitSec = Math.max(0, Number(state.limit) || 0) * 60;
-  var leftSec = (state.studyLeftSec != null) ? Math.max(0, Number(state.studyLeftSec) || 0)
-    : Math.max(0, limitSec - (Number(state.used) || 0) * 60);
-  swBannerDismissedFor = Math.ceil(leftSec / 60);
-}
-/* Practice palette: display / undisplay, exactly like Exam mode's panel. */
-function pracPalToggle(){
-  var body = document.getElementById('pracPalBody');
-  var btn = document.getElementById('pracPalToggle');
-  if(!body) return;
-  var hide = body.style.display !== 'none';
-  body.style.display = hide ? 'none' : '';
-  if(btn){ btn.textContent = hide ? 'Show' : 'Hide'; btn.setAttribute('aria-expanded', hide ? 'false' : 'true'); }
-}
-/* ============ STUDY CBT: hub -> instructions -> existing set-up ============ */
-var scMode = 'cbt';
-function openStudyCbt(){ go('studycbt'); }
-function scGuide(mode){
-  scMode = (mode === 'practice') ? 'practice' : 'cbt';
-  go('cbtGuide');
-  var prac = scMode === 'practice';
-  var pill = document.getElementById('scgPill');
-  if(pill){ pill.textContent = prac ? 'Practice mode' : 'Exam Mode'; pill.classList.toggle('alt', prac); }
-  var sub = document.getElementById('scgSub');
-  if(sub) sub.textContent = prac ? 'Untimed \u00b7 explanations as you go' : 'Timed \u00b7 marked at the end';
-  var who = (typeof studentFirst !== 'undefined' && studentFirst) ? studentFirst : 'Scholar';
-  var sum = document.getElementById('scgSummary');
-  if(sum) sum.textContent = who + (studentId ? ' \u00b7 ' + studentId : '') + (prac
-    ? ' \u00b7 no time limit \u00b7 explanations on'
-    : ' \u00b7 timed sitting \u00b7 calculator on screen');
-  var rules = prac ? [
-    'No timer \u2014 take as long as you need; the clock only shows time spent.',
-    'After each answer you see whether you are right, with the full working.',
-    'The question palette shows answered, current and unanswered questions \u2014 tap any number to jump, and Hide folds it away.',
-    'An on-screen calculator is provided for calculation subjects.',
-    'You can revisit questions and try again before you finish.',
-    'Finish practice whenever you are done to see your score.'
-  ] : [
-    'The timer counts down and submits automatically at 0:00.',
-    'Use the subject tabs at the top to move between subjects anytime.',
-    'The question palette shows answered, current, not answered and marked-for-review questions \u2014 tap any number to jump.',
-    'An on-screen calculator is provided, just like exam day.',
-    'Use Previous and Next; you can change any answer before you submit.',
-    'No explanations during the exam \u2014 your result is marked at the end.'
-  ];
-  var host = document.getElementById('scgRules');
-  if(host) host.innerHTML = rules.map(function(r){ return '<li>' + esc(r) + '</li>'; }).join('');
-  var start = document.getElementById('scgStart');
-  if(start) start.textContent = prac ? 'Continue \u2014 choose your practice paper' : 'Continue \u2014 sit the JAMB-oriented exam';
-  /* The acknowledge checkbox starts unticked, and Start stays disabled
-     until it is ticked — every time the guide is shown, for either mode. */
-  var ack = document.getElementById('scgAck');
-  if(ack) ack.checked = false;
-  scGuideGate();
-}
-function scGuideGate(){
-  var ack = document.getElementById('scgAck');
-  var start = document.getElementById('scgStart');
-  if(start) start.disabled = !(ack && ack.checked);
-}
-function scGuideStart(){
-  if(scMode === 'practice'){ openStudySet('practice'); return; }
-  scExamStart();
-}
-/* Exam Mode is the JAMB-oriented sitting, not a study run: it is read from
-   the same Web Test catalogue the academy publishes (section 'jamb', held
-   back until its bank is ready in every subject of the combination) and
-   started through the same instructions + start route as Web Test, which
-   lands it in the UTME examination room (cbtOpenPaper) as a real, marked
-   attempt. Practice mode, by contrast, draws only on the practice bank
-   (core.studyPool keeps section 'practice' exclusive). */
-function scExamStart(){
-  if(state.studyExhausted){ showWinddown(); return; }
-  if(!GOC.api || !GOC.api.listMyTests){ openWebTest(); return; }
-  GOC.api.listMyTests().then(function(r){
-    var rows = (r && r.tests) || [], j = null;
-    rows.forEach(function(t){ if(t.section === 'jamb') j = t; });
-    if(j && !j.locked){ wtConfirmStart(j, null); return; }
-    toast(j ? 'The JAMB-oriented sitting is not open for you yet — your Web Test papers are here meanwhile.'
-            : 'The JAMB-oriented sitting opens once its question bank is ready in all of your subjects.');
-    openWebTest();
-  }, function(){ openWebTest(); });
-}
-/* The one Practice entry point students are offered: inside Study CBT. */
-function openPracticeGuide(){ scGuide('practice'); }
-
 function showWinddown(){
   paintWinddownText();
   var o=document.getElementById('windOverlay'); if(o) o.classList.add('show');
@@ -10966,22 +10836,7 @@ function renderCBTQ(){
     b.onclick=function(){ cbtAns[cbtCur]=i; renderCBTQ(); buildCBTNav(); cbtPaintSubjects(); };
     host.appendChild(b);
   });
-  cbtPaintStrip(d);
   jambSaveSession();
-}
-/* The A–D strip beside the question: one cell per option letter, the
-   chosen one filled red — the hall's at-a-glance answer tracker. */
-function cbtPaintStrip(d){
-  var bar = document.getElementById('cbtLetterbar');
-  if(!bar || bar.hidden) return;
-  var n = Math.min(((d && (d.options || d.opts)) || []).length, 8);
-  bar.innerHTML = '';
-  for(var i = 0; i < n; i++){
-    var c = document.createElement('span');
-    c.textContent = OPT_KEYS[i];
-    if(cbtAns[cbtCur] === i) c.className = 'on';
-    bar.appendChild(c);
-  }
 }
 function cbtMove(d){
   cbtCur=Math.max(0,Math.min(cbtN-1,cbtCur+d));
@@ -11082,17 +10937,11 @@ function jambModeOn(p){
     var full = (document.getElementById('profName') || {}).textContent
       || (document.getElementById('idName') || {}).textContent || studentFirst || 'Candidate';
     if(nm) nm.textContent = full;
-    var av = document.getElementById('cbtCandAv');
-    if(av) av.textContent = full.split(/\s+/).filter(Boolean).slice(0, 2)
-      .map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
     if(idEl) idEl.textContent = studentId ? ('Scholar ID · ' + studentId) : '';
     if(pp) pp.textContent = 'JAMB Test · UTME practice examination';
   }
   var side = document.getElementById('cbtSide');
   if(side) side.hidden = false;
-  ['cbtLetterbar', 'cbtKeys'].forEach(function(id){
-    var e = document.getElementById(id); if(e) e.hidden = false;
-  });
   jambPaintSide();
   jambSaveSession();
 }
@@ -11102,7 +10951,7 @@ function jambModeOff(){
   jambDeadline = 0;
   var scr = document.getElementById('cbt');
   if(scr) scr.classList.remove('jamb-mode');
-  ['cbtCandidate', 'cbtSide', 'jambCalc', 'cbtLetterbar', 'cbtKeys'].forEach(function(id){
+  ['cbtCandidate', 'cbtSide', 'jambCalc'].forEach(function(id){
     var e = document.getElementById(id); if(e) e.hidden = true;
   });
   jambSubmitReturn();
@@ -11128,8 +10977,6 @@ function jambPaintSide(){
       grid.appendChild(b);
     })(i);
   }
-  var hd = document.getElementById('cbtSideHead');
-  if(hd) hd.textContent = 'Question palette' + (g ? ' \u00b7 ' + g.subject : '');
   var cnt = document.getElementById('cbtSideCount');
   if(cnt){
     var done = 0;
@@ -11424,25 +11271,6 @@ function openResults(){
   });
 }
 function rsSetFilter(s){ rsFilter = s; renderResults(); }
-/* Score trend: the student's own marked attempts, oldest to newest. Fewer
-   than two marked attempts means no line is drawn — never an invented one. */
-function rsPaintTrend(all){
-  var card = document.getElementById('rsTrendCard');
-  var host = document.getElementById('rsTrend');
-  if(!card || !host) return;
-  var pts = (all || []).filter(function(a){ return a.status === 'marked' && a.percent != null; })
-    .slice(-12).map(function(a){ return Math.max(0, Math.min(100, Number(a.percent) || 0)); });
-  if(pts.length < 2){ card.style.display = 'none'; host.innerHTML = ''; return; }
-  card.style.display = '';
-  var w = 320, h = 72, pad = 8, step = (w - pad * 2) / (pts.length - 1);
-  var d = pts.map(function(p, i){
-    return (i ? 'L' : 'M') + (pad + i * step).toFixed(1) + ' ' + (h - pad - (p / 100) * (h - pad * 2)).toFixed(1);
-  }).join(' ');
-  var last = pts[pts.length - 1];
-  host.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;display:block" role="img" aria-label="Score trend, latest '
-    + last + '%"><path d="' + d + '" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round"/></svg>'
-    + '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--gray);font-weight:700"><span>Earlier</span><span>Latest ' + last + '%</span></div>';
-}
 /* Only the papers of the type currently being looked at. */
 function rsRows(){
   var rows = (rsData && rsData.attempts) || [];
@@ -11456,7 +11284,6 @@ function renderResults(){
   var perf = (rsData && rsData.performance) || null;
   var rows = rsRows();
   var all = (rsData && rsData.attempts) || [];
-  rsPaintTrend(all);
   var marked = rows.filter(function(a){ return a.status === 'marked' && typeof a.percent === 'number'; });
 
   /* The ring shows the figure that belongs to the filter: the weighted overall
