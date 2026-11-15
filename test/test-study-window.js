@@ -150,16 +150,24 @@ async function main() {
   ok('and there is nothing left of today\'s window',
      lastWin === 0, lastWin);
 
-  head('the ring updates without anything else being touched');
-  ok('the minutes-left figure reads zero', text('focusMin') === '0', text('focusMin'));
-  ok('the arc turns to the low-time warning colour',
-     id('focusArc').getAttribute('stroke') === '#D97706',
-     id('focusArc').getAttribute('stroke'));
-  ok('the dash offset is pulled all the way round, an empty ring',
-     id('focusArc').getAttribute('stroke-dashoffset') ===
-       id('focusArc').getAttribute('stroke-dasharray'),
-     id('focusArc').getAttribute('stroke-dashoffset') + ' of ' +
-       id('focusArc').getAttribute('stroke-dasharray'));
+  /* UI reimagination: Home no longer carries the study-window ring card.
+     updateFocus() now drives a slim warning banner instead — shown only
+     while a little time remains, never once the window is spent (the
+     wind-down overlay below takes over from there). */
+  head('the study window warning banner, where the ring used to be');
+  ok('the old focus ring card is gone from Home', !id('focusArc') && !id('focusMin'));
+  ok('the warning banner is on Home', !!id('swBanner'));
+  ok('at zero minutes the banner stays hidden — the wind-down takes over',
+     id('swBanner').style.display === 'none', id('swBanner').style.display);
+  run("paintStudyWindow({ dailyLimitMin: 30, usedMin: 25, leftSec: 300, exhausted: false })");
+  ok('with five minutes left the banner appears', id('swBanner').style.display === 'flex',
+     id('swBanner').style.display);
+  ok('and it says how long is left', /5 minutes left today/.test(text('swBannerText')),
+     text('swBannerText'));
+  run('swBannerDismiss()');
+  ok('dismissing hides it again', id('swBanner').style.display === 'none',
+     id('swBanner').style.display);
+  run("paintStudyWindow({ dailyLimitMin: 30, usedMin: 30, leftSec: 0, exhausted: true })");
 
   head('the wind-down overlay opens itself, unasked');
   ok('it is shown', shown('windOverlay') === true);
