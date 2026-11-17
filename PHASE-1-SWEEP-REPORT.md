@@ -2,7 +2,7 @@
 
 **Branch:** `arena/1f98403a-goc-academy-hub`
 **Base commit:** `950c276` — "Hostname entry replaces Website Mode Control (removed)"
-**Sweep commit:** `7427fca` — "Phase 1 review corrections: preserve the planner engine for Study Plan, retire student video playback"
+**Sweep commit:** `c130a40` — "Phase 1 review corrections: preserve the planner engine for Study Plan, retire student video playback"
 **Status:** sweep complete + the four review corrections applied. **Stopped here** — Student Homepage work has not begun.
 
 > **Revision 2** supersedes revision 1. Two things changed after ChatGPT's review: the weekly
