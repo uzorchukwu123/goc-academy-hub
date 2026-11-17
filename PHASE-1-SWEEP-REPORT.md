@@ -1,16 +1,20 @@
-# Phase 1 — FEATURE SWEEP CLEAN: completion report (revision 3)
+# Phase 1 — FEATURE SWEEP CLEAN: completion report (revision 4)
 
 **Branch:** `arena/1f98403a-goc-academy-hub`
 **Base commit:** `950c276` — "Hostname entry replaces Website Mode Control (removed)"
 **Sweep commit:** `c130a40` — "Phase 1 review corrections: preserve the planner engine for Study Plan, retire student video playback"
 **Video-exclusion commit:** `7de66c7` — "Exclude video from the student resource interface entirely (Phase 1 review)"
+**Route-order commit:** "Check video before the tier and download/view decisions on the resource file route"
 **Status:** sweep complete + all review corrections applied, including the full video exclusion. **Stopped here** — Student Homepage work has not begun.
 
-> **Revision 3** supersedes revision 2. Two things changed: the weekly planner is no longer owned
-> by the Classes screen (§1), and video is now excluded from the student interface **entirely** —
-> not just from its player (§2). Revision 2 had retired playback but still left a `.mp4` reachable
-> as a *download*; that is the defect this revision fixes. Everything else still holds and is
-> restated here so this document stands on its own.
+> **Revision 4** supersedes revision 3. The only change is the **order of checks** on
+> `GET /api/resources/:id/file`: the video refusal now happens straight after the record is
+> retrieved and validated, **before** the resource-view tier check and **before** the
+> download/view decision (§2.1). Revision 3 had it after both, which meant an Open student asking to
+> *open* a video was told "this is for GOC students — download it instead" about a file that is not
+> offered at all, and the video answer only arrived if you already passed the tier gate. Nothing
+> else changed: no record, file, route or protection was touched. Revisions 2 and 3 still hold and
+> are restated here so this document stands on its own.
 
 ---
 
@@ -22,7 +26,9 @@ quests, the Personal Notes feature (which did not exist), admin video upload/pub
 Guardian PIN, tutor analytics, the console approval queue, and tutor question
 activation/approval/return. Video is **excluded from the app entirely** — a `.mp4` is not played,
 not listed and **not downloadable** as a student resource, enforced in one shared rule, on the
-screen and on the route that serves the bytes — while the stored records and files are untouched
+screen and on the route that serves the bytes (refused before the tier check and before the
+download/view decision, so every tier and every request shape gets the same answer) — while the
+stored records and files are untouched
 and still served by their own tier-guarded routes. The weekly planner is preserved as a
 **screen-independent engine** in `js/goc-core.js` rather than living on any page, because its
 permanent home is the redesigned Study Plan page. No data was destroyed: every retired item was an
@@ -78,8 +84,63 @@ deleted.
 
 Revision 2 retired the *player* but left the *file* reachable: the resource viewer's video branch was
 gone, yet a `.mp4` resource was still listed, still had an open and a download button, and the route
-behind those buttons still served the bytes. That is not exclusion, it is removal of one way in. This
-revision excludes video as a **student resource**, everywhere the list and the bytes are decided.
+behind those buttons still served the bytes. That is not exclusion, it is removal of one way in.
+Revision 3 excluded video as a **student resource**, everywhere the list and the bytes are decided.
+Revision 4 fixes **where in the handler** that refusal sits (below).
+
+### 2.1 The order of checks on `GET /api/resources/:id/file` (revision 4)
+
+The refusal has to be the same answer whichever tier asks and whichever button is pressed, so the
+record is retrieved and validated **first** and video is refused **before** the tier check and
+**before** the download/view decision:
+
+| # | Step | What answers |
+|---|---|---|
+| 1 | Retrieve the resource record | — |
+| 2 | Confirm it exists and is published | `404` "That resource is not available." |
+| 3 | Confirm its stored file reference exists | `404` "The resource file is missing." |
+| 4 | **Reject video** via `resourceStudentAccessible()` | **`403`, `reason: 'video-excluded'`** |
+| 5 | Resource-view tier restriction (`resourceView`) | `403`, `reason: 'tier'` |
+| 6 | Download/view handling and file delivery | `200`, `inline` or `attachment` |
+
+**Why the order matters.** In revision 3 the video gate sat *after* the tier branch. Two defects
+followed, and only one of them was about bytes:
+
+- An Open student asking to **open** a video got `403 reason: 'tier'` — "Opening files in the app is
+  for GOC students. Tap the download icon to save this file instead" — advice to download a file that
+  is deliberately not offered at all. The video answer was only reachable by callers who had already
+  passed the tier gate.
+- A **download** of a video is not tier-restricted at all, so `?download=1` reached the video gate by
+  a different path than the open request. Same refusal, different route through the handler — two
+  paths to audit instead of one.
+
+With the gate at step 4 there is exactly **one** answer for video, and it precedes every branch that
+could vary by tier or by request shape. Non-video resources fail out of step 4 untouched and take
+steps 5–6 exactly as they did before: the tier restriction, the `inline`/`attachment` decision, the
+MIME map and the `Cache-Control` header are unchanged.
+
+**One consequential cleanup:** the `mp4: 'video/mp4'` entry came out of the route's MIME map. It
+became unreachable the moment the gate moved to step 4, and leaving it would have been a second,
+dormant answer for a video on a route that refuses video. `GET /api/videos/:id/file` keeps its own
+`video/mp4` handling — that route serves stored records and is untouched.
+
+**Proved two ways**, because a source-position assertion alone can be satisfied by code that does
+not behave (`test/test-video-excluded.js`, §3 and §3b):
+
+- **Source:** each step is located by a string that belongs to it and only to it, and the positions
+  are compared — record retrieved < published < file-ref < **video gate** < tier lookup < tier
+  refusal < download/view decision < file read < delivery. A further check rejects the shape
+  `(wantsDownload|canUse|tier) … resourceStudentAccessible`, i.e. a gate wrapped in a tier or
+  download condition.
+- **Live:** a real server against the in-memory Appwrite stand-in. A video answers `403
+  video-excluded`, **not** `403 tier`, for all four combinations of {GOC, Open} × {open, download},
+  with no file bytes. A PDF still answers `403 tier` for an Open student's *view*, still downloads
+  as an attachment for an Open student, and still opens inline for a GOC student. An unpublished
+  video and a video with no stored file still answer `404`, not `403` — confirming steps 2–3 come
+  first. A stranger still gets `401`.
+- **Able to fail:** putting the gate back after the tier branch makes **8 checks** fail, including
+  the live one that catches the actual defect — "an Open student opening a video is NOT told it is a
+  tier problem".
 
 ### The six requirements, one by one
 
@@ -96,7 +157,7 @@ only thing standing between a student and the file:
 |---|---|---|
 | **The rule** | `js/goc-core.js` — `resourceStudentAccessible()` / `isVideoResource()` | Decides on the **real file extension**, deliberately not on the record's category badge (the badge is a category relabel: an "other" resource can be an `.mp4`, and a badge can read "PDF" over a `.docx`). `.mp4 .m4v .mov .webm .avi .mkv .ogv .wmv .flv .3gp` are excluded. |
 | **The screen** | `js/app.js` — `renderResources()` | A video is dropped before it is counted or drawn, so it is never listed. Both the open **and** the download handler re-check at the click and toast the exclusion message — a list built before the rule existed still cannot open or fetch a video. |
-| **The route** | `server/server.js` | `GET /api/resources` filters video out of the list. `GET /api/resources/:id/file` answers **403** `video-excluded` **before** the download/view branch and before any file read, so `?download=1` cannot get past it — the one path revision 2 left open. |
+| **The route** | `server/server.js` | `GET /api/resources` filters video out of the list. `GET /api/resources/:id/file` answers **403** `video-excluded` at **step 4** of the handler (§2.1) — after the record is retrieved and validated, and **before** the tier check, the download/view decision and any file read. One answer for every tier and every request shape. |
 
 Unknown or blank extension is treated as a **document**, not as video: hiding a legitimate file
 because its type string is missing would be a real loss, and a file we cannot identify is not
@@ -208,7 +269,7 @@ test/test-quest-weekly-route.js  test/test-quest-weekly-ui.js
 `test-approval.js` (the **sign-up** approval flow) is a different suite, kept and passing.
 
 **Added (2):** `test/test-study-plan-engine.js`, `PHASE-1-SWEEP-REPORT.md`.
-**Added in revision 3:** `test/test-video-excluded.js` (36 checks).
+**Added in revision 3:** `test/test-video-excluded.js` (extended to 67 checks in revision 4).
 
 **Modified (33):** `index.html`, `js/app.js`, `js/api.js`, `js/goc-core.js`, `server/server.js`,
 `server/tutor/tutor-app.js`, `server/lib/reminders.js`, `css/styles.css`,
@@ -249,6 +310,11 @@ guards; only their answer to a student changes.
 `/api/me/tests*`, `/api/results*`, `/api/students/:id/approve`.
 
 **Contract changes on retained routes** (all removals, never redesigns):
+- `GET /api/resources/:id/file` — check order changed (revision 4, §2.1): video is refused at step 4,
+  before the tier restriction and the download/view decision. The path, the tier rule, the
+  `inline`/`attachment` behaviour and the header set for non-video files are all unchanged. The
+  now-unreachable `mp4: 'video/mp4'` entry was removed from this route's MIME map; the `/api/videos`
+  file route keeps its own MP4 handling.
 - `GET /api/tutor/subject` — `statusCounts` is `{ live, held }`.
 - `GET /api/tutor/questions` — `counts` is `{ live, held }`; a saved question's `status` is `live`.
 - `POST /api/tutor/questions/import` — response `status` is `live`.
@@ -263,8 +329,8 @@ accessors, storage, crawler/content-protection. No migration, no API replacement
 
 ## 5. Tests executed and results (correction 3)
 
-`node test/run.js` — **200 suites passed, 4 FAILED** (revision 2 reported 199; the new
-`test-video-excluded.js` is the one addition).
+`node test/run.js` — **200 suites passed, 4 FAILED**, unchanged by revision 4 (revision 2 reported
+199; `test-video-excluded.js` is the one addition).
 
 The four failures reproduce **identically against the original base commit `950c276`**, re-verified
 in a clean `git worktree` after these corrections:
@@ -283,11 +349,16 @@ and the ephemeral test ports are normalised out of the message text (e.g. `lhost
 `[both hosting builds complete] — Command failed: node build/build.js`.
 
 **New:** `test/test-study-plan-engine.js` — 50 checks, all passing (revision 2).
-**New in revision 3:** `test/test-video-excluded.js` — 36 checks, all passing, registered in
-`test/run.js`. It covers the rule format-by-format, the screen filter **and** the click-time guards,
-the server list filter, the 403 on the file route and its position before the download/view branch,
-records/routes/audit-tool preservation, and the absence of any player. Proven able to fail: core rule
-disabled → 5 checks fail; server gate removed → 3; screen filter removed → 2.
+**New in revision 3, extended in revision 4:** `test/test-video-excluded.js` — **67 checks**, all
+passing, registered in `test/run.js`. It covers the rule format-by-format, the screen filter **and**
+the click-time guards, the server list filter, records/routes/audit-tool preservation, and the
+absence of any player.
+
+Revision 4 replaced the two loose positional assertions with a **step-by-step order proof** plus a
+**live-server section** (§2.1). Proven able to fail: core rule disabled → 5 checks fail; the video
+gate put back after the tier branch → **8** checks fail, including the live one that catches the
+real defect (an Open student opening a video being told it is a tier problem); screen filter removed
+→ 2.
 
 **Requirement 4 verified directly:** `test-resource-download.js` passes unchanged, and
 `resourceStudentAccessible()` returns `true` for `pdf/doc/docx/xls/xlsx/ppt/pptx/jpg/png/gif/zip/txt`
@@ -320,6 +391,10 @@ sections 27 → 25, route table 253 → 241).
 - **Free UTME 2027 Tutorial Edition untouched** — no `free2027` file, screen or route modified; its
   suite result is identical to baseline.
 - **Student Homepage not started.**
+- **Revision 4 touched no data.** One handler's check order changed in `server/server.js`, plus the
+  tests and this report. No record was read, written or migrated, and no bucket file was touched —
+  the live section of the test writes a throwaway seed to a temp directory that only the stand-in
+  Appwrite knows about, and removes it afterwards.
 - **Nothing deleted from storage** — video records and files included.
 
 ---
@@ -340,10 +415,16 @@ sections 27 → 25, route table 253 → 241).
    writing an Appwrite record directly, and it would still not appear to a student: the resource
    interface refuses video by file extension, before the record's category, title or tier is
    considered. That is the intended behaviour, not a gap to close.
-6. **No device pass.** The tutorial's six steps, the interim schedule block on Classes and the
+6. **The video answer is now the first thing a caller can learn about a video resource.** Anyone
+   probing `GET /api/resources/:id/file` with an unguessable id learns "video" from a published
+   record even without passing the tier gate. That is the intended consequence of putting the refusal
+   first — it is the same answer a student needs — but it is a slightly wider disclosure than
+   revision 3's ordering, where a tier failure came first. IDs are unguessable and the fact disclosed
+   is only a file type.
+7. **No device pass.** The tutorial's six steps, the interim schedule block on Classes and the
    trimmed Classes layout have not been checked on a real phone; this carries the standing caveat in
    `DEPLOYMENT.md`.
-7. **`readme.md` keeps a `SUPERSEDED` note** on the "imported questions go to the approval queue"
+8. **`readme.md` keeps a `SUPERSEDED` note** on the "imported questions go to the approval queue"
    entry, because that behaviour was deliberately reversed. Say the word and the log can be rewritten
    instead of annotated.
 

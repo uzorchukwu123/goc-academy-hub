@@ -7448,40 +7448,65 @@ const ROUTES = [
 
     const resourceId = params[0];
 
-    /* ACCESS TIER: an Open student may download a resource but not open it in the
-       app. `?download=1` is the download; anything else is a view. Fails closed:
-       a student record that cannot be read is treated as Open. */
-    const wantsDownload = new URL(req.url, 'http://localhost').searchParams.get('download') === '1';
-    if (!wantsDownload) {
-      const st = await getAppwriteStudent(sess.data.id).catch(() => null);
-      if (!core.canUse('resourceView', st && st.tier)) {
-        return send(res, 403, { error: core.RESOURCE_VIEW_LOCK_MESSAGE, reason: 'tier' });
-      }
-    }
+    /* ORDER MATTERS IN THIS ROUTE (owner instruction, Phase 1 review). The
+       answer must be the same whichever tier asks and whichever button is
+       pressed, so the record is retrieved and validated FIRST and video is
+       refused BEFORE the tier check and BEFORE the download/view decision:
+
+         1. retrieve the resource record
+         2. it exists and is published
+         3. its stored file reference exists
+         4. it is not video            <- 403 video-excluded
+         5. resource-view tier check   (Open may download, not open)
+         6. download/view handling and file delivery
+
+       Checking video last, or inside the download/view branch, is how a
+       ?download=1 or an Open-tier request could reach a video: the tier check
+       answers 403 reason 'tier' and the video answer is never given, and a
+       download is not tier-restricted at all. Video is excluded from the app
+       entirely, so every caller gets the video answer, in every tier, for both
+       open and download. Nothing about non-video resources changes: they fail
+       out of step 4 untouched and take steps 5-6 exactly as before. */
 
     try {
+      /* 1. retrieve the resource record */
       const doc = await appwriteDatabases.getDocument(
         APPWRITE_DATABASE_ID,
         APPWRITE_RESOURCES_COLLECTION_ID,
         resourceId
       );
 
+      /* 2. it exists and is published */
       if (!doc || !doc.published) {
         return errJson(res, 404, 'That resource is not available.');
       }
 
+      /* 3. its stored file reference exists */
       if (!doc.storageFileId) {
         return errJson(res, 404, 'The resource file is missing.');
       }
 
-      /* Video is excluded from the app entirely (owner decision, Phase 1 review):
-         a video file is neither previewed nor downloadable as a student resource.
-         The record and its stored file are kept — only this route's answer to a
-         student changes. Every other format is untouched below. */
+      /* 4. Video is excluded from the app entirely (owner decision, Phase 1
+         review): a video file is neither previewed nor downloadable as a
+         student resource. The record and its stored file are kept — only this
+         route's answer to a student changes. */
       if (!core.resourceStudentAccessible({ fileType: doc.fileType })) {
         return send(res, 403, { error: core.VIDEO_EXCLUDED_MESSAGE, reason: 'video-excluded' });
       }
 
+      /* 5. ACCESS TIER: an Open student may download a resource but not open it
+         in the app. `?download=1` is the download; anything else is a view.
+         Fails closed: a student record that cannot be read is treated as Open.
+         Only non-video resources reach this line. */
+      const wantsDownload = new URL(req.url, 'http://localhost').searchParams.get('download') === '1';
+      if (!wantsDownload) {
+        const st = await getAppwriteStudent(sess.data.id).catch(() => null);
+        if (!core.canUse('resourceView', st && st.tier)) {
+          return send(res, 403, { error: core.RESOURCE_VIEW_LOCK_MESSAGE, reason: 'tier' });
+        }
+      }
+
+      /* 6. download/view handling and delivery */
       const fileData = await appwriteResourcesStorage.getFileView(
         APPWRITE_BUCKET_ID,
         doc.storageFileId
@@ -7499,8 +7524,7 @@ const ROUTES = [
         jpeg: 'image/jpeg',
         png: 'image/png',
         gif: 'image/gif',
-        zip: 'application/zip',
-        mp4: 'video/mp4'
+        zip: 'application/zip'
       };
 
       const mime = mimeTypes[ext] || 'application/octet-stream';
