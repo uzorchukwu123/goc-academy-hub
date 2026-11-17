@@ -2236,13 +2236,6 @@
         var e = requireUnlocked(); if (e) return e;
         return fail('Resource deletion requires a server connection.');
       },
-      listPublishedVideos: function () {
-        var e = requireStudent(); if (e) return e;
-        return ok({ videos: [] });
-      },
-      getVideoFile: function () {
-        return fail('Video downloads require a server connection.');
-      },
 
       /* ------------------------------------------------------------ classes
          Live classes (Zoom schedule). No classes persist in demo mode, the same
@@ -2699,32 +2692,10 @@
       uploadResource: function (formData) {
       return uploadReq('/admin/resources/upload', formData);
     },
-    getVideoFile: function (id) {
-  return fetch(base + '/videos/' + encodeURIComponent(String(id)) + '/file', {
-    method: 'GET',
-    headers: {
-      'Accept': '*/*',
-      'Authorization': token ? 'Bearer ' + token : ''
-    }
-  }).then(function (r) {
-    if (!r.ok) {
-      return r.text().then(function (txt) {
-        var data = null;
-        try { data = txt ? JSON.parse(txt) : null; } catch (e) {}
-        throw new Error(
-          (data && data.error) ||
-          'Could not open this video (' + r.status + ').'
-        );
-      });
-    }
-    return r.blob();
-  }, function () {
-    throw new Error('Cannot reach the server. Check that it is running.');
-  });
-},
-listPublishedVideos: function () {
-      return req('GET', '/videos');
-    },
+    /* Video playback is retired from the redesigned app (owner decision, Phase 1
+       review). The server's GET /api/videos and GET /api/videos/:id/file are
+       deliberately left in place so the stored records and files stay readable
+       and nothing had to be deleted; no client method calls them any more. */
     listClasses: function () {
       return req('GET', '/admin/classes');
     },
@@ -3002,8 +2973,6 @@ listPublishedVideos: function () {
     uploadQuestionImage: function (formData) { return active.uploadQuestionImage(formData); },
     getQuestionImage: function (id) { return active.getQuestionImage(id); },
     uploadResource: function (formData) { return active.uploadResource(formData); },
-    listPublishedVideos: function () { return active.listPublishedVideos(); },
-    getVideoFile: function (id) { return active.getVideoFile(id); },
     listClasses: function () { return active.listClasses(); },
     listUpcomingClasses: function () { return active.listUpcomingClasses(); },
     createClass: function (d) { return active.createClass(d); },

@@ -638,20 +638,17 @@ body.session-warning.previewing .ss-bar{top:40px}
 .fchip.brand.on{background:linear-gradient(135deg,var(--red) 0%,#B91C1C 100%);border-color:var(--red);color:#fff}
 .fchip-mark{width:12px;height:12px;flex:0 0 auto;color:currentColor}
 .sub-lead{font-size:12.5px;color:var(--gray);margin:-4px 0 12px;line-height:1.45}
+/* .vcard / .vmeta / .vtag are not video-specific: the interim scheduled-classes
+   rows on the Classes screen use them, so they stay. The video-only pieces are
+   gone with the playback surfaces (Phase 1 review: video is excluded from the
+   redesigned app) — .vthumb, .vplay, .vbadge, .vdur and .player-stage had no
+   other caller. */
 .vcard{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--sh-sm);margin-bottom:14px;cursor:pointer;font-family:var(--font);padding:0}
 .vcard:active{transform:scale(.99)}
-.vthumb{position:relative;height:150px;display:flex;align-items:center;justify-content:center}
-.vplay{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer}
-.vbadge{position:absolute;top:10px;left:10px;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;gap:5px}
-.vbadge.live{background:var(--red)}
-.vdur{position:absolute;bottom:10px;right:10px;font-size:11px;font-weight:800;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.7);color:#fff;font-variant-numeric:tabular-nums}
 .vmeta{padding:12px 14px 14px}
 .vtag{display:inline-block;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;margin-bottom:7px}
 .vmeta h4{font-size:15px;font-weight:800;line-height:1.28}
 .vmeta p{font-size:12.5px;color:var(--gray);margin-top:4px}
-/* video player */
-.player-stage{position:relative;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
-.player-stage .vplay{width:64px;height:64px}
 .player-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--ink);color:#fff}
 .player-track{flex:1;height:5px;border-radius:999px;background:rgba(255,255,255,.25);position:relative}
 .player-track span{position:absolute;left:0;top:0;bottom:0;width:32%;background:var(--red);border-radius:999px}

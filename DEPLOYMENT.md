@@ -505,10 +505,12 @@ item and still holds.
 
 ## Check your resources and videos once Appwrite is configured
 
-> **Phase 1 sweep:** the console's own video upload/publish/delete panel is retired, so lesson
-> videos are no longer managed from inside the app. Existing video records and their stored
-> files are untouched and students still see and play everything already published; this check
-> is how you confirm those files are intact.
+> **Phase 1 sweep + review:** video is excluded from the redesigned web application. The console's
+> upload/publish/delete panel is retired *and* the student playback surfaces are gone, so nothing in
+> the app plays a video any more. Existing video records and their stored files are **not deleted** —
+> that needs a separate decision — and `GET /api/videos` / `GET /api/videos/:id/file` are still
+> registered, still tier-guarded, and still serve those records. This check is how you confirm the
+> files are intact.
 
 After the credentials are in `.env` and the resource/video files are in the bucket:
 

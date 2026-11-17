@@ -654,7 +654,7 @@ function go(id){
   var tabbar = document.getElementById('tabbar');
   var tabScreens = ['home','classes','study','league','profile'];
   var showTabs = tabScreens.indexOf(id) > -1;
-  // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
+  // Immersive flows (login, lesson/practice/CBT/results, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
   tabbar.style.display = showTabs ? 'flex' : 'none';
   // On desktop: screens outside the authenticated hub are full-bleed, and every
@@ -709,7 +709,7 @@ function loginNow(raw, pw){
        not yet supporting some server-only feature) only logs a warning
        instead of throwing the whole chain into the outer .catch() below,
        which used to strand an authenticated user on the login screen. */
-    [renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
+    [renderSchedule, renderResources, loadPublishedResources, loadUpcomingClasses, refreshMe, renderLeague]
       .forEach(function(fn){
         try{ fn(); }
         catch(e){ console.warn('[login] dashboard widget failed to hydrate:', e); }
@@ -761,7 +761,7 @@ function admPreview(){
   document.body.classList.add('previewing');
   var b = document.getElementById('pvBar'); if(b) b.style.display = 'flex';
   go('home');
-  updateFocus(); renderClasses(); renderResources(); renderUpdates();
+  updateFocus(); renderSchedule(); renderResources(); renderUpdates();
   renderLeague();
   toast('Previewing as a student — your console session stays unlocked');
 }
@@ -1298,7 +1298,7 @@ function signupSubmit(){
     applyIdentity(r2.session);
     loadSettings();
     go('home');
-    renderClasses(); renderResources();
+    renderSchedule(); renderResources();
     wtCatalogue = null;
     refreshMe();
     renderLeague();
@@ -1376,7 +1376,6 @@ function applySubjects(subs){
 }
 function paintSubjectSurfaces(){
   renderClassFilters();
-  renderClasses();
   renderSchedule();
   renderResources();
 }
@@ -1619,7 +1618,7 @@ function _scholFormHtml(){
   return '<div class="sch-intro">' +
     '<h2 class="sch-heading">🎓 Free Scholarship — Apply Now</h2>' +
     '<p class="sch-sub">G.O.C Academy is offering <strong>30 fully-free scholarship places</strong> for dedicated UTME candidates. ' +
-    'Accepted scholars get full GOC access — Web Tests, live classes, lesson videos and everything in between — at no cost.</p>' +
+    'Accepted scholars get full GOC access — Web Tests, live classes and everything in between — at no cost.</p>' +
     '</div>' +
     '<form id="schForm" class="sch-form" onsubmit="scholSubmit();return false;">' +
       '<p class="sch-section-label">About you</p>' +
@@ -7183,12 +7182,20 @@ function hexA(hex){
   return 'rgba('+r+','+g+','+b+',0.10)';
 }
 
-/* ================= SCHEDULED LIVE CLASSES =================
-   The academy's live timetable, as GET /api/classes reports it for this
-   account. This used to be drawn as a whole week on the standalone Timetable
-   screen; that screen was retired in the redesign's Phase 1 sweep, so the same
-   classes are listed here on the Classes screen — the next one first, with the
-   same GOC join-lock the server sets on the response. */
+/* ================= SCHEDULED LIVE CLASSES (interim) =================
+   The academy's live classes, as GET /api/classes reports them for this
+   account: the week that used to be drawn on the standalone Timetable screen.
+   That screen is retired and stays retired.
+
+   Its permanent home is the redesigned Study Plan page, which is not built yet.
+   So this is explicitly an interim surface, and it holds no planner logic of its
+   own: the week grouping, day keys, time labels, sorting and durations all come
+   from the planner engine in js/goc-core.js (GOC.core.planWeek and friends).
+   When the Study Plan page lands it mounts the same engine, and this block is
+   deleted — nothing has to be ported, because nothing is implemented here.
+
+   GOC join-lock is preserved exactly: a class the server marks locked opens the
+   academy's message instead of a link. */
 var upcomingClasses = [];
 var upcomingLocked = false;
 
@@ -7199,6 +7206,7 @@ function loadUpcomingClasses(){
     upcomingLocked = !!(result && result.joinLocked);
     upcomingClasses = items.map(function(c){
       return {
+        subject: c.subject,
         subj: canonSubject(c.subject),
         topic: c.topic || '',
         tutor: c.tutor || '',
@@ -7217,20 +7225,24 @@ function loadUpcomingClasses(){
 }
 
 function renderSchedule(){
+  var cs = document.getElementById('classFilters');
+  if(cs){ cs.querySelectorAll('.fchip').forEach(function(ch){ var on = ch.getAttribute('data-f') === classFilter; ch.classList.toggle('on', on); ch.setAttribute('aria-pressed', String(on)); }); }
   var host = document.getElementById('scheduleList');
   if(!host) return;
   var empty = document.getElementById('scheduleEmpty');
-  var rows = upcomingClasses.filter(function(c){ return studiesSubject(c.subj); })
-    .filter(function(c){ return classFilter === 'all' || c.subj === canonSubject(classFilter); })
-    .sort(function(a, b){ return String(a.scheduledAt).localeCompare(String(b.scheduledAt)); });
+
+  /* The whole week past a filter that is the screen's own (studiesSubject plus
+     the chip), then flattened back into one chronological list: this interim
+     surface lists what is coming, it does not draw a week yet. */
+  var plan = GOC.core.planWeek(upcomingClasses, [], function(bl){
+    return studiesSubject(bl.subj) && (classFilter === 'all' || bl.subj === canonSubject(classFilter));
+  });
+  var rows = [];
+  plan.days.forEach(function(k){ rows = rows.concat(plan.week[k].blocks); });
+
   host.innerHTML = '';
   if(empty) empty.style.display = rows.length ? 'none' : 'block';
   rows.forEach(function(c){
-    var d = new Date(c.scheduledAt);
-    var when = isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, {
-      weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'
-    });
-    var dur = c.durationMin ? (c.durationMin % 60 === 0 ? (c.durationMin / 60) + 'h' : c.durationMin + 'm') : '';
     var col = (SUBJECT_META[c.subj] || {}).color || '#334155';
     var b = document.createElement('button');
     b.className = 'vcard';
@@ -7238,8 +7250,8 @@ function renderSchedule(){
     b.innerHTML =
       '<div class="vmeta" style="text-align:left">' +
         '<span class="vtag" style="background:' + hexA(col) + ';color:' + col + '">' + esc(c.subj) + '</span>' +
-        '<h4>' + esc(c.topic ) + '</h4>' +
-        '<p>' + esc(when) + (dur ? ' · ' + esc(dur) : '') + (c.tutor ? ' · ' + esc(c.tutor) : '') + '</p>' +
+        '<h4>' + esc(c.topic || '') + '</h4>' +
+        '<p>' + esc(scheduleWhen(c)) + (c.dur ? ' · ' + esc(c.dur) : '') + '</p>' +
         (c.joinLocked ? '<span class="tt-tag" style="background:#f3f4f6;color:#6b7280;margin-left:6px">Join link: GOC</span>' : '') +
       '</div>';
     b.onclick = function(){
@@ -7249,6 +7261,17 @@ function renderSchedule(){
     };
     host.appendChild(b);
   });
+}
+
+/* When a class block reads: the weekday and date the planner grouped it under,
+   plus the time label the engine produced, so the wording matches whatever the
+   Study Plan page ends up showing for the same class. */
+function scheduleWhen(block){
+  if(!block || !block.at) return (block && block.t) || '';
+  var d = new Date(block.at);
+  if(isNaN(d.getTime())) return block.t || '';
+  var day = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return day + ', ' + block.t;
 }
 
 /* ================= SELF-DIRECTED STUDY =================
@@ -10230,160 +10253,23 @@ function rsOpen(id){
     function(err){ toast(err.message || 'Could not open that paper'); });
 }
 
-/* ================= CLASSES / VIDEOS =================
-   No hardcoded demo rows here on purpose — this list is only ever filled by
-   loadPublishedVideos() (below), reading real published video records from
-   the server. An empty array is the honest state before that call resolves
-   or if the academy hasn't published anything yet; renderClasses() already
-   shows the right "Nothing yet" message for an empty list on its own. */
-var videos = [];
+/* ================= CLASSES =================
+   Live classes only. Video was excluded from the redesigned application (owner
+   decision, Phase 1 review), so the student-facing video surfaces that used to
+   live on this screen are retired: the "Recorded live classes" and "Lesson
+   videos" shelves, their video cards, the play overlay entry point and the
+   published-video fetch that fed them.
+
+   Nothing was deleted from storage. Every video record and every stored file is
+   untouched and still readable by the routes that serve it; only the interface
+   that played them inside the app is gone. Stored video records are kept for a
+   separate decision, and nothing here reads or writes them.
+
+   The subject filter survives because it still narrows the scheduled live
+   classes listed on this screen. */
 var classFilter = 'all';
-var publishedVideosLoaded = false;
 
-/* Real video records don't carry their own thumbnail gradient the way the
-   old hardcoded demo rows did, so map the canonical subject onto one —
-   reusing the same brand colour per subject as SUBJECT_META, paired with a
-   slightly darker second stop. Unknown/blank subjects fall back to grey. */
-var VIDEO_GRADIENTS = {
-  'Use of English': ['#4F46E5', '#3730A3'],
-  'Physics':        ['#DC2626', '#7F1D1D'],
-  'Chemistry':      ['#0E7490', '#155e75'],
-  'Biology':        ['#15803D', '#106b34'],
-  'Mathematics':    ['#7F1D1D', '#5E1212']
-};
-var VIDEO_GRADIENT_FALLBACK = ['#475467', '#344054'];
-
-function videoGradient(subj){
-  return VIDEO_GRADIENTS[canonSubject(subj)] || VIDEO_GRADIENT_FALLBACK;
-}
-
-function setClassFilter(f){ classFilter = f; renderClasses(); renderSchedule(); }
-
-/* This is the one function that was missing end to end: the admin console
-   could already publish a video, but nothing on the student side ever
-   asked the server for the published list — the screen only ever showed
-   the fixed demo rows above (now removed). This mirrors
-   loadPublishedResources() function-for-function. */
-function loadPublishedVideos(){
-  if(!GOC.api || !GOC.api.listPublishedVideos) return;
-
-  GOC.api.listPublishedVideos().then(function(result){
-    var items = result && Array.isArray(result.videos) ? result.videos : [];
-    publishedVideosLoaded = true;
-    videosLocked = !!(result && result.locked);
-
-    /* Convert Appwrite video records into the {type, subj, title, tutor,
-       dur, date, c1, c2, videoId, storageFileId, externalUrl} shape the
-       existing renderClasses() / videoCard() functions already expect. */
-    videos = items.map(function(v){
-      var subj = canonSubject(v.subject || '');
-      var grad = videoGradient(subj);
-      var type = v.type === 'live' ? 'live' : 'lesson';
-
-      var when = '';
-      if(v.createdAt){
-        var d = new Date(v.createdAt);
-        if(!isNaN(d.getTime())){
-          when = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-        }
-      }
-      var date = when
-        ? (type === 'live' ? ('Recorded ' + when) : ('Added ' + when))
-        : (type === 'live' ? 'Recorded class' : 'Lesson video');
-
-      return {
-        type: type,
-        subj: subj,
-        title: v.title || 'Untitled video',
-        tutor: v.tutor || '',
-        dur: v.duration || '',
-        date: date,
-        c1: grad[0],
-        c2: grad[1],
-        videoId: v.videoId || '',
-        storageFileId: v.storageFileId || '',
-        externalUrl: v.externalUrl || ''
-      };
-    });
-
-    renderClasses();
-
-  }, function(err){
-    console.warn('[goc] Could not load published videos:', err && err.message);
-    publishedVideosLoaded = false;
-    videos = [];
-    renderClasses();
-  });
-}
-/* Set when the server held videos back because this student is on the Open tier. */
-var videosLocked = false;
-function renderClasses(){
-  var cs = document.getElementById('classFilters');
-  if(cs){ cs.querySelectorAll('.fchip').forEach(function(ch){ var on = ch.getAttribute('data-f') === classFilter; ch.classList.toggle('on', on); ch.setAttribute('aria-pressed', String(on)); }); }
-  var live = document.getElementById('liveList'), les = document.getElementById('lessonList');
-  if(!live || !les) return;
-  live.innerHTML = ''; les.innerHTML = '';
-  var liveN = 0, lesN = 0;
-  videos.forEach(function(v){
-    var subj = canonSubject(v.subj);
-    // A recording for a paper the student does not sit is not on their shelf.
-    if(!studiesSubject(subj)) return;
-    if(classFilter !== 'all' && subj !== canonSubject(classFilter)) return;
-    if(v.type === 'live'){ live.appendChild(videoCard(v)); liveN++; }
-    else { les.appendChild(videoCard(v)); lesN++; }
-  });
-  document.getElementById('liveEmpty').style.display = liveN ? 'none' : 'block';
-  document.getElementById('lessonEmpty').style.display = lesN ? 'none' : 'block';
-  /* Say which papers were looked in. An empty shelf is otherwise ambiguous: the
-     student cannot tell whether nothing has been published for their
-     combination or whether the app has forgotten what they sit. */
-  var scope = classFilter === 'all' ? orderedSubjects().join(', ') : canonSubject(classFilter);
-  var le = document.getElementById('liveEmpty'), se = document.getElementById('lessonEmpty');
-  if(le) le.textContent = videosLocked ? GOC.core.videoLockMessage('live') : 'No live classes yet for ' + scope + '.';
-  if(se) se.textContent = videosLocked ? GOC.core.videoLockMessage('lesson') : 'No lesson videos yet for ' + scope + '.';
-}
-function videoCard(v){
-  var b = document.createElement('button');
-  b.className = 'vcard';
-  var badge = v.type === 'live'
-    ? '<span class="vbadge live"><svg width="7" height="7" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#fff"/></svg>Live replay</span>'
-    : '<span class="vbadge">Lesson</span>';
-  b.innerHTML =
-    '<div class="vthumb" style="background:linear-gradient(135deg,' + v.c1 + ',' + v.c2 + ')">' +
-      badge +
-      '<span class="vplay"><svg class="icon" viewBox="0 0 24 24" fill="#DC2626"><path d="M8 5v14l11-7z"/></svg></span>' +
-      '<span class="vdur">' + esc(v.dur) + '</span>' +
-    '</div>' +
-    '<div class="vmeta">' +
-      '<span class="vtag" style="background:' + hexA(v.c1) + ';color:' + v.c1 + '">' + esc(v.subj) + '</span>' +
-      '<h4>' + esc(v.title) + '</h4>' +
-      '<p>' + esc(v.tutor) + ' · ' + esc(v.date) + '</p>' +
-    '</div>';
-  b.onclick = function(){ playVideo(v); };
-  return b;
-}
-function playVideo(v){
-  /* External links (Zoom cloud / unlisted YouTube) are never embedded
-     inline — hand off to the browser/app that already knows how to play
-     them. File-backed videos stream through the same overlay viewer the
-     video-type resources already use, so no new player UI is needed. */
-  if(v.externalUrl){
-    window.open(v.externalUrl, '_blank');
-    return;
-  }
-
-  if(v.storageFileId){
-    toast('Opening “' + v.title + '”…');
-    GOC.api.getVideoFile(v.videoId).then(function(blob){
-      openResourceMediaViewer(blob, v.title, 'video', 'mp4');
-    }, function(err){
-      toast(err.message || 'Could not open this video.');
-    });
-    return;
-  }
-
-  toast('This video has no file or link attached.');
-}
+function setClassFilter(f){ classFilter = f; renderSchedule(); }
 
 /* ================= RESOURCES ================= */
 /* `subj` is what personalisation reads. 'all' means the item belongs to every
@@ -10394,15 +10280,17 @@ var publishedResources = [];
 var publishedResourcesLoaded = false;
 
 
-/* Only these can actually be shown inside the app (an iframe, an <img>, or
-   a <video> tag). Word/Excel/zip files have no in-browser renderer, so for
-   those "open" and "download" both just save the file — there is no third
-   option a browser can offer without a plugin. */
+/* Only these can actually be shown inside the app (an iframe or an <img>).
+   Word/Excel/zip files have no in-browser renderer, so for those "open" and
+   "download" both just save the file — there is no third option a browser can
+   offer without a plugin. Video is excluded from the redesigned app (owner
+   decision, Phase 1 review), so a video resource is NOT previewed inline any
+   more either — it downloads, like an office file. Documents and images are
+   untouched: they still open in the viewer below. */
 function resourceViewerKind(ext){
   ext = String(ext || '').toLowerCase();
   if(ext === 'pdf') return 'pdf';
   if(ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif') return 'image';
-  if(ext === 'mp4') return 'video';
   return null;
 }
 
@@ -10618,10 +10506,6 @@ function openResourceMediaViewer(blob, title, kind, ext){
     body = '<div class="goc-viewer-stage" style="flex:1;min-height:0;background:#333;display:flex;align-items:center;justify-content:center;overflow:auto;">' +
       '<img id="gocPdfFrame" alt="' + esc(title || 'Resource image') + '" style="max-width:100%;max-height:100%;object-fit:contain;">' +
     '</div>';
-  } else if(kind === 'video'){
-    body = '<div class="goc-viewer-stage" style="flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;">' +
-      '<video id="gocPdfFrame" controls autoplay style="max-width:100%;max-height:100%;"></video>' +
-    '</div>';
   } else {
     body = '<div id="gocPdfCanvasWrap" class="goc-viewer-stage" style="flex:1;min-height:0;background:#3a3b3e;overflow:auto;display:flex;align-items:center;justify-content:center;padding:14px 0;">' +
       '<canvas id="gocPdfCanvas" style="box-shadow:0 2px 14px rgba(0,0,0,.4);background:#fff;height:fit-content;"></canvas>' +
@@ -10795,15 +10679,14 @@ function openResourceMediaViewer(blob, title, kind, ext){
     if(e.target === overlay) closeViewer();
   });
 
-  if(kind === 'image' || kind === 'video'){
+  if(kind === 'image'){
     var frame = document.getElementById('gocPdfFrame');
     if(frame){
       frame.src = url;
       frame.addEventListener('load', function(){
         settled = true;
-        if(kind === 'image') setZoomUi();
+        setZoomUi();
       });
-      frame.addEventListener('loadeddata', function(){ settled = true; }); // video
       frame.addEventListener('error', showFallback);
       setTimeout(function(){ if(!settled) showFallback(); }, 1500);
     } else {
@@ -11096,7 +10979,7 @@ function restoreSession(){
       if(typeof animEnter === 'function') animEnter();
       applyIdentity(user);
       loadSettings();
-      [renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
+      [renderSchedule, renderResources, loadPublishedResources, loadUpcomingClasses, refreshMe, renderLeague]
         .forEach(function(fn){
           try{ fn(); }
           catch(e){ console.warn('[restoreSession] dashboard widget failed to hydrate:', e); }

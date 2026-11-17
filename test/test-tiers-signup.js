@@ -36,7 +36,14 @@ ok('Open: the JAMB-oriented test is offered, as the table says', F.jambMock === 
 ok('Open: resource downloads are offered, as the table says', F.resourceDownload === true && /Resource downloads/.test(text(open)));
 ok('Open: nothing is promised that the table refuses', !/Web Test|live class|video|replay|streak/i.test(text(open)) && F.webTestObjective === false && F.videos === false && F.liveClassJoin === false);
 ok('GOC: Objective and Theory Web Tests', G.webTestObjective && G.webTestTheory && /Objective and Theory Web Tests/.test(text(goc)));
-ok('GOC: live classes, videos and replays', G.liveClassJoin && G.videos && G.classRecordings && /Live classes, lesson videos and class replays/.test(text(goc)));
+/* Video is excluded from the redesigned app (Phase 1 review), so the GOC card
+   no longer promises lesson videos or replays. What it must still promise is
+   GOC-only live classes. The `videos`/`classRecordings` rules themselves are
+   unchanged — they still gate the stored-record routes. */
+ok('GOC: live classes, and no video promise left on the card',
+   G.liveClassJoin && G.videos && G.classRecordings &&
+   /Live classes/.test(text(goc)) && !/lesson videos|replays/i.test(text(goc)),
+   text(goc));
 ok('GOC: in-app resource viewing and streak freezes', G.resourceView && G.streakFreezes && /Read resources in the app/.test(text(goc)) && /streak freezes/.test(text(goc)));
 var GL = core.tierLimits('goc');
 ok('GOC: no limit on reviews, saved questions or notes, as the table says', GL.reviewsPerDay === null && GL.bookmarks === null && GL.notesPerSubject === null && /unlimited reviews and saved questions/.test(text(goc)));
@@ -57,7 +64,7 @@ ok('it sits before the contact section', li > 0 && li < html.indexOf('id="contac
 ok('it names no price (the decision is: ask the academy)', !/N8|₦|\u20A6|8,000|per month|\/month/i.test(text(land)));
 var lo = land.slice(land.indexOf('tc-card open'), land.indexOf('tc-card goc')), lg = land.slice(land.indexOf('tc-card goc'));
 ok('landing Open card matches the table', new RegExp('first ' + L.notesPerSubject + ' notes').test(text(lo)) && new RegExp(L.reviewsPerDay + ' spaced reviews a day').test(text(lo)) && new RegExp(L.bookmarks + ' saved questions').test(text(lo)));
-ok('landing GOC card matches the table', G.webTestObjective && G.liveClassJoin && /Objective and Theory Web Tests/.test(text(lg)) && /Live classes, lesson videos and class replays/.test(text(lg)));
+ok('landing GOC card matches the table', G.webTestObjective && G.liveClassJoin && /Objective and Theory Web Tests/.test(text(lg)) && /Live classes/.test(text(lg)) && !/lesson videos|replays/i.test(text(lg)));
 ok('landing styles exist', /\.landing-tiers\b/.test(css));
 
 console.log('\nstyle and release');

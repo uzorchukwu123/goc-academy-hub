@@ -214,7 +214,7 @@
                         <li>Everything in Open, with no limits</li>
                         <li>Objective and Theory Web Tests</li>
                         <li>Every note, unlimited reviews and saved questions</li>
-                        <li>Live classes, lesson videos and class replays</li>
+                        <li>Live classes and every note and resource</li>
                         <li>Read resources in the app, and earn streak freezes</li>
                       </ul>
                     </div>
@@ -690,7 +690,7 @@
                     <li>Everything in Open, with no limits</li>
                     <li>Objective and Theory Web Tests</li>
                     <li>Every note, unlimited reviews and saved questions</li>
-                    <li>Live classes, lesson videos and class replays</li>
+                    <li>Live classes and every note and resource</li>
                     <li>Read resources in the app, and earn streak freezes</li>
                   </ul>
                 </div>
@@ -1807,7 +1807,7 @@
     <section class="screen pad" id="classes">
       <div class="hdr">
         <div class="eyebrow">Classes</div>
-        <div class="row between"><div class="h-title">Live classes &amp; videos</div><span class="chip red">4 new</span></div>
+        <div class="row between"><div class="h-title">Live classes</div><span class="chip red">4 new</span></div>
       </div>
       <div class="wrap">
         <!-- One chip only: renderClassFilters() replaces this strip with the
@@ -1819,22 +1819,15 @@
 
         <!-- Scheduled live classes. This is the week that used to be drawn on the
              standalone Timetable screen (retired in the Phase 1 sweep): the same
-             server data (GET /api/classes), the same GOC join-lock, now shown
-             beside the recordings where a student looks for a class. -->
+             server data (GET /api/classes) and the same GOC join-lock, in its
+             interim home until the redesigned Study Plan page owns it. Video is
+             excluded from the redesigned app, so the recording and lesson-video
+             shelves that sat here are retired; see PHASE-1-SWEEP-REPORT.md. -->
         <div class="sec-head" style="margin-top:6px"><div class="section-t">📅 Scheduled live classes</div></div>
         <div class="sub-lead">Your academy's live timetable. Tap a class to join when it is your turn.</div>
         <div id="scheduleList"></div>
         <div class="rest" id="scheduleEmpty" style="display:none">No live class has been scheduled for you yet.</div>
 
-        <div class="sec-head" style="margin-top:18px"><div class="section-t">🔴 Recorded live classes</div></div>
-        <div class="sub-lead">Full replays of your tutor's live sessions — watch what you missed.</div>
-        <div id="liveList"></div>
-        <div class="rest" id="liveEmpty" style="display:none">No live classes for this subject yet.</div>
-
-        <div class="sec-head" style="margin-top:18px"><div class="section-t">🎬 Lesson videos</div></div>
-        <div class="sub-lead">Short topic walk-throughs you can watch any time.</div>
-        <div id="lessonList"></div>
-        <div class="rest" id="lessonEmpty" style="display:none">No lesson videos for this subject yet.</div>
         <div class="spacer"></div>
       </div>
     </section>

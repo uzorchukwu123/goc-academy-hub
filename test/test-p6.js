@@ -112,20 +112,12 @@ ok('the refusal is explained on screen', text('subjMsg').length > 0, text('subjM
 ok('still exactly three after the refusal', run('chosenSciences().length') === 3);
 
 head('Priority 6 — the stored combination drives every subject-aware surface');
-/* Priority 6 tests whether the *filtering logic* correctly narrows videos to
-   a student's combination — it has nothing to do with what real videos an
-   academy has published. Production js/app.js no longer ships hardcoded
-   placeholder rows (Priority: "clear the placeholder videos"), so this test
-   supplies its own small fixture directly, the same way a real published
-   video would arrive from loadPublishedVideos() once the server has one for
-   every subject under test. */
-run("videos = [" +
-  "{type:'live',subj:'Use of English',title:'Comprehension Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Physics',title:'Newton Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Chemistry',title:'Hydrocarbons Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Biology',title:'Cell Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'live',subj:'Maths',title:'Quadratic Equations Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}" +
-  "]");
+/* Priority 6 tests whether the *filtering logic* correctly narrows a
+   subject-aware surface to a student's combination. This block used to do it
+   through the video shelves; video is excluded from the redesigned app
+   (Phase 1 review), so the same personalisation is now proved through the
+   scheduled-live-classes list below, which shares studiesSubject() and the
+   subject filter with everything else. */
 run("resources = [{resourceId:'FIXTURE-SYL',storageFileId:'',description:'',published:true,cat:'syllabus',type:'SYL',tcol:'#15803D',subj:'all',title:'JAMB 2027 Syllabus — Fixture',meta:'All subjects · test fixture',fileExt:'pdf'}]");
 run('applySubjects')(['Use of English', 'Physics', 'Chemistry', 'Mathematics']);
 ['Use of English', 'Physics', 'Chemistry', 'Mathematics'].forEach(function (s) {
@@ -134,23 +126,25 @@ run('applySubjects')(['Use of English', 'Physics', 'Chemistry', 'Mathematics']);
 ok('class filters = All + four papers', (markup('classFilters').match(/fchip/g) || []).length === 5,
    (markup('classFilters').match(/fchip/g) || []).length);
 ok('no Biology filter', markup('classFilters').indexOf('Biology') < 0);
-ok('recordings exclude Biology', markup('liveList').indexOf('Biology') < 0 &&
-   markup('lessonList').indexOf('Biology') < 0);
-ok('recordings keep Mathematics (written "Maths")',
-   (markup('liveList') + markup('lessonList')).indexOf('Quadratic') > -1);
+ok('no video shelf is on the Classes screen any more',
+   !doc.getElementById('liveList') && !doc.getElementById('lessonList') &&
+   markup('classes').indexOf('vthumb') < 0 && markup('classes').indexOf('vbadge') < 0);
 ok('materials exclude Biology', markup('resList').indexOf('Biology') < 0);
 ok('materials keep the all-subject syllabus', markup('resList').indexOf('Syllabus') > -1);
 /* The standalone Timetable screen was retired in the redesign's Phase 1 sweep.
-   The same week is now drawn on the Classes screen, so these checks moved to
-   #scheduleList: a scheduled class for a paper the student does not sit must
-   still be kept off their list. */
+   The same week is drawn on the Classes screen in the interim — its permanent
+   home is the redesigned Study Plan page (Phase 1 review) — so these checks
+   live on #scheduleList: a scheduled class for a paper the student does not
+   sit must still be kept off their list. */
 run("upcomingClasses = [" +
     "{subj:'Biology', topic:'Cell Fixture', tutor:'t', scheduledAt:'2026-11-18T10:00:00Z', durationMin:60, zoomLink:'', joinLocked:false}," +
-    "{subj:'Physics', topic:'Newton Fixture', tutor:'t', scheduledAt:'2026-11-19T10:00:00Z', durationMin:60, zoomLink:'', joinLocked:false}" +
+    "{subj:'Physics', topic:'Newton Fixture', tutor:'t', scheduledAt:'2026-11-19T10:00:00Z', durationMin:60, zoomLink:'', joinLocked:false}," +
+    "{subj:'Mathematics', topic:'Quadratic Equations Fixture', tutor:'t', scheduledAt:'2026-11-20T10:00:00Z', durationMin:60, zoomLink:'', joinLocked:false}" +
     "]");
 run('renderSchedule()');
 ok('scheduled classes exclude Biology', markup('scheduleList').indexOf('Biology') < 0, markup('scheduleList'));
 ok('scheduled classes keep a paper the student sits', markup('scheduleList').indexOf('Newton Fixture') > -1, markup('scheduleList'));
+ok('and keep Mathematics (written "Maths")', markup('scheduleList').indexOf('Quadratic') > -1, markup('scheduleList'));
 ok('the study catalogue narrowed to the combination',
    run('studyCat') === null || run('studyCat').subjects.every(function (e) {
      return ['Use of English','Physics','Chemistry','Mathematics'].indexOf(e.subject) > -1;
@@ -160,9 +154,8 @@ head('Priority 6 — a different combination redraws everything');
 run('applySubjects')(['Use of English', 'Biology', 'Chemistry', 'Physics']);
 ok('class filters now show Biology', markup('classFilters').indexOf('Biology') > -1);
 ok('class filters drop Mathematics', markup('classFilters').indexOf('Mathematics') < 0);
-ok('recordings drop the Maths class', (markup('liveList') + markup('lessonList')).indexOf('Quadratic') < 0);
 run('renderSchedule()');
-ok('scheduled classes drop Mathematics', markup('scheduleList').indexOf('Maths') < 0 && markup('scheduleList').indexOf('Mathematics') < 0);
+ok('scheduled classes drop Mathematics', markup('scheduleList').indexOf('Maths') < 0 && markup('scheduleList').indexOf('Mathematics') < 0, markup('scheduleList'));
 ok('the study catalogue drops Mathematics',
    run('studyCat') === null || run('studyCat').subjects.every(function (e) { return e.subject !== 'Mathematics'; }));
 
@@ -176,7 +169,9 @@ head('a filter for a dropped paper cannot survive');
 run('setClassFilter')('Mathematics');
 run('applySubjects')(['Use of English', 'Biology', 'Chemistry', 'Physics']);
 ok('filter fell back to All', run('classFilter') === 'all', run('classFilter'));
-ok('the shelf is not empty', markup('liveList').length > 0);
+/* The live-class list is the subject-aware surface on this screen now. */
+run('renderSchedule()');
+ok('the scheduled list is not empty', markup('scheduleList').length > 0, markup('scheduleList'));
 
 head('the account is the source of truth');
 run('applyIdentity')({ id: 'GOC-S-042', name: 'Ada Test', role: 'student',

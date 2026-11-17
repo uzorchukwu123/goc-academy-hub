@@ -23,8 +23,16 @@ ok('an unknown or missing type is treated as a lesson', core.videoAllowed(undefi
 ok('the messages name the thing and GOC', /Lesson videos/.test(core.videoLockMessage('lesson')) && /Live class replays/.test(core.videoLockMessage('live')) && /GOC/.test(core.videoLockMessage('lesson')));
 
 console.log('\nthe screen');
-ok('the list reads the server\'s locked flag', /videosLocked = !!\(result && result\.locked\)/.test(app));
-ok('a locked shelf says why instead of "No lesson videos yet"', /videosLocked \? GOC\.core\.videoLockMessage\('lesson'\)/.test(app) && /videosLocked \? GOC\.core\.videoLockMessage\('live'\)/.test(app));
+/* Phase 1 review: video is excluded from the redesigned web application, so the
+   student-facing shelves that read the server's locked flag and named the lock
+   are retired. The rules above still govern the routes that serve stored
+   records, which is why this file keeps them. What is checked here now is that
+   no playback surface came back. */
+ok('no student-facing video shelf is left on the Classes screen',
+   !/videoCard\(/.test(app) && !/function playVideo\(/.test(app) && !/loadPublishedVideos/.test(app));
+ok('and the Classes markup no longer carries the recordings or lesson shelves',
+   !/id="liveList"/.test(fs.readFileSync(path.join(APP, 'index.html'), 'utf8')) &&
+   !/id="lessonList"/.test(fs.readFileSync(path.join(APP, 'index.html'), 'utf8')));
 
 console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
 process.exit(fails ? 1 : 0);

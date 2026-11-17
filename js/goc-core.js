@@ -1684,6 +1684,206 @@
     };
   }
 
+  /* ==================================================== STUDY PLAN (the planner)
+     THE PLANNER ENGINE. This is the weekly study planner, kept whole and kept
+     here — in the shared rules module both the browser and the server load —
+     because its permanent home is the redesigned Study Plan page, not the
+     Classes screen it is standing in on for now.
+
+     Nothing here draws anything: these are the pure rules a planner surface
+     mounts, so the redesigned page can read, validate, sort and cap blocks
+     without re-deriving any of it, and the server can validate the same rules
+     if a student's own blocks are ever persisted.
+
+     Days are Monday-first, the order the academy's week actually runs in. */
+  var PLAN_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var PLAN_DAY_LABELS = {
+    Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday',
+    Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday'
+  };
+  /* The planner's own slots are study blocks; a live class dropped onto the
+     planner is a class. The distinction matters because a class is the
+     academy's and a block is the student's. */
+  var PLAN_BLOCK_KINDS = ['study', 'class', 'rest'];
+  /* The non-subject slots that belong to every student regardless of paper —
+     the same two studiesSubject() already lets through. */
+  var PLAN_SHARED_SLOTS = ['Revision', 'Review'];
+
+  function planDayIndex(key) {
+    var i = PLAN_DAYS.indexOf(String(key || ''));
+    return i;
+  }
+
+  /* A Monday-first key for a Date, so a class that starts on a Sunday lands on
+     Sunday and not on the Monday of the wrong week. */
+  function planDayKey(date) {
+    if (date == null || date === '') return '';
+    var d = date instanceof Date ? date : new Date(date);
+    if (!isFinite(d.getTime())) return '';
+    return PLAN_DAYS[(d.getDay() + 6) % 7];
+  }
+
+  /* "H:MM" as the planner labels a time — 12-hour, no am/pm, matching the
+     wording the academy's schedule already uses. Accepts a Date or anything
+     Date can parse. An unusable value reads as ''. */
+  function planTimeLabel(when) {
+    var d = when instanceof Date ? when : new Date(when);
+    if (!isFinite(d.getTime())) return '';
+    var h = d.getHours() % 12;
+    if (h === 0) h = 12;
+    var m = d.getMinutes();
+    return h + ':' + (m < 10 ? '0' + m : String(m));
+  }
+
+  /* The inverse of a "HH:MM" <input type=time> value, for a block the student
+     types in rather than one that came from a timestamp. */
+  function planTimeFromInput(hhmm) {
+    var p = String(hhmm == null ? '' : hhmm).split(':');
+    var h = parseInt(p[0], 10) % 12;
+    if (h === 0) h = 12;
+    var m = parseInt(p[1], 10);
+    return h + ':' + (m < 10 ? '0' + m : String(m));
+  }
+
+  /* Minutes since midnight for an "H:MM" planner label. The label carries no
+     am/pm, so this reads the planner's own convention: 1-6 are afternoon. That
+     holds for every block this app produces (school hours run from morning
+     classes into evening revision, never past-midnight study). */
+  function planMinutesOf(label) {
+    var p = String(label == null ? '' : label).split(':');
+    var h = parseInt(p[0], 10) || 0, m = parseInt(p[1], 10) || 0;
+    if (h >= 1 && h <= 6) h += 12;
+    return h * 60 + m;
+  }
+
+  /* Sort one day's blocks into the order a student reads them: by time, with
+     the rest marker always last. Never mutates the array it is given. */
+  function planSortBlocks(blocks) {
+    return (blocks || []).slice().sort(function (a, b) {
+      if (a && a.rest) return 1;
+      if (b && b.rest) return -1;
+      if ((a && a.kind) === 'rest') return 1;
+      if ((b && b.kind) === 'rest') return -1;
+      return planMinutesOf(a && a.t) - planMinutesOf(b && b.t);
+    });
+  }
+
+  /* Is this a block the planner will accept? Returns { block } or { error }.
+     `subjects` is the list the student may plan for (their own papers plus the
+     shared slots); pass it and a block for a paper they do not sit is refused
+     the same way studiesSubject() refuses it everywhere else. Duration is in
+     minutes, 5-240, and a block needs a topic so an empty slot can never be
+     saved as a plan. */
+  function planValidateBlock(block, subjects) {
+    if (!block || typeof block !== 'object') return { error: 'There is no block to plan.' };
+    var day = String(block.day || '').slice(0, 3);
+    day = day.charAt(0).toUpperCase() + day.slice(1).toLowerCase();
+    if (planDayIndex(day) < 0) return { error: 'Choose a day of the week.' };
+    var subj = String(block.subj == null ? '' : block.subj).trim();
+    if (!subj) return { error: 'Choose a subject for this block.' };
+    if (subjects && subjects.length) {
+      var allowed = subjects.some(function (s) { return (s.subject || s) === subj; });
+      if (!allowed && PLAN_SHARED_SLOTS.indexOf(subj) < 0) {
+        return { error: 'You do not sit ' + subj + '.' };
+      }
+    }
+    var t = String(block.t == null ? '' : block.t).trim();
+    if (!/^\d{1,2}:\d{2}$/.test(t)) return { error: 'Pick a time for this block.' };
+    var mins = Math.round(Number(block.minutes != null ? block.minutes : block.mins) || 0);
+    if (!mins || mins < 5) return { error: 'Enter a duration of at least 5 minutes.' };
+    if (mins > 240) return { error: 'Keep a block under four hours — split it instead.' };
+    var topic = String(block.topic == null ? '' : block.topic).trim();
+    if (!topic) return { error: 'Give this block a topic to study.' };
+    return {
+      block: {
+        day: day,
+        t: t,
+        minutes: mins,
+        dur: planDurationLabel(mins),
+        subj: subj,
+        topic: topic.slice(0, 120),
+        kind: 'study'
+      }
+    };
+  }
+
+  /* "30m" / "1h" / "1h30m" — the same shorthand the schedule already uses. */
+  function planDurationLabel(mins) {
+    var m = Math.round(Number(mins) || 0);
+    if (!m) return '';
+    if (m % 60 === 0) return (m / 60) + 'h';
+    if (m < 60) return m + 'm';
+    return Math.floor(m / 60) + 'h' + (m % 60) + 'm';
+  }
+
+  /* A live class as a planner block, so the same surface can show the academy's
+     week beside the student's own. Returns null for an unusable timestamp. */
+  function planClassBlock(cls) {
+    if (!cls) return null;
+    var d = new Date(cls.scheduledAt);
+    if (!isFinite(d.getTime())) return null;
+    return {
+      day: planDayKey(d),
+      t: planTimeLabel(d),
+      at: d.getTime(),
+      dur: planDurationLabel(cls.durationMin),
+      minutes: Math.round(Number(cls.durationMin) || 0),
+      subj: String(cls.subj || cls.subject || ''),
+      topic: String(cls.topic || '') + (cls.tutor ? ' — ' + cls.tutor : ''),
+      kind: 'class',
+      zoomLink: String(cls.zoomLink || ''),
+      joinLocked: !!cls.joinLocked
+    };
+  }
+
+  /* Group a mixed list of classes and blocks into the planner's week, each day
+     sorted and empty days present. `show(block)` is the surface's own filter —
+     the Classes screen passes studiesSubject so a paper the student does not
+     sit never appears; the redesigned page can pass its own. */
+  function planWeek(classes, blocks, show) {
+    var week = {}, i;
+    for (i = 0; i < PLAN_DAYS.length; i++) {
+      week[PLAN_DAYS[i]] = { key: PLAN_DAYS[i], label: PLAN_DAY_LABELS[PLAN_DAYS[i]], blocks: [] };
+    }
+    function place(bl) {
+      if (!bl || planDayIndex(bl.day) < 0) return;
+      if (typeof show === 'function' && !show(bl)) return;
+      week[bl.day].blocks.push(bl);
+    }
+    (classes || []).forEach(function (c) { place(planClassBlock(c)); });
+    (blocks || []).forEach(place);
+    for (i = 0; i < PLAN_DAYS.length; i++) {
+      var day = PLAN_DAYS[i];
+      week[day].blocks = planSortBlocks(week[day].blocks);
+      week[day].studyCount = week[day].blocks.filter(function (b) { return b.kind === 'study'; }).length;
+      week[day].totalMinutes = week[day].blocks.reduce(function (n, b) {
+        return n + (b.kind === 'rest' ? 0 : Math.round(Number(b.minutes) || 0));
+      }, 0);
+    }
+    return { days: PLAN_DAYS.slice(), week: week };
+  }
+
+  /* The one-line summary a planner day header carries. */
+  function planDaySummary(blocks) {
+    var n = (blocks || []).filter(function (b) { return b.kind === 'study' || b.kind === 'class'; }).length;
+    if (!n) return 'Nothing planned';
+    return n + (n === 1 ? ' block planned' : ' blocks planned');
+  }
+
+  /* How much of a day's plan is done, given the minutes studied today. Capped at
+     the plan, so a long session cannot read as 140% of a 30-minute block. */
+  function planDayProgress(plannedMinutes, studiedMinutes) {
+    var planned = Math.max(0, Math.round(Number(plannedMinutes) || 0));
+    var done = Math.max(0, Math.round(Number(studiedMinutes) || 0));
+    if (!planned) return { planned: 0, done: done, percent: 0, met: false, remaining: 0 };
+    var percent = Math.min(100, Math.round((done / planned) * 100));
+    return {
+      planned: planned, done: done, percent: percent,
+      met: done >= planned,
+      remaining: Math.max(0, planned - done)
+    };
+  }
+
   /* ------------------------------------- extra time already granted to a day
      The guardian-PIN grant that used to add these minutes was retired in the
      redesign's Phase 1 sweep, so nothing can add to them any more. The two
@@ -3796,6 +3996,11 @@
   var RESOURCE_VIEW_LOCK_MESSAGE = 'Opening files in the app is for GOC students. Tap the download icon to save this file instead, or ask the academy about joining.';
   /* Videos: a recording of a live class (type 'live') is the classRecordings
      feature, every other video is a lesson (the videos feature). Fails closed. */
+  /* Video playback is excluded from the redesigned web application (owner
+     decision, Phase 1 review). These two rules are kept because the server's
+     GET /api/videos routes are still in place over stored records — nothing was
+     deleted while that decision is pending — so the routes must keep applying
+     the access tier exactly as they did. No interface calls them now. */
   function videoFeature(type) { return type === 'live' ? 'classRecordings' : 'videos'; }
   function videoAllowed(type, tier) { return canUse(videoFeature(type), tier); }
   function videoLockMessage(type) {
@@ -6364,6 +6569,24 @@
     STUDY_PING_MAX_SEC: STUDY_PING_MAX_SEC,
     clampStudyPingSeconds: clampStudyPingSeconds,
     studyWindowStatus: studyWindowStatus,
+    /* Study Plan planner engine — the retained weekly planner, ready for the
+       redesigned Study Plan page to mount. */
+    PLAN_DAYS: PLAN_DAYS,
+    PLAN_DAY_LABELS: PLAN_DAY_LABELS,
+    PLAN_BLOCK_KINDS: PLAN_BLOCK_KINDS,
+    PLAN_SHARED_SLOTS: PLAN_SHARED_SLOTS,
+    planDayIndex: planDayIndex,
+    planDayKey: planDayKey,
+    planTimeLabel: planTimeLabel,
+    planTimeFromInput: planTimeFromInput,
+    planMinutesOf: planMinutesOf,
+    planSortBlocks: planSortBlocks,
+    planValidateBlock: planValidateBlock,
+    planDurationLabel: planDurationLabel,
+    planClassBlock: planClassBlock,
+    planWeek: planWeek,
+    planDaySummary: planDaySummary,
+    planDayProgress: planDayProgress,
     EXTRA_TIME_GRANT_MIN: EXTRA_TIME_GRANT_MIN,
     EXTRA_TIME_MAX_GRANTS_PER_DAY: EXTRA_TIME_MAX_GRANTS_PER_DAY,
     STUDY_MODES: STUDY_MODES.slice(),
