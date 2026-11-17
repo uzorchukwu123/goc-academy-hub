@@ -7409,18 +7409,23 @@ const ROUTES = [
         ]
       );
 
-      const resources = result.documents.map(doc => ({
-        resourceId: doc.resourceId || doc.$id,
-        title: doc.title || '',
-        description: doc.description || '',
-        subject: doc.subject || '',
-        category: doc.category || '',
-        fileType: doc.fileType || '',
-        storageFileId: doc.storageFileId || '',
-        published: true,
-        createdAt: doc.$createdAt || null,
-        updatedAt: doc.$updatedAt || null
-      }));
+      /* Video is excluded from the student resource interface, so a video record
+         is never listed here. The record itself is kept in Appwrite, untouched;
+         it simply is not a resource a student is offered. */
+      const resources = result.documents
+        .filter(doc => core.resourceStudentAccessible({ fileType: doc.fileType }))
+        .map(doc => ({
+          resourceId: doc.resourceId || doc.$id,
+          title: doc.title || '',
+          description: doc.description || '',
+          subject: doc.subject || '',
+          category: doc.category || '',
+          fileType: doc.fileType || '',
+          storageFileId: doc.storageFileId || '',
+          published: true,
+          createdAt: doc.$createdAt || null,
+          updatedAt: doc.$updatedAt || null
+        }));
 
       resources.sort((a, b) =>
         String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
@@ -7467,6 +7472,14 @@ const ROUTES = [
 
       if (!doc.storageFileId) {
         return errJson(res, 404, 'The resource file is missing.');
+      }
+
+      /* Video is excluded from the app entirely (owner decision, Phase 1 review):
+         a video file is neither previewed nor downloadable as a student resource.
+         The record and its stored file are kept — only this route's answer to a
+         student changes. Every other format is untouched below. */
+      if (!core.resourceStudentAccessible({ fileType: doc.fileType })) {
+        return send(res, 403, { error: core.VIDEO_EXCLUDED_MESSAGE, reason: 'video-excluded' });
       }
 
       const fileData = await appwriteResourcesStorage.getFileView(

@@ -3991,9 +3991,46 @@
     return what + ' are for GOC students. Ask the academy about joining to sit them. ' +
       'You can keep practising with the free practice questions.';
   }
-  /* What an Open student is told when they try to open a resource in the app
-     (they may still download it). */
+  /* What an Open student is told when they try to open a document in the app.
+     This speaks about documents, PDFs and images only — a video is not offered
+     to a student at all, by either route (see VIDEO_EXCLUDED_MESSAGE below). */
   var RESOURCE_VIEW_LOCK_MESSAGE = 'Opening files in the app is for GOC students. Tap the download icon to save this file instead, or ask the academy about joining.';
+  /* --------------------------------------------------- video is excluded entirely
+     Video content is excluded from the redesigned web application, not merely
+     from its player (owner decision, Phase 1 review). So a video FILE is not a
+     student resource at all: it is neither previewed nor offered for download.
+     Anything else — PDF, Word, Excel, PowerPoint, plain text, images, zip — is
+     untouched and behaves exactly as it did.
+
+     This is about the FILE FORMAT, deliberately, and not about the record's
+     category label. A resource filed under the "other" category can still be an
+     .mp4, and the category-based badge can say "PDF" while the file is a .docx,
+     so the extension is the only trustworthy signal. A record with no usable
+     extension is treated as downloadable: refusing on a blank would hide real
+     documents, and a file we cannot identify is not evidently video. */
+  var VIDEO_FILE_EXTENSIONS = ['mp4', 'm4v', 'mov', 'webm', 'avi', 'mkv', 'ogv', 'wmv', 'flv', '3gp'];
+  var VIDEO_EXCLUDED_MESSAGE = 'Video is not part of the app. Ask the academy if you need this recording.';
+
+  function resourceFileExtension(r) {
+    /* A student resource carries its real extension; the video records carry
+       type/storageFileId instead. Both shapes are accepted so one rule covers
+       everything a surface might hand it. */
+    var ext = String((r && (r.fileExt || r.fileType || r.ext)) || '').trim().toLowerCase();
+    ext = ext.replace(/^\./, '');
+    return ext;
+  }
+  function isVideoResource(r) {
+    var ext = resourceFileExtension(r);
+    if (ext === 'video') return true;          /* an already-classified video */
+    return VIDEO_FILE_EXTENSIONS.indexOf(ext) > -1;
+  }
+  /* May a student play or download this resource? Video may not, by either
+     route. Everything else may — this rule never widens a tier's access, it only
+     excludes video from what the resource interface offers. */
+  function resourceStudentAccessible(r) {
+    if (!r) return false;
+    return !isVideoResource(r);
+  }
   /* Videos: a recording of a live class (type 'live') is the classRecordings
      feature, every other video is a lesson (the videos feature). Fails closed. */
   /* Video playback is excluded from the redesigned web application (owner
@@ -6741,6 +6778,12 @@
     videoAllowed: videoAllowed,
     videoLockMessage: videoLockMessage,
     RESOURCE_VIEW_LOCK_MESSAGE: RESOURCE_VIEW_LOCK_MESSAGE,
+    /* Video is excluded from the app entirely — not previewed, not downloadable. */
+    VIDEO_FILE_EXTENSIONS: VIDEO_FILE_EXTENSIONS,
+    VIDEO_EXCLUDED_MESSAGE: VIDEO_EXCLUDED_MESSAGE,
+    resourceFileExtension: resourceFileExtension,
+    isVideoResource: isVideoResource,
+    resourceStudentAccessible: resourceStudentAccessible,
     webTestAllowed: webTestAllowed,
     webTestLockMessage: webTestLockMessage,
     lagosDay: lagosDay,

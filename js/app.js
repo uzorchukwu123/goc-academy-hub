@@ -10861,6 +10861,11 @@ function renderResources(){
     }
     // Materials follow the student's own combination.
     if(r.subj !== 'all' && !studiesSubject(r.subj)) return;
+    /* Video is excluded from the app entirely (owner decision, Phase 1 review):
+       a video file is not a student resource, so it is not listed at all. It is
+       therefore neither openable nor downloadable from this screen. Nothing was
+       deleted from storage — the record and its file are still there. */
+    if(!GOC.core.resourceStudentAccessible(r)) return;
     n++;
     var d = document.createElement('div');
     d.className = 'rcard';
@@ -10877,6 +10882,12 @@ function renderResources(){
     var dlBtn = d.querySelector('.rcard-dl');
 
     openBtn.onclick = function(){
+      /* Re-checked at the click, not only at render: a list built before this
+         rule existed must not be able to open a video either. */
+      if(!GOC.core.resourceStudentAccessible(r)){
+        toast(GOC.core.VIDEO_EXCLUDED_MESSAGE);
+        return;
+      }
       if(!r.resourceId){
         toast('This resource cannot be opened.');
         return;
@@ -10899,6 +10910,12 @@ function renderResources(){
 
     dlBtn.onclick = function(e){
       e.stopPropagation();
+      /* Video is not downloadable either — excluded content, not merely a
+         retired player. */
+      if(!GOC.core.resourceStudentAccessible(r)){
+        toast(GOC.core.VIDEO_EXCLUDED_MESSAGE);
+        return;
+      }
       if(!r.resourceId){
         toast('This resource cannot be downloaded.');
         return;
