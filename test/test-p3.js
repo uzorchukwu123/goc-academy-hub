@@ -108,7 +108,12 @@ async function main() {
     ok('#' + x + ' exists', !!id(x));
   });
   var src = read('index.html');
-  ok('Study opens the Web Test', src.indexOf('openWebTest()') > -1);
+  /* The Web Test is no longer offered as a standalone entry point (Phase 1
+     sweep): its tile and the dashboard "Waiting for you" card are gone, while
+     the sitting engine, Results and Review stay. What must still hold is that
+     Results — how a student reaches a marked paper — is offered from Study. */
+  ok('Study still opens Results', src.indexOf("openResults()") > -1);
+  ok('and no standalone Web Test entry point is offered', src.indexOf('openWebTest()') < 0);
   ok('the logo symbol is untouched', src.indexOf('id="goc-mark"') > -1);
   ok('no in-app coins remain in the markup', src.indexOf('🪙') < 0);
 
@@ -630,20 +635,19 @@ async function main() {
   /* The home screen used to end in blank space. Every panel below is drawn from
      GOC.api on the way in — nothing is held from a previous visit, and nothing is
      invented. */
-  ['dashNext', 'dashStand', 'dashLast'].forEach(function (x) { ok('#' + x + ' exists', !!id(x)); });
+  /* The Next Activity panel was removed with the standalone Web Test entry
+     point; the standings and last-result panels remain. */
+  ok('the Next Activity panel is gone', !id('dashNext'));
+  ['dashStand', 'dashLast'].forEach(function (x) { ok('#' + x + ' exists', !!id(x)); });
   ok('the markup ships no figure of its own', /Checking your papers|Reading the standings|Reading your record/
      .test(read('index.html')) && read('index.html').indexOf('#1 of') < 0);
   run('go')('home');
   await flush();
   await flush();
   ok('the home screen is showing', shown('home'));
-  ok('the waiting-for-you panel names the objective sitting',
-     text('dashNext').indexOf('Objective sitting') > -1, text('dashNext'));
-  ok('and states its length in hours', /hour/.test(text('dashNext')), text('dashNext'));
-  ok('it names the theory papers and says they are untimed',
-     text('dashNext').indexOf('Theory papers') > -1
-     && text('dashNext').indexOf('no time limit') > -1, text('dashNext'));
-  ok('the papers it counts are the ones the backend published',
+  /* The unseen-papers list moved to the Web Test screen itself, which is still
+     reachable from Results; the dashboard no longer mirrors it. */
+  ok('the papers the Web Test screen lists are the ones the backend published',
      (await run('GOC.api.listMyTests')()).tests.length > 0);
   ok('the standing panel states a position out of the league',
      /#\d+ of \d+/.test(text('dashStand')), text('dashStand'));
@@ -659,7 +663,7 @@ async function main() {
      text('dashLast').indexOf('marks') > -1 || text('dashLast').indexOf('not released yet') > -1,
      text('dashLast'));
   ok('and no panel discloses how a paper is marked',
-     !/by hand|hand[ -]mark|automatic/i.test(text('dashNext') + text('dashStand') + text('dashLast')));
+     !/by hand|hand[ -]mark|automatic/i.test(text('dashStand') + text('dashLast')));
 
   head('signing out clears the papers');
   run('logout')();

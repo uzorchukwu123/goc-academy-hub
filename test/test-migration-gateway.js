@@ -47,7 +47,12 @@ function makeApp(overrides) {
 
   /* ---------------------------------------------------------- route accounting */
   console.log('\n— route accounting —');
-  check('inventory is the verified 253-route table', inventory.total === 253, String(inventory.total));
+  /* Pinned so a route change is deliberate: the Phase 1 sweep retired the quest,
+     video-admin, approval, tutor-analytics-adjacent and guardian-PIN routes, which
+     took the table from 253 to 241. Regenerate with:
+       node functions/goc-api/tools/extract-routes.js
+       node functions/goc-api/tools/coverage-report.js */
+  check('inventory is the verified 241-route table', inventory.total === 241, String(inventory.total));
   check('router compiles every inventoried route', app.router.total === inventory.total);
   const coverage = app.router.coverage();
   check('coverage report accounts for every route', coverage.length === inventory.total);

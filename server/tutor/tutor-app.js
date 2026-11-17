@@ -129,10 +129,8 @@
     var statusRow = '';
     if (sc) {
       var parts = [];
-      parts.push('<b>' + esc(sc.live) + '</b> live');
-      if (sc.pending) parts.push('<b>' + esc(sc.pending) + '</b> awaiting approval');
-      if (sc.returned) parts.push('<b>' + esc(sc.returned) + '</b> returned for edit');
-      if (sc.other) parts.push('<b>' + esc(sc.other) + '</b> other');
+      parts.push('<b>' + esc(sc.live) + '</b> on a student\'s paper');
+      if (sc.held) parts.push('<b>' + esc(sc.held) + '</b> held back');
       statusRow = '<p style="margin:8px 0 0;font-size:12px;color:#6B7280">Status: ' + parts.join(' · ') + '</p>';
     }
     return '<div class="zx-card"><h3>Questions and notes in ' + esc(st.subject) + '</h3>' +
@@ -401,10 +399,12 @@
   }
 
   /* ------------------------------------------------------------ Slice 6.2: questions
-     A tutor types or imports questions for their own subject. Everything goes in as Awaiting
-     approval; the admin approves or returns it. A live question can be withdrawn and put back. */
+     A tutor types or imports questions for their own subject. A saved question is live at once
+     (the approval queue was retired in the Phase 1 sweep); a live question can be withdrawn and
+     put back. A row left non-live before the sweep stays out of students' papers until the tutor
+     edits it. */
   var SECTION_NAMES = { objective: 'Objective', theory: 'Theory', jamb: 'JAMB-oriented', practice: 'Practice-only' };
-  var STATUS_TEXT = { pending: 'Awaiting approval', live: 'Live', returned: 'Returned' };
+  var STATUS_TEXT = { pending: 'Held back', live: 'Live', returned: 'Held back' };
   var CSV_HEAD = 'subject,section,topic,text,optionA,optionB,optionC,optionD,optionE,answer,expected,maxMark,difficulty,explanation';
 
   function badgeFor(q) {
@@ -412,6 +412,7 @@
     if (stt === 'live' && q.active === false) { cls = 'zx-b-off'; txt = 'Live, withdrawn'; }
     return '<span class="zx-badge ' + cls + '">' + esc(txt) + '</span>';
   }
+  function isHeld(q) { return (q.status || 'live') !== 'live'; }
 
   function questionsCard() {
     if (st.qError) return '<div class="zx-card"><h3>Your questions</h3><p>' + esc(st.qError) + '</p></div>';
@@ -419,16 +420,18 @@
     var c = st.qs.counts || {};
     function s2(label, n) { return '<div class="zx-stat"><b>' + esc(n || 0) + '</b>' + esc(label) + '</div>'; }
     return '<div class="zx-card"><h3>Your questions in ' + esc(st.subject) + '</h3>' +
-      '<div class="zx-grid">' + s2('Awaiting approval', c.pending) + s2('Live', c.live) + s2('Returned', c.returned) + '</div>' +
-      '<p style="margin-top:10px">New and changed questions wait for the admin before students see them.</p>' +
+      '<div class="zx-grid">' + s2('Live', c.live) + s2('Held back', c.held) + '</div>' +
+      '<p style="margin-top:10px">A question you add or change is live straight away. Withdraw it to take it off a student\'s paper.</p>' +
       '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="qopen">Manage questions</button>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="qnew">Add a question</button></div></div>';
   }
 
   function questionsHTML() {
     var list = (st.qs && st.qs.questions) || [], f = st.qFilter;
-    var shown = list.filter(function (q) { return f === 'all' || (q.status || 'live') === f; });
-    var chips = ['all', 'pending', 'live', 'returned'].map(function (k) {
+    /* Two filters only: what is on a student's paper, and what is held back from it. A row left
+       'returned' by the retired approval queue is held back exactly like a 'pending' one. */
+    var shown = list.filter(function (q) { return f === 'all' || (f === 'held' ? isHeld(q) : !isHeld(q)); });
+    var chips = ['all', 'live', 'held'].map(function (k) {
       return '<button type="button" class="zx-chip" data-act="qfilter" data-filter="' + k + '" aria-pressed="' + (k === f ? 'true' : 'false') + '">' + (k === 'all' ? 'All' : STATUS_TEXT[k]) + '</button>';
     }).join('');
     var rows = shown.map(function (q) {
@@ -439,7 +442,7 @@
       return '<div class="zx-card">' + badgeFor(q) + '<span class="zx-badge zx-b-off">' + esc(SECTION_NAMES[q.section] || q.section) + '</span>' +
         '<p class="zx-qtext">' + esc(String(q.text || '').slice(0, 220)) + '</p>' +
         (q.topic ? '<p>' + esc(q.topic) + '</p>' : '') +
-        (q.status === 'returned' && q.returnReason ? '<p class="zx-why"><b>Returned:</b> ' + esc(q.returnReason) + '<br>Edit the question to send it back for approval.</p>' : '') +
+        (isHeld(q) ? '<p class="zx-why">This question is held back — students are not seeing it. Edit and save it to put it on their paper.</p>' : '') +
         '<div class="zx-acts">' + acts + '</div></div>';
     }).join('');
     var empty = st.qError ? esc(st.qError) : (!st.qs ? 'Loading…' : (list.length ? 'Nothing with that status.' : 'You have not added any questions yet. Add one, or import a file.'));
@@ -472,7 +475,7 @@
     return '<div class="zx-full"><div class="zx-top"><div class="zx-who">' + (f.id ? 'Change a question' : 'New question') + '<b>' + esc(st.subject) + '</b></div>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="qcancel">Cancel</button></div>' +
       '<div class="zx-body">' + errHTML() +
-      '<p class="zx-p">' + (f.id ? 'Saving sends this question back to the admin for approval.' : 'Students will see this question once the admin approves it.') + '</p>' +
+      '<p class="zx-p">' + (f.id ? 'Saving puts the change straight on the paper students sit.' : 'Students see this question as soon as you save it.') + '</p>' +
       fld('zxSec', 'Section', '<select id="zxSec" data-act="qsection">' + secOpts + '</select>') +
       fld('zxTopic', 'Topic', '<input id="zxTopic" type="text" value="' + esc(f.topic) + '">') +
       fld('zxText', 'Question', '<textarea id="zxText">' + esc(f.text) + '</textarea>') +
@@ -482,7 +485,7 @@
       fld('zxDif', 'Difficulty', '<select id="zxDif">' + dif + '</select>') +
       (f.section === 'practice' ? fld('zxYear', 'Exam year (optional)', '<input id="zxYear" type="number" value="' + esc(f.year) + '">') : '') +
       fld('zxEx', 'Explanation (optional)', '<textarea id="zxEx">' + esc(f.explanation) + '</textarea>') +
-      '<button type="button" class="zx-btn" data-act="qsave"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Please wait…' : (f.id ? 'Save and send for approval' : 'Send for approval')) + '</button>' +
+      '<button type="button" class="zx-btn" data-act="qsave"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Please wait…' : (f.id ? 'Save question' : 'Publish question')) + '</button>' +
       '</div></div>';
   }
   function readForm() {
@@ -506,7 +509,7 @@
     var m = st.imp || {}, secOpts = '<option value="">Use the section column in my file</option>' + Object.keys(SECTION_NAMES).map(function (k) { return '<option value="' + k + '"' + (m.section === k ? ' selected' : '') + '>Put every row in ' + SECTION_NAMES[k] + '</option>'; }).join('');
     var res = '';
     if (m.result) {
-      res = '<div class="zx-note" role="status">' + esc(m.result.added) + ' question' + (m.result.added === 1 ? '' : 's') + ' sent for approval' + (m.result.skipped ? ', ' + esc(m.result.skipped) + ' skipped' : '') + '.</div>';
+      res = '<div class="zx-note" role="status">' + esc(m.result.added) + ' question' + (m.result.added === 1 ? '' : 's') + ' added' + (m.result.skipped ? ', ' + esc(m.result.skipped) + ' skipped' : '') + '.</div>';
       if (m.result.errors && m.result.errors.length) res += '<div class="zx-card"><h3>Skipped rows</h3><ul class="zx-rank">' + m.result.errors.slice(0, 8).map(function (e) { return '<li>' + esc(typeof e === 'string' ? e : (e.line ? 'Line ' + e.line + ': ' : '') + (e.error || e.message || '')) + '</li>'; }).join('') + '</ul></div>';
     }
     return '<div class="zx-full"><div class="zx-top"><div class="zx-who">Import questions<b>' + esc(st.subject) + '</b></div>' +
@@ -517,7 +520,7 @@
       fld('zxFile', 'CSV file', '<input id="zxFile" type="file" accept=".csv,text/csv,text/plain" data-act="qfile">') +
       fld('zxCsv', 'Or paste the rows here', '<textarea id="zxCsv" style="min-height:160px">' + esc(m.csv || '') + '</textarea>') +
       fld('zxImpSec', 'Section', '<select id="zxImpSec">' + secOpts + '</select>') +
-      '<button type="button" class="zx-btn" data-act="qimportgo"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Please wait…' : 'Import for approval') + '</button>' +
+      '<button type="button" class="zx-btn" data-act="qimportgo"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Please wait…' : 'Import questions') + '</button>' +
       '</div></div>';
   }
 
@@ -527,14 +530,14 @@
   function kitCardHTML() {
     var topics = (st.imp && st.imp.topics) || '';
     return '<div class="zx-card"><h3>Write questions with your own AI</h3>' +
-      '<p class="zx-p">Paste a ready-made brief into Claude, ChatGPT or similar with your material (notes, a past paper, photos). It returns CSV in exactly the format below, which you paste into the box here. The admin still approves every question.</p>' +
+      '<p class="zx-p">Paste a ready-made brief into Claude, ChatGPT or similar with your material (notes, a past paper, photos). It returns CSV in exactly the format below, which you paste into the box here. Every row you keep goes straight onto your paper.</p>' +
       fld('zxKitTopics', 'Topics to set questions from (comma-separated)', '<input id="zxKitTopics" value="' + esc(topics) + '" placeholder="e.g. Acids and bases, Stoichiometry">') +
       '<div class="zx-acts"><button type="button" class="zx-btn zx-sm" data-act="kitcopy">Copy instructions for an AI</button>' +
       '<button type="button" class="zx-btn zx-ghost zx-sm" data-act="kittpl">Download template</button></div>' +
       '<ol class="zx-rank"><li>Tap <b>Copy instructions for an AI</b>.</li>' +
       '<li>Open your AI. Paste the instructions, then attach your PDF, Word file or photo, or paste your notes.</li>' +
       '<li>Check every question and answer. Fix anything wrong.</li>' +
-      '<li>Paste the CSV it gives you into the box below and tap <b>Import for approval</b>.</li></ol></div>';
+      '<li>Paste the CSV it gives you into the box below and tap <b>Import questions</b>.</li></ol></div>';
   }
   function kitCore() { return (typeof window !== 'undefined' && window.GOC && window.GOC.core) || null; }
   function kitFallbackCopy(text) {
@@ -571,7 +574,7 @@
     var f = readForm();
     st.busy = true; setError(''); draw();
     var p = f.id ? call('PUT', '/tutor/questions/' + encodeURIComponent(f.id), formBody(f)) : call('POST', '/tutor/questions', formBody(f));
-    p.then(function () { afterChange('Sent for approval. Students will see it once the admin approves it.'); }).catch(failed);
+    p.then(function () { afterChange('Saved. It is live on your paper now.'); }).catch(failed);
   }
   function runImport() {
     var csv = val('zxCsv'), sec = val('zxImpSec');
@@ -944,7 +947,7 @@
     });
   }
 
-  /* Slice 6.2: the tutor's own questions for the open subject, with their approval status. */
+  /* Slice 6.2: the tutor's own questions for the open subject, with whether each is live. */
   function loadQuestions() {
     var want = st.subject;
     st.qs = null; st.qError = '';

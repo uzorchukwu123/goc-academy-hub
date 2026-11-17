@@ -59,7 +59,7 @@ function markup(x) { var e = id(x); return e ? e.innerHTML : ''; }
 
 head('markup the new code depends on');
 ['signGoal', 'examNote', 'examNoteBody', 'subjPick', 'subjGrid', 'subjCount', 'subjMsg',
- 'classFilters', 'resList', 'ttBlocks', 'pracSub'].forEach(function (x) {
+ 'classFilters', 'resList', 'scheduleList', 'pracSub'].forEach(function (x) {
   ok('#' + x + ' exists', !!id(x));
 });
 /* The home screen was cut back to what is live and honest: the hero, the
@@ -140,9 +140,17 @@ ok('recordings keep Mathematics (written "Maths")',
    (markup('liveList') + markup('lessonList')).indexOf('Quadratic') > -1);
 ok('materials exclude Biology', markup('resList').indexOf('Biology') < 0);
 ok('materials keep the all-subject syllabus', markup('resList').indexOf('Syllabus') > -1);
-ok('timetable excludes Biology', markup('ttBlocks').indexOf('Biology') < 0, markup('ttBlocks'));
-ok('timetable keeps a shared CBT/Review block or says why not',
-   markup('ttBlocks').length > 0);
+/* The standalone Timetable screen was retired in the redesign's Phase 1 sweep.
+   The same week is now drawn on the Classes screen, so these checks moved to
+   #scheduleList: a scheduled class for a paper the student does not sit must
+   still be kept off their list. */
+run("upcomingClasses = [" +
+    "{subj:'Biology', topic:'Cell Fixture', tutor:'t', scheduledAt:'2026-11-18T10:00:00Z', durationMin:60, zoomLink:'', joinLocked:false}," +
+    "{subj:'Physics', topic:'Newton Fixture', tutor:'t', scheduledAt:'2026-11-19T10:00:00Z', durationMin:60, zoomLink:'', joinLocked:false}" +
+    "]");
+run('renderSchedule()');
+ok('scheduled classes exclude Biology', markup('scheduleList').indexOf('Biology') < 0, markup('scheduleList'));
+ok('scheduled classes keep a paper the student sits', markup('scheduleList').indexOf('Newton Fixture') > -1, markup('scheduleList'));
 ok('the study catalogue narrowed to the combination',
    run('studyCat') === null || run('studyCat').subjects.every(function (e) {
      return ['Use of English','Physics','Chemistry','Mathematics'].indexOf(e.subject) > -1;
@@ -153,7 +161,8 @@ run('applySubjects')(['Use of English', 'Biology', 'Chemistry', 'Physics']);
 ok('class filters now show Biology', markup('classFilters').indexOf('Biology') > -1);
 ok('class filters drop Mathematics', markup('classFilters').indexOf('Mathematics') < 0);
 ok('recordings drop the Maths class', (markup('liveList') + markup('lessonList')).indexOf('Quadratic') < 0);
-ok('timetable drops Mathematics', markup('ttBlocks').indexOf('Mathematics') < 0);
+run('renderSchedule()');
+ok('scheduled classes drop Mathematics', markup('scheduleList').indexOf('Maths') < 0 && markup('scheduleList').indexOf('Mathematics') < 0);
 ok('the study catalogue drops Mathematics',
    run('studyCat') === null || run('studyCat').subjects.every(function (e) { return e.subject !== 'Mathematics'; }));
 

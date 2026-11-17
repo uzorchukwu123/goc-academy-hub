@@ -251,8 +251,7 @@ function stop() {
     dailyLimitMin: 111,
     sessionMinutes: 47,
     sessionWarnMinutes: 5,
-    objectiveMinutes: 63,
-    guardianPin: '4321'
+    objectiveMinutes: 63
   }, adm);
   ok('the console accepts the new settings', beforeSet.status === 200, beforeSet.status + ' ' + beforeSet.raw);
 
@@ -311,7 +310,8 @@ function stop() {
   ok('sessionMinutes survived the restart', after.body.sessionMinutes === 47, after.raw);
   ok('sessionWarnMinutes survived the restart', after.body.sessionWarnMinutes === 5, after.raw);
   ok('objectiveMinutes survived the restart', after.body.objectiveMinutes === 63, after.raw);
-  ok('the guardian PIN survived the restart', after.body.hasGuardianPin === true, after.raw);
+  ok('the retired guardian PIN is no longer part of the settings payload',
+     after.body.hasGuardianPin === undefined && after.body.guardianPin === undefined, after.raw);
 
   var afterBp = await call('GET', '/api/objective/blueprint?period=weekly', undefined, adm2);
   var physicsRow = (afterBp.body.papers || []).filter(function (r) { return r.subject === 'Physics'; })[0];

@@ -206,15 +206,15 @@ var home = doc.getElementById('home');
 run('animEnter(); go("home");');
 ok('the screen arrived at is marked for the richer entrance',
    home.classList.contains('enter-rich'));
-run('go("timetable"); go("home");');
+run('go("classes"); go("home");');
 ok('an ordinary tab change afterwards does not repeat it',
    !home.classList.contains('enter-rich'));
 run('go("home");');
 ok('and it stays off until it is armed again', !home.classList.contains('enter-rich'));
 ok('arming it twice still only decorates one arrival', (function () {
-  run('animEnter(); go("home"); go("timetable");');
+  run('animEnter(); go("home"); go("classes");');
   return !home.classList.contains('enter-rich') &&
-         !doc.getElementById('timetable').classList.contains('enter-rich');
+         !doc.getElementById('classes').classList.contains('enter-rich');
 })());
 
 /* -------------------------------------------- 1.1 the connecting threads --- */

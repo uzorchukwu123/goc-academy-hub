@@ -2085,7 +2085,6 @@ a.cv:hover{color:var(--red)}
    ===================================================================== */
 
 /* ---- aurora wash behind the browse / result screens ---- */
-#timetable::before,
 #studySet::before,
 #reading::before,
 #studyRes::before,
@@ -2094,7 +2093,6 @@ a.cv:hover{color:var(--red)}
 #profile::before,
 #classes::before,
 #resources::before,
-#timetable::after,
 #studySet::after,
 #reading::after,
 #studyRes::after,
@@ -2103,7 +2101,6 @@ a.cv:hover{color:var(--red)}
 #profile::after,
 #classes::after,
 #resources::after{ content:""; position:absolute; border-radius:50%; pointer-events:none; z-index:0; }
-#timetable::before,
 #studySet::before,
 #reading::before,
 #studyRes::before,
@@ -2112,7 +2109,6 @@ a.cv:hover{color:var(--red)}
 #profile::before,
 #classes::before,
 #resources::before{ width:340px; height:340px; top:-130px; right:-120px; background:radial-gradient(circle,rgba(252,165,165,.55),transparent 70%); }
-#timetable::after,
 #studySet::after,
 #reading::after,
 #studyRes::after,
@@ -2121,7 +2117,6 @@ a.cv:hover{color:var(--red)}
 #profile::after,
 #classes::after,
 #resources::after{ width:300px; height:300px; top:380px; left:-150px; background:radial-gradient(circle,rgba(253,230,138,.5),transparent 70%); }
-#timetable > .wrap,
 #studySet > .wrap,
 #reading > .wrap,
 #studyRes > .wrap,
@@ -2130,7 +2125,6 @@ a.cv:hover{color:var(--red)}
 #profile > .wrap,
 #classes > .wrap,
 #resources > .wrap,
-#timetable > .prof-hero,
 #studySet > .prof-hero,
 #reading > .prof-hero,
 #studyRes > .prof-hero,
@@ -2141,7 +2135,6 @@ a.cv:hover{color:var(--red)}
 #resources > .prof-hero{ position:relative; z-index:1; }
 
 /* ---- frosted headers with the tricolour hairline ---- */
-#timetable .hdr,
 #studySet .hdr,
 #reading .hdr,
 #studyRes .hdr,
@@ -2153,9 +2146,7 @@ a.cv:hover{color:var(--red)}
 #practice .hdr,
 #cbt .hdr,
 #wtRun .hdr{ backdrop-filter:blur(10px); }
-#timetable .hdr,
 #classes .hdr{ background:rgba(250,247,242,.78); }
-#timetable .hdr.solid,
 #studySet .hdr.solid,
 #reading .hdr.solid,
 #studyRes .hdr.solid,
@@ -2167,7 +2158,6 @@ a.cv:hover{color:var(--red)}
 #practice .hdr.solid,
 #cbt .hdr.solid,
 #wtRun .hdr.solid{ background:rgba(255,255,255,.9); border-bottom-color:transparent; box-shadow:0 8px 24px rgba(127,29,29,.07); }
-#timetable .hdr.solid::after,
 #studySet .hdr.solid::after,
 #reading .hdr.solid::after,
 #studyRes .hdr.solid::after,
@@ -2179,7 +2169,6 @@ a.cv:hover{color:var(--red)}
 #practice .hdr.solid::after,
 #cbt .hdr.solid::after,
 #wtRun .hdr.solid::after{ content:""; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg,#DC2626,#F0A500,#22A559); }
-#timetable .back,
 #studySet .back,
 #reading .back,
 #studyRes .back,
@@ -2191,7 +2180,6 @@ a.cv:hover{color:var(--red)}
 #practice .back,
 #cbt .back,
 #wtRun .back{ background:#fff; border:1.5px solid var(--line); box-shadow:0 3px 0 var(--line); transition:transform .12s ease, box-shadow .12s ease; }
-#timetable .back:active,
 #studySet .back:active,
 #reading .back:active,
 #studyRes .back:active,
@@ -2206,7 +2194,6 @@ a.cv:hover{color:var(--red)}
 #cbt .back, #wtRun .back{ border-color:rgba(255,255,255,.22); box-shadow:none; }
 
 /* ---- section titles, cards, list rows ---- */
-#timetable .sec-head .section-t,
 #studySet .sec-head .section-t,
 #reading .sec-head .section-t,
 #studyRes .sec-head .section-t,
@@ -2215,7 +2202,6 @@ a.cv:hover{color:var(--red)}
 #profile .sec-head .section-t,
 #classes .sec-head .section-t,
 #resources .sec-head .section-t{ display:flex; align-items:center; gap:8px; }
-#timetable .sec-head .section-t::before,
 #studySet .sec-head .section-t::before,
 #reading .sec-head .section-t::before,
 #studyRes .sec-head .section-t::before,
@@ -2224,7 +2210,6 @@ a.cv:hover{color:var(--red)}
 #profile .sec-head .section-t::before,
 #classes .sec-head .section-t::before,
 #resources .sec-head .section-t::before{ content:""; width:5px; height:16px; border-radius:3px; flex:0 0 auto; background:linear-gradient(180deg,#DC2626,#F0A500); }
-#timetable .card,
 #studySet .card,
 #reading .card,
 #studyRes .card,
@@ -2233,23 +2218,19 @@ a.cv:hover{color:var(--red)}
 #profile .card,
 #classes .card,
 #resources .card{ box-shadow:0 10px 26px rgba(17,24,39,.07); border-color:rgba(234,228,218,.9); }
-#timetable .tt-block,
 #resources .rcard,
 #classes .vcard,
 #classes .rcard{ box-shadow:0 8px 22px rgba(17,24,39,.07); transition:transform .16s ease, box-shadow .18s ease, border-color .18s ease; }
 @media (hover:hover){
-  #timetable .tt-block:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(17,24,39,.12); }
   #resources .rcard:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(17,24,39,.12); }
   #classes .vcard:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(17,24,39,.12); }
   #classes .rcard:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(17,24,39,.12); }
   .screen .fchip:not(.on):hover, .screen .wt-tab:not(.on):hover{ border-color:#FCA5A5; }
 }
-#timetable .tt-bar{ background-image:linear-gradient(180deg,rgba(255,255,255,.35),transparent); }
 #resources .rcard-dl{ box-shadow:0 3px 0 var(--line); }
 #resources .rcard-dl:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--line); }
 
 /* ---- chunky press-down buttons ---- */
-#timetable .btn-red:not(:disabled),
 #studySet .btn-red:not(:disabled),
 #reading .btn-red:not(:disabled),
 #studyRes .btn-red:not(:disabled),
@@ -2261,7 +2242,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-red:not(:disabled),
 #cbt .btn-red:not(:disabled),
 #wtRun .btn-red:not(:disabled){ position:relative; overflow:hidden; background:linear-gradient(180deg,#EF4444,#DC2626); box-shadow:0 4px 0 #991B1B, 0 12px 22px rgba(220,38,38,.24); }
-#timetable .btn-red:not(:disabled):active,
 #studySet .btn-red:not(:disabled):active,
 #reading .btn-red:not(:disabled):active,
 #studyRes .btn-red:not(:disabled):active,
@@ -2273,7 +2253,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-red:not(:disabled):active,
 #cbt .btn-red:not(:disabled):active,
 #wtRun .btn-red:not(:disabled):active{ transform:translateY(3px); filter:none; box-shadow:0 1px 0 #991B1B, 0 5px 10px rgba(220,38,38,.2); }
-#timetable .btn-red:not(:disabled)::after,
 #studySet .btn-red:not(:disabled)::after,
 #reading .btn-red:not(:disabled)::after,
 #studyRes .btn-red:not(:disabled)::after,
@@ -2285,7 +2264,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-red:not(:disabled)::after,
 #cbt .btn-red:not(:disabled)::after,
 #wtRun .btn-red:not(:disabled)::after{ content:""; position:absolute; top:0; left:0; width:45%; height:100%; pointer-events:none; background:linear-gradient(100deg,transparent,rgba(255,255,255,.36),transparent); transform:translateX(-200%) skewX(-18deg); }
-#timetable .btn:disabled,
 #studySet .btn:disabled,
 #reading .btn:disabled,
 #studyRes .btn:disabled,
@@ -2297,7 +2275,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn:disabled,
 #cbt .btn:disabled,
 #wtRun .btn:disabled{ cursor:default; background:#E5E7EB; color:#9CA3AF; box-shadow:0 4px 0 #D1D5DB; }
-#timetable .btn-outline,
 #studySet .btn-outline,
 #reading .btn-outline,
 #studyRes .btn-outline,
@@ -2309,7 +2286,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-outline,
 #cbt .btn-outline,
 #wtRun .btn-outline{ border-width:2px; box-shadow:0 3px 0 var(--line); }
-#timetable .btn-ghost,
 #studySet .btn-ghost,
 #reading .btn-ghost,
 #studyRes .btn-ghost,
@@ -2321,7 +2297,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-ghost,
 #cbt .btn-ghost,
 #wtRun .btn-ghost{ box-shadow:0 3px 0 #DDD6CA; }
-#timetable .btn-outline:active,
 #studySet .btn-outline:active,
 #reading .btn-outline:active,
 #studyRes .btn-outline:active,
@@ -2333,7 +2308,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-outline:active,
 #cbt .btn-outline:active,
 #wtRun .btn-outline:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--line); }
-#timetable .btn-ghost:active,
 #studySet .btn-ghost:active,
 #reading .btn-ghost:active,
 #studyRes .btn-ghost:active,
@@ -2345,7 +2319,6 @@ a.cv:hover{color:var(--red)}
 #practice .btn-ghost:active,
 #cbt .btn-ghost:active,
 #wtRun .btn-ghost:active{ transform:translateY(2px); box-shadow:0 1px 0 #DDD6CA; }
-#timetable .bottom-bar,
 #studySet .bottom-bar,
 #reading .bottom-bar,
 #studyRes .bottom-bar,
@@ -2361,7 +2334,6 @@ a.cv:hover{color:var(--red)}
 /* Ensure the scrollable content area in screens with a sticky bottom-bar always
    has enough bottom padding so the last item (e.g. the disclaimer note on the
    practice set-up screen) scrolls fully above the bar and is never obscured. */
-#timetable > .wrap,
 #studySet > .wrap,
 #reading > .wrap,
 #studyRes > .wrap,
@@ -2376,7 +2348,6 @@ a.cv:hover{color:var(--red)}
 #studySet #suCountChipsWrap{ margin-bottom:12px; }
 
 /* ---- chips, tabs, week days ---- */
-#timetable .fchip,
 #studySet .fchip,
 #reading .fchip,
 #studyRes .fchip,
@@ -2385,7 +2356,6 @@ a.cv:hover{color:var(--red)}
 #profile .fchip,
 #classes .fchip,
 #resources .fchip{ border-width:2px; box-shadow:0 3px 0 var(--line); transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
-#timetable .fchip.on,
 #studySet .fchip.on,
 #reading .fchip.on,
 #studyRes .fchip.on,
@@ -2394,7 +2364,6 @@ a.cv:hover{color:var(--red)}
 #profile .fchip.on,
 #classes .fchip.on,
 #resources .fchip.on{ box-shadow:0 3px 0 #991B1B; }
-#timetable .wt-tab,
 #studySet .wt-tab,
 #reading .wt-tab,
 #studyRes .wt-tab,
@@ -2406,7 +2375,6 @@ a.cv:hover{color:var(--red)}
 #practice .wt-tab,
 #cbt .wt-tab,
 #wtRun .wt-tab{ border-width:2px; box-shadow:0 3px 0 var(--line); }
-#timetable .wt-tab.on,
 #studySet .wt-tab.on,
 #reading .wt-tab.on,
 #studyRes .wt-tab.on,
@@ -2418,7 +2386,6 @@ a.cv:hover{color:var(--red)}
 #practice .wt-tab.on,
 #cbt .wt-tab.on,
 #wtRun .wt-tab.on{ box-shadow:0 3px 0 #991B1B; }
-#timetable .fchip:active,
 #studySet .fchip:active,
 #reading .fchip:active,
 #studyRes .fchip:active,
@@ -2427,7 +2394,6 @@ a.cv:hover{color:var(--red)}
 #profile .fchip:active,
 #classes .fchip:active,
 #resources .fchip:active,
-#timetable .wt-tab:active,
 #studySet .wt-tab:active,
 #reading .wt-tab:active,
 #studyRes .wt-tab:active,
@@ -2439,15 +2405,11 @@ a.cv:hover{color:var(--red)}
 #practice .wt-tab:active,
 #cbt .wt-tab:active,
 #wtRun .wt-tab:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--line); }
-#timetable .wday{ border-width:2px; box-shadow:0 3px 0 var(--line); transition:transform .12s ease; }
-#timetable .wday.on{ box-shadow:0 3px 0 #991B1B; }
-#timetable .wday:active{ transform:translateY(2px); }
 
 /* ---- questions: Duolingo-style answer buttons and chunky progress ---- */
 #practice,
 #cbt,
 #wtRun{ background-image:linear-gradient(180deg,#FFF6F3 0,transparent 240px); }
-#timetable .q-num,
 #studySet .q-num,
 #reading .q-num,
 #studyRes .q-num,
@@ -2459,7 +2421,6 @@ a.cv:hover{color:var(--red)}
 #practice .q-num,
 #cbt .q-num,
 #wtRun .q-num{ display:inline-block; background:#FEECEC; color:var(--red-deep); padding:5px 11px; border-radius:999px; }
-#timetable .q-text,
 #studySet .q-text,
 #reading .q-text,
 #studyRes .q-text,
@@ -2471,7 +2432,6 @@ a.cv:hover{color:var(--red)}
 #practice .q-text,
 #cbt .q-text,
 #wtRun .q-text{ font-size:19px; }
-#timetable .opt,
 #studySet .opt,
 #reading .opt,
 #studyRes .opt,
@@ -2483,7 +2443,6 @@ a.cv:hover{color:var(--red)}
 #practice .opt,
 #cbt .opt,
 #wtRun .opt{ border-width:2px; border-radius:16px; box-shadow:0 4px 0 #E4DDD2; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease; }
-#timetable .opt.sel,
 #studySet .opt.sel,
 #reading .opt.sel,
 #studyRes .opt.sel,
@@ -2495,7 +2454,6 @@ a.cv:hover{color:var(--red)}
 #practice .opt.sel,
 #cbt .opt.sel,
 #wtRun .opt.sel{ box-shadow:0 4px 0 #F0A3A3; }
-#timetable .opt.correct,
 #studySet .opt.correct,
 #reading .opt.correct,
 #studyRes .opt.correct,
@@ -2507,7 +2465,6 @@ a.cv:hover{color:var(--red)}
 #practice .opt.correct,
 #cbt .opt.correct,
 #wtRun .opt.correct{ box-shadow:0 4px 0 #86C9A0; }
-#timetable .opt.wrong,
 #studySet .opt.wrong,
 #reading .opt.wrong,
 #studyRes .opt.wrong,
@@ -2519,7 +2476,6 @@ a.cv:hover{color:var(--red)}
 #practice .opt.wrong,
 #cbt .opt.wrong,
 #wtRun .opt.wrong{ box-shadow:0 4px 0 #EFA0A0; }
-#timetable .opt:not(:disabled):active,
 #studySet .opt:not(:disabled):active,
 #reading .opt:not(:disabled):active,
 #studyRes .opt:not(:disabled):active,
@@ -2531,7 +2487,6 @@ a.cv:hover{color:var(--red)}
 #practice .opt:not(:disabled):active,
 #cbt .opt:not(:disabled):active,
 #wtRun .opt:not(:disabled):active{ transform:translateY(3px); box-shadow:0 1px 0 #E4DDD2; }
-#timetable .opt .key,
 #studySet .opt .key,
 #reading .opt .key,
 #studyRes .opt .key,
@@ -2543,7 +2498,6 @@ a.cv:hover{color:var(--red)}
 #practice .opt .key,
 #cbt .opt .key,
 #wtRun .opt .key{ box-shadow:0 2px 0 rgba(17,24,39,.1); }
-#timetable .feedback,
 #studySet .feedback,
 #reading .feedback,
 #studyRes .feedback,
@@ -2555,7 +2509,6 @@ a.cv:hover{color:var(--red)}
 #practice .feedback,
 #cbt .feedback,
 #wtRun .feedback{ border:2px solid transparent; border-radius:18px; }
-#timetable .feedback.ok,
 #studySet .feedback.ok,
 #reading .feedback.ok,
 #studyRes .feedback.ok,
@@ -2567,7 +2520,6 @@ a.cv:hover{color:var(--red)}
 #practice .feedback.ok,
 #cbt .feedback.ok,
 #wtRun .feedback.ok{ border-color:#BFE3CD; }
-#timetable .feedback.no,
 #studySet .feedback.no,
 #reading .feedback.no,
 #studyRes .feedback.no,
@@ -2611,7 +2563,6 @@ a.cv:hover{color:var(--red)}
 #wtResult .result-ring:not(:empty){ filter:drop-shadow(0 12px 22px rgba(220,38,38,.22)); }
 #results .result-ring:not(:empty)::before,
 #wtResult .result-ring:not(:empty)::before{ content:""; position:absolute; inset:-14px; border-radius:50%; z-index:-1; pointer-events:none; background:radial-gradient(circle,rgba(240,165,0,.28),transparent 68%); }
-#timetable .chip.gold,
 #studySet .chip.gold,
 #reading .chip.gold,
 #studyRes .chip.gold,
@@ -2620,7 +2571,6 @@ a.cv:hover{color:var(--red)}
 #profile .chip.gold,
 #classes .chip.gold,
 #resources .chip.gold{ position:relative; overflow:hidden; font-weight:850; background:linear-gradient(135deg,#FDECC8,#FEF08A); box-shadow:0 4px 0 #EFD9A6; }
-#timetable .chip.gold::after,
 #studySet .chip.gold::after,
 #reading .chip.gold::after,
 #studyRes .chip.gold::after,
@@ -2681,10 +2631,10 @@ a.cv:hover{color:var(--red)}
 
 /* ---- motion: only when the student has not asked for less ---- */
 @media (prefers-reduced-motion: no-preference){
-  #timetable::before, #studySet::before, #reading::before, #studyRes::before, #wtResult::before, #results::before, #profile::before, #classes::before, #resources::before{ animation:dashAuroraA 17s ease-in-out infinite alternate; }
-  #timetable::after, #studySet::after, #reading::after, #studyRes::after, #wtResult::after, #results::after, #profile::after, #classes::after, #resources::after{ animation:dashAuroraB 20s ease-in-out infinite alternate; }
-  #timetable .wrap .sec-head, #studySet .wrap .sec-head, #reading .wrap .sec-head, #studyRes .wrap .sec-head, #wtResult .wrap .sec-head, #results .wrap .sec-head, #profile .wrap .sec-head, #classes .wrap .sec-head, #resources .wrap .sec-head{ animation:dealUp .5s backwards; }
-  #timetable .wrap .card, #studySet .wrap .card, #reading .wrap .card, #studyRes .wrap .card, #wtResult .wrap .card, #results .wrap .card, #profile .wrap .card, #classes .wrap .card, #resources .wrap .card{ animation:dealUp .55s backwards; }
+ #studySet::before, #reading::before, #studyRes::before, #wtResult::before, #results::before, #profile::before, #classes::before, #resources::before{ animation:dashAuroraA 17s ease-in-out infinite alternate; }
+ #studySet::after, #reading::after, #studyRes::after, #wtResult::after, #results::after, #profile::after, #classes::after, #resources::after{ animation:dashAuroraB 20s ease-in-out infinite alternate; }
+ #studySet .wrap .sec-head, #reading .wrap .sec-head, #studyRes .wrap .sec-head, #wtResult .wrap .sec-head, #results .wrap .sec-head, #profile .wrap .sec-head, #classes .wrap .sec-head, #resources .wrap .sec-head{ animation:dealUp .5s backwards; }
+ #studySet .wrap .card, #reading .wrap .card, #studyRes .wrap .card, #wtResult .wrap .card, #results .wrap .card, #profile .wrap .card, #classes .wrap .card, #resources .wrap .card{ animation:dealUp .55s backwards; }
   #ttBlocks > *, #resList > *, #liveList > *, #lessonList > *, #rsList > *, #rsSections > *{ animation:dealUp .5s backwards; }
   #ttBlocks > *:nth-child(2), #resList > *:nth-child(2), #liveList > *:nth-child(2), #lessonList > *:nth-child(2), #rsList > *:nth-child(2), #rsSections > *:nth-child(2):nth-child(2){ animation-delay:0.05s; }
   #ttBlocks > *:nth-child(3), #resList > *:nth-child(3), #liveList > *:nth-child(3), #lessonList > *:nth-child(3), #rsList > *:nth-child(3), #rsSections > *:nth-child(3):nth-child(3){ animation-delay:0.10s; }
@@ -2694,17 +2644,17 @@ a.cv:hover{color:var(--red)}
   #ttBlocks > *:nth-child(7), #resList > *:nth-child(7), #liveList > *:nth-child(7), #lessonList > *:nth-child(7), #rsList > *:nth-child(7), #rsSections > *:nth-child(7):nth-child(7){ animation-delay:0.30s; }
   #ttBlocks > *:nth-child(n+8), #resList > *:nth-child(n+8), #liveList > *:nth-child(n+8), #lessonList > *:nth-child(n+8), #rsList > *:nth-child(n+8), #rsSections > *:nth-child(n+8):nth-child(n+8){ animation-delay:.35s; }
   #practice .q-card, #cbt .q-card, #wtRun .q-card{ animation:dealUp .45s backwards; }
-  #timetable .opt.sel, #studySet .opt.sel, #reading .opt.sel, #studyRes .opt.sel, #wtResult .opt.sel, #results .opt.sel, #profile .opt.sel, #classes .opt.sel, #resources .opt.sel, #practice .opt.sel, #cbt .opt.sel, #wtRun .opt.sel{ animation:optPop .28s cubic-bezier(.2,1.5,.4,1); }
-  #timetable .opt.correct, #studySet .opt.correct, #reading .opt.correct, #studyRes .opt.correct, #wtResult .opt.correct, #results .opt.correct, #profile .opt.correct, #classes .opt.correct, #resources .opt.correct, #practice .opt.correct, #cbt .opt.correct, #wtRun .opt.correct{ animation:okBounce .5s cubic-bezier(.2,1.4,.4,1); }
-  #timetable .opt.wrong, #studySet .opt.wrong, #reading .opt.wrong, #studyRes .opt.wrong, #wtResult .opt.wrong, #results .opt.wrong, #profile .opt.wrong, #classes .opt.wrong, #resources .opt.wrong, #practice .opt.wrong, #cbt .opt.wrong, #wtRun .opt.wrong{ animation:noShake .42s ease-in-out; }
-  #timetable .feedback, #studySet .feedback, #reading .feedback, #studyRes .feedback, #wtResult .feedback, #results .feedback, #profile .feedback, #classes .feedback, #resources .feedback, #practice .feedback, #cbt .feedback, #wtRun .feedback{ animation:dealUp .35s backwards; }
+ #studySet .opt.sel, #reading .opt.sel, #studyRes .opt.sel, #wtResult .opt.sel, #results .opt.sel, #profile .opt.sel, #classes .opt.sel, #resources .opt.sel, #practice .opt.sel, #cbt .opt.sel, #wtRun .opt.sel{ animation:optPop .28s cubic-bezier(.2,1.5,.4,1); }
+ #studySet .opt.correct, #reading .opt.correct, #studyRes .opt.correct, #wtResult .opt.correct, #results .opt.correct, #profile .opt.correct, #classes .opt.correct, #resources .opt.correct, #practice .opt.correct, #cbt .opt.correct, #wtRun .opt.correct{ animation:okBounce .5s cubic-bezier(.2,1.4,.4,1); }
+ #studySet .opt.wrong, #reading .opt.wrong, #studyRes .opt.wrong, #wtResult .opt.wrong, #results .opt.wrong, #profile .opt.wrong, #classes .opt.wrong, #resources .opt.wrong, #practice .opt.wrong, #cbt .opt.wrong, #wtRun .opt.wrong{ animation:noShake .42s ease-in-out; }
+ #studySet .feedback, #reading .feedback, #studyRes .feedback, #wtResult .feedback, #results .feedback, #profile .feedback, #classes .feedback, #resources .feedback, #practice .feedback, #cbt .feedback, #wtRun .feedback{ animation:dealUp .35s backwards; }
   #practice .q-prog span.cur, #wtRun .q-prog span.cur{ animation:streakPulse 1.6s ease-in-out infinite; }
   #cbt .timer.warn, #wtRun .timer.warn{ animation:streakPulse 1s ease-in-out infinite; }
   #cbt .cbt-top::before, #wtRun .cbt-top::before{ animation:dashAuroraA 12s ease-in-out infinite alternate; }
-  #timetable .btn-red:not(:disabled)::after, #studySet .btn-red:not(:disabled)::after, #reading .btn-red:not(:disabled)::after, #studyRes .btn-red:not(:disabled)::after, #wtResult .btn-red:not(:disabled)::after, #results .btn-red:not(:disabled)::after, #profile .btn-red:not(:disabled)::after, #classes .btn-red:not(:disabled)::after, #resources .btn-red:not(:disabled)::after, #practice .btn-red:not(:disabled)::after, #cbt .btn-red:not(:disabled)::after, #wtRun .btn-red:not(:disabled)::after{ animation:heroSweep 4.8s ease-in-out 1.4s infinite; }
-  #timetable .fchip.on, #studySet .fchip.on, #reading .fchip.on, #studyRes .fchip.on, #wtResult .fchip.on, #results .fchip.on, #profile .fchip.on, #classes .fchip.on, #resources .fchip.on, #timetable .wt-tab.on, #studySet .wt-tab.on, #reading .wt-tab.on, #studyRes .wt-tab.on, #wtResult .wt-tab.on, #results .wt-tab.on, #profile .wt-tab.on, #classes .wt-tab.on, #resources .wt-tab.on, #practice .wt-tab.on, #cbt .wt-tab.on, #wtRun .wt-tab.on, #timetable .wday.on{ animation:chipPop .3s cubic-bezier(.2,1.5,.4,1); }
+ #studySet .btn-red:not(:disabled)::after, #reading .btn-red:not(:disabled)::after, #studyRes .btn-red:not(:disabled)::after, #wtResult .btn-red:not(:disabled)::after, #results .btn-red:not(:disabled)::after, #profile .btn-red:not(:disabled)::after, #classes .btn-red:not(:disabled)::after, #resources .btn-red:not(:disabled)::after, #practice .btn-red:not(:disabled)::after, #cbt .btn-red:not(:disabled)::after, #wtRun .btn-red:not(:disabled)::after{ animation:heroSweep 4.8s ease-in-out 1.4s infinite; }
+ #studySet .fchip.on, #reading .fchip.on, #studyRes .fchip.on, #wtResult .fchip.on, #results .fchip.on, #profile .fchip.on, #classes .fchip.on, #resources .fchip.on, #studySet .wt-tab.on, #reading .wt-tab.on, #studyRes .wt-tab.on, #wtResult .wt-tab.on, #results .wt-tab.on, #profile .wt-tab.on, #classes .wt-tab.on, #resources .wt-tab.on, #practice .wt-tab.on, #cbt .wt-tab.on, #wtRun .wt-tab.on{ animation:chipPop .3s cubic-bezier(.2,1.5,.4,1); }
   #results .result-ring, #wtResult .result-ring{ animation:ringPop .7s cubic-bezier(.2,1.3,.4,1) backwards; }
-  #timetable .chip.gold::after, #studySet .chip.gold::after, #reading .chip.gold::after, #studyRes .chip.gold::after, #wtResult .chip.gold::after, #results .chip.gold::after, #profile .chip.gold::after, #classes .chip.gold::after, #resources .chip.gold::after{ animation:heroSweep 5.2s ease-in-out 1.2s infinite; }
+ #studySet .chip.gold::after, #reading .chip.gold::after, #studyRes .chip.gold::after, #wtResult .chip.gold::after, #results .chip.gold::after, #profile .chip.gold::after, #classes .chip.gold::after, #resources .chip.gold::after{ animation:heroSweep 5.2s ease-in-out 1.2s infinite; }
   #profile .prof-hero::after{ animation:heroSweep 6.5s ease-in-out 1s infinite; }
   #profile .prof-hero .avatar{ animation:avatarBob 4.5s ease-in-out infinite; }
   #profile .hstat{ animation:statPop .5s cubic-bezier(.2,1.3,.4,1) backwards; }

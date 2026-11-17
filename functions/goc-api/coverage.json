@@ -1,8 +1,8 @@
 {
   "generatedBy": "functions/goc-api/tools/coverage-report.js",
-  "total": 253,
+  "total": 241,
   "implemented": 1,
-  "notStarted": 252,
+  "notStarted": 240,
   "percent": 0.4,
   "byFamily": {
     "api/health": {
@@ -14,7 +14,7 @@
       "implemented": 0
     },
     "api/me": {
-      "total": 32,
+      "total": 29,
       "implemented": 0
     },
     "api/students": {
@@ -22,7 +22,7 @@
       "implemented": 0
     },
     "api/admin": {
-      "total": 22,
+      "total": 17,
       "implemented": 0
     },
     "api/staff": {
@@ -89,10 +89,6 @@
       "total": 2,
       "implemented": 0
     },
-    "api/approvals": {
-      "total": 3,
-      "implemented": 0
-    },
     "api/tutors": {
       "total": 6,
       "implemented": 0
@@ -150,7 +146,7 @@
       "implemented": 0
     },
     "api/free2027": {
-      "total": 54,
+      "total": 53,
       "implemented": 0
     },
     "api/analytics": {
@@ -521,14 +517,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/admin/tutors/analytics",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "tutors.accounts",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
       "path": "/api/tutor/atrisk",
       "family": "api/tutor",
       "authTier": "tutor",
@@ -825,30 +813,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/approvals",
-      "family": "api/approvals",
-      "authTier": "console",
-      "capability": "approvals.review",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/approvals/batch/approve",
-      "family": "api/approvals",
-      "authTier": "console",
-      "capability": "approvals.review",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/approvals/(\\d+)/(approve|return)",
-      "family": "api/approvals",
-      "authTier": "console",
-      "capability": "approvals.review",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
       "path": "/api/tutors",
       "family": "api/tutors",
       "authTier": "console",
@@ -1016,22 +980,6 @@
       "status": "not-started"
     },
     {
-      "method": "GET",
-      "path": "/api/me/quest",
-      "family": "api/me",
-      "authTier": "student",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/me/weekly-quest",
-      "family": "api/me",
-      "authTier": "student",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
       "method": "POST",
       "path": "/api/me/practice",
       "family": "api/me",
@@ -1114,14 +1062,6 @@
     {
       "method": "POST",
       "path": "/api/me/study-time/ping",
-      "family": "api/me",
-      "authTier": "student",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/me/study-time/extend",
       "family": "api/me",
       "authTier": "student",
       "capability": null,
@@ -1537,38 +1477,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/admin/videos",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/admin/videos/([A-Za-z0-9._-]+)/published",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/admin/videos/upload",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/admin/videos/([A-Za-z0-9._-]+)",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
       "path": "/api/classes",
       "family": "api/classes",
       "authTier": "student",
@@ -1898,14 +1806,6 @@
     {
       "method": "GET",
       "path": "/api/free2027/admin/email-status",
-      "family": "api/free2027",
-      "authTier": "console",
-      "capability": "homepage.edit",
-      "status": "not-started"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/free2027/admin/mode",
       "family": "api/free2027",
       "authTier": "console",
       "capability": "homepage.edit",

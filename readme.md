@@ -316,7 +316,10 @@ behaviour). The fix is purely defensive client-side hygiene.
 **File:** `server/server.js` — `GET /api/tutor/subject` handler (~line 4006)
 **Change:** Added `if (q.addedBy !== sess.tutor.id) return;` inside the `statusCounts` forEach loop so a tutor only sees counts for their own questions. The depth grid above it still shows system-wide live counts — that is correct and unchanged.
 
-### Fix 2 — Imported questions go to approval queue (not auto-live)
+### Fix 2 — Imported questions go to approval queue (not auto-live) — SUPERSEDED
+> **Superseded by the Phase 1 feature sweep.** Question approval is retired: a tutor's
+> typed or imported question is live as soon as it is saved, and `POST /api/approvals*`
+> no longer exists. The entry below is kept only as a record of the earlier change.
 **File:** `server/server.js` — `POST /api/tutor/questions/import` handler (~line 4236)
 **Change:** Removed `st.rec.status = 'live'` so bulk CSV imports land as `pending` and wait in the admin approval queue, exactly like individually submitted tutor questions. The `okJson` response now returns `status: 'pending'` (or `''` if nothing was added). The admin approves the whole batch at once via `POST /api/approvals/batch/approve`.
 

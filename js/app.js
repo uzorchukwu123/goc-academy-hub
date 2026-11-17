@@ -441,8 +441,8 @@ function toggleIosInstallHelp(){
    see paintStudyWindow(). */
 var state = { limit:90, used:0, sessionMin:120, sessionWarn:5,
               studyLeftSec:null, studyExhausted:false,
-              studyBonusMin:0, studyExtensionsLeft:0,
-              hasGuardianPin:false, guardianPin:'' };
+              studyBonusMin:0,
+              };
 /* The student's first name, for the wind-down screen's copy. Set by
    applyIdentity(); '' before anyone is signed in. */
 var studentFirst = '';
@@ -614,7 +614,7 @@ function go(id){
   /* B#2 slice 7 — show/hide the scholarship banner depending on current status. */
   if(id === 'landing') scholBannerInit();
   if(id === 'admin' && typeof admMenuApply === 'function') admMenuApply();
-  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof admApBadge === 'function') admApBadge(); }
+  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); }
   /* Priority 12 — the standings are re-read on the way in, so they are current
      whenever the student looks rather than only just after logging in. */
   if(id === 'league' && typeof renderLeague === 'function') renderLeague();
@@ -629,8 +629,6 @@ function go(id){
   if((id === 'study' || id === 'mistakes') && typeof refreshMistakes === 'function') refreshMistakes();
   if(id === 'study' && typeof refreshReview === 'function') refreshReview();
   if(id === 'review' && typeof rvOpen === 'function') rvOpen();
-  if(id === 'study' && typeof refreshQuest === 'function') refreshQuest();
-  if(id === 'study' && typeof refreshWeekly === 'function') refreshWeekly();
   if(id === 'study' && typeof refreshChallenge === 'function') refreshChallenge();
   // Install-state can change between visits (installed elsewhere, prompt
   // captured after the screen first loaded), so it's re-read on the way in.
@@ -654,7 +652,7 @@ function go(id){
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   }
   var tabbar = document.getElementById('tabbar');
-  var tabScreens = ['home','timetable','classes','study','league','profile','webtest'];
+  var tabScreens = ['home','classes','study','league','profile'];
   var showTabs = tabScreens.indexOf(id) > -1;
   // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
@@ -671,7 +669,7 @@ function go(id){
     'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard'];
   document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
   // highlight tab (map sub-screens to their section)
-  var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
+  var map = { lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
   var active = map[id] || id;
   list(document.querySelectorAll('.tab')).forEach(function(t){
     var on = t.getAttribute('data-t') === active;
@@ -711,7 +709,7 @@ function loginNow(raw, pw){
        not yet supporting some server-only feature) only logs a warning
        instead of throwing the whole chain into the outer .catch() below,
        which used to strand an authenticated user on the login screen. */
-    [buildWeek, renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
+    [renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
       .forEach(function(fn){
         try{ fn(); }
         catch(e){ console.warn('[login] dashboard widget failed to hydrate:', e); }
@@ -763,7 +761,7 @@ function admPreview(){
   document.body.classList.add('previewing');
   var b = document.getElementById('pvBar'); if(b) b.style.display = 'flex';
   go('home');
-  updateFocus(); buildWeek(); renderClasses(); renderResources(); renderUpdates();
+  updateFocus(); renderClasses(); renderResources(); renderUpdates();
   renderLeague();
   toast('Previewing as a student — your console session stays unlocked');
 }
@@ -1300,7 +1298,7 @@ function signupSubmit(){
     applyIdentity(r2.session);
     loadSettings();
     go('home');
-    buildWeek(); renderClasses(); renderResources();
+    renderClasses(); renderResources();
     wtCatalogue = null;
     refreshMe();
     renderLeague();
@@ -1379,8 +1377,8 @@ function applySubjects(subs){
 function paintSubjectSurfaces(){
   renderClassFilters();
   renderClasses();
+  renderSchedule();
   renderResources();
-  if(document.getElementById('weekStrip') && document.getElementById('ttBlocks')) renderDay();
 }
 function renderClassFilters(){
   var host = document.getElementById('classFilters');
@@ -2147,18 +2145,10 @@ function paintStudyWindow(win){
   if(win.usedMin != null) state.used = Number(win.usedMin) || 0;
   state.studyLeftSec = (win.leftSec != null) ? Number(win.leftSec) : null;
   state.studyExhausted = !!win.exhausted;
-  // Any guardian-granted bonus minutes for today, and how many "Add 15 min"
-  // grants are still available today. Derived the same way server.js derives
-  // them (bonusMin / EXTRA_TIME_GRANT_MIN) rather than guessed, so the
-  // wind-down copy and the extend button can never promise a grant the
-  // server would refuse. Falls back to the same defaults core.js ships with
-  // if the rulebook isn't reachable yet.
+  /* Any extra minutes already granted for today, so the wind-down copy adds up.
+     The guardian-PIN grant that used to add them was retired in the Phase 1
+     sweep; a day recorded before that can still carry them. */
   state.studyBonusMin = (win.bonusMin != null) ? Math.max(0, Number(win.bonusMin) || 0) : 0;
-  var rb0 = rulebook();
-  var grantMin = (rb0 && rb0.EXTRA_TIME_GRANT_MIN) || 15;
-  var maxGrants = (rb0 && rb0.EXTRA_TIME_MAX_GRANTS_PER_DAY != null) ? rb0.EXTRA_TIME_MAX_GRANTS_PER_DAY : 2;
-  var grantsUsed = grantMin ? Math.round(state.studyBonusMin / grantMin) : 0;
-  state.studyExtensionsLeft = Math.max(0, maxGrants - grantsUsed);
   updateFocus();
   // If a student is sitting on a screen whose Start button depends on this,
   // relabel it immediately rather than waiting for the next navigation —
@@ -2269,20 +2259,12 @@ function paintWinddownText(){
   var lim = Math.max(0, Number(state.limit) || 0);
   var bonus = Math.max(0, Number(state.studyBonusMin) || 0);
   var msg = 'You\u2019ve reached your ' + lim + '-minute daily limit';
+  /* Bonus minutes granted before the guardian-PIN grant was retired still count
+     against today's window, so the card says so rather than showing a limit
+     that does not add up. Nothing can add to them any more. */
   if(bonus) msg += ' (already includes ' + bonus + ' extra minute' + (bonus === 1 ? '' : 's') + ' added today)';
   msg += '. Great work, ' + who + ' — rest lets what you learned settle. Come back tomorrow to keep your streak. \uD83D\uDD25';
   p.textContent = msg;
-  // Keeps a stale error from an earlier attempt from lingering into the
-  // next time the overlay is shown.
-  var e = document.getElementById('windPinErr'); if(e) e.textContent = '';
-  // The PIN field only makes sense to show if a guardian PIN is actually
-  // set — swExtend() would otherwise just no-op with "Enter the guardian
-  // PIN." forever. state.hasGuardianPin is populated either by
-  // paintGuardianPin() (console) or, for a real student session, directly
-  // from getMySettings()'s hasGuardianPin flag in loadSettings() — both
-  // land in the same state field, so this check works for either session.
-  var wrap = document.getElementById('windExtendWrap');
-  if(wrap) wrap.style.display = state.hasGuardianPin ? 'block' : 'none';
 }
 /* The daily study window is an academy-wide setting, so it is stored on the
    server. The screen updates once the save is confirmed, never before. */
@@ -2307,14 +2289,6 @@ function loadSettings(){
   return call.then(function(cfg){
     paintLimit(cfg.dailyLimitMin);
     paintSession(cfg);
-    // An admin's settings response carries both the yes/no flag and (for
-    // prefilling the edit form) the actual digits, so it gets the full
-    // paint. getMySettings() now carries the flag too (effectiveSettingsFor()
-    // on the server, the mock driver's getMySettings() offline) but never the
-    // digits — a student only needs to know whether the wind-down overlay's
-    // PIN field should show at all.
-    if(!isStudent) paintGuardianPin(cfg);
-    else if(cfg && cfg.hasGuardianPin != null) state.hasGuardianPin = !!cfg.hasGuardianPin;
     // Only getMySettings() carries this student's real usage today — the
     // academy-wide getSettings() an admin gets back has no personal window.
     if(isStudent && cfg && cfg.exhausted != null) paintStudyWindow(cfg);
@@ -2460,35 +2434,6 @@ function swPing(){
     paintStudyWindow(win);
   }).catch(function(){ /* network hiccup — the next beat will try again */ });
 }
-/* The wind-down overlay's "Add 15 min (guardian PIN)" button — see
-   DAILY-STUDY-WINDOW-STATUS.txt and core.EXTRA_TIME_GRANT_MIN. Reads
-   whatever was typed into the PIN input (Task 4 restores that input; the
-   ids below are what it will use), asks the server to check and grant it,
-   and only ever repaints from what the server actually sends back. A wrong
-   PIN or an already-exhausted daily grant count comes back as a plain
-   inline error next to the input — never a toast, and the message is
-   always the server's own ("That PIN is not correct." /
-   "Today's extra time has already been used up.") so it can never hint at
-   what the correct PIN is or how many tries are left. */
-function swExtend(){
-  var input = document.getElementById('windPinInput');
-  var errEl = document.getElementById('windPinErr');
-  if(errEl) errEl.textContent = '';
-  var pin = input ? String(input.value || '').trim() : '';
-  if(!pin){
-    if(errEl) errEl.textContent = 'Enter the guardian PIN.';
-    return;
-  }
-  GOC.api.extendStudyTime(pin).then(function(win){
-    if(input) input.value = '';
-    if(errEl) errEl.textContent = '';
-    paintStudyWindow(win);
-  }).catch(function(err){
-    if(input) input.value = '';
-    if(errEl) errEl.textContent = err.message || 'Could not add that time.';
-  });
-}
-
 /* The console's view of the same two settings. */
 function paintSession(cfg){
   if(!cfg) return;
@@ -2520,50 +2465,6 @@ function admSetWarn(delta){
     paintSession(cfg);
     toast('Students are warned '+state.sessionWarn+' minutes before the end');
   }).catch(function(err){ toast(err.message || 'Could not save that setting'); });
-}
-/* The console's view of the same guardian PIN swExtend() checks (see
-   DAILY-STUDY-WINDOW-STATUS.txt and core.EXTRA_TIME_GRANT_MIN). Only
-   console ever gets the actual digits back — see server.js's GET
-   /api/settings, which sends hasGuardianPin to everyone but the raw
-   guardianPin only to an unlocked admin session — so this fills in
-   whichever of the two the response actually carried, never guesses.
-   Task 4 adds the elements these ids reference (#admGuardianStatus,
-   #admGuardianPinInput, #admGuardianPinErr); until then this keeps state
-   in sync and no-ops on the DOM, the same way paintWinddownText() did
-   before its own ids existed. */
-function paintGuardianPin(cfg){
-  if(!cfg) return;
-  if(cfg.hasGuardianPin != null) state.hasGuardianPin = !!cfg.hasGuardianPin;
-  else if(cfg.guardianPin !== undefined) state.hasGuardianPin = !!cfg.guardianPin;
-  if(cfg.guardianPin !== undefined) state.guardianPin = cfg.guardianPin || '';
-  var s = document.getElementById('admGuardianStatus');
-  if(s) s.textContent = state.hasGuardianPin ? 'A guardian PIN is set.' : 'No guardian PIN set.';
-  var i = document.getElementById('admGuardianPinInput');
-  if(i && document.activeElement !== i) i.value = state.guardianPin || '';
-  var e = document.getElementById('admGuardianPinErr'); if(e){ e.textContent = ''; e.classList.remove('ok-note'); }
-}
-/* Sets or clears the academy-wide guardian PIN — the adminSetLimit()/
-   admSetSession() pattern: read the console's own input, ask the server,
-   and only ever repaint from what it actually sends back. An empty field
-   clears the PIN; anything else must be 4-8 digits, the same rule
-   server.js enforces in PUT /api/settings, so a typo can never lock the
-   feature into an unusable PIN silently. A wrong-shaped PIN comes back as
-   a plain inline error next to the input, never a toast — the save
-   itself (not a guess) gets the toast, same as adminSetLimit(). */
-function admSetGuardianPin(){
-  var input = document.getElementById('admGuardianPinInput');
-  var errEl = document.getElementById('admGuardianPinErr');
-  if(errEl) errEl.textContent = '';
-  var pin = input ? String(input.value || '').trim() : '';
-  GOC.api.setGuardianPin(pin).then(function(cfg){
-    paintGuardianPin(cfg);
-    if(errEl){
-      errEl.textContent = pin ? 'Guardian PIN updated.' : 'Guardian PIN cleared.';
-      errEl.classList.add('ok-note');
-    }
-  }).catch(function(err){
-    if(errEl){ errEl.classList.remove('ok-note'); errEl.textContent = err.message || 'Could not save that PIN.'; }
-  });
 }
 /* ===== Secure access portal (firewall) ===== */
 function gatePaint(){
@@ -2924,7 +2825,6 @@ var ADM_TILE_META = {
   notes:        { label: 'Notes' },
   passages:     { label: 'Passages' },
   'import':     { label: 'Import' },
-  videos:       { label: 'Videos' },
   resources:    { label: 'Resources' },
   classes:      { label: 'Live classes' },
   broadcast:    { label: 'Broadcast' },
@@ -2938,7 +2838,6 @@ var ADM_TILE_META = {
   window:       { label: 'Study window' },
   tutors:       { label: 'Tutors' },
   managers:     { label: 'Managers' },
-  approvals:    { label: 'Approvals' },
   flags:        { label: 'Flags' },
   challenges:   { label: 'Challenges' },
   access:       { label: 'Access' },
@@ -3123,21 +3022,6 @@ function admOpen(section){
       '<p class="ad-note" id="admLgBasis">Reading the ranking basis…</p>'+
       '<div class="ad-actions"><button class="ad-btn" onclick="admLgLoad()">Refresh</button><button class="ad-btn pri" onclick="admPreview()">View as student</button></div></div>'
     ); },
-    videos: function(){ return (
-      '<div class="ad-card"><div class="ad-h">Recorded videos</div><p class="ad-p">Upload a recorded class, or link one hosted elsewhere (Zoom cloud, unlisted YouTube).</p>'+
-      subjSeg()+
-      '<div class="ad-field"><label>Video title</label><input id="admVidTitle" placeholder="e.g. '+admSubj+' — Live Class 04"></div>'+
-      '<div class="ad-field"><label>Type</label><select id="admVidType"><option value="live">Live class replay</option><option value="lesson">Lesson video</option></select></div>'+
-      '<div class="ad-field"><label>Tutor / instructor</label><input id="admVidTutor" placeholder="e.g. Mr. Okafor"></div>'+
-      '<div class="ad-field"><label>Duration</label><input id="admVidDuration" placeholder="e.g. 48:00"></div>'+
-      '<div class="ad-drop" onclick="document.getElementById(\'admVidFile\').click()">'+upIcon()+'<b id="admVidFileLabel">Choose an MP4 file (optional)</b><span>MP4 · maximum 50 MB</span></div>'+
-      '<input id="admVidFile" type="file" accept=".mp4" style="display:none" onchange="admVideoFilePicked(this)">'+
-      '<div class="ad-field"><label>Link (used if no file is chosen)</label><input id="admVidLink" placeholder="Zoom cloud / YouTube unlisted link"></div>'+
-      '<div class="ad-actions"><button class="ad-btn pri" id="admVidUploadBtn" onclick="admUploadVideo()">Add video</button></div>'+
-      '<div id="admVidStatus" class="ad-note"></div>'+
-      '<div class="ad-field"><label>Uploaded videos</label><div id="admVideoList"><div class="ad-note">Loading videos…</div></div></div>'+
-      '</div>'
-    ); },
     resources: function(){ return (
       '<div class="ad-card"><div class="ad-h">Resources</div><p class="ad-p">Upload past questions, notes and downloadable materials.</p>'+
       subjSeg(true)+
@@ -3278,21 +3162,6 @@ function admOpen(section){
       '<div class="ad-win"><div class="big"><span id="admLimit">'+L+'</span> <s>min / day</s></div></div>'+
       '<div class="stepper" style="justify-content:center;margin-top:10px"><button onclick="adminSetLimit(-15)">−</button><b id="admLimitVal">'+L+' min</b><button onclick="adminSetLimit(15)">+</button></div>'+
       '<div class="ad-actions" style="justify-content:center"><button class="ad-btn" onclick="admPreview()">Check on student dashboard</button></div>'+
-      /* Guardian PIN — lets a parent/guardian grant a student a few extra
-         minutes past the window above from the wind-down screen (see
-         swExtend() / #windExtendWrap), without handing the student the
-         console passcode. Lives next to the stepper because it's a
-         setting on the same window. paintGuardianPin() repaints
-         #admGuardianStatus/#admGuardianPinInput/#admGuardianPinErr from
-         whatever the server actually sends back — this markup just gives
-         it somewhere to write. */
-      '<div class="ad-field" style="margin-top:14px"><label>Guardian PIN</label>'+
-        '<p class="ad-note" id="admGuardianStatus" style="margin:6px 0 8px">'+(state.hasGuardianPin?'A guardian PIN is set.':'No guardian PIN set.')+'</p>'+
-        '<input id="admGuardianPinInput" type="text" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4 to 8 digits" value="'+esc(state.guardianPin||'')+'">'+
-        '<div class="gate-err" id="admGuardianPinErr"></div>'+
-      '</div>'+
-      '<p class="ad-note">Lets a guardian add '+((rulebook().EXTRA_TIME_GRANT_MIN)||15)+' minutes to a student\'s day from the wind-down screen, up to '+((rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY)!=null?rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY:2)+' time'+(((rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY)!=null?rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY:2)===1?'':'s')+' a day. Leave blank and save to turn it off.</p>'+
-      '<div class="ad-actions" style="justify-content:center"><button class="ad-btn pri" onclick="admSetGuardianPin()">Save guardian PIN</button></div></div>'+
       /* Priority 9 — the session threshold sits beside the daily study window
          because they are the same kind of setting: how long a student spends in
          the app, decided by the academy. The expiry is enforced on the server;
@@ -3394,7 +3263,7 @@ function admOpen(section){
       '<div class="ad-field"><label>Starting password</label><input id="admTutPw" type="text" autocomplete="off" placeholder="at least 8 characters"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" id="admTutNewBtn" onclick="admTutCreate()">Create tutor</button></div></div>'+
       '<div class="ad-card"><div class="ad-h">Tutors</div><div id="admTutList"><div class="ad-loading">Loading tutors…</div></div></div>'+
-      '<div class="ad-card"><div class="ad-h">Tutor Analytics</div><p class="ad-p">Subject activity and student performance overview.</p><div id="admTutAnalytics"><div class="ad-loading">Loading analytics…</div></div></div><div class="ad-card"><div class="ad-h">Subjects &amp; tutors</div><p class="ad-p">Who teaches each subject and where a paper is empty or thin.</p><div id="admTutOver"><div class="ad-loading">Loading…</div></div></div>'+
+      '<div class="ad-card"><div class="ad-h">Subjects &amp; tutors</div><p class="ad-p">Who teaches each subject and where a paper is empty or thin.</p><div id="admTutOver"><div class="ad-loading">Loading…</div></div></div>'+
       '<div class="ad-card"><div class="ad-h">Tutor access log</div><p class="ad-p">Every time a tutor opens a student\u2019s page or shows their contact details. Kept for 12 months. Times are Nigeria time.</p>'+
       '<div class="ad-field"><label>Tutor</label><select id="admAudTutor"><option value="">Any tutor</option></select></div>'+
       '<div class="ad-field"><label>Scholar ID</label><input id="admAudStudent" placeholder="e.g. GOC-0001 (leave empty for all)" autocomplete="off"></div>'+
@@ -3418,14 +3287,6 @@ function admOpen(section){
       '<div class="ad-field"><label>To</label><input id="admMgLogTo" type="date"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" onclick="admMgLogLoad()">Show</button><button class="ad-btn" onclick="admMgLogClear()">Clear filters</button><button class="ad-btn" id="admMgLogCsvBtn" onclick="admMgLogExport()" disabled>Export CSV</button></div>'+
       '<div id="admMgLogList"><div class="ad-empty">Press Show to load the log.</div></div></div>'
-    ); },
-    approvals: function(){ return (
-      '<div class="ad-card"><div class="ad-h">Awaiting approval</div>'+
-      '<p class="ad-p">Questions your tutors typed or imported wait here. Students never see one until you approve it. Oldest first.</p>'+
-      '<div class="ad-field"><label>Subject</label><select id="admApSubject" onchange="admApLoad()"><option value="">All subjects</option>'+
-      GOC.core.ALL_SUBJECTS.map(function(sj){ return '<option value="'+esc(sj)+'">'+esc(sj)+'</option>'; }).join('')+'</select></div>'+
-      '<div class="ad-actions"><button class="ad-btn" onclick="admApLoad()">Refresh</button></div></div>'+
-      '<div id="admApList"><div class="ad-loading">Loading…</div></div>'
     ); },
     scholarship: function(){ return (
       '<div class="ad-card"><div class="ad-h">Scholarship applications</div>'+
@@ -3512,7 +3373,6 @@ function admOpen(section){
   if(section === 'overview'){ admOverviewLoad(); admAlLoad(); }
   if(section === 'overview' && typeof admNoLoad === 'function') admNoLoad();
   if(section === 'resources') admLoadResources();
-  if(section === 'videos') admLoadVideos();
   if(section === 'classes') admLoadClasses();
   if(section === 'cohorts') admLoadCohorts();
   if(section === 'students') admLoadCohorts();
@@ -3521,9 +3381,8 @@ function admOpen(section){
   if(section === 'league') admLgLoad();
   if(section === 'access') admAccessLoad();
   if(section === 'siteanalytics') saLoad();
-  if(section === 'tutors'){ admTutLoad(); admAuditLoad(); admTutOverLoad(); admTutAnalyticsLoad(); }
+  if(section === 'tutors'){ admTutLoad(); admAuditLoad(); admTutOverLoad(); }
   if(section === 'managers'){ setTimeout(admMgLoad, 0); setTimeout(admMgLogLoad, 0); }
-  if(section === 'approvals') admApLoad();
   if(section === 'flags') admFlagsLoad();
   if(section === 'scholarship') admScLoad();
   if(section === 'challenges'){ if(!admCohortsCache.length) admLoadCohorts().then(function(){ admOpen('challenges'); }); admChLoad(); }
@@ -3557,8 +3416,7 @@ function subjSeg(includeMaterials){
 function upIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>'; }
 /* Overview panel — one call, four numbers filled in after the markup
    lands, same "fill itself in after the panel renders" pattern every
-   other live admin panel uses (admLoadResources/admLoadVideos below,
-   admObjLoad, etc). */
+   other live admin panel uses (admLoadResources below, admObjLoad, etc). */
 /* KPI strip at the top of the console — real numbers, not placeholders.
    Students comes from the roster cache (kept current by loadStudents()),
    active-today/avg-mock come from the same overview endpoint the Overview
@@ -3898,115 +3756,9 @@ function admDeleteResource(id, title){
   });
 }
 
-function admLoadVideos(){
-  var host = document.getElementById('admVideoList');
-  if(!host) return;
-
-  host.innerHTML = '<div class="ad-loading">Loading videos…</div>';
-
-  GOC.api.listVideos().then(function(result){
-    var videos = result && Array.isArray(result.videos) ? result.videos : [];
-    admRenderVideos(videos);
-  }, function(err){
-    host.innerHTML = '<div class="ad-note warn">' +
-      esc(err.message || 'Could not load videos.') +
-      '</div>';
-  });
-}
-
-function admRenderVideos(videos){
-  var host = document.getElementById('admVideoList');
-  if(!host) return;
-
-  var filtered = videos.filter(function(v){
-    return String(v.subject || '').toLowerCase() === String(admSubj || '').toLowerCase();
-  });
-
-  if(!filtered.length){
-    if(videos.length){
-      var bySubj = {};
-      videos.forEach(function(v){
-        var s = v.subject || 'Unspecified';
-        bySubj[s] = (bySubj[s] || 0) + 1;
-      });
-      var breakdown = Object.keys(bySubj).map(function(s){
-        return esc(s) + ' (' + bySubj[s] + ')';
-      }).join(', ');
-
-      host.innerHTML = '<div class="ad-empty">No videos uploaded for ' + esc(admSubj) +
-        ' yet.<br>' + videos.length + ' video' + (videos.length === 1 ? '' : 's') +
-        ' exist under other subjects — switch the subject above to view them: ' + breakdown + '.</div>';
-    } else {
-      host.innerHTML = '<div class="ad-empty">No videos uploaded for ' +
-        esc(admSubj) + ' yet.</div>';
-    }
-    return;
-  }
-
-  host.innerHTML = filtered.map(function(v){
-    var published = !!v.published;
-    var status = published ? 'Published' : 'Draft';
-    var statusClass = published ? 'published' : 'draft';
-    var typeLabel = v.type === 'live' ? 'Live' : 'Lesson';
-    var source = v.storageFileId ? 'MP4' : 'Link';
-
-    return '<div class="goc-resource-item">' +
-      '<div class="goc-resource-icon">' + esc(typeLabel) + '</div>' +
-      '<div class="goc-resource-main">' +
-        '<span class="goc-resource-title">' +
-          esc(v.title || 'Untitled video') +
-        '</span>' +
-        '<div class="goc-resource-meta">' +
-          '<span>' + esc(v.subject || '') + '</span>' +
-          '<span>' + esc(v.tutor || '') + '</span>' +
-          '<span>' + esc(v.duration || '') + '</span>' +
-          '<span>' + esc(source) + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="goc-resource-actions">' +
-        '<span class="goc-resource-status ' + statusClass + '">' +
-          status +
-        '</span>' +
-        '<button class="ad-btn" onclick="admSetVideoPublished(\'' +
-          esc(v.videoId) + '\',' + (!published) + ')">' +
-          (published ? 'Unpublish' : 'Publish') +
-        '</button>' +
-        (published ? '' :
-          '<button class="ad-btn danger" onclick="admDeleteVideo(\'' +
-            esc(v.videoId) + '\',\'' + esc((v.title || 'this video').replace(/'/g, "\\'")) + '\')">' +
-            'Delete' +
-          '</button>'
-        ) +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
-
-function admSetVideoPublished(id, published){
-  GOC.api.setVideoPublished(id, published).then(function(){
-    toast(published ? 'Video published.' : 'Video unpublished.');
-    admLoadVideos();
-  }, function(err){
-    toast(err.message || 'Could not update the video.');
-  });
-}
-
-function admDeleteVideo(id, title){
-  if(!confirm('Permanently delete "' + title + '"?\n\nThis removes the database record and its stored file (if any) for good — it cannot be undone. Only unpublished (draft) videos can be deleted; a published video must be unpublished first.')) return;
-
-  GOC.api.deleteVideo(id).then(function(){
-    toast('Video deleted.');
-    admLoadVideos();
-  }, function(err){
-    toast(err.message || 'Could not delete the video.');
-  });
-}
-
 /* ================= LIVE CLASSES (admin) =================
-   Function-for-function against the admin video pattern above
-   (admLoadVideos/admRenderVideos/admDeleteVideo) rather than a new shape —
-   a scheduled class filtered by admSubj, one form to create, cancel/mark
-   complete/delete to manage what already exists. */
+   A scheduled class filtered by admSubj, one form to create, and
+   cancel/mark complete/delete to manage what already exists. */
 function admLoadClasses(){
   var host = document.getElementById('admClassList');
   if(!host) return;
@@ -4808,147 +4560,6 @@ function admMgDelete(id){
   GOC.api.deleteManager(id).then(function(){
     toast('Manager deleted.'); delete admMgOpen[id]; admMgLoad();
   }, function(err){ toast(err.message || 'Could not delete that manager.'); });
-}
-
-/* ---------------------------------------------------------------- awaiting approval (Phase 3C, slice 6.4)
-   Console -> Awaiting approval: the questions tutors typed or imported, oldest first. Approve,
-   Edit then approve, Return (with a reason), or approve everything from one import. The rules
-   (who may review, the reason length, nobody approving their own) are the server's; this only
-   shows them and relays the server's words. */
-var admApCache = [];
-var admApMode = {};      // question id -> 'edit' | 'return' while its inline form is open
-var admApBusy = false;
-
-function admApBadge(){
-  var sel = document.getElementById('admSelect');
-  if(!sel || !GOC.api.listApprovals) return Promise.resolve();
-  return GOC.api.listApprovals('').then(function(r){
-    admApSetBadge(r && typeof r.count === 'number' ? r.count : 0);
-  }, function(){});
-}
-function admApSetBadge(n){
-  var sel = document.getElementById('admSelect');
-  if(!sel || !sel.options) return;
-  for(var i = 0; i < sel.options.length; i++){
-    if(sel.options[i].value === 'approvals'){
-      sel.options[i].textContent = n > 0 ? 'Awaiting approval (' + n + ')' : 'Awaiting approval';
-    }
-  }
-}
-function admApLoad(){
-  var host = document.getElementById('admApList');
-  if(host) host.innerHTML = '<div class="ad-loading">Loading…</div>';
-  var f = document.getElementById('admApSubject');
-  var subject = f ? String(f.value || '') : '';
-  return GOC.api.listApprovals(subject).then(function(r){
-    admApCache = (r && Array.isArray(r.queue)) ? r.queue : [];
-    if(!subject) admApSetBadge(admApCache.length);
-    admApRender();
-  }, function(err){
-    admApCache = [];
-    var h = document.getElementById('admApList');
-    if(h) h.innerHTML = '<div class="ad-note warn">' + esc(err.message || 'Could not load the questions waiting for approval.') + '</div>';
-  });
-}
-function admApOptionsHTML(q){
-  if(q.kind === 'theory'){
-    return '<div class="ac-cell" style="margin-top:8px"><label>Reference answer · out of '+esc(q.maxMark)+'</label><div>'+esc(q.expected || '')+'</div></div>';
-  }
-  var letters = ['A','B','C','D','E'];
-  return '<div style="margin-top:8px">'+(q.options || []).map(function(o, i){
-    var right = Number(q.answer) === i;
-    return '<div class="ad-metric"><span>'+letters[i]+'. '+esc(o)+'</span><b>'+(right ? '✓ correct' : '')+'</b></div>';
-  }).join('')+'</div>';
-}
-function admApRender(){
-  var host = document.getElementById('admApList');
-  if(!host) return;
-  if(!admApCache.length){ host.innerHTML = '<div class="ad-card"><div class="ad-empty">Nothing is waiting for approval.</div></div>'; return; }
-  var seen = {};
-  host.innerHTML = admApCache.map(function(q){
-    var id = esc(String(q.id)), mode = admApMode[q.id] || '';
-    var top = '<div class="ac-top"><div class="ac-who"><b>'+esc(q.subject)+' · '+esc(q.topic || 'General')+'</b>'+
-      '<span>'+esc(q.section || '')+' · added by '+esc(q.addedByName || q.addedBy || 'a tutor')+(q.addedAt ? ' · '+esc(admWhen(q.addedAt)) : '')+'</span></div>'+
-      '<span class="ad-tag a">Awaiting</span></div>';
-    var body = '<div style="margin-top:8px;white-space:pre-wrap">'+esc(q.text)+'</div>'+admApOptionsHTML(q)+
-      (q.explanation ? '<p class="ad-note">Explanation: '+esc(q.explanation)+'</p>' : '');
-    var batchBtn = '';
-    if(q.batch && !seen[q.batch]){
-      seen[q.batch] = true;
-      var n = admApCache.filter(function(x){ return x.batch === q.batch; }).length;
-      batchBtn = '<div class="ad-note">From import <code>'+esc(q.batch)+'</code> · '+n+' waiting</div>'+
-        '<div class="ac-btns"><button class="ad-btn" onclick="admApBatch(\''+esc(q.batch)+'\','+n+')">Approve all '+n+' from this import</button></div>';
-    }
-    var actions;
-    if(mode === 'edit'){
-      var isT = q.kind === 'theory';
-      actions = '<div class="ad-field"><label>Question</label><textarea id="admApE_text_'+id+'">'+esc(q.text)+'</textarea></div>'+
-        '<div class="ad-field"><label>Topic</label><input id="admApE_topic_'+id+'" value="'+esc(q.topic || '')+'"></div>'+
-        (isT
-          ? '<div class="ad-field"><label>Reference answer</label><textarea id="admApE_expected_'+id+'">'+esc(q.expected || '')+'</textarea></div>'+
-            '<div class="ad-field"><label>Maximum mark</label><input id="admApE_max_'+id+'" type="number" value="'+esc(q.maxMark)+'"></div>'
-          : '<div class="ad-field"><label>Options (one per line)</label><textarea id="admApE_opts_'+id+'">'+esc((q.options || []).join('\n'))+'</textarea></div>'+
-            '<div class="ad-field"><label>Correct option (1 = first line)</label><input id="admApE_ans_'+id+'" type="number" value="'+(Number(q.answer) + 1)+'"></div>')+
-        '<div class="ad-field"><label>Explanation</label><textarea id="admApE_expl_'+id+'">'+esc(q.explanation || '')+'</textarea></div>'+
-        '<div class="ac-btns"><button class="ad-btn pri" onclick="admApSaveApprove(\''+id+'\')">Save and approve</button><button class="ad-btn" onclick="admApSetMode(\''+id+'\',\'\')">Cancel</button></div>';
-    } else if(mode === 'return'){
-      actions = '<div class="ad-field"><label>Why is it being returned? (3 to 300 characters; the tutor reads this)</label><textarea id="admApR_'+id+'"></textarea></div>'+
-        '<div class="ac-btns"><button class="ad-btn danger" onclick="admApReturn(\''+id+'\')">Return to tutor</button><button class="ad-btn" onclick="admApSetMode(\''+id+'\',\'\')">Cancel</button></div>';
-    } else {
-      actions = '<div class="ac-btns"><button class="ad-btn pri" onclick="admApApprove(\''+id+'\')">Approve</button>'+
-        '<button class="ad-btn" onclick="admApSetMode(\''+id+'\',\'edit\')">Edit then approve</button>'+
-        '<button class="ad-btn danger" onclick="admApSetMode(\''+id+'\',\'return\')">Return</button></div>';
-    }
-    return '<div class="ad-card">'+top+body+actions+batchBtn+'</div>';
-  }).join('');
-}
-function admApSetMode(id, mode){
-  if(mode) admApMode[id] = mode; else delete admApMode[id];
-  admApRender();
-}
-function admApDone(msg){
-  toast(msg);
-  admApBusy = false;
-  return admApLoad();
-}
-function admApFail(err, fallback){
-  admApBusy = false;
-  toast((err && err.message) || fallback);
-}
-function admApApprove(id){
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.approveQuestion(Number(id)).then(function(){ delete admApMode[id]; admApDone('Approved. Students can now see it.'); },
-    function(err){ admApFail(err, 'Could not approve that question.'); });
-}
-function admApVal(id){ var el = document.getElementById(id); return el ? String(el.value == null ? '' : el.value) : ''; }
-function admApSaveApprove(id){
-  var q = admApCache.filter(function(x){ return String(x.id) === String(id); })[0];
-  if(!q) return;
-  var edit = { text: admApVal('admApE_text_'+id), topic: admApVal('admApE_topic_'+id), explanation: admApVal('admApE_expl_'+id) };
-  if(q.kind === 'theory'){
-    edit.expected = admApVal('admApE_expected_'+id);
-    edit.maxMark = Number(admApVal('admApE_max_'+id));
-  } else {
-    edit.options = admApVal('admApE_opts_'+id).split('\n').map(function(o){ return o.trim(); }).filter(function(o){ return o; });
-    edit.answer = Number(admApVal('admApE_ans_'+id)) - 1;
-  }
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.approveQuestion(Number(id), edit).then(function(){ delete admApMode[id]; admApDone('Saved and approved.'); },
-    function(err){ admApFail(err, 'Could not save that question.'); });
-}
-function admApReturn(id){
-  var why = admApVal('admApR_'+id).trim();
-  if(why.length < GOC.core.RETURN_REASON_MIN){ toast('Say why it is being returned (at least ' + GOC.core.RETURN_REASON_MIN + ' characters).'); return; }
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.returnQuestion(Number(id), why).then(function(){ delete admApMode[id]; admApDone('Returned to the tutor with your reason.'); },
-    function(err){ admApFail(err, 'Could not return that question.'); });
-}
-function admApBatch(batch, n){
-  if(!confirm('Approve all ' + n + ' questions from this import? Students will see them straight away.')) return;
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.approveBatch(batch).then(function(r){
-    admApDone('Approved ' + ((r && r.approved) || 0) + ' questions' + (r && r.skipped ? ' (' + r.skipped + ' left alone)' : '') + '.');
-  }, function(err){ admApFail(err, 'Could not approve that import.'); });
 }
 
 function admCreateCohort(){
@@ -6087,125 +5698,10 @@ function admUploadResource(){
   });
 }
 
-function admVideoFilePicked(input){
-  var label = document.getElementById('admVidFileLabel');
-  if(!label) return;
-
-  var file = input && input.files && input.files[0];
-
-  if(!file){
-    label.textContent = 'Choose an MP4 file (optional)';
-    return;
-  }
-
-  label.textContent = file.name + ' · ' + Math.round(file.size / 1024 / 1024 * 10) / 10 + ' MB';
-}
-
-function admUploadVideo(){
-  var titleEl = document.getElementById('admVidTitle');
-  var typeEl = document.getElementById('admVidType');
-  var tutorEl = document.getElementById('admVidTutor');
-  var durationEl = document.getElementById('admVidDuration');
-  var fileEl = document.getElementById('admVidFile');
-  var linkEl = document.getElementById('admVidLink');
-  var btn = document.getElementById('admVidUploadBtn');
-  var status = document.getElementById('admVidStatus');
-
-  var title = titleEl ? String(titleEl.value || '').trim() : '';
-  var type = typeEl ? String(typeEl.value || 'lesson').trim() : 'lesson';
-  var tutor = tutorEl ? String(tutorEl.value || '').trim() : '';
-  var duration = durationEl ? String(durationEl.value || '').trim() : '';
-  var file = fileEl && fileEl.files ? fileEl.files[0] : null;
-  var link = linkEl ? String(linkEl.value || '').trim() : '';
-
-  if(!title){
-    toast('Enter a video title first.');
-    return;
-  }
-
-  if(!admSubj){
-    toast('Select a subject first.');
-    return;
-  }
-
-  if(!tutor){
-    toast('Enter the tutor / instructor name.');
-    return;
-  }
-
-  if(!duration){
-    toast('Enter the video duration.');
-    return;
-  }
-
-  if(!file && !link){
-    toast('Choose an MP4 file or paste a link.');
-    return;
-  }
-
-  if(file && file.size > 50 * 1024 * 1024){
-    toast('The video file must not exceed 50 MB.');
-    return;
-  }
-
-  if(link && !/^https?:\/\//i.test(link)){
-    toast('The link must start with http:// or https://');
-    return;
-  }
-
-  var form = new FormData();
-  form.append('title', title);
-  form.append('subject', admSubj);
-  form.append('type', type);
-  form.append('tutor', tutor);
-  form.append('duration', duration);
-  form.append('externalUrl', link);
-  if(file) form.append('file', file);
-
-  if(btn){
-    btn.disabled = true;
-    btn.textContent = 'Uploading…';
-  }
-
-  if(status){
-    status.textContent = file ? ('Uploading ' + file.name + '…') : 'Saving link…';
-  }
-
-  GOC.api.uploadVideo(form).then(function(result){
-    if(status){
-      status.textContent = 'Added successfully. The video is saved as a draft — publish it below to make it visible to students.';
-    }
-
-    toast('Video added successfully.');
-
-    if(titleEl) titleEl.value = '';
-    if(tutorEl) tutorEl.value = '';
-    if(durationEl) durationEl.value = '';
-    if(linkEl) linkEl.value = '';
-    if(fileEl) fileEl.value = '';
-
-    var label = document.getElementById('admVidFileLabel');
-    if(label) label.textContent = 'Choose an MP4 file (optional)';
-
-    admLoadVideos();
-  }, function(err){
-    if(status){
-      status.textContent = err.message || 'The video could not be added.';
-    }
-
-    toast(err.message || 'Video upload failed.');
-  }).then(function(){
-    if(btn){
-      btn.disabled = false;
-      btn.textContent = 'Add video';
-    }
-  });
-}
-
 var admNSelected = {};   // ids checked in the notes list, for bulk delete
 
 /* Same two-step rule as the question bank: a live note is held back first, then
-   deleted, so one click finishes the job whatever state the note is in. */
+   deleted, so a note a student is reading cannot vanish mid-read. */
 function admNForceDelete(id){
   var n = null;
   admNCache.forEach(function(r){ if(String(r.id) === String(id)) n = r; });
@@ -7678,231 +7174,80 @@ function mathHelp(){
     + out + '</div>';
 }
 
-/* ================= TIMETABLE ================= */
-var week = {
-  Mon:{label:'Monday', blocks:[]},
-  Tue:{label:'Tuesday', blocks:[]},
-  Wed:{label:'Wednesday', blocks:[]},
-  Thu:{label:'Thursday', blocks:[]},
-  Fri:{label:'Friday', blocks:[]},
-  Sat:{label:'Saturday', blocks:[]},
-  Sun:{label:'Sunday', blocks:[]}
-};
-var dayKeys = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-/* The strip always shows the current Mon-Sun week, so the prototype never looks
-   stale. BACKEND: the real week should come from the server with the timetable. */
-var dayNums = (function(){
-  var t = new Date(), dow = t.getDay();            // 0 = Sunday
-  var mon = new Date(t.getFullYear(), t.getMonth(), t.getDate() - (dow === 0 ? 6 : dow - 1));
-  var out = [];
-  for(var i = 0; i < 7; i++){
-    var d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i);
-    out.push(String(d.getDate()));
-  }
-  return out;
-})();
-var curDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
-
-/* Real classes replace the hardcoded `week` above once loaded. Kept as the
-   honest fallback for a brand-new deployment (or an academy with nothing
-   scheduled yet) — same "keep the demo data only when the server returns
-   nothing real" rule loadPublishedResources()/loadPublishedVideos() use. */
-function loadUpcomingClasses(){
-  if(!GOC.api || !GOC.api.listUpcomingClasses) return;
-
-  GOC.api.listUpcomingClasses().then(function(result){
-    var items = result && Array.isArray(result.classes) ? result.classes : [];
-    if(!items.length){
-      week = {
-        Mon:{label:'Monday', blocks:[]},
-        Tue:{label:'Tuesday', blocks:[]},
-        Wed:{label:'Wednesday', blocks:[]},
-        Thu:{label:'Thursday', blocks:[]},
-        Fri:{label:'Friday', blocks:[]},
-        Sat:{label:'Saturday', blocks:[]},
-        Sun:{label:'Sunday', blocks:[]}
-      };
-      buildWeek();
-      return;
-    }
-
-    var byDay = {};
-    dayKeys.forEach(function(k){ byDay[k] = { label: week[k].label, blocks: [] }; });
-
-    items.forEach(function(c){
-      var d = new Date(c.scheduledAt);
-      if(isNaN(d.getTime())) return;
-      var key = dayKeys[(d.getDay() + 6) % 7];   // getDay(): 0=Sun; dayKeys starts Mon
-      var subj = canonSubject(c.subject);
-      var color = (SUBJECT_META[subj] || {}).color || '#334155';
-      var hh = d.getHours() % 12; if(hh === 0) hh = 12;
-      var mm = String(d.getMinutes()).padStart ? String(d.getMinutes()).padStart(2,'0') : ('0'+d.getMinutes()).slice(-2);
-      var durationMin = Number(c.durationMin) || 0;
-      var dur = durationMin ? (durationMin % 60 === 0 ? (durationMin/60)+'h' : durationMin+'m') : '';
-
-      // GET /api/classes already returns these ordered by scheduledAt, so
-      // grouping by weekday here — without re-sorting — keeps each day's
-      // blocks in chronological order too.
-      byDay[key].blocks.push({
-        t: hh+':'+mm, dur: dur, subj: subj,
-        topic: c.topic + (c.tutor ? ' — ' + c.tutor : ''),
-        color: color, zoomLink: c.zoomLink || '', joinLocked: !!(c.joinLocked || (result && result.joinLocked))
-      });
-    });
-
-    week = byDay;
-    buildWeek();
-  }, function(err){
-    console.warn('[goc] Could not load upcoming classes:', err && err.message);
-  });
-}
-
-function buildWeek(){
-  var strip = document.getElementById('weekStrip');
-  strip.innerHTML = '';
-  dayKeys.forEach(function(k,i){
-    var b = document.createElement('button');
-    b.className = 'wday' + (k===curDay?' on':'');
-    b.innerHTML = '<div class="d">'+k+'</div><div class="n">'+dayNums[i]+'</div>';
-    b.onclick = function(){ curDay=k; buildWeek(); renderDay(); };
-    strip.appendChild(b);
-  });
-  renderDay();
-}
-/* The timetable is the student's own week: a block for a paper they do not sit
-   is not their study block. CBT, Review and Revision belong to everyone, which
-   studiesSubject() already allows because they are not subjects. */
-function dayBlocks(key){
-  var day = week[key];
-  if(!day) return [];
-  return day.blocks.filter(function(bl){ return bl.rest || studiesSubject(bl.subj); });
-}
-function renderDay(){
-  var day = week[curDay];
-  var blocks = dayBlocks(curDay);
-  document.getElementById('ttDayLabel').textContent = day.label;
-  var real = blocks.filter(function(x){return !x.rest;});
-  document.getElementById('ttDaySummary').textContent = real.length+' study block'+(real.length!==1?'s':'')+' planned';
-  var host = document.getElementById('ttBlocks');
-  host.innerHTML = '';
-  if(!blocks.length){
-    var e = document.createElement('div');
-    e.className = 'rest';
-    e.innerHTML = 'Nothing scheduled for your combination today';
-    host.appendChild(e);
-    return;
-  }
-  blocks.forEach(function(bl){
-    if(bl.rest){
-      var r = document.createElement('div');
-      r.className='rest';
-      r.innerHTML='🌙 Rest & recharge — you earned it';
-      host.appendChild(r); return;
-    }
-    var d = document.createElement('div');
-    d.className='tt-block';
-    d.innerHTML =
-      '<div class="tt-bar" style="background:'+bl.color+'"></div>'+
-      '<div class="tt-time">'+esc(bl.t)+'</div>'+
-      '<div class="tt-main"><h4>'+esc(bl.topic)+'</h4><p>'+esc(bl.dur)+' · '+esc(bl.subj)+'</p>'+
-      '<span class="tt-tag" style="background:'+hexA(bl.color)+';color:'+bl.color+'">'+esc(bl.subj)+'</span>'+
-      (bl.joinLocked ? '<span class="tt-tag" style="background:#f3f4f6;color:#6b7280;margin-left:6px">Join link: GOC</span>' : '')+'</div>';
-    // A real class carries its own Zoom link — open it the same way a
-    // video's externalUrl already does. A demo block has no link, so it
-    // still just names itself.
-    d.onclick=function(){
-      if(bl.joinLocked){ toast(GOC.core.LIVE_JOIN_LOCK_MESSAGE); }
-      else if(bl.zoomLink){ window.open(bl.zoomLink, '_blank'); } else { toast(bl.subj+' · '+bl.topic); }
-    };
-    host.appendChild(d);
-  });
-}
+/* A subject's accent colour at 10% — used by the results, resources and
+   class cards to tint a chip with the same colour the timetable used to. */
 function hexA(hex){
-  var h=hex.replace('#','');
+  var h=String(hex||'#334155').replace('#','');
+  if(h.length===3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
   var r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);
   return 'rgba('+r+','+g+','+b+',0.10)';
 }
 
-/* ================= ADD STUDY BLOCK (student's own session) =================
-   The button in the markup had no onclick at all, so tapping it did nothing —
-   that was the bug. This wires it up: a small inline form that adds a block
-   to whichever day is currently open in the strip. Pushed straight into the
-   in-memory `week` object alongside real classes, so — same as everything
-   else in this file (see the header note) — it lasts for this session and
-   resets on refresh. BACKEND: once a student's own blocks should persist and
-   sync across devices, save it through the API instead of into `week`
-   directly, the same way a scheduled class already round-trips. */
-function toggleAddBlock(){
-  var form = document.getElementById('ttAddForm');
-  var opening = form.style.display === 'none' || !form.style.display;
-  if(!opening){ form.style.display = 'none'; return; }
-  populateAddBlockSubjects();
-  document.getElementById('ttNewTime').value = '';
-  document.getElementById('ttNewDuration').value = '30';
-  document.getElementById('ttNewTopic').value = '';
-  form.style.display = 'block';
-  document.getElementById('ttNewTime').focus();
-}
-/* Only the papers this student actually sits, plus the shared, non-subject
-   slots studiesSubject() already treats as belonging to everyone. */
-function populateAddBlockSubjects(){
-  var sel = document.getElementById('ttNewSubject');
-  var opts = orderedSubjects().concat(['Revision', 'Review']);
-  sel.innerHTML = opts.map(function(s){ return '<option value="'+esc(s)+'">'+esc(s)+'</option>'; }).join('');
-}
-function submitStudyBlock(){
-  var timeEl = document.getElementById('ttNewTime');
-  var durEl = document.getElementById('ttNewDuration');
-  var subjEl = document.getElementById('ttNewSubject');
-  var topicEl = document.getElementById('ttNewTopic');
+/* ================= SCHEDULED LIVE CLASSES =================
+   The academy's live timetable, as GET /api/classes reports it for this
+   account. This used to be drawn as a whole week on the standalone Timetable
+   screen; that screen was retired in the redesign's Phase 1 sweep, so the same
+   classes are listed here on the Classes screen — the next one first, with the
+   same GOC join-lock the server sets on the response. */
+var upcomingClasses = [];
+var upcomingLocked = false;
 
-  if(!timeEl.value){ toast('Pick a time for this block.'); timeEl.focus(); return; }
-  var mins = parseInt(durEl.value, 10);
-  if(!mins || mins <= 0){ toast('Enter a duration in minutes.'); durEl.focus(); return; }
-  var topic = topicEl.value.trim();
-  if(!topic){ toast('Give this block a topic to study.'); topicEl.focus(); return; }
-
-  var subj = subjEl.value;
-  var color = (SUBJECT_META[subj] || {}).color || '#334155';
-
-  week[curDay].blocks.push({
-    t: timeInputTo12(timeEl.value),
-    dur: mins % 60 === 0 ? (mins / 60) + 'h' : mins + 'm',
-    subj: subj,
-    topic: topic,
-    color: color
+function loadUpcomingClasses(){
+  if(!GOC.api || !GOC.api.listUpcomingClasses) return;
+  return GOC.api.listUpcomingClasses().then(function(result){
+    var items = result && Array.isArray(result.classes) ? result.classes : [];
+    upcomingLocked = !!(result && result.joinLocked);
+    upcomingClasses = items.map(function(c){
+      return {
+        subj: canonSubject(c.subject),
+        topic: c.topic || '',
+        tutor: c.tutor || '',
+        scheduledAt: c.scheduledAt,
+        durationMin: Number(c.durationMin) || 0,
+        zoomLink: c.zoomLink || '',
+        joinLocked: !!(c.joinLocked || upcomingLocked)
+      };
+    });
+    renderSchedule();
+  }, function(err){
+    console.warn('[goc] Could not load upcoming classes:', err && err.message);
+    upcomingClasses = [];
+    renderSchedule();
   });
-  sortDayBlocks(curDay);
+}
 
-  toggleAddBlock();
-  renderDay();
-  toast('Study block added to ' + week[curDay].label + '.');
-}
-/* Matches the "H:MM, no am/pm" label the rest of the timetable already uses
-   (see loadUpcomingClasses above), so a student-added block looks identical
-   to a real class. */
-function timeInputTo12(hhmm){
-  var p = hhmm.split(':');
-  var h = parseInt(p[0], 10) % 12; if(h === 0) h = 12;
-  return h + ':' + p[1];
-}
-/* Existing blocks arrive already in time order (hardcoded demo data, or real
-   classes grouped in the chronological order the server returns them in), so
-   this only needs to place ONE new block correctly among them. The label has
-   no am/pm marker, so reading it back to minutes is a heuristic, not a fact:
-   it assumes the 1–6 o'clock hours on this timetable are always afternoon,
-   which holds for every block this app currently produces (school hours run
-   from morning classes into evening revision, never past-midnight study). */
-function blockSortKey(label){
-  var p = String(label).split(':');
-  var h = parseInt(p[0], 10) || 0, m = parseInt(p[1], 10) || 0;
-  if(h >= 1 && h <= 6) h += 12;
-  return h * 60 + m;
-}
-function sortDayBlocks(key){
-  week[key].blocks.sort(function(a, b){
-    if(a.rest || b.rest) return a.rest ? 1 : -1;
-    return blockSortKey(a.t) - blockSortKey(b.t);
+function renderSchedule(){
+  var host = document.getElementById('scheduleList');
+  if(!host) return;
+  var empty = document.getElementById('scheduleEmpty');
+  var rows = upcomingClasses.filter(function(c){ return studiesSubject(c.subj); })
+    .filter(function(c){ return classFilter === 'all' || c.subj === canonSubject(classFilter); })
+    .sort(function(a, b){ return String(a.scheduledAt).localeCompare(String(b.scheduledAt)); });
+  host.innerHTML = '';
+  if(empty) empty.style.display = rows.length ? 'none' : 'block';
+  rows.forEach(function(c){
+    var d = new Date(c.scheduledAt);
+    var when = isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, {
+      weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'
+    });
+    var dur = c.durationMin ? (c.durationMin % 60 === 0 ? (c.durationMin / 60) + 'h' : c.durationMin + 'm') : '';
+    var col = (SUBJECT_META[c.subj] || {}).color || '#334155';
+    var b = document.createElement('button');
+    b.className = 'vcard';
+    b.style.marginBottom = '10px';
+    b.innerHTML =
+      '<div class="vmeta" style="text-align:left">' +
+        '<span class="vtag" style="background:' + hexA(col) + ';color:' + col + '">' + esc(c.subj) + '</span>' +
+        '<h4>' + esc(c.topic ) + '</h4>' +
+        '<p>' + esc(when) + (dur ? ' · ' + esc(dur) : '') + (c.tutor ? ' · ' + esc(c.tutor) : '') + '</p>' +
+        (c.joinLocked ? '<span class="tt-tag" style="background:#f3f4f6;color:#6b7280;margin-left:6px">Join link: GOC</span>' : '') +
+      '</div>';
+    b.onclick = function(){
+      if(c.joinLocked){ toast(GOC.core.LIVE_JOIN_LOCK_MESSAGE); }
+      else if(c.zoomLink){ window.open(c.zoomLink, '_blank'); }
+      else { toast(c.subj + ' · ' + c.topic); }
+    };
+    host.appendChild(b);
   });
 }
 
@@ -8872,62 +8217,6 @@ function rvPick(j){
 }
 function rvAdvance(){ rvIndex++; rvRender(); }
 
-/* Daily quest (Phase 2, daily quest slice 4): a read-only card at the top of
-   the Study hub. paintQuest draws the quest the server computed; refreshQuest
-   asks for it. With no quest (signed out, or an older server) the card stays
-   hidden. */
-function paintQuest(q){
-  var card = document.getElementById('questCard');
-  if(!card) return;
-  if(!q || !q.target){ card.style.display = 'none'; return; }
-  var text = document.getElementById('questText'), bar = document.getElementById('questBar'), note = document.getElementById('questNote');
-  var done = Math.min(Number(q.answered) || 0, q.target);
-  if(text) text.textContent = q.kind === 'weak' && q.topic
-    ? 'Answer ' + q.target + ' questions in ' + q.subject + ' · ' + q.topic
-    : 'Answer ' + q.target + ' questions today, in any topic';
-  if(bar) bar.style.width = Math.round(done / q.target * 100) + '%';
-  if(note) note.textContent = q.done
-    ? 'Done for today. Well done!'
-    : done + ' of ' + q.target + ' answered today' + (q.kind === 'weak' ? ' · your weakest topic so far' : '');
-  card.style.display = '';
-}
-function refreshQuest(){
-  if(!studentId){ paintQuest(null); return Promise.resolve(); }
-  if(!GOC.api || typeof GOC.api.getQuest !== 'function') return Promise.resolve();
-  return GOC.api.getQuest().then(function(r){
-    paintQuest(r && r.quest);
-  }).catch(function(){ /* offline — leave the card as it is */ });
-}
-
-/* Weekly quest (Phase 2, weekly quest slice 5): a read-only card under the Daily
-   quest on the Study hub. The week runs Monday to Sunday; finishing 5 daily
-   quests OR answering 100 practice questions, whichever comes first, earns one
-   streak freeze. The server keeps the counts and pays the freeze; this only
-   shows them. The bar follows whichever target is closer. */
-function paintWeekly(r){
-  var card = document.getElementById('weekCard');
-  if(!card) return;
-  var q = r && r.weeklyQuest;
-  if(!q || !q.targetDays){ card.style.display = 'none'; return; }
-  var text = document.getElementById('weekText'), bar = document.getElementById('weekBar'), note = document.getElementById('weekNote');
-  var days = Math.min(Number(q.days) || 0, q.targetDays), qs = Math.min(Number(q.questions) || 0, q.targetQuestions);
-  var pct = Math.round(Math.max(days / q.targetDays, qs / q.targetQuestions) * 100);
-  if(text) text.textContent = 'Finish ' + q.targetDays + ' daily quests or answer ' + q.targetQuestions + ' questions this week';
-  if(bar) bar.style.width = pct + '%';
-  if(note){
-    if(q.done && q.claimed) note.textContent = 'Done \u2014 your streak freeze for this week has been added.';
-    else if(q.done) note.textContent = 'Done \u2014 you already hold the most streak freezes. Yours is added after your next practice run once you have room.';
-    else note.textContent = days + ' of ' + q.targetDays + ' daily quests \u00B7 ' + qs + ' of ' + q.targetQuestions + ' questions \u00B7 week ends Sunday';
-  }
-  card.style.display = '';
-}
-function refreshWeekly(){
-  if(!studentId){ paintWeekly(null); return Promise.resolve(); }
-  if(!GOC.api || typeof GOC.api.getWeeklyQuest !== 'function') return Promise.resolve();
-  return GOC.api.getWeeklyQuest().then(function(r){
-    paintWeekly(r);
-  }).catch(function(){ /* offline \u2014 leave the card as it is */ });
-}
 /* Team challenge (Phase 4.C): a read-only card on the Study hub, filled from GET /api/me/challenge. */
 function paintChallenge(r){
   var card = document.getElementById('chalCard');
@@ -8956,15 +8245,6 @@ function reopenPrac(i){
   if(r) srShow(r, true);   /* fromHistory: don't re-save it */
 }
 var srLast = null;
-/* Weekly quest line for the practice results screen: shown only on the run
-   that finished the week (the freeze was just paid) or while a finished week
-   is waiting for room under the freeze cap. The server decides; this words it. */
-function weeklyRow(res){
-  if(!res || res.mode !== 'practice' || !res.weekQuest) return null;
-  if(res.weekClaimed) return ['Weekly quest', 'Complete \u2014 +' + (Number(res.freezeAwarded) || 1) + ' streak freeze'];
-  if(res.weekQuest.done && !res.weekQuest.claimed) return ['Weekly quest', 'Complete \u2014 you hold the most streak freezes, so it is added once you have room'];
-  return null;
-}
 /* Team challenge line for the practice results screen (Phase 4.C). The server
    sends a `challenge` block on the study-submit response ({ title, teamTotal,
    goal, added, done, freezeAwarded }); this only words it. Null when the run
@@ -8977,23 +8257,6 @@ function challengeRow(res){
   if(added > 0) return ['Team challenge', '+' + added + ' toward the goal \u00b7 ' + (Number(c.teamTotal) || 0) + ' of ' + (Number(c.goal) || 0) + ' answered'];
   return null;
 }
-/* Daily quest line for the practice results screen. The server decides the
-   bonus (questXp / questClaimed / questDone on the study-submit response);
-   this only words it. Returns a [label, text] row, or null when the run had
-   nothing to do with the quest (or the result came back from saved history,
-   which does not carry the quest fields). */
-function questRow(res){
-  if(!res || res.mode !== 'practice') return null;
-  var xp = Number(res.questXp) || 0;
-  if(res.questClaimed){
-    return ['Daily quest', xp > 0
-      ? 'Complete — +' + xp + ' XP bonus'
-      : 'Complete — daily XP allowance was full, so no bonus'];
-  }
-  if(res.questDone) return ['Daily quest', 'Already completed today'];
-  return null;
-}
-
 function srShow(res, fromHistory){
   srLast = res;
   if(!fromHistory) savePracResult(res);
@@ -9015,10 +8278,6 @@ function srShow(res, fromHistory){
      than being left to wonder why the figure stopped moving. */
   if(prac){
     rows.push(['XP earned', '+' + (Number(res.xpAwarded) || 0) + ' XP']);
-    var qr = questRow(res);
-    if(qr) rows.push(qr);
-    var wr = weeklyRow(res);
-    if(wr) rows.push(wr);
     var cr = challengeRow(res);
     if(cr) rows.push(cr);
     if(res.xpCapped) rows.push(['Daily XP allowance', 'Reached for today — keep practising for the marks']);
@@ -9996,7 +9255,6 @@ function renderDash(){
   if(role !== 'student' && !previewing) return;
   var helloEl = document.getElementById('dashHello');
   if(helloEl && role === 'student') helloEl.textContent = greetingWord();
-  dashPaintNext();
   dashPaintStanding();
   dashPaintLast();
   dashPaintBroadcasts();
@@ -10006,44 +9264,8 @@ function dashSet(id, html){
   var e = document.getElementById(id);
   if(e) e.innerHTML = html;
 }
-function dashRow(title, sub, cta){
-  return '<div class="wt-row"><div class="nm"><b>' + esc(title) + '</b><span>' + esc(sub)
-    + '</span></div><button class="wt-start" onclick="openWebTest()">' + esc(cta) + '</button></div>';
-}
 function dashStat(k, v){
   return '<div class="wt-stat"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>';
-}
-/* What is actually published for this student, in the order they would sit it. */
-function dashPaintNext(){
-  if(!GOC.api.listMyTests) return;
-  GOC.api.listMyTests().then(function(r){
-    var rows = (r && r.tests) || [];
-    if(!rows.length){
-      dashSet('dashNext', '<div class="wt-none">No paper has been published for your subjects yet. One will appear here the moment it is.</div>');
-      return;
-    }
-    var thy = [], obj = null;
-    rows.forEach(function(t){
-      if(t.section === 'objective') obj = t;
-      else if(t.section === 'theory') thy.push(t);
-    });
-    var h = '';
-    if(obj){
-      h += dashRow('Objective sitting',
-        obj.questions + ' question' + (obj.questions !== 1 ? 's' : '')
-        + ' · ' + wtMinutes(obj.durationSec) + ' · your whole combination', 'Sit it');
-    }
-    if(thy.length){
-      var q = 0;
-      thy.forEach(function(t){ q += Number(t.questions) || 0; });
-      h += dashRow('Theory papers',
-        thy.length + ' paper' + (thy.length !== 1 ? 's' : '')
-        + ' · ' + q + ' question' + (q !== 1 ? 's' : '') + ' · no time limit', 'Open');
-    }
-    dashSet('dashNext', h || '<div class="wt-none">No paper has been published for your subjects yet.</div>');
-  }, function(){
-    dashSet('dashNext', '<div class="wt-none">Your papers are not available right now.</div>');
-  });
 }
 /* The same standing the league screen shows, spelled out on the way past. */
 function dashPaintStanding(){
@@ -11035,7 +10257,7 @@ function videoGradient(subj){
   return VIDEO_GRADIENTS[canonSubject(subj)] || VIDEO_GRADIENT_FALLBACK;
 }
 
-function setClassFilter(f){ classFilter = f; renderClasses(); }
+function setClassFilter(f){ classFilter = f; renderClasses(); renderSchedule(); }
 
 /* This is the one function that was missing end to end: the admin console
    could already publish a video, but nothing on the student side ever
@@ -11874,7 +11096,7 @@ function restoreSession(){
       if(typeof animEnter === 'function') animEnter();
       applyIdentity(user);
       loadSettings();
-      [buildWeek, renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
+      [renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
         .forEach(function(fn){
           try{ fn(); }
           catch(e){ console.warn('[restoreSession] dashboard widget failed to hydrate:', e); }
@@ -11994,58 +11216,3 @@ function qPanelRefreshGrid(){
   }
 }
 
-
-/* Admin Console -> Tutors -> Tutor Analytics */
-function admTutAnalyticsLoad() {
-  var host = document.getElementById('admTutAnalytics');
-  if (!host || !GOC.api.adminTutorAnalytics) return;
-
-  host.innerHTML = '<div class="ad-loading">Loading analytics…</div>';
-
-  GOC.api.adminTutorAnalytics().then(function (result) {
-    if (!host.isConnected) return;
-
-    var reports = result && Array.isArray(result.reports)
-      ? result.reports : [];
-
-    if (!reports.length) {
-      host.innerHTML = '<div class="ad-empty">No analytics data available yet.</div>';
-      return;
-    }
-
-    host.innerHTML = reports.map(function (report) {
-      var s = report.snapshot || {};
-
-      function value(obj, keys) {
-        for (var i = 0; obj && i < keys.length; i++) {
-          if (obj[keys[i]] != null &&
-              typeof obj[keys[i]] !== 'object') {
-            return obj[keys[i]];
-          }
-        }
-        return '—';
-      }
-
-      return '<div class="ad-cred" style="margin-bottom:12px">' +
-        '<div class="ac-top"><div class="ac-who">' +
-        '<b>' + esc(report.subject) + '</b>' +
-        '<span>Subject performance overview</span></div></div>' +
-        '<div class="ac-grid">' +
-        '<div class="ac-cell"><label>Students</label><code>' +
-        esc(String(value(s, ['students', 'studentCount', 'totalStudents']))) +
-        '</code></div>' +
-        '<div class="ac-cell"><label>Attempts</label><code>' +
-        esc(String(value(s, ['attempts', 'attemptCount', 'totalAttempts']))) +
-        '</code></div>' +
-        '<div class="ac-cell"><label>Average score</label><code>' +
-        esc(String(value(s, ['average', 'averageScore', 'avgScore']))) +
-        '</code></div></div></div>';
-    }).join('');
-  }, function (err) {
-    if (!host.isConnected) return;
-    host.innerHTML =
-      '<div class="ad-note warn">' +
-      esc(err.message || 'Could not load tutor analytics.') +
-      '</div>';
-  });
-}

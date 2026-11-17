@@ -505,7 +505,12 @@ item and still holds.
 
 ## Check your resources and videos once Appwrite is configured
 
-After the credentials are in `.env` and the resource/video files are uploaded from the Console:
+> **Phase 1 sweep:** the console's own video upload/publish/delete panel is retired, so lesson
+> videos are no longer managed from inside the app. Existing video records and their stored
+> files are untouched and students still see and play everything already published; this check
+> is how you confirm those files are intact.
+
+After the credentials are in `.env` and the resource/video files are in the bucket:
 
     node server/verify-media.js
 

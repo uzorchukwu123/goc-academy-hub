@@ -48,7 +48,7 @@ var p = plan();
 ok('practised yesterday, not today: streak reminder', p.send && p.kinds.join() === 'streak' && p.streak === 4, JSON.stringify(p.kinds));
 ok('practised today: nothing', !plan({ student: stu({ streakDay: WED }) }).send);
 ok('streak already lost (older than yesterday): nothing to save',
-  !plan({ student: stu({ streakDay: '2026-10-03' }), weekQuest: { week: MON, days: 1, questions: 5, claimed: false } }).send);
+  !plan({ student: stu({ streakDay: '2026-10-03' }) }).send);
 ok('no streak: nothing', !plan({ student: stu({ streak: 0 }) }).send);
 ok('a held freeze is carried on the plan', plan({ student: stu({ streakFreezes: 2 }) }).freezes === 2);
 ok('already told today: nothing', !plan({ sent: { streak: WED } }).send);
@@ -61,15 +61,14 @@ ok('nothing due: nothing', !plan({ student: stu({ streakDay: WED }), dueCount: 0
 ok('told yesterday: waits (at most every 2 days)', !plan({ student: stu({ streakDay: WED }), dueCount: 3, sent: { review: TUE } }).send);
 ok('told two days ago: tells again', plan({ student: stu({ streakDay: WED }), dueCount: 3, sent: { review: '2026-10-05' } }).send);
 
-head('Weekly digest');
-p = plan({ today: SUN, student: stu({ streakDay: SUN }), weekQuest: { week: MON, days: 2, questions: 40, claimed: false } });
-ok('Sunday: the digest goes', p.send && p.kinds.join() === 'weekly' && p.weekly.days === 2 && p.weekly.questions === 40, JSON.stringify(p.kinds));
-ok('not on a weekday', !plan({ student: stu({ streakDay: WED }), weekQuest: { week: MON, days: 2, questions: 40, claimed: false } }).send);
-ok('once per week', !plan({ today: SUN, student: stu({ streakDay: SUN }), weekQuest: { week: MON, days: 2, questions: 40, claimed: false }, sent: { weekly: MON } }).send);
+head('Weekly digest — retired with the weekly quests');
+p = plan({ today: SUN, student: stu({ streakDay: SUN }) });
+ok('no weekly digest is planned any more', !p.send && p.kinds.indexOf('weekly') === -1, JSON.stringify(p.kinds));
+ok('the weekly kind is gone from the rule book', core.REMINDER_KINDS.indexOf('weekly') === -1, JSON.stringify(core.REMINDER_KINDS));
 
 head('Several at once → one message, in priority order');
-p = plan({ today: SUN, student: stu({ streakDay: '2026-10-10' }), dueCount: 5, weekQuest: { week: MON, days: 1, questions: 10, claimed: false } });
-ok('streak, weekly, review together', p.kinds.join() === 'streak,weekly,review', p.kinds.join());
+p = plan({ today: SUN, student: stu({ streakDay: '2026-10-10' }), dueCount: 5 });
+ok('streak and review together', p.kinds.join() === 'streak,review', p.kinds.join());
 
 head('When nothing may go out');
 ok('before the window', !plan({ hour: 16 }).send);
@@ -78,27 +77,22 @@ ok('the window can be moved', plan({ hour: 9, startHour: 8, endHour: 12 }).send)
 ok('deactivated student', !plan({ student: stu({ active: false }) }).send);
 ok('opted out', !plan({ prefs: { email: false } }).send);
 ok('no student', !core.reminderPlan({ today: WED, hour: 18 }).send);
-ok('dormant a month and nothing this week: silence',
+ok('dormant a month: silence',
   !plan({ student: stu({ streakDay: '2026-08-01' }), dueCount: 9 }).send);
-ok('never practised and nothing this week: silence', !plan({ student: stu({ streak: 0, streakDay: null }), dueCount: 9 }).send);
+ok('never practised: silence', !plan({ student: stu({ streak: 0, streakDay: null }), dueCount: 9 }).send);
 
 head('The message');
-var P = { kinds: ['streak', 'weekly', 'review'], streak: 6, freezes: 1, dueCount: 1,
-  weekly: core.weeklyQuest({ week: MON, days: 2, questions: 30, claimed: false }, SUN) };
+var P = { kinds: ['streak', 'review'], streak: 6, freezes: 1, dueCount: 1 };
 var links = { app: 'https://hub.example.ng/', off: 'https://hub.example.ng/api/unsubscribe?id=GOC-S-001&t=abc' };
 var m = svc.composeReminder(P, { name: 'Ada Obi' }, links);
 ok('subject leads with the streak', /^Your 6 days streak ends tonight/.test(m.subject), m.subject);
 ok('greets by first name only', /^Hi Ada,/.test(m.text) && m.text.indexOf('Obi') === -1);
 ok('says how many reviews are due, singular', /1 question is ready to review/.test(m.text), m.text);
-ok('mentions the weekly progress', /2 of 5 daily quests/.test(m.text) && /30 of 100/.test(m.text));
 ok('mentions the held freeze', /1 streak freeze/.test(m.text));
 ok('text carries the opt-out link and the Profile route',
   m.text.indexOf(links.off) > -1 && /Profile \u2192 Study reminders/.test(m.text));
 ok('html carries the opt-out link', m.html.indexOf('unsubscribe?id=GOC-S-001&amp;t=abc') > -1);
 ok('review-only subject', svc.composeReminder({ kinds: ['review'], dueCount: 4 }, { name: 'X' }, links).subject === '4 questions ready to review');
-ok('weekly-only subject', /^Your week/.test(svc.composeReminder({ kinds: ['weekly'], weekly: P.weekly }, { name: 'X' }, links).subject));
-var done = svc.composeReminder({ kinds: ['weekly'], weekly: core.weeklyQuest({ week: MON, days: 5, questions: 0, claimed: true }, SUN) }, { name: 'X' }, links);
-ok('a finished week is congratulated, not nagged', /finished this week/.test(done.text) && !/closes tonight/.test(done.text));
 var evil = svc.composeReminder({ kinds: ['review'], dueCount: 1 }, { name: '<script>alert(1)</script> Bob' }, links);
 ok('a hostile name cannot inject markup into the html', evil.html.indexOf('<script>') === -1);
 ok('and never reaches the subject', evil.subject.indexOf('script') === -1);
@@ -191,12 +185,14 @@ var at18 = new Date(2026, 9, 7, 18, 0);
   r = await w.svc.sweep(at18);
   ok('the next sweep carries on where it stopped', w.box.length === 4);
 
+  /* The Sunday weekly digest went with the weekly quests: a Sunday now sends
+     nothing at all unless a review is due, and no week is ever recorded. */
   var sunday = new Date(2026, 9, 11, 18, 0);
-  var s2 = [stu({ streakDay: SUN, weekQuest: { week: MON, days: 3, questions: 55, claimed: false } })];
+  var s2 = [stu({ streakDay: WED })];
   w = world(s2, {}, {});
   await w.svc.sweep(sunday);
-  ok('Sunday digest is emailed and its week recorded', w.box.length === 1 && /^Your week/.test(w.box[0].subject) &&
-    w.db().reminderState['GOC-S-001'].sent.weekly === MON, w.box[0] && w.box[0].subject);
+  ok('Sunday sends no digest any more', w.box.length === 0 &&
+    !((w.db().reminderState['GOC-S-001'] || {}).sent || {}).weekly);
 
   w = world([stu()], { 'GOC-S-001': { prefs: { email: false, sms: true } } }, {}, { channels: { email: true, sms: true } });
   await w.svc.sweep(at18);

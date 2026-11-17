@@ -1661,10 +1661,10 @@
   /* One place that turns "the limit" and "seconds used so far today" into
      everything a screen needs to draw the ring and decide whether to gate a
      Start button — shared so the server's enforcement and the client's display
-     can never quietly disagree about what "used up" means. bonusMin is any
-     guardian-granted extra time for today (see EXTRA_TIME_GRANT_MIN below) —
-     optional and defaulting to zero, so every existing caller that doesn't
-     know about grants keeps behaving exactly as before. */
+     can never quietly disagree about what "used up" means. bonusMin is any extra
+     time already granted for today (see EXTRA_TIME_GRANT_MIN below) — optional
+     and defaulting to zero, so every existing caller keeps behaving exactly as
+     before. */
   function studyWindowStatus(limitMin, usedSec, bonusMin) {
     var limit = Math.max(0, Math.round(Number(limitMin) || 0));
     var bonus = Math.max(0, Math.round(Number(bonusMin) || 0));
@@ -1684,30 +1684,14 @@
     };
   }
 
-  /* -------------------------------------------- guardian "add time" grants
-     The old wind-down overlay had an "Add 15 min (guardian PIN)" button that
-     did nothing real — see DAILY-STUDY-WINDOW-STATUS.txt. This is the actual
-     feature: a single academy-wide PIN (set by management in Settings, never
-     shown to students) lets whoever holds it grant a fixed, capped amount of
-     extra time on top of today's window. Fixed size and a daily cap keep this
-     from ever becoming a way to lift the window indefinitely — it is a relief
-     valve for one closely-supervised paper, not a second daily allowance. */
+  /* ------------------------------------- extra time already granted to a day
+     The guardian-PIN grant that used to add these minutes was retired in the
+     redesign's Phase 1 sweep, so nothing can add to them any more. The two
+     constants stay because a record written before the retirement can still
+     carry granted minutes, and the study window must keep reading and wording
+     them honestly rather than dropping them on the floor. */
   var EXTRA_TIME_GRANT_MIN = 15;
   var EXTRA_TIME_MAX_GRANTS_PER_DAY = 2;
-
-  /* A PIN is only ever compared, never displayed back, so the only shape rule
-     that matters is "plausible enough to be a PIN": 4 to 8 digits. Anything
-     else (blank, letters, absurdly long) is rejected before it is ever stored
-     or compared, the same way a passcode is validated elsewhere in this app. */
-  function normalizeGuardianPin(raw) {
-    var s = String(raw == null ? '' : raw).trim();
-    return (/^[0-9]{4,8}$/.test(s)) ? s : null;
-  }
-  function guardianPinMatches(stored, attempt) {
-    var a = normalizeGuardianPin(stored);
-    var b = normalizeGuardianPin(attempt);
-    return !!a && !!b && a === b;
-  }
 
   /* -------------------------------------------------- self-directed study
      The student chooses subject, topics, how many questions and — in CBT mode —
@@ -2453,126 +2437,9 @@
     return { ok: true, xp: have - STREAK_FREEZE_COST_XP, freezes: held + 1 };
   }
 
-  /* ---- Daily quest (Phase 2, Daily goal & quests, slice 1: pure logic) ------
-     "Answer 10 questions in your weakest topic today." Pure and storage-free:
-     it takes practice runs (the shape mistakesFromRuns reads — each with a ts
-     and a review of {subject, topic, given, isCorrect}) and returns today's
-     quest and how far along it is.
-
-     The weakest topic is chosen from runs BEFORE today, so it cannot shift
-     under the student while they work on it. A topic needs at least
-     DAILY_QUEST_MIN_ANSWERED answered questions before it counts as evidence.
-     With no such history the quest falls back to a plain daily goal: the same
-     target, any topic. Skipped questions (given == null) never count, either
-     as evidence or as progress. */
-  var DAILY_QUEST_TARGET = 10;
-  var DAILY_QUEST_MIN_ANSWERED = 3;
-
-  function weakestTopicFromRuns(runs, minAnswered) {
-    var min = Math.max(1, Number(minAnswered) || DAILY_QUEST_MIN_ANSWERED);
-    var map = {}, order = [], i, j, q, k;
-    for (i = 0; i < (runs || []).length; i++) {
-      var rev = (runs[i] && runs[i].review) || [];
-      for (j = 0; j < rev.length; j++) {
-        q = rev[j];
-        if (!q || q.given == null) continue;
-        /* A stored review row may not carry its own subject; the run does. */
-        var sub = q.subject || runs[i].subject || '';
-        if (!sub || !q.topic) continue;
-        k = sub + '\u0001' + q.topic;
-        if (!map[k]) { map[k] = { subject: sub, topic: q.topic, answered: 0, correct: 0 }; order.push(k); }
-        map[k].answered++;
-        if (q.isCorrect) map[k].correct++;
-      }
-    }
-    var best = null, pc;
-    for (i = 0; i < order.length; i++) {
-      var t = map[order[i]];
-      if (t.answered < min) continue;
-      pc = (t.correct / t.answered) * 100;
-      /* Lowest percent wins; on a tie the topic with more evidence does. */
-      if (!best || pc < best.percent || (pc === best.percent && t.answered > best.answered)) {
-        best = { subject: t.subject, topic: t.topic, answered: t.answered, correct: t.correct, percent: round1(pc) };
-      }
-    }
-    return best;
-  }
-
-  function dailyQuest(runs, today) {
-    var t = today || dayStamp();
-    var history = [], todays = [], i, j;
-    for (i = 0; i < (runs || []).length; i++) {
-      var r = runs[i];
-      if (!r) continue;
-      /* A run's timestamp is an instant, so it is stamped in the academy's
-         timezone (lagosDay), the same clock `t` defaults to. */
-      if (r.ts && lagosDay(r.ts) === t) todays.push(r);
-      else if (!r.ts || lagosDay(r.ts) < t) history.push(r);
-    }
-    var weak = weakestTopicFromRuns(history);
-    var answered = 0;
-    for (i = 0; i < todays.length; i++) {
-      var rev = todays[i].review || [];
-      for (j = 0; j < rev.length; j++) {
-        var q = rev[j];
-        if (!q || q.given == null) continue;
-        if (weak && ((q.subject || todays[i].subject || '') !== weak.subject || q.topic !== weak.topic)) continue;
-        answered++;
-      }
-    }
-    return {
-      day: t, kind: weak ? 'weak' : 'any',
-      subject: weak ? weak.subject : null, topic: weak ? weak.topic : null,
-      target: DAILY_QUEST_TARGET, answered: answered,
-      remaining: Math.max(0, DAILY_QUEST_TARGET - answered),
-      done: answered >= DAILY_QUEST_TARGET
-    };
-  }
-
-  /* ---- Daily quest reward (Phase 2, Daily goal & quests, slice 5) -----------
-     Finishing the day's quest earns QUEST_XP_REWARD, once per calendar day.
-     The reward is practice XP in every sense: it comes out of the same daily
-     allowance (PRACTICE_XP_DAILY_CAP) as run XP, so the quest can never lift a
-     student past the ceiling. `claimedDay` is the day stamp the student last
-     collected on; `earnedToday` is the practice XP already counted today
-     INCLUDING the run being submitted. Pure: the caller stores the claim.
-
-     Returns { claim, award, day }. claim is true when today's quest is done and
-     not yet collected — the day is then spent even if the allowance was already
-     full (award 0), so a later run cannot collect it again. */
-  var QUEST_XP_REWARD = 20;
-
-  function questReward(quest, claimedDay, earnedToday) {
-    if (!quest || !quest.done || !quest.day) return { claim: false, award: 0, day: null };
-    if (claimedDay === quest.day) return { claim: false, award: 0, day: quest.day };
-    return {
-      claim: true,
-      award: Math.min(QUEST_XP_REWARD, practiceXpRemaining(earnedToday)),
-      day: quest.day
-    };
-  }
-
-  /* ---- Weekly quest (Phase 2, Daily goal & quests, weekly slice 1: pure logic)
-     The weekly way to earn a streak freeze. A calendar week runs Monday to
-     Sunday. Either of two things completes it, whichever comes first:
-       - WEEKLY_QUEST_DAYS daily quests finished in the week, or
-       - WEEKLY_QUEST_QUESTIONS questions answered in practice in the week.
-     Finishing it earns WEEKLY_QUEST_FREEZES streak freeze(s), once per week.
-
-     Everything here is pure and storage-free. The progress is a small record
-     the server keeps on the student, {week, days, questions, claimed}, where
-     `week` is the Monday it belongs to. A record from an earlier week is simply
-     read as empty, so nothing has to be reset by a cron job or a midnight
-     sweep. The counters are kept rather than recomputed from the stored
-     practice runs because those are capped (30 runs) and a busy week could
-     outgrow them. */
-  var WEEKLY_QUEST_DAYS = 5;
-  var WEEKLY_QUEST_QUESTIONS = 100;
-  var WEEKLY_QUEST_FREEZES = 1;
-  var WEEKLY_COUNT_CEILING = 100000;   /* a stored counter can never run away */
-
-  /* The Monday of the calendar week holding `stamp` ('YYYY-MM-DD', or none for
-     today). A Sunday belongs to the week that began six days before it. */
+  /* Calendar-week helpers, shared by team challenges and the weekly reminder.
+     The Monday of the week holding `stamp` ('YYYY-MM-DD', or none for today); a
+     Sunday belongs to the week that began six days before it. */
   function weekStart(stamp) {
     var t = stamp || dayStamp();
     var p = String(t).split('-');
@@ -2587,72 +2454,6 @@
     var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
     d.setDate(d.getDate() + 6);
     return dayStamp(d);
-  }
-
-  function weekCount(v) {
-    var n = Math.floor(Number(v) || 0);
-    return Math.max(0, Math.min(WEEKLY_COUNT_CEILING, n));
-  }
-  /* A stored record, made safe and aligned to the week `today` falls in. An
-     older week (or nothing, or garbage) reads as an empty current week. */
-  function cleanWeekQuest(state, today) {
-    var wk = weekStart(today);
-    if (!state || typeof state !== 'object' || state.week !== wk) {
-      return { week: wk, days: 0, questions: 0, claimed: false };
-    }
-    return { week: wk, days: weekCount(state.days), questions: weekCount(state.questions), claimed: state.claimed === true };
-  }
-
-  /* The quest as the student sees it. `done` is true once either target is met;
-     `claimed` once its freeze has been paid. */
-  function weeklyQuest(state, today) {
-    var s = cleanWeekQuest(state, today);
-    var byDays = s.days >= WEEKLY_QUEST_DAYS, byQuestions = s.questions >= WEEKLY_QUEST_QUESTIONS;
-    return {
-      week: s.week, endsOn: weekEnd(s.week),
-      days: s.days, questions: s.questions,
-      targetDays: WEEKLY_QUEST_DAYS, targetQuestions: WEEKLY_QUEST_QUESTIONS,
-      remainingDays: Math.max(0, WEEKLY_QUEST_DAYS - s.days),
-      remainingQuestions: Math.max(0, WEEKLY_QUEST_QUESTIONS - s.questions),
-      done: byDays || byQuestions, byDays: byDays, byQuestions: byQuestions,
-      claimed: s.claimed, reward: WEEKLY_QUEST_FREEZES
-    };
-  }
-
-  /* Folds one finished practice run into the week. `answered` is how many
-     questions the run answered (as the server marked them); `dailyClaimed` is
-     true when this run is the one that completed and collected today's daily
-     quest, which happens at most once a day, so each such day counts once. */
-  function weeklyQuestAfterRun(state, today, run) {
-    var s = cleanWeekQuest(state, today);
-    var answered = weekCount(run && run.answered);
-    s.questions = weekCount(s.questions + answered);
-    if (run && run.dailyClaimed) s.days = weekCount(s.days + 1);
-    return s;
-  }
-
-  /* Should the week's freeze be paid now? `freezes` is how many the student
-     holds right now (after any freeze this same run just spent on a bridged
-     day). A finished, unpaid quest pays WEEKLY_QUEST_FREEZES, trimmed so the
-     student never holds more than STREAK_FREEZE_MAX.
-
-     When the student is already at the cap the quest is NOT spent: it stays
-     finished-but-unpaid and is paid by the next practice run that finds room,
-     so a freeze is never thrown away. `blocked` is 'max' in that case.
-     Returns { claim, award, freezes, blocked }; `freezes` is the new count. */
-  function weeklyReward(quest, freezes) {
-    var held = Math.max(0, Math.min(STREAK_FREEZE_MAX, Math.floor(Number(freezes) || 0)));
-    if (!quest || !quest.done || quest.claimed) return { claim: false, award: 0, freezes: held, blocked: null };
-    var room = STREAK_FREEZE_MAX - held;
-    if (room <= 0) return { claim: false, award: 0, freezes: held, blocked: 'max' };
-    var award = Math.min(WEEKLY_QUEST_FREEZES, room);
-    return { claim: true, award: award, freezes: held + award, blocked: null };
-  }
-  /* The record once its freeze has been paid. */
-  function weeklyQuestClaimed(state, today) {
-    var s = cleanWeekQuest(state, today);
-    s.claimed = true;
-    return s;
   }
 
   /* ----------------------------------------------- team challenges (Phase 4.C)
@@ -3690,7 +3491,7 @@
      the link in any message. SMS stays off until a provider is configured AND
      the student turns it on. Nothing is sent outside the evening window, to a
      deactivated student, or to one with no activity for REMINDER_DORMANT_DAYS. */
-  var REMINDER_KINDS = ['streak', 'weekly', 'review'];   /* also the priority order */
+  var REMINDER_KINDS = ['streak', 'review'];   /* also the priority order */
   var REMINDER_START_HOUR = 17;                           /* first hour a message may go */
   var REMINDER_END_HOUR = 21;                             /* none from this hour on */
   var REMINDER_REVIEW_GAP_DAYS = 2;
@@ -3726,11 +3527,11 @@
   }
 
   /* input: { student: {active, email, phone, streak, streakDay, streakFreezes},
-              prefs, sent: {streak, weekly, review}, today, hour,
-              dueCount, weekQuest, startHour, endHour }
-              (weekQuest = the stored {week,days,...}; the two hours default to
-              REMINDER_START_HOUR / REMINDER_END_HOUR and exist so an owner can move the window)
-     returns { send, kinds, channels, today, streak, freezes, dueCount, weekly } */
+              prefs, sent: {streak, review}, today, hour,
+              dueCount, startHour, endHour }
+              (the two hours default to REMINDER_START_HOUR /
+              REMINDER_END_HOUR and exist so an owner can move the window)
+     returns { send, kinds, channels, today, streak, freezes, dueCount } */
   function reminderPlan(input) {
     var inp = input || {}, stu = inp.student || null;
     var today = inp.today || dayStamp();
@@ -3744,16 +3545,13 @@
     if (!(hour >= from && hour < to)) return none;
 
     var sent = inp.sent && typeof inp.sent === 'object' ? inp.sent : {};
-    var wk = weeklyQuest(inp.weekQuest, today);
-    /* Dormant: no streak activity for a month and nothing done this week. */
+    /* Dormant: no streak activity for a month. */
     var idle = stu.streakDay ? daysBetweenStamps(stu.streakDay, today) : null;
-    var activeThisWeek = wk.days > 0 || wk.questions > 0;
-    if (!activeThisWeek && (idle === null || idle > REMINDER_DORMANT_DAYS)) return none;
+    if (idle === null || idle > REMINDER_DORMANT_DAYS) return none;
 
     var kinds = [];
     var streak = Math.max(0, Number(stu.streak) || 0);
     if (streak >= 1 && stu.streakDay === dayBefore(today) && sent.streak !== today) kinds.push('streak');
-    if (weekEnd(today) === today && sent.weekly !== weekStart(today)) kinds.push('weekly');
     var due = Math.max(0, Math.floor(Number(inp.dueCount) || 0));
     var gap = sent.review ? daysBetweenStamps(sent.review, today) : null;
     if (due > 0 && (gap === null || gap >= REMINDER_REVIEW_GAP_DAYS)) kinds.push('review');
@@ -3761,7 +3559,7 @@
     return {
       send: true, kinds: kinds, channels: channels, today: today,
       streak: streak, freezes: Math.max(0, Math.floor(Number(stu.streakFreezes) || 0)),
-      dueCount: due, weekly: wk
+      dueCount: due
     };
   }
 
@@ -4149,21 +3947,21 @@
     return out;
   }
 
-  /* ------------------------------------------------------- tutor question approval
-     Phase 3C slice 6, part 1: the approval rules as pure functions. Nothing is stored or
-     served here; the routes (part 2) and the console queue (part 3) feed these.
-     - A question has a status: 'live' (what every student sees), 'pending' (Awaiting
-       approval) or 'returned' (sent back with the admin's reason). A question with NO
-       status is live, so nothing that exists today disappears.
-     - Everything a tutor types or imports is saved pending, stamped with the tutor, the
-       tutor's name, the time and (for an import) a batch id. Students never see it.
-     - Only management reviews. A tutor never approves, and nobody approves their own.
-     - A tutor may edit only their OWN question in their OWN subject; editing sends it back
-       to pending, whatever it was. Admin-added questions are not a tutor's to edit.
-     - Owner decision (8 Oct 2026): tutor THEORY MARKS need no approval, so none of this
-       touches marking. */
+  /* --------------------------------------------------- tutor question authorship
+     Phase 1 sweep: tutor questions are no longer reviewed before they reach students. What a tutor
+     types or imports is published at once, stamped with the tutor and the time. The status field
+     stays on the record shape for two reasons, and only these two:
+     - a question saved before the sweep may still say 'pending' or 'returned', and it must stay
+       out of students' papers rather than silently appearing because the queue is gone;
+     - 'live' is still the word for "students see this", so listQuestions()/questionIsLive() keep
+       working unchanged.
+     Nothing sets 'pending' or 'returned' any more, and nothing stores a reviewer or a return
+     reason — the approval queue and both of its decisions were retired with this sweep.
+     - A tutor may edit only their OWN question in their OWN subject. Admin-added questions are
+       not a tutor's to edit.
+     - Owner decision (8 Oct 2026): tutor THEORY MARKS need no approval, so none of this touches
+       marking. */
   var QUESTION_STATUSES = ['live', 'pending', 'returned'];
-  var RETURN_REASON_MIN = 3, RETURN_REASON_MAX = 300;
 
   function questionStatus(q) {
     var st = q && q.status ? String(q.status) : 'live';
@@ -4180,15 +3978,15 @@
   function copyRec(r) { var c = {}, k; for (k in r) if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k]; return c; }
   var REVIEW_FIELDS = ['reviewedBy', 'reviewedAt', 'returnReason'];
 
-  /* A validated question from a tutor, ready to store: pending and stamped. Returns
-     { rec } or { error }. o.batch is an import's batch id (blank for a typed question). */
+  /* A validated question from a tutor, ready to store: live and stamped. Returns { rec } or
+     { error }. o.batch is an import's batch id (blank for a typed question). */
   function stampTutorQuestion(rec, tutor, o, now) {
     if (!rec || typeof rec !== 'object') return { error: 'There is no question to save.' };
     if (!tutor || tutor.active === false) return { error: 'This tutor account is switched off.' };
     if (!tutorCan(tutor, rec.subject)) return { error: 'You do not teach ' + String(rec.subject || 'that subject') + '.' };
     var out = copyRec(rec);
     REVIEW_FIELDS.forEach(function (k) { delete out[k]; });
-    out.status = 'pending';
+    out.status = 'live';
     out.addedBy = String(tutor.id || '');
     out.addedByName = String(tutor.name || '');
     out.addedAt = stampNow(now);
@@ -4202,9 +4000,9 @@
     return !!q && !!tutor && tutor.active !== false && !!tutor.id && q.addedBy === tutor.id && tutorCan(tutor, q.subject);
   }
 
-  /* A tutor edits their own question: `changes` is a validated record. The result is the
-     stored question with the changes, back to pending, review marks cleared, author and
-     first-added time kept. A change of subject must still be one of the tutor's. */
+  /* A tutor edits their own question: `changes` is a validated record. The result is the stored
+     question with the changes, live, author and first-added time kept. A change of subject must
+     still be one of the tutor's. */
   function tutorEditQuestion(tutor, q, changes, now) {
     if (!tutorOwnsQuestion(tutor, q)) return { error: 'You can only change questions you added, in your own subjects.' };
     if (!changes || typeof changes !== 'object') return { error: 'There is nothing to change.' };
@@ -4214,69 +4012,17 @@
     var out = copyRec(changes), keep = ['id', 'addedBy', 'addedByName', 'addedAt', 'batch'];
     REVIEW_FIELDS.forEach(function (k) { delete out[k]; });
     keep.forEach(function (k) { if (q[k] !== undefined) out[k] = q[k]; else delete out[k]; });
-    out.status = 'pending';
+    out.status = 'live';
     out.editedAt = stampNow(now);
     return { rec: out };
   }
 
-  /* Management approves or returns a PENDING question. reviewer = { id, name, role }.
-     decision 'approve' | 'return'; a return needs a reason of 3-300 characters.
-     "Edit then approve" is: apply the admin's validated edit to the question, then approve it. */
-  function reviewQuestion(q, decision, reviewer, reason, now) {
-    if (!reviewer || reviewer.role === 'tutor' || !reviewer.name) return { error: 'Only the academy’s management can review questions.' };
-    if (!q || questionStatus(q) !== 'pending') return { error: 'Only a question awaiting approval can be reviewed.' };
-    if (q.addedBy && reviewer.id && q.addedBy === reviewer.id) return { error: 'Nobody can approve their own question.' };
-    var out = copyRec(q), why = String(reason == null ? '' : reason).trim();
-    if (decision === 'approve') {
-      out.status = 'live';
-      delete out.returnReason;
-    } else if (decision === 'return') {
-      if (why.length < RETURN_REASON_MIN) return { error: 'Say why the question is being returned (at least ' + RETURN_REASON_MIN + ' characters).' };
-      if (why.length > RETURN_REASON_MAX) return { error: 'Keep the reason under ' + RETURN_REASON_MAX + ' characters.' };
-      out.status = 'returned';
-      out.returnReason = why;
-    } else {
-      return { error: 'Choose approve or return.' };
-    }
-    out.reviewedBy = String(reviewer.name);
-    out.reviewedAt = stampNow(now);
-    return { rec: out };
-  }
-
-  /* Approve every pending question from one import in one go. Returns the questions to
-     store ({ recs }) and how many were left alone. The batch id must be given. */
-  function approveBatch(list, batch, reviewer, now) {
-    var id = String(batch == null ? '' : batch).trim();
-    if (!id) return { error: 'Say which import to approve.' };
-    var recs = [], skipped = 0, i, r;
-    for (i = 0; i < (list || []).length; i++) {
-      if (!list[i] || list[i].batch !== id) continue;
-      r = reviewQuestion(list[i], 'approve', reviewer, '', now);
-      if (r.error) {
-        if (!/Only the academy/.test(r.error)) { skipped++; continue; }
-        return { error: r.error };
-      }
-      recs.push(r.rec);
-    }
-    return { recs: recs, skipped: skipped };
-  }
-
-  /* A tutor's own questions (any status), newest first, for their dashboard. */
+  /* A tutor's own questions, newest first, for their dashboard. */
   function tutorQuestions(list, tutor) {
     var mine = (list || []).filter(function (q) { return tutorOwnsQuestion(tutor, q); });
     return mine.sort(function (a, b) { return String(b.addedAt || '').localeCompare(String(a.addedAt || '')); });
   }
 
-  /* The console's Awaiting approval list: pending questions, every subject, oldest first
-     so nothing waits for ever. Optional subject filter. */
-  function approvalQueue(list, subject) {
-    var want = subject ? String(subject) : '';
-    var out = (list || []).filter(function (q) { return q && questionStatus(q) === 'pending' && (!want || q.subject === want); });
-    return out.sort(function (a, b) { return String(a.addedAt || '').localeCompare(String(b.addedAt || '')); });
-  }
-  function pendingCount(list) {
-    return (list || []).reduce(function (n, q) { return n + (q && questionStatus(q) === 'pending' ? 1 : 0); }, 0);
-  }
   /* The newest time a tutor added a question to this subject, or '' (for Subjects & tutors). */
   function lastTutorUpload(list, subject) {
     var best = '';
@@ -5800,7 +5546,6 @@
     notes: ['questions.manage'],
     passages: ['questions.manage'],
     'import': ['questions.manage'],
-    videos: ['resources.publish'],
     resources: ['resources.publish'],
     classes: ['classes.schedule'],
     broadcast: ['broadcast.send'],
@@ -5814,7 +5559,6 @@
     window: ['sittings.configure'],
     tutors: ['tutors.accounts'],
     managers: ['managers.accounts'],
-    approvals: ['approvals.review'],
     flags: ['approvals.review'],
     challenges: ['challenges.manage'],
     access: ['managers.accounts'],
@@ -6622,8 +6366,6 @@
     studyWindowStatus: studyWindowStatus,
     EXTRA_TIME_GRANT_MIN: EXTRA_TIME_GRANT_MIN,
     EXTRA_TIME_MAX_GRANTS_PER_DAY: EXTRA_TIME_MAX_GRANTS_PER_DAY,
-    normalizeGuardianPin: normalizeGuardianPin,
-    guardianPinMatches: guardianPinMatches,
     STUDY_MODES: STUDY_MODES.slice(),
     STUDY_MAX: STUDY_MAX,
     dailyLimitMessage: dailyLimitMessage,
@@ -6660,19 +6402,13 @@
     tutorSubjectFor: tutorSubjectFor,
     tutorPublic: tutorPublic,
     QUESTION_STATUSES: QUESTION_STATUSES,
-    RETURN_REASON_MIN: RETURN_REASON_MIN,
-    RETURN_REASON_MAX: RETURN_REASON_MAX,
     questionStatus: questionStatus,
     questionIsLive: questionIsLive,
     liveQuestions: liveQuestions,
     stampTutorQuestion: stampTutorQuestion,
     tutorOwnsQuestion: tutorOwnsQuestion,
     tutorEditQuestion: tutorEditQuestion,
-    reviewQuestion: reviewQuestion,
-    approveBatch: approveBatch,
     tutorQuestions: tutorQuestions,
-    approvalQueue: approvalQueue,
-    pendingCount: pendingCount,
     lastTutorUpload: lastTutorUpload,
     tutorOwnsNote: tutorOwnsNote,
     stampTutorNote: stampTutorNote,
@@ -6851,19 +6587,8 @@
     dayBefore: dayBefore,
     streakAfterActivity: streakAfterActivity,
     buyStreakFreeze: buyStreakFreeze,
-    DAILY_QUEST_TARGET: DAILY_QUEST_TARGET,
-    DAILY_QUEST_MIN_ANSWERED: DAILY_QUEST_MIN_ANSWERED,
-    weakestTopicFromRuns: weakestTopicFromRuns,
-    dailyQuest: dailyQuest,
-    questReward: questReward,
-    WEEKLY_QUEST_DAYS: WEEKLY_QUEST_DAYS,
-    WEEKLY_QUEST_QUESTIONS: WEEKLY_QUEST_QUESTIONS,
-    WEEKLY_QUEST_FREEZES: WEEKLY_QUEST_FREEZES,
     weekStart: weekStart,
     weekEnd: weekEnd,
-    cleanWeekQuest: cleanWeekQuest,
-    weeklyQuest: weeklyQuest,
-    weeklyQuestAfterRun: weeklyQuestAfterRun,
     REMINDER_KINDS: REMINDER_KINDS.slice(),
     REMINDER_START_HOUR: REMINDER_START_HOUR,
     REMINDER_END_HOUR: REMINDER_END_HOUR,
@@ -6874,8 +6599,6 @@
     reminderPhoneOk: reminderPhoneOk,
     reminderChannels: reminderChannels,
     reminderPlan: reminderPlan,
-    weeklyQuestClaimed: weeklyQuestClaimed,
-    weeklyReward: weeklyReward,
     validateChallenge: validateChallenge,
     cleanChallengeState: cleanChallengeState,
     challengeAfterRun: challengeAfterRun,
@@ -6888,7 +6611,6 @@
     CHALLENGE_FREEZE_REWARD: CHALLENGE_FREEZE_REWARD,
     CHALLENGE_GOAL_MIN: CHALLENGE_GOAL_MIN,
     CHALLENGE_GOAL_MAX: CHALLENGE_GOAL_MAX,
-    QUEST_XP_REWARD: QUEST_XP_REWARD,
     STREAK_FREEZE_COST_XP: STREAK_FREEZE_COST_XP,
     STREAK_FREEZE_MAX: STREAK_FREEZE_MAX,
     PRIVACY_POLICY_VERSION: PRIVACY_POLICY_VERSION,

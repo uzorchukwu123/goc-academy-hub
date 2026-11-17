@@ -894,9 +894,6 @@
           <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
         </div>
 
-        <div class="sec-head" id="tut-webtest"><div class="section-t">Waiting for you</div><button class="ss-link" onclick="openWebTest()">Open Web Test</button></div>
-        <div class="card wrap dash-card"><div id="dashNext"><div class="wt-none">Checking your papers…</div></div></div>
-
         <div class="sec-head" id="tut-league"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
         <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
 
@@ -906,51 +903,8 @@
         <div class="sec-head"><div class="section-t">Carry on</div></div>
         <div class="dash-jump" id="tut-jump">
           <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
-          <button class="dj" onclick="go('timetable')"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><b>Timetable</b><s>What your week holds</s></button>
           <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
           <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
-        </div>
-        <div class="spacer"></div>
-      </div>
-    </section>
-
-    <!-- ============ TIMETABLE ============ -->
-    <section class="screen pad" id="timetable">
-      <div class="hdr">
-        <div class="eyebrow">My week</div>
-        <div class="row between"><div class="h-title">Weekly Timetable</div><span class="chip green">On track</span></div>
-      </div>
-      <div class="wrap">
-        <div class="week-strip" id="weekStrip"></div>
-        <div class="card" style="padding:13px 15px;margin:12px 0;display:flex;align-items:center;gap:12px">
-          <div class="dot" style="background:var(--red);width:40px;height:40px">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-          </div>
-          <div style="flex:1"><div style="font-weight:800;font-size:14px" id="ttDayLabel">Monday</div><div class="muted" style="font-size:12.5px" id="ttDaySummary">2 study blocks · 1h 25m planned</div></div>
-        </div>
-        <div id="ttBlocks"></div>
-        <button class="btn btn-outline btn-block" style="margin-top:4px" onclick="toggleAddBlock()" id="ttAddBtn">+ Add study block</button>
-        <div class="card wrap" id="ttAddForm" style="display:none;margin-top:10px;padding:14px 15px">
-          <div class="field">
-            <label for="ttNewTime">Time</label>
-            <input type="time" id="ttNewTime">
-          </div>
-          <div class="field">
-            <label for="ttNewDuration">Duration (minutes)</label>
-            <input type="number" id="ttNewDuration" min="5" max="240" step="5" value="30">
-          </div>
-          <div class="field">
-            <label for="ttNewSubject">Subject</label>
-            <select id="ttNewSubject"></select>
-          </div>
-          <div class="field">
-            <label for="ttNewTopic">Topic</label>
-            <input type="text" id="ttNewTopic" placeholder="e.g. Revise past questions">
-          </div>
-          <div class="row gap12">
-            <button class="btn btn-outline" style="flex:1" onclick="toggleAddBlock()">Cancel</button>
-            <button class="btn btn-red" style="flex:1" onclick="submitStudyBlock()">Add block</button>
-          </div>
         </div>
         <div class="spacer"></div>
       </div>
@@ -963,19 +917,6 @@
         <div class="h-title">Learn, practise, test</div>
       </div>
       <div class="wrap">
-        <!-- Quest / review nudge cards — hidden until filled by JS -->
-        <div class="card" id="questCard" style="display:none;margin-bottom:12px;padding:13px 15px">
-          <div class="eyebrow">Daily quest</div>
-          <div id="questText" style="font-weight:600;margin-top:4px"></div>
-          <div style="height:6px;border-radius:3px;background:rgba(127,127,127,.22);margin-top:9px;overflow:hidden"><div id="questBar" style="height:100%;width:0;background:#15803D"></div></div>
-          <div id="questNote" style="font-size:12px;opacity:.75;margin-top:5px"></div>
-        </div>
-        <div class="card" id="weekCard" style="display:none;margin-bottom:12px;padding:13px 15px">
-          <div class="eyebrow">Weekly quest · earns a streak freeze</div>
-          <div id="weekText" style="font-weight:600;margin-top:4px"></div>
-          <div style="height:6px;border-radius:3px;background:rgba(127,127,127,.22);margin-top:9px;overflow:hidden"><div id="weekBar" style="height:100%;width:0;background:#0E7490"></div></div>
-          <div id="weekNote" style="font-size:12px;opacity:.75;margin-top:5px"></div>
-        </div>
         <div class="card" id="chalCard" style="display:none;margin-bottom:12px;padding:13px 15px">
           <div class="eyebrow">Team challenge · earns a streak freeze</div>
           <div id="chalText" style="font-weight:600;margin-top:4px"></div>
@@ -1001,12 +942,6 @@
             <span class="sg-label">Practice</span>
             <span class="sg-badge gold-badge">+XP</span>
           </button>
-          <button class="sg-cell" onclick="openWebTest()">
-            <div class="sg-icon" style="background:#141821"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/></svg></div>
-            <span class="sg-label">Web Test</span>
-            <span class="sg-badge red-badge">Assessed</span>
-          </button>
-
           <button class="sg-cell" onclick="openResults()">
             <div class="sg-icon" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 4v16h16"/><path d="M7 15l3-4 3 2 5-7"/></svg></div>
             <span class="sg-label">Results</span>
@@ -1838,7 +1773,6 @@
           <option value="notes">Reading notes</option>
           <option value="passages">Comprehension passages</option>
           <option value="import">Import (CSV)</option>
-          <option value="videos">Videos</option>
           <option value="resources">Resources</option>
           <option value="classes">Live classes</option>
           <option value="broadcast">Broadcast</option>
@@ -1852,7 +1786,6 @@
           <option value="window">Study window</option>
           <option value="tutors">Tutors</option>
           <option value="managers">Managers</option>
-          <option value="approvals">Awaiting approval</option>
           <option value="flags">Question flags</option>
           <option value="challenges">Team challenges</option>
           <option value="access">Access &amp; firewall</option>
@@ -1884,7 +1817,16 @@
           <button class="fchip on" data-f="all" onclick="setClassFilter('all')" aria-pressed="true">All</button>
         </div>
 
-        <div class="sec-head" style="margin-top:6px"><div class="section-t">🔴 Recorded live classes</div></div>
+        <!-- Scheduled live classes. This is the week that used to be drawn on the
+             standalone Timetable screen (retired in the Phase 1 sweep): the same
+             server data (GET /api/classes), the same GOC join-lock, now shown
+             beside the recordings where a student looks for a class. -->
+        <div class="sec-head" style="margin-top:6px"><div class="section-t">📅 Scheduled live classes</div></div>
+        <div class="sub-lead">Your academy's live timetable. Tap a class to join when it is your turn.</div>
+        <div id="scheduleList"></div>
+        <div class="rest" id="scheduleEmpty" style="display:none">No live class has been scheduled for you yet.</div>
+
+        <div class="sec-head" style="margin-top:18px"><div class="section-t">🔴 Recorded live classes</div></div>
         <div class="sub-lead">Full replays of your tutor's live sessions — watch what you missed.</div>
         <div id="liveList"></div>
         <div class="rest" id="liveEmpty" style="display:none">No live classes for this subject yet.</div>
@@ -2201,12 +2143,6 @@
       <div class="big"><svg class="icon" style="width:32px;height:32px" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
       <h3>That's your focus for today</h3>
       <p id="windMsg">You've reached your daily limit. Great work — rest lets what you learned settle. Come back tomorrow to keep your streak. 🔥</p>
-      <div class="field" id="windExtendWrap" style="display:none;text-align:left">
-        <label for="windPinInput">Guardian PIN</label>
-        <input type="text" inputmode="numeric" autocomplete="off" id="windPinInput" placeholder="Enter guardian PIN" maxlength="8">
-        <div class="gate-err" id="windPinErr"></div>
-        <button class="btn btn-outline btn-block" onclick="swExtend()">Add 15 min</button>
-      </div>
       <button class="btn btn-red btn-block" onclick="hideWinddown()">Okay, I'll rest</button>
     </div>
   </div>
@@ -2419,13 +2355,6 @@ window.__gocBootTimer = setTimeout(function() {
       pos: 'below', scrollTo: 'auto'
     },
     {
-      anchor: 'tut-webtest',
-      ico: '📝', icoBg: '#141821',
-      title: 'Web Test',
-      body: 'Your Web Test is the official assessed paper set by your academy — it counts towards your record. Check here regularly for new papers and deadlines.',
-      pos: 'below', scrollTo: 'auto'
-    },
-    {
       anchor: 'tut-league',
       ico: '🏆', icoBg: '#F59E0B',
       title: 'League & Rankings',
@@ -2436,7 +2365,7 @@ window.__gocBootTimer = setTimeout(function() {
       anchor: 'tut-jump',
       ico: '⚡', icoBg: '#15803D',
       title: 'Quick Access Shortcuts',
-      body: 'Jump straight into Practice, your Timetable, live Classes, or your Profile from here — one tap and you\'re in.',
+      body: 'Jump straight into Practice, live Classes, or your Profile from here — one tap and you\'re in.',
       pos: 'above', scrollTo: 'auto'
     },
     {

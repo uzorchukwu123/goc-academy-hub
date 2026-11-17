@@ -1,16 +1,16 @@
 /* test-tutors-appwrite-source.js — audit regression: tutor figures must read
    the Appwrite question bank, not the local data.json cache.
 
-   The defect: /api/tutor/subject counted a tutor's pending/returned questions
-   from db.questions, and /api/admin/tutors/analytics derived its subject list
-   from db.questions. In Appwrite mode db.questions is only a local cache that
-   is EMPTY on a fresh deploy, so both came back zero/empty while the real bank
+   The defect: /api/tutor/subject counted a tutor's own questions from
+   db.questions. In Appwrite mode db.questions is only a local cache that is
+   EMPTY on a fresh deploy, so the counts came back zero while the real bank
    (the Appwrite questions collection) held the tutor's rows.
 
    This boots the server against the in-memory Appwrite stand-in with the
    questions and the tutor seeded in Appwrite and a deliberately EMPTY local
-   question cache, then asserts the tutor's status counts and the admin
-   analytics subject list come from Appwrite.
+   question cache, then asserts the tutor's counts come from Appwrite.
+   (The admin tutor-analytics route this suite also covered was retired in the
+   Phase 1 sweep, so only the tutor-side route is checked now.)
    node test/test-tutors-appwrite-source.js */
 'use strict';
 var http = require('http');
@@ -118,17 +118,16 @@ function call(method, url, body, token) {
   var subj = await call('GET', '/api/tutor/subject?subject=Physics', undefined, tt);
   ok('the subject route answers', subj.status === 200, subj.status + ' ' + subj.raw);
   var sc = (subj.body && subj.body.statusCounts) || {};
-  ok('status counts come from Appwrite, not the empty cache (1 live / 1 pending / 1 returned)',
-    sc.live === 1 && sc.pending === 1 && sc.returned === 1, JSON.stringify(sc));
+  /* 1 live + the two non-live rows the retired approval queue could leave behind:
+     both read as "held", so the count still comes from Appwrite, not the cache. */
+  ok('counts come from Appwrite, not the empty cache (1 live / 2 held)',
+    sc.live === 1 && sc.held === 2, JSON.stringify(sc));
 
-  /* Admin analytics: the subject list must also come from Appwrite. */
-  var fl = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
-  var ft = fl.body && fl.body.token;
-  await call('POST', '/api/auth/unlock', { passcode: '2027' }, ft);
-  var an = await call('GET', '/api/admin/tutors/analytics', undefined, ft);
-  ok('admin tutor analytics answers', an.status === 200, an.status + ' ' + an.raw);
-  var subjects = ((an.body && an.body.reports) || []).map(function (r) { return r.subject; });
-  ok('the analytics subject list comes from Appwrite (Physics present)', subjects.indexOf('Physics') > -1, JSON.stringify(subjects));
+  /* The tutor's own question list reads the same Appwrite bank. */
+  var qs = await call('GET', '/api/tutor/questions?subject=Physics', undefined, tt);
+  ok('the tutor question list answers', qs.status === 200, qs.status + ' ' + qs.raw);
+  ok('and lists the Appwrite rows, not the empty cache',
+    ((qs.body && qs.body.questions) || []).length === 3, JSON.stringify((qs.body || {}).counts));
 
   await halt();
   console.log('\n' + passes + ' passed, ' + fails + ' failed');

@@ -42,20 +42,6 @@ function composeReminder(plan, student, links) {
     });
     smsBits.push('your ' + plan.streak + '-day streak ends tonight');
   }
-  if (kinds.indexOf('weekly') > -1) {
-    var w = plan.weekly || {};
-    var body;
-    if (w.done) {
-      body = 'You finished this week\u2019s quest (' + plural(w.days, 'daily quest', 'daily quests') + ', ' +
-        plural(w.questions, 'question', 'questions') + ' answered). Well done.';
-    } else {
-      body = 'This week so far: ' + w.days + ' of ' + w.targetDays + ' daily quests and ' +
-        w.questions + ' of ' + w.targetQuestions + ' practice questions. Reach either target and you earn a streak freeze. ' +
-        'The week closes tonight.';
-    }
-    sections.push({ head: 'Your week', body: body });
-    smsBits.push(w.done ? 'weekly quest done' : 'weekly quest: ' + w.days + '/' + w.targetDays + ' days');
-  }
   if (kinds.indexOf('review') > -1) {
     sections.push({
       head: plural(plan.dueCount, 'question is', 'questions are') + ' ready to review',
@@ -68,9 +54,7 @@ function composeReminder(plan, student, links) {
   var top = kinds[0];
   var subject = top === 'streak'
     ? 'Your ' + plural(plan.streak, 'day', 'days') + ' streak ends tonight \u2014 one quick practice keeps it'
-    : top === 'weekly'
-      ? 'Your week on G.O.C Academy Hub'
-      : plural(plan.dueCount, 'question', 'questions') + ' ready to review';
+    : plural(plan.dueCount, 'question', 'questions') + ' ready to review';
 
   var offLine = links && links.off
     ? 'Turn these reminders off: ' + links.off + '\n(You can also switch them off any time in Profile \u2192 Study reminders.)'
@@ -192,7 +176,7 @@ function createReminderService(deps) {
         var st = (db.reminderState && db.reminderState[s.id]) || {};
         var base = {
           student: s, prefs: st.prefs, sent: st.sent, today: today, hour: hour,
-          weekQuest: s.weekQuest, startHour: from, endHour: to
+          startHour: from, endHour: to
         };
         /* Cheap pass first: pretend one review is due. If even that sends
            nothing, the (heavier) real due count is never worked out. */
@@ -233,7 +217,6 @@ function createReminderService(deps) {
           if (delivered) {
             cur.sent = Object.assign({}, cur.sent);
             if (plan.kinds.indexOf('streak') > -1) cur.sent.streak = today;
-            if (plan.kinds.indexOf('weekly') > -1) cur.sent.weekly = core.weekStart(today);
             if (plan.kinds.indexOf('review') > -1) cur.sent.review = today;
             delete cur.fails;
           } else {

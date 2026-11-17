@@ -34,8 +34,12 @@ ok('the selector offers Tutors', /<option value="tutors">Tutors<\/option>/.test(
 var tutorsBranch = (app.match(/if\(section === 'tutors'\)\{[^}]*\}/) || [''])[0];
 ok('opening it loads the tutors (and the access log)',
    ['admTutLoad()', 'admAuditLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
-ok('and the two panels added since: Subjects & tutors, and Tutor Analytics',
-   ['admTutOverLoad()', 'admTutAnalyticsLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
+ok('and the Subjects & tutors panel added since',
+   ['admTutOverLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
+/* Phase 1 sweep: the Tutors panel no longer carries the per-subject analytics
+   card, so its loader is gone from the branch as well. */
+ok('and the retired Tutor Analytics loader is not called any more',
+   tutorsBranch.indexOf('admTutAnalyticsLoad') === -1, tutorsBranch);
 
 var calls = [], toasts = [], confirms = [], answer = true, tutors = [];
 var els = {};

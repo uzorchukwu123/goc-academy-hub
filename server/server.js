@@ -313,15 +313,10 @@ function appwriteStudentToRecord(doc) {
        attributes `tierChangedBy` size 80 and `tierChangedAt` size 40). */
     tierChangedBy: typeof doc.tierChangedBy === 'string' && doc.tierChangedBy ? doc.tierChangedBy : null,
     tierChangedAt: typeof doc.tierChangedAt === 'string' && doc.tierChangedAt ? doc.tierChangedAt : null,
+    /* Read-only: a daily-quest claim day left on a record written before the
+       daily quests were retired. Nothing writes it any more; it is carried so
+       the record round-trips without losing a field. */
     questDay: doc.questDay || null,
-    /* Weekly quest progress, kept as a small JSON string in the optional
-       string attribute `weekQuest` (size 80). Absent or unreadable = none. */
-    weekQuest: (() => {
-      try {
-        const v = typeof doc.weekQuest === 'string' ? JSON.parse(doc.weekQuest) : doc.weekQuest;
-        return v && typeof v === 'object' ? v : null;
-      } catch (_) { return null; }
-    })(),
     mustChangePassword: !!doc.must_change_password,
     goal: doc.goal || '',
     last: doc.last || null,
@@ -441,9 +436,9 @@ function appwriteQuery() {
 
 /* ---- questions: record <-> Appwrite document ---- */
 const APPROVAL_KEYS = ['status', 'addedBy', 'addedByName', 'addedAt', 'editedAt', 'batch', 'returnReason', 'reviewedBy', 'reviewedAt'];
-/* A full patch for a reviewed or edited tutor question: every approval field is named, so one
-   the rules cleared (an old return reason) is cleared in storage too. */
-function approvalPatch(rec) {
+/* An edit to a tutor's own question, ready to store. Every approval field is named, so a value
+   the edit cleared (status, an old return reason) is cleared in storage too. */
+function questionPatch(rec) {
   const p = Object.assign({}, rec);
   APPROVAL_KEYS.forEach(k => { if (p[k] === undefined) p[k] = ''; });
   return p;
@@ -472,9 +467,9 @@ function questionToDoc(rec) {
   /* Same rule for the picture: written only when set, so a collection made
      before these optional attributes existed keeps working. */
   if (rec.imageId) { doc.imageId = String(rec.imageId); doc.imageAlt = String(rec.imageAlt || ''); }
-  /* Phase 3C slice 6: the approval fields. Written only once a question has a status (a tutor's
-     question, or one the admin has reviewed), so a collection made before these optional
-     attributes existed keeps accepting every admin-added question. Blank means cleared. */
+  /* Phase 3C slice 6: the authorship fields. Written only once a question has a status (every
+     tutor-authored question carries one), so a collection made before these optional attributes
+     existed keeps accepting every admin-added question. Blank means cleared. */
   if (rec.status !== undefined) {
     doc.status = String(rec.status || '');
     APPROVAL_KEYS.slice(1).forEach(k => { doc[k] = String(rec[k] == null ? '' : rec[k]); });
@@ -570,9 +565,9 @@ function docToAttempt(doc) {
 
 /* ---- QUESTION accessors ---- */
 /* Only LIVE questions unless the caller says { all: true }. Students, papers, blueprints and the
-   tutor numbers all read through here, so a question awaiting approval (or returned) can never
-   reach them by a route that forgot to ask. The console's bank, imports and approval queue ask
-   for all of them. A question with no status is live. */
+   tutor numbers all read through here, so a question left non-live by the retired approval queue
+   can never reach them by a route that forgot to ask. The console's bank and imports ask for all
+   of them. A question with no status is live. */
 /* The same filtering the local branch has always done, extracted so the 2027
    Free Tutorial Edition can read the bank without ever asking Appwrite. */
 function filterLocalQuestions(rows, filter, localDb) {
@@ -583,8 +578,8 @@ function filterLocalQuestions(rows, filter, localDb) {
   /* Phase 4 — archived questions (soft-deleted) are excluded from every view
      unless the caller explicitly asks for them. Student pools, blueprint
      counts, and the normal admin bank never see archived questions.
-     { all: true } still excludes archived unless showArchived is also set,
-     so even the approval queue does not resurface soft-deleted records. */
+     { all: true } still excludes archived unless showArchived is also set, so
+     no read resurfaces a soft-deleted record. */
   if (!filter.showArchived) list = list.filter(q => !q.archived);
   if (filter.subject) list = list.filter(q => q.subject === filter.subject);
   if (filter.section) list = list.filter(q => q.section === filter.section);
@@ -1467,7 +1462,6 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
        GOC; a stored tier is only ever normalised, never promoted. */
     if (s.tier != null) s.tier = core.cleanTier(s.tier);
     if (s.questDay === undefined) s.questDay = null;
-    if (s.weekQuest === undefined) s.weekQuest = null;
     if (s.cohort === undefined) s.cohort = null;
     if (!Array.isArray(s.subjects) || s.subjects.length !== 4) {
       // Registered before subject combinations existed: give the default UTME
@@ -2109,10 +2103,10 @@ function studySecToday(s) {
   if (!s || s.studyDay !== core.dayStamp()) return 0;
   return Number(s.studySecToday) || 0;
 }
-/* Same day-stamped-reset shape again, this time for a guardian's "add 15
-   min" grants (see core.EXTRA_TIME_GRANT_MIN): both the extra minutes and
-   how many grants have been used today reset together, the moment the day
-   stamp no longer matches today. */
+/* Same day-stamped-reset shape again, this time for the extra minutes a day was
+   granted (see core.EXTRA_TIME_GRANT_MIN). The guardian-PIN grant was retired in
+   the Phase 1 sweep so nothing adds to these any more, but a record written
+   before that still carries them and the window must keep counting them. */
 function studyBonusMinToday(s) {
   if (!s || s.studyBonusDay !== core.dayStamp()) return 0;
   return Number(s.studyBonusMin) || 0;
@@ -2723,186 +2717,6 @@ async function handleResourceUpload(req, res) {
   }
 }
 
-/* ------------------------------------------------------------------ videos */
-/*
- * Handles an admin video upload. Mirrors handleResourceUpload, with one
- * difference: the file is optional. A video can be backed by an uploaded
- * MP4 (stored the same way a resource file is) or by an external link
- * (a Zoom cloud recording or an unlisted YouTube URL) — at least one of
- * the two is required, but not both.
- */
-async function handleVideoUpload(req, res) {
-  if (!appwriteResourcesStorage || !appwriteDatabases) {
-    return errJson(res, 503, 'Video storage is not available.');
-  }
-
-  const os = require('os');
-  const { InputFile } = require(
-    path.join(path.dirname(require.resolve('node-appwrite')), 'inputFile.js')
-  );
-
-  const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-video-'));
-  let tempFilePath = null;
-  let uploadedFileName = '';
-  let uploadedBytes = 0;
-  let fileSeen = false;
-
-  const fields = {};
-
-  try {
-    await new Promise((resolve, reject) => {
-      const busboy = getBusboy()({
-        headers: req.headers,
-        limits: {
-          files: 1,
-          fileSize: MAX_FILE_SIZE,
-          fields: 10,
-          fieldSize: 10 * 1024
-        }
-      });
-
-      let fileWritePromise = Promise.resolve();
-
-      busboy.on('field', (name, value) => {
-        fields[name] = String(value || '').trim();
-      });
-
-      busboy.on('file', (name, file, info) => {
-        fileSeen = true;
-
-        uploadedFileName = String(info.filename || 'video');
-        const ext = path.extname(uploadedFileName).toLowerCase();
-
-        if (ext !== '.mp4') {
-          file.resume();
-          return reject(new ClientError('Only .mp4 video files are allowed.'));
-        }
-
-        tempFilePath = path.join(
-          tempDir,
-          crypto.randomUUID() + ext
-        );
-
-        const writeStream = fs.createWriteStream(tempFilePath);
-
-        file.on('data', chunk => {
-          uploadedBytes += chunk.length;
-        });
-
-        file.on('limit', () => {
-          reject(new ClientError('The video file is too large. Maximum size is 50 MB.'));
-        });
-
-        file.pipe(writeStream);
-
-        fileWritePromise = new Promise((resolveWrite, rejectWrite) => {
-          writeStream.on('finish', resolveWrite);
-          writeStream.on('error', rejectWrite);
-          file.on('error', rejectWrite);
-        });
-      });
-
-      busboy.on('error', reject);
-
-      busboy.on('finish', async () => {
-        try {
-          await fileWritePromise;
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
-
-      req.pipe(busboy);
-    });
-
-    if (!fields.title) {
-      return errJson(res, 400, 'Video title is required.');
-    }
-
-    if (!fields.subject) {
-      return errJson(res, 400, 'Video subject is required.');
-    }
-
-    if (fields.type !== 'live' && fields.type !== 'lesson') {
-      return errJson(res, 400, 'Video type must be "live" or "lesson".');
-    }
-
-    if (!fields.tutor) {
-      return errJson(res, 400, 'Tutor / instructor name is required.');
-    }
-
-    if (!fields.duration) {
-      return errJson(res, 400, 'Video duration is required.');
-    }
-
-    const externalUrl = clean(fields.externalUrl || '', 500);
-
-    if (fileSeen && uploadedBytes <= 0) {
-      return errJson(res, 400, 'The uploaded file is empty.');
-    }
-
-    if (!fileSeen && !externalUrl) {
-      return errJson(res, 400, 'Provide either a video file or a link.');
-    }
-
-    if (externalUrl && !/^https?:\/\//i.test(externalUrl)) {
-      return errJson(res, 400, 'The link must start with http:// or https://.');
-    }
-
-    const videoId = 'VID-' + crypto.randomUUID().replace(/-/g, '').slice(0, 32);
-    let storageFileId = '';
-
-    if (fileSeen && tempFilePath) {
-      storageFileId = crypto.randomUUID();
-      const inputFile = InputFile.fromPath(tempFilePath, uploadedFileName);
-      await appwriteResourcesStorage.createFile(
-        APPWRITE_BUCKET_ID,
-        storageFileId,
-        inputFile
-      );
-    }
-
-    const record = {
-      videoId,
-      title: clean(fields.title, 255),
-      subject: clean(fields.subject, 100),
-      type: fields.type,
-      tutor: clean(fields.tutor, 100),
-      duration: clean(fields.duration, 20),
-      storageFileId,
-      externalUrl,
-      published: false
-    };
-
-    await appwriteDatabases.createDocument(
-      APPWRITE_DATABASE_ID,
-      APPWRITE_VIDEOS_COLLECTION_ID,
-      videoId,
-      record
-    );
-
-    return okJson(res, { ok: true, video: record });
-  } catch (err) {
-    return errJson(
-      res,
-      400,
-      safeClientMessage(err, 'Video upload failed. Please try again.')
-    );
-  } finally {
-    try {
-      if (tempFilePath && fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
-    } catch (_) {}
-
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (_) {}
-  }
-}
 
 /* ------------------------------------------------------------- video cache
    Every play used to re-download the whole file from Appwrite Storage into
@@ -3011,7 +2825,7 @@ function streamVideoFile(req, res, filePath) {
 
 /* Maps a liveclasses Appwrite document onto the one shape every class route
    returns, so the mapping lives in one place instead of being repeated at
-   each route the way the videos routes above do. */
+   each route. */
 function classFromDoc(doc) {
   return {
     classId: doc.classId || doc.$id,
@@ -3066,13 +2880,6 @@ function effectiveSettingsFor(db, cohort) {
     objectiveCounts: Object.assign({}, st.objectiveCounts || {}),
     jambMinutes: core.clampJambMinutes(st.jambMinutes),
     jambCounts: Object.assign({}, st.jambCounts || {}),
-    // The guardian PIN is academy-wide, not cohort-resolved (no cohort ever
-    // overrides it below), but a signed-in student still needs to know
-    // *whether* one is set so the wind-down overlay can decide whether to
-    // show its "enter the guardian PIN to keep going" field at all. Only
-    // the yes/no flag travels here — the digits themselves stay off every
-    // route but the console's own GET /api/settings.
-    hasGuardianPin: !!core.normalizeGuardianPin(st.guardianPin),
     cohortId: null, cohortName: null
   };
   if (!cohort) return base;
@@ -3869,9 +3676,8 @@ const ROUTES = [
 
   /* Overview panel — the four headline numbers, computed here in one place
      rather than the client stitching together four separate fetches.
-     "Lessons published" needs Appwrite (resources/videos live only there,
-     same as the admin resources/videos list routes); everything else works
-     in flat-file mode too. */
+     "Lessons published" needs Appwrite (resources live only there, same as the
+     admin resources list route); everything else works in flat-file mode too. */
   { method: 'GET', path: /^\/api\/admin\/overview$/, need: 'console', cap: 'overview.own', handler: async (req, res, body, sess) => {
       const db = readData();
       const students = appwriteDatabases ? await listAppwriteStudents() : db.students;
@@ -4160,22 +3966,15 @@ const ROUTES = [
 
   { method: 'GET', path: /^\/api\/settings$/, need: null, handler: (req, res, body, sess) => {
       const st = readData().settings;
-      // Only the values the app needs to draw itself. No hashes, no secrets —
-      // and the guardian PIN is a secret, so it is never sent here at all.
-      // Everyone (including a logged-out visitor) may know a PIN feature
-      // exists; only console gets the digits back, to prefill the edit form.
-      const isConsole = !!(sess && sess.data && sess.data.role === 'admin' && sess.data.unlocked);
-      const out = {
+      // Only the values the app needs to draw itself. No hashes, no secrets.
+      okJson(res, {
         dailyLimitMin: st.dailyLimitMin,
         sessionMinutes: st.sessionMinutes,
         sessionWarnMinutes: st.sessionWarnMinutes,
         objectiveMinutes: core.clampObjectiveMinutes(st.objectiveMinutes),
         jambMinutes: core.clampJambMinutes(st.jambMinutes),
-        jambReadyMin: core.clampJambReadyMin(st.jambReadyMin),
-        hasGuardianPin: !!core.normalizeGuardianPin(st.guardianPin)
-      };
-      if (isConsole) out.guardianPin = st.guardianPin || '';
-      okJson(res, out);
+        jambReadyMin: core.clampJambReadyMin(st.jambReadyMin)
+      });
     } },
 
   { method: 'PUT', path: /^\/api\/settings$/, need: 'console', cap: 'sittings.configure', handler: (req, res, body) => {
@@ -4198,20 +3997,6 @@ const ROUTES = [
       if (body.jambReadyMin !== undefined) {
         db.settings.jambReadyMin = core.clampJambReadyMin(body.jambReadyMin);
       }
-      /* Sending an empty string clears the PIN back to "feature off", the same
-         {field: ''/null} convention cohorts use to mean "go back to unset".
-         A non-empty value that isn't 4-8 digits is refused outright, so a typo
-         can never lock the feature into an unusable PIN silently. */
-      if (body.guardianPin !== undefined) {
-        const raw = String(body.guardianPin == null ? '' : body.guardianPin).trim();
-        if (!raw) {
-          db.settings.guardianPin = null;
-        } else {
-          const norm = core.normalizeGuardianPin(raw);
-          if (!norm) return errJson(res, 400, 'A guardian PIN must be 4 to 8 digits.');
-          db.settings.guardianPin = norm;
-        }
-      }
       /* Shortening the session can leave a warning longer than the session it
          warns about, so the pair is always settled together. */
       db.settings.sessionWarnMinutes =
@@ -4223,9 +4008,7 @@ const ROUTES = [
         sessionWarnMinutes: db.settings.sessionWarnMinutes,
         objectiveMinutes: core.clampObjectiveMinutes(db.settings.objectiveMinutes),
         jambMinutes: core.clampJambMinutes(db.settings.jambMinutes),
-        jambReadyMin: core.clampJambReadyMin(db.settings.jambReadyMin),
-        hasGuardianPin: !!core.normalizeGuardianPin(db.settings.guardianPin),
-        guardianPin: db.settings.guardianPin || ''
+        jambReadyMin: core.clampJambReadyMin(db.settings.jambReadyMin)
       });
     } },
 
@@ -4535,20 +4318,17 @@ const ROUTES = [
       const db = readData();
       const questions = await listQuestions({ subject, all: true }, db);
       const mine = core.subjectDepth(questions, db.notes).find(r => r.subject === subject);
-      /* Count all questions for this subject by status so the tutor sees pending/returned
-         questions, not only approved 'live' ones (subjectDepth skips non-live rows).
-         Read from the SAME fetched list as the depth figures above — in Appwrite
-         mode db.questions is only the local cache and can be empty or stale, which
-         made these counts read zero while the bank actually held the tutor's rows. */
-      const statusCounts = { live: 0, pending: 0, returned: 0, other: 0 };
+      /* Count the tutor's own questions for this subject: how many are live on a student's paper
+         and how many are held back (switched off, or left non-live by the retired approval
+         queue). Read from the SAME fetched list as the depth figures above — in Appwrite mode
+         db.questions is only the local cache and can be empty or stale, which made these counts
+         read zero while the bank actually held the tutor's rows. */
+      const statusCounts = { live: 0, held: 0 };
       (questions || []).forEach(q => {
         if (!q || q.subject !== subject) return;
         if (q.addedBy !== sess.tutor.id) return;
-        const s = q.status || 'live';
-        if (s === 'live') statusCounts.live++;
-        else if (s === 'pending') statusCounts.pending++;
-        else if (s === 'returned') statusCounts.returned++;
-        else statusCounts.other++;
+        if (core.questionIsLive(q)) statusCounts.live++;
+        else statusCounts.held++;
       });
       okJson(res, { subject, subjects: sess.tutor.subjects.slice(), depth: mine, statusCounts });
     } },
@@ -4581,66 +4361,6 @@ const ROUTES = [
       });
     } },
 
-
-  /* Admin console tutor analytics.
-     Access requires an authenticated console session and the
-     existing tutors.accounts capability. */
-  {
-    method: 'GET',
-    path: /^\/api\/admin\/tutors\/analytics$/,
-    need: 'console',
-    cap: 'tutors.accounts',
-    handler: async (req, res) => {
-      const db = readData();
-      const students = appwriteDatabases
-        ? await listAppwriteStudents()
-        : (db.students || []);
-
-      const runsByStudent = {};
-      students.forEach(st => {
-        if (!st || !st.id) return;
-        const runs = db.practiceRuns && db.practiceRuns[st.id];
-        if (Array.isArray(runs)) {
-          runsByStudent[st.id] = core.dropOldRuns(runs);
-        }
-      });
-
-      /* The subject list comes from the data-access layer, not the local blob:
-         in Appwrite mode db.questions is a cache that can be empty on a fresh
-         deploy, which used to make this report come back with no subjects at all. */
-      const bank = await listQuestions({ all: true }, db);
-      const subjects = Array.from(new Set(
-        bank
-          .filter(q => q && q.subject)
-          .map(q => q.subject)
-      ));
-
-      const reports = [];
-
-      for (const subject of subjects) {
-        const attempts = await listAttempts({ subject }, db);
-        const snapshot = core.tutorSnapshot(
-          subject, students, runsByStudent, attempts, Date.now()
-        );
-
-        const stats = db.answerStats &&
-          Object.prototype.hasOwnProperty.call(db.answerStats, subject)
-          ? db.answerStats[subject]
-          : {};
-
-        reports.push({
-          subject,
-          snapshot,
-          activity: core.tutorActivity(
-            subject, students, runsByStudent, attempts, Date.now()
-          ),
-          weakTopics: core.rankWeakTopics(stats)
-        });
-      }
-
-      okJson(res, { reports });
-    }
-  },
 
   /* Phase 3C, at-risk list, slice 2: GET /api/tutor/atrisk?subject=[&sort=inactive|score]. The tutor's
      own subject only (same scope guard as every tutor route). GOC students taking the subject who have
@@ -4775,17 +4495,16 @@ const ROUTES = [
 
   /* ---- Phase 3C slice 6, part 2: tutor questions. Every route here is for the tutor's OWN
      questions in the tutor's OWN subjects, checked against the tutor record read on this
-     request. Whatever a tutor types or imports is saved as Awaiting approval; nothing a tutor
-     sends can set a status, an author or a review mark (core.stampTutorQuestion and
-     core.tutorEditQuestion overwrite them). Students never see a question until the admin
-     approves it (listQuestions serves live questions only). */
+     request. A tutor's question is live as soon as it is saved (owner decision, Phase 1 sweep:
+     the approval queue was retired); nothing a tutor sends can set an author or a review mark
+     (core.stampTutorQuestion and core.tutorEditQuestion overwrite them). */
   { method: 'GET', path: /^\/api\/tutor\/questions$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, new URL(req.url, 'http://x').searchParams.get('subject'));
       if (!subject) return;
       const db = readData();
       const mine = core.tutorQuestions(await listQuestions({ subject, all: true }, db), sess.tutor);
-      const counts = { live: 0, pending: 0, returned: 0 };
-      mine.forEach(q => { counts[core.questionStatus(q)] += 1; });
+      const counts = { live: 0, held: 0 };
+      mine.forEach(q => { counts[core.questionIsLive(q) ? 'live' : 'held'] += 1; });
       okJson(res, { subject, subjects: sess.tutor.subjects.slice(), counts, questions: mine });
     } },
 
@@ -4809,8 +4528,7 @@ const ROUTES = [
     } },
 
   /* Bulk import: the same CSV reader and checks as the console, fixed to the tutor's subject,
-     every kept row saved as Awaiting approval under one batch id so the admin can approve the
-     whole import at once. */
+     every kept row published under one batch id so the import can be traced back as one job. */
   { method: 'POST', path: /^\/api\/tutor\/questions\/import$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, body && body.subject);
       if (!subject) return;
@@ -4834,9 +4552,6 @@ const ROUTES = [
         for (const rec of r.records) {
           const st = core.stampTutorQuestion(rec, sess.tutor, { batch }, now);
           if (st.error) { errors.push(st.error); continue; }
-          /* Leave status as 'pending' so imported questions sit in the approval
-             queue just like individually submitted tutor questions. The admin
-             approves the whole batch in one go via POST /api/approvals/batch/approve. */
           db.settings.questionSeq = (db.settings.questionSeq || 0) + 1;
           st.rec.id = db.settings.questionSeq;
           /* createQuestion pushes the record into db.questions before writeData
@@ -4849,7 +4564,7 @@ const ROUTES = [
                         target: subject + '/' + (section || 'any') + (stampSection ? ' (stamped)' : ''),
                         read: r.read, added: ids.length, skipped: errors.length, by: sess.tutor.id });
         writeData(db);
-        okJson(res, { read: r.read, added: ids.length, ids, skipped: errors.length, errors, batch, status: ids.length ? 'pending' : '' });
+        okJson(res, { read: r.read, added: ids.length, ids, skipped: errors.length, errors, batch, status: ids.length ? 'live' : '' });
       });
     } },
 
@@ -4866,26 +4581,25 @@ const ROUTES = [
       const ed = core.tutorEditQuestion(sess.tutor, cur, v.rec, Date.now());
       if (ed.error) return errJson(res, 403, ed.error);
       ed.rec.id = cur.id;
-      await updateQuestion(cur.id, approvalPatch(ed.rec), db);
+      await updateQuestion(cur.id, questionPatch(ed.rec), db);
       writeData(db);
       okJson(res, { question: ed.rec, changed: true });
     } },
 
-  /* Withdraw (hide) or republish one's own APPROVED question. This only flips the question's
-     on/off switch: it can never make an unapproved question live. */
+  /* Switch one's own question off, or back on. This only flips the question's on/off switch. */
   { method: 'PUT', path: /^\/api\/tutor\/questions\/(\d+)\/active$/, need: 'tutor', handler: async (req, res, body, sess, params) => {
       if (typeof body.active !== 'boolean') return errJson(res, 400, 'Say whether the question is on or off.');
       const db = readData();
       const cur = await findQ(db, params[0]);
       if (!cur || !core.tutorOwnsQuestion(sess.tutor, cur)) return errJson(res, 404, 'That question is not one of yours.');
-      if (!core.questionIsLive(cur)) return errJson(res, 400, 'Only an approved question can be withdrawn or republished.');
+      if (!core.questionIsLive(cur)) return errJson(res, 400, 'That question is not on a student\'s paper yet.');
       await updateQuestion(cur.id, { active: body.active }, db);
       writeData(db);
       okJson(res, { question: Object.assign({}, cur, { active: body.active }), changed: true });
     } },
 
-  /* Delete one's own question once it is not showing to students: awaiting approval, returned,
-     or withdrawn. (Same rule as the console: switch it off first.) */
+  /* Delete one's own question once it is not showing to students — a held-back legacy row, or one
+     switched off first. (Same rule as the console: switch it off first.) */
   { method: 'DELETE', path: /^\/api\/tutor\/questions\/(\d+)$/, need: 'tutor', handler: async (req, res, body, sess, params) => {
       const db = readData();
       const cur = await findQ(db, params[0]);
@@ -5212,48 +4926,6 @@ const ROUTES = [
       });
     } },
 
-  /* ---- The admin side of the same rules (the console screen for these is the next part). ---- */
-  { method: 'GET', path: /^\/api\/approvals$/, need: 'console', cap: 'approvals.review', handler: async (req, res) => {
-      const db = readData();
-      const subject = new URL(req.url, 'http://x').searchParams.get('subject') || '';
-      const queue = core.approvalQueue(await listQuestions({ all: true }, db), subject);
-      okJson(res, { count: queue.length, queue });
-    } },
-
-  { method: 'POST', path: /^\/api\/approvals\/batch\/approve$/, need: 'console', cap: 'approvals.review', handler: async (req, res, body, sess) => {
-      const db = readData();
-      const r = core.approveBatch(await listQuestions({ all: true }, db), body && body.batch, reviewerOf(sess), Date.now());
-      if (r.error) return errJson(res, 400, r.error);
-      for (const rec of r.recs) await updateQuestion(rec.id, approvalPatch(rec), db);
-      writeData(db);
-      okJson(res, { approved: r.recs.length, skipped: r.skipped });
-    } },
-
-  { method: 'POST', path: /^\/api\/approvals\/(\d+)\/(approve|return)$/, need: 'console', cap: 'approvals.review', handler: async (req, res, body, sess, params) => {
-      const db = readData();
-      const cur = await findQ(db, params[0]);
-      if (!cur) return errJson(res, 404, 'That question no longer exists.');
-      /* "Edit then approve": the admin's changes go through the console's own validator, the
-         author and review marks stay exactly as the tutor left them, then the rules approve it. */
-      let target = cur, edited = false;
-      if (params[1] === 'approve' && body && body.edit && typeof body.edit === 'object') {
-        const v = core.validateQuestion(Object.assign({}, cur, body.edit));
-        if (v.error) return errJson(res, 400, v.error);
-        const pl = core.passageLinkError(v.rec, db.passages);
-        if (pl) return errJson(res, 400, pl);
-        const il = imageLinkError(v.rec);
-        if (il) return errJson(res, 400, il);
-        target = Object.assign({}, cur, v.rec, { id: cur.id });
-        APPROVAL_KEYS.forEach(k => { if (cur[k] !== undefined) target[k] = cur[k]; else delete target[k]; });
-        edited = true;
-      }
-      const r = core.reviewQuestion(target, params[1], reviewerOf(sess), body && body.reason, Date.now());
-      if (r.error) return errJson(res, 400, r.error);
-      await updateQuestion(cur.id, approvalPatch(r.rec), db);
-      writeData(db);
-      okJson(res, { question: r.rec, decision: params[1], edited });
-    } },
-
   {
     method: 'GET',
     path: /^\/api\/tutors$/,
@@ -5388,7 +5060,6 @@ const ROUTES = [
       const rows = core.subjectDepth(db.questions, db.notes).map(r => {
         r.tutors = db.tutors.filter(t => t.active !== false && t.subjects.indexOf(r.subject) > -1)
                             .map(t => ({ id: t.id, name: t.name }));
-        r.pending = core.approvalQueue(db.questions, r.subject).length;
         r.lastUpload = core.lastTutorUpload(db.questions, r.subject);
         return r;
       });
@@ -5819,30 +5490,6 @@ const ROUTES = [
       });
     } },
 
-  /* Daily quest (Phase 2, slice 2): today's quest for this student — answer
-     core.DAILY_QUEST_TARGET questions in their weakest topic (or any topic when
-     there is no history yet) — and how far along it is. Read-only, computed
-     from the stored practice runs by core.dailyQuest. */
-  { method: 'GET', path: /^\/api\/me\/quest$/, need: 'student', handler: async (req, res, body, sess) => {
-      const db = readData();
-      okJson(res, { quest: core.dailyQuest(await practiceRunsOf(db, sess.data.id)) });
-    } },
-
-  /* Weekly quest (Phase 2, weekly quest slice 2): this calendar week's quest
-     (Monday to Sunday) and the student's progress — daily quests finished and
-     practice questions answered, whichever reaches its target first. Read-only.
-     The counters are kept on the student by the study-submit route (never sent
-     by the page); core.weeklyQuest only reads them, and reads a record from an
-     earlier week as empty. */
-  { method: 'GET', path: /^\/api\/me\/weekly-quest$/, need: 'student', handler: async (req, res, body, sess) => {
-      const db = readData();
-      const s = appwriteDatabases
-        ? await getAppwriteStudent(sess.data.id).catch(() => null)
-        : db.students.find(x => x.id === sess.data.id);
-      if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-      okJson(res, { weeklyQuest: core.weeklyQuest(s.weekQuest, core.dayStamp()), streakFreezes: s.streakFreezes || 0 });
-    } },
-
   { method: 'POST', path: /^\/api\/me\/practice$/, need: 'student', handler: async (req, res, body, sess) => {
       const rec = sanitizePracticeRun(body);
       if (!rec) return errJson(res, 400, 'A practice run needs a review with at least one question.');
@@ -6247,66 +5894,6 @@ const ROUTES = [
       okJson(res, core.studyWindowStatus(eff.dailyLimitMin, studySecToday(stu), studyBonusMinToday(stu)));
     } },
 
-  /* "Add 15 min (guardian PIN)" — see DAILY-STUDY-WINDOW-STATUS.txt. A single
-     academy-wide PIN, checked here against db.settings.guardianPin, grants a
-     fixed EXTRA_TIME_GRANT_MIN on top of today's window, up to
-     EXTRA_TIME_MAX_GRANTS_PER_DAY times a day. Wrong-PIN guesses share the
-     same tooManyAttempts(ip)/noteFailure(ip) throttle already used on
-     login/signup, so this can't be brute-forced any more easily than a
-     password. */
-  { method: 'POST', path: /^\/api\/me\/study-time\/extend$/, need: 'student', handler: async (req, res, body, sess) => {
-      const ip = getClientIp(req);
-      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-
-      const db = readData();
-      let stu = appwriteDatabases
-        ? await getAppwriteStudentOrNull(sess.data.id)
-        : db.students.find(x => x.id === sess.data.id);
-      if (!stu) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-
-      if (!core.normalizeGuardianPin(db.settings.guardianPin)) {
-        return errJson(res, 403, 'No guardian PIN has been set for this academy.');
-      }
-      if (!core.guardianPinMatches(db.settings.guardianPin, body && body.pin)) {
-        noteFailure(ip);
-        return errJson(res, 401, 'That PIN is not correct.');
-      }
-      attempts.delete(ip);
-
-      if (studyExtendCountToday(stu) >= core.EXTRA_TIME_MAX_GRANTS_PER_DAY) {
-        return errJson(res, 403, "Today's extra time has already been used up.");
-      }
-
-      const today = core.dayStamp();
-      const afterBonus = studyBonusMinToday(stu) + core.EXTRA_TIME_GRANT_MIN;
-      const afterCount = studyExtendCountToday(stu) + 1;
-
-      if (appwriteDatabases) {
-        // studyBonusMin/studyBonusDay/studyExtendCount are new attributes that
-        // may not exist yet on a live Appwrite "students" collection — reads
-        // of an unmapped field are safe (undefined/0), but this write will
-        // throw until the academy adds them, so that case gets a clear
-        // message instead of a raw 500.
-        try {
-          const updated = await updateAppwriteStudent(sess.data.id, {
-            studyBonusDay: today, studyBonusMin: afterBonus, studyExtendCount: afterCount
-          });
-          stu = appwriteStudentToRecord(updated);
-        } catch (err) {
-          return errJson(res, 500, 'Could not save the extra time. Ask the academy to add the studyBonusMin, studyBonusDay and studyExtendCount attributes to the Appwrite students collection, then try again.');
-        }
-      } else {
-        stu.studyBonusDay = today;
-        stu.studyBonusMin = afterBonus;
-        stu.studyExtendCount = afterCount;
-        writeData(db);
-      }
-
-      const cohort = stu.cohort ? await getCohortOrNull(stu.cohort).catch(() => null) : null;
-      const eff = effectiveSettingsFor(db, cohort);
-      okJson(res, core.studyWindowStatus(eff.dailyLimitMin, studySecToday(stu), studyBonusMinToday(stu)));
-    } },
-
   /* A student reads only notes for a paper they sit, and only what management
      has left active. */
   { method: 'GET', path: /^\/api\/me\/notes$/, need: 'student', handler: async (req, res, body, sess) => {
@@ -6563,8 +6150,7 @@ const ROUTES = [
           stu = db.students.find(x => x.id === sess.data.id);
         }
 
-        let gain = 0, left = 0, earned = 0, questBonus = 0, questClaimed = false, questDone = false;
-        let weekAfter = null, weekDirty = false, weekReward = null, finalFreezes = null;
+        let gain = 0, left = 0, earned = 0, finalFreezes = null;
         let challengeOut = null;
 
         /* A submitted study run — mock/CBT or practice — is the student's own
@@ -6582,70 +6168,7 @@ const ROUTES = [
           earned = core.xpForPractice(marked.answered, marked.correct);
           gain = Math.min(left, earned);
 
-          /* Daily quest (Phase 2, slice 5). Whether the quest is done is worked
-             out here from the answers this side just marked, added to the runs
-             already stored — never from anything the page claims. The reward
-             comes out of the same daily allowance as the run's own XP, and the
-             day is claimed once (stu.questDay). On Appwrite the claim is
-             written FIRST; if the optional string attribute `questDay` has not
-             been added to the students collection that write fails and no
-             bonus is paid, so the bonus can never be collected twice. */
-          const thisRun = {
-            ts: Date.now(), subject: paper.subject,
-            review: pool.map((q, i) => {
-              const a = marked.answers[i] || {};
-              return { subject: paper.subject, topic: q.topic, given: a.given === undefined ? null : a.given, isCorrect: !!a.isCorrect };
-            })
-          };
-          const storedRuns = await practiceRunsOf(db, sess.data.id);
-          const quest = core.dailyQuest([thisRun].concat(storedRuns));
-          questDone = !!quest.done;
-          let qr = core.questReward(quest, stu.questDay, practiceXpToday(stu) + gain);
-          if (qr.claim && appwriteDatabases) {
-            try { await updateAppwriteStudent(sess.data.id, { questDay: qr.day }); }
-            catch (e) { qr = { claim: false, award: 0, day: null }; }
-          }
-          questBonus = qr.award;
-          questClaimed = qr.claim;
-
-          /* Weekly quest (Phase 2, weekly slice 2 and 3): fold this run into the
-             week, from the answers this side just marked — and from whether
-             this run collected today's daily quest, which only the server
-             decides. The page sends none of it. When that completes the week,
-             one streak freeze is paid, counted on top of whatever the streak
-             itself just spent on this run, and the week is marked paid in the
-             same write (a student already holding the most freezes keeps the
-             week unpaid until a later run finds room — core.weeklyReward).
-             On Appwrite the weekly write is made FIRST and on its own: the
-             progress and, when a freeze is due, the paid mark plus the new
-             freeze count go in ONE patch, so a missing optional attribute
-             (`weekQuest` string, or `streakFreezes` integer) fails the whole
-             patch and nothing is paid. If the paid patch fails the progress
-             alone is tried; if that fails too the week simply goes uncounted
-             and nothing else is affected. */
-          const weekToday = core.dayStamp();
-          const weekBefore = core.cleanWeekQuest(stu.weekQuest, weekToday);
-          weekAfter = core.weeklyQuestAfterRun(stu.weekQuest, weekToday, { answered: marked.answered, dailyClaimed: questClaimed });
-          weekReward = core.weeklyReward(core.weeklyQuest(weekAfter, weekToday), streakUpdate.freezes);
-          const weekPaid = weekReward.claim ? core.weeklyQuestClaimed(weekAfter, weekToday) : weekAfter;
-          if (appwriteDatabases) {
-            let saved = false;
-            if (weekReward.claim) {
-              try {
-                await updateAppwriteStudent(sess.data.id, { weekQuest: JSON.stringify(weekPaid), streakFreezes: weekReward.freezes });
-                saved = true; weekAfter = weekPaid;
-              } catch (e) { weekReward = { claim: false, award: 0, freezes: streakUpdate.freezes, blocked: null }; }
-            }
-            if (!saved) {
-              try { await updateAppwriteStudent(sess.data.id, { weekQuest: JSON.stringify(weekAfter) }); }
-              catch (e) { weekAfter = weekBefore; }
-            }
-          } else {
-            weekAfter = weekPaid;
-            stu.weekQuest = weekAfter;
-            weekDirty = true;
-          }
-          finalFreezes = weekReward.freezes;
+          finalFreezes = streakUpdate.freezes;
 
           /* Phase 4.C: team (cohort) challenge. Fold this run's answered count into
              the student's capped contribution and, if the team has now met the goal,
@@ -6673,7 +6196,7 @@ const ROUTES = [
               }
             } catch (e) { /* a challenge glitch never breaks a practice submit */ }
           }
-          const total = gain + questBonus;
+          const total = gain;
 
           if (total > 0) {
             const newXp = (stu.xp || 0) + total;
@@ -6695,16 +6218,14 @@ const ROUTES = [
               stu.xp = newXp;
               stu.practiceXpDay = newPracticeXpDay;
               stu.practiceXpToday = newPracticeXpToday;
-              if (questClaimed) stu.questDay = qr.day;
               stu.streak = streakUpdate.streak;
               stu.streakDay = streakUpdate.day;
               stu.streakFreezes = finalFreezes;
               writeData(db);
             }
-          } else if (streakChanged || (questClaimed && !appwriteDatabases) || weekDirty) {
+          } else if (streakChanged) {
             // Today's practice cap was already hit, so no XP moves — but the
-            // run itself still counts as today's activity for the streak (and
-            // a completed quest is still marked as collected for the day).
+            // run itself still counts as today's activity for the streak.
             if (appwriteDatabases) {
               const updated = await updateAppwriteStudent(sess.data.id, {
                 streak: streakUpdate.streak, streakDay: streakUpdate.day,
@@ -6715,7 +6236,6 @@ const ROUTES = [
               stu.streak = streakUpdate.streak;
               stu.streakDay = streakUpdate.day;
               stu.streakFreezes = finalFreezes;
-              if (questClaimed) stu.questDay = qr.day;
               writeData(db);
             }
           }
@@ -6765,12 +6285,8 @@ const ROUTES = [
         xpTotal: stu ? (stu.xp || 0) : 0,
         level: core.levelFor(stu ? (stu.xp || 0) : 0),
         streak: stu ? (stu.streak || 0) : 0,
-        xpLeftToday: mode === 'practice' ? Math.max(0, left - gain - questBonus) : 0,
+        xpLeftToday: mode === 'practice' ? Math.max(0, left - gain) : 0,
         xpCapped: mode === 'practice' && gain < earned,
-        questXp: questBonus, questClaimed: questClaimed, questDone: questDone,
-        weekQuest: weekAfter ? core.weeklyQuest(weekAfter, core.dayStamp()) : null,
-        weekClaimed: !!(weekReward && weekReward.claim),
-        freezeAwarded: weekReward ? weekReward.award : 0,
         challenge: challengeOut,
         streakFreezes: stu ? (finalFreezes != null ? finalFreezes : (stu.streakFreezes || 0)) : 0,
         review: pool.map((q, i) => {
@@ -7391,7 +6907,7 @@ const ROUTES = [
         /* Replace mode: matching questions are corrected where they stand (same id). */
         const replacedIds = [];
         /* The patch is laid over the stored question first, so a store that rewrites the
-           whole record (Appwrite) keeps the picture, the live flag and any approval fields. */
+           whole record (Appwrite) keeps the picture, the live flag and the authorship fields. */
         const stored = {};
         existing.forEach(q => { stored[String(q.id)] = q; });
         for (const rp of (ri.replacements || [])) {
@@ -8236,148 +7752,6 @@ const ROUTES = [
       return errJson(res, 404, 'Could not open that video.');
     }
   } },
-
-  { method: 'GET', path: /^\/api\/admin\/videos$/, need: 'console', cap: 'resources.publish', handler: async (req, res) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    try {
-      const { Query } = require('node-appwrite');
-      const result = await appwriteDatabases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        [Query.limit(5000)]
-      );
-
-      const videos = result.documents.map(doc => ({
-        videoId: doc.videoId || doc.$id,
-        title: doc.title || '',
-        subject: doc.subject || '',
-        type: doc.type || 'lesson',
-        tutor: doc.tutor || '',
-        duration: doc.duration || '',
-        storageFileId: doc.storageFileId || '',
-        externalUrl: doc.externalUrl || '',
-        published: !!doc.published,
-        createdAt: doc.$createdAt || null,
-        updatedAt: doc.$updatedAt || null
-      }));
-
-      videos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-      return okJson(res, { videos });
-    } catch (err) {
-      console.error('[goc] Video list failed:', err.message);
-      return errJson(res, 500, 'Could not load videos.');
-    }
-  } },
-
-  { method: 'PUT', path: /^\/api\/admin\/videos\/([A-Za-z0-9._-]+)\/published$/, need: 'console', cap: 'resources.publish', handler: async (req, res, body, sess, params) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    const videoId = params[0];
-    const published = body && typeof body.published === 'boolean'
-      ? body.published
-      : null;
-
-    if (published === null) {
-      return errJson(res, 400, 'Published must be true or false.');
-    }
-
-    try {
-      const doc = await appwriteDatabases.updateDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId,
-        { published }
-      );
-
-      return okJson(res, {
-        video: {
-          videoId: doc.videoId || doc.$id,
-          title: doc.title || '',
-          subject: doc.subject || '',
-          type: doc.type || 'lesson',
-          tutor: doc.tutor || '',
-          duration: doc.duration || '',
-          storageFileId: doc.storageFileId || '',
-          externalUrl: doc.externalUrl || '',
-          published: !!doc.published,
-          createdAt: doc.$createdAt || null,
-          updatedAt: doc.$updatedAt || null
-        }
-      });
-    } catch (err) {
-      console.error('[goc] Video publish update failed:', err.message);
-      return errJson(res, 500, 'Could not update the video publication status.');
-    }
-  } },
-
-  { method: 'POST', path: /^\/api\/admin\/videos\/upload$/, need: 'console', cap: 'resources.publish', multipart: true, handler: (req, res, body, sess) => {
-    return handleVideoUpload(req, res, sess);
-  } },
-
-  /* Same rule as resource deletion: a published video must be unpublished
-     first, so a live student-facing recording can never be deleted by
-     accident. Best-effort removes the stored file (when there is one —
-     a link-only video has none) before clearing the database record. */
-  { method: 'DELETE', path: /^\/api\/admin\/videos\/([A-Za-z0-9._-]+)$/, need: 'console', cap: 'resources.publish', handler: async (req, res, body, sess, params) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    const videoId = params[0];
-    let doc = null;
-
-    try {
-      doc = await appwriteDatabases.getDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId
-      );
-    } catch (err) {
-      if (err && (err.code === 404 || err.status === 404)) {
-        return okJson(res, { ok: true, deleted: videoId, alreadyGone: true });
-      }
-      console.error('[goc] Video lookup before delete failed:', err.message);
-      return errJson(res, 500, 'Could not look up that video.');
-    }
-
-    if (doc && doc.published) {
-      return errJson(res, 400, 'Unpublish this video before deleting it.');
-    }
-
-    if (doc && doc.storageFileId && appwriteResourcesStorage) {
-      try {
-        await appwriteResourcesStorage.deleteFile(APPWRITE_BUCKET_ID, doc.storageFileId);
-      } catch (fileErr) {
-        console.error('[goc] Video file delete failed (continuing):', fileErr.message);
-      }
-      clearCachedVideo(doc.storageFileId);
-    }
-
-    try {
-      await appwriteDatabases.deleteDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId
-      );
-      return okJson(res, { ok: true, deleted: videoId });
-    } catch (err) {
-      if (err && (err.code === 404 || err.status === 404)) {
-        return okJson(res, { ok: true, deleted: videoId, alreadyGone: true });
-      }
-      console.error('[goc] Video delete failed:', err.message);
-      return errJson(res, 500, 'Could not delete the video.');
-    }
-  } },
-
-  /* ------------------------------------------------------------ classes
-     Live classes (Zoom schedule). Lives only in Appwrite — same convention
-     as resources/videos, no flat-file fallback. classFromDoc keeps the one
-     mapping in one place instead of repeating it at every route. */
 
   { method: 'GET', path: /^\/api\/classes$/, need: 'student', handler: async (req, res, body, sess) => {
     if (!appwriteDatabases) {

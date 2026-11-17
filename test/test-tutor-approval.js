@@ -1,4 +1,9 @@
-/* test-tutor-approval.js — Phase 3C slice 6, part 1: the question approval rules (pure).
+/* test-tutor-approval.js — the tutor-question ownership and authorship rules (pure).
+   The approval queue this suite was written for was retired in the Phase 1 sweep: a
+   tutor's question is live as soon as it is saved. What is left to check here is the
+   part that still runs — who may author and edit what, and how an edit is stamped —
+   plus the one thing the retirement must not break: a row a tutor saved BEFORE the
+   sweep that still says 'pending' or 'returned' must stay off students' papers.
    node test/test-tutor-approval.js */
 'use strict';
 var path = require('path');
@@ -35,16 +40,16 @@ ok('the serving pool holds back pending and returned questions', (function () {
 
 console.log('\nstamping a tutor question');
 var st = core.stampTutorQuestion(q0, chem, { batch: 'IMP-1' }, T0);
-ok('saved as pending with the author, name and time', st.rec && st.rec.status === 'pending' && st.rec.addedBy === 'GOC-T-001' && st.rec.addedByName === 'Mrs Ada Obi' && st.rec.addedAt === T0);
+ok('saved as live, with the author, name and time', st.rec && st.rec.status === 'live' && st.rec.addedBy === 'GOC-T-001' && st.rec.addedByName === 'Mrs Ada Obi' && st.rec.addedAt === T0);
 ok('an import batch is kept', st.rec && st.rec.batch === 'IMP-1');
 ok('a typed question has no batch', !('batch' in core.stampTutorQuestion(q0, chem, {}, T0).rec));
 ok('the original is not changed', q0.status === undefined && q0.addedBy === undefined);
 ok('a Chemistry tutor cannot add Physics', /do not teach Physics/.test(core.stampTutorQuestion({ subject: 'Physics', text: 'x' }, chem, {}, T0).error || ''));
 ok('a switched-off tutor cannot add', !!core.stampTutorQuestion(q0, { id: 'GOC-T-001', subjects: ['Chemistry'], active: false }, {}, T0).error);
 ok('no tutor, no record: refused', !!core.stampTutorQuestion(q0, null, {}, T0).error && !!core.stampTutorQuestion(null, chem, {}, T0).error);
-ok('a forged live status or review mark is overwritten', (function () {
-  var r = core.stampTutorQuestion({ id: 'Q9', subject: 'Chemistry', status: 'live', reviewedBy: 'x', returnReason: 'y' }, chem, {}, T0).rec;
-  return r.status === 'pending' && r.reviewedBy === undefined && r.returnReason === undefined;
+ok('a forged status, review mark or return reason is overwritten', (function () {
+  var r = core.stampTutorQuestion({ id: 'Q9', subject: 'Chemistry', status: 'pending', reviewedBy: 'x', returnReason: 'y' }, chem, {}, T0).rec;
+  return r.status === 'live' && r.reviewedBy === undefined && r.returnReason === undefined;
 })());
 ok('a bad time falls back to now rather than breaking', /^\d{4}-/.test(core.stampTutorQuestion(q0, chem, {}, 'junk').rec.addedAt));
 
@@ -54,63 +59,46 @@ ok('a tutor owns their own question', core.tutorOwnsQuestion(chem, mine));
 ok('another tutor does not', !core.tutorOwnsQuestion(phys, mine));
 ok('an admin-added question (no author) is not a tutor\'s', !core.tutorOwnsQuestion(chem, q0));
 ok('a tutor moved off the subject loses it', !core.tutorOwnsQuestion({ id: 'GOC-T-001', subjects: ['Biology'], active: true }, mine));
-var live = core.reviewQuestion(mine, 'approve', admin, '', T1).rec;
+var live = mine;
 var ed = core.tutorEditQuestion(chem, live, { subject: 'Chemistry', section: 'objective', topic: 'Acids', text: 'Which of these is a strong acid?' }, T1);
-ok('editing a live tutor question sends it back to pending', ed.rec && ed.rec.status === 'pending');
+ok('editing a tutor question leaves it live, straight on the paper', ed.rec && ed.rec.status === 'live');
 ok('the edit keeps id, author and first-added time', ed.rec && ed.rec.id === 'Q1' && ed.rec.addedBy === 'GOC-T-001' && ed.rec.addedAt === T0 && ed.rec.batch === 'IMP-1');
 ok('the edit clears the old review marks', ed.rec && ed.rec.reviewedBy === undefined && ed.rec.reviewedAt === undefined);
 ok('the new text is in', ed.rec && /Which of these/.test(ed.rec.text) && ed.rec.editedAt === T1);
-ok('a returned question edited goes back to pending and loses the reason', (function () {
-  var ret = core.reviewQuestion(mine, 'return', admin, 'Option C is also correct', T1).rec;
+ok('a legacy returned row edited goes back live and loses the old reason', (function () {
+  var ret = { id: 'Q1', subject: 'Chemistry', status: 'returned', returnReason: 'Option C is also correct', addedBy: 'GOC-T-001' };
   var e = core.tutorEditQuestion(chem, ret, { subject: 'Chemistry', text: 'Fixed question text here' }, T1).rec;
-  return e.status === 'pending' && e.returnReason === undefined;
+  return e.status === 'live' && e.returnReason === undefined;
 })());
 ok('another tutor cannot edit it', !!core.tutorEditQuestion(phys, live, { subject: 'Physics', text: 'xxxxxxxxx' }, T1).error);
 ok('a tutor cannot edit an admin question', !!core.tutorEditQuestion(chem, q0, { subject: 'Chemistry', text: 'xxxxxxxxx' }, T1).error);
 ok('a tutor cannot move their question into another subject', /do not teach Physics/.test(core.tutorEditQuestion(chem, live, { subject: 'Physics', text: 'xxxxxxxxx' }, T1).error || ''));
-ok('an edit cannot smuggle a live status or another author', (function () {
-  var e = core.tutorEditQuestion(chem, live, { subject: 'Chemistry', text: 'xxxxxxxxx', status: 'live', addedBy: 'GOC-T-002' }, T1).rec;
-  return e.status === 'pending' && e.addedBy === 'GOC-T-001';
+ok('an edit cannot smuggle a held-back status or another author', (function () {
+  var e = core.tutorEditQuestion(chem, live, { subject: 'Chemistry', text: 'xxxxxxxxx', status: 'pending', addedBy: 'GOC-T-002' }, T1).rec;
+  return e.status === 'live' && e.addedBy === 'GOC-T-001';
 })());
 
-console.log('\nreviewing');
-var ap = core.reviewQuestion(mine, 'approve', admin, '', T1);
-ok('approve makes it live and records who and when', ap.rec && ap.rec.status === 'live' && ap.rec.reviewedBy === 'Founder' && ap.rec.reviewedAt === T1);
-ok('an approved question can be served', ap.rec && core.servablePool([ap.rec], []).length === 1);
-var rt = core.reviewQuestion(mine, 'return', admin, '  Option C is also correct  ', T1);
-ok('return needs a reason and keeps it trimmed', rt.rec && rt.rec.status === 'returned' && rt.rec.returnReason === 'Option C is also correct');
-ok('a returned question is not served', rt.rec && core.servablePool([rt.rec], []).length === 0);
-ok('return without a reason is refused', /Say why/.test(core.reviewQuestion(mine, 'return', admin, ' ', T1).error || ''));
-ok('a very long reason is refused', !!core.reviewQuestion(mine, 'return', admin, new Array(400).join('a'), T1).error);
-ok('an unknown decision is refused', /approve or return/.test(core.reviewQuestion(mine, 'publish', admin, '', T1).error || ''));
-ok('a tutor cannot approve', /management/.test(core.reviewQuestion(mine, 'approve', { id: 'GOC-T-002', name: 'Mr Eze', role: 'tutor' }, '', T1).error || ''));
-ok('a tutor cannot approve even without a role label if they are the author', !!core.reviewQuestion(mine, 'approve', { id: 'GOC-T-001', name: 'Mrs Ada Obi' }, '', T1).error);
-ok('no reviewer is refused', !!core.reviewQuestion(mine, 'approve', null, '', T1).error);
-ok('only a pending question can be reviewed', !!core.reviewQuestion(ap.rec, 'approve', admin, '', T1).error && !!core.reviewQuestion(q0, 'return', admin, 'reason here', T1).error);
-ok('the pending original is not changed by a review', mine.status === 'pending' && mine.reviewedBy === undefined);
-
-console.log('\napprove a whole import');
-var imp = [1, 2, 3].map(function (n) { return core.stampTutorQuestion({ id: 'B' + n, subject: 'Chemistry', text: 'Question number ' + n }, chem, { batch: 'IMP-7' }, T0).rec; });
-imp.push(core.stampTutorQuestion({ id: 'C1', subject: 'Chemistry', text: 'Another import entirely' }, chem, { batch: 'IMP-8' }, T0).rec);
-imp[1] = core.reviewQuestion(imp[1], 'return', admin, 'Needs a clearer stem', T1).rec; /* already returned: skipped */
-var ab = core.approveBatch(imp, 'IMP-7', admin, T1);
-ok('every pending question in the batch is approved', ab.recs && ab.recs.length === 2 && ab.recs.every(function (r) { return r.status === 'live' && r.batch === 'IMP-7'; }));
-ok('a question already returned is left alone and counted', ab.skipped === 1);
-ok('another batch is untouched', ab.recs && ab.recs.every(function (r) { return r.id !== 'C1'; }));
-ok('no batch given is refused', !!core.approveBatch(imp, '', admin, T1).error);
-ok('a tutor cannot approve a batch', !!core.approveBatch(imp, 'IMP-7', { id: 'GOC-T-002', name: 'Mr Eze', role: 'tutor' }, T1).error);
-ok('an unknown batch approves nothing', core.approveBatch(imp, 'IMP-99', admin, T1).recs.length === 0);
+console.log('\nrows left behind by the retired queue');
+var legacyPending = { id: 'L1', subject: 'Chemistry', text: 'left pending', status: 'pending', addedBy: 'GOC-T-001' };
+var legacyReturned = { id: 'L2', subject: 'Chemistry', text: 'left returned', status: 'returned', addedBy: 'GOC-T-001' };
+ok('a row left pending is not live, so no student is served it',
+   !core.questionIsLive(legacyPending) && core.servablePool([legacyPending], []).length === 0);
+ok('a row left returned is not live either',
+   !core.questionIsLive(legacyReturned) && core.servablePool([legacyReturned], []).length === 0);
+ok('the live pool really does drop them while keeping a live row',
+   core.servablePool([legacyPending, legacyReturned, live], []).length === 1);
+ok('there is no reviewer or return reason left to read anywhere', (function () {
+  var r = core.stampTutorQuestion(q0, chem, {}, T0).rec;
+  return r.reviewedBy === undefined && r.reviewedAt === undefined && r.returnReason === undefined;
+})());
 
 console.log('\nlists and counts');
 var all = [q0,
-  core.stampTutorQuestion({ id: 'P1', subject: 'Chemistry', text: 'older pending one' }, chem, {}, '2026-10-01T08:00:00.000Z').rec,
-  core.stampTutorQuestion({ id: 'P2', subject: 'Physics', text: 'newer pending one' }, phys, {}, '2026-10-05T08:00:00.000Z').rec,
-  core.stampTutorQuestion({ id: 'P3', subject: 'Chemistry', text: 'newest pending one' }, chem, {}, '2026-10-07T08:00:00.000Z').rec,
-  core.reviewQuestion(core.stampTutorQuestion({ id: 'P4', subject: 'Chemistry', text: 'approved already' }, chem, {}, '2026-10-02T08:00:00.000Z').rec, 'approve', admin, '', T1).rec];
-ok('the queue lists pending questions across subjects, oldest first', core.approvalQueue(all).map(function (q) { return q.id; }).join() === 'P1,P2,P3');
-ok('the queue can be limited to one subject', core.approvalQueue(all, 'Chemistry').map(function (q) { return q.id; }).join() === 'P1,P3');
-ok('the pending count matches the queue', core.pendingCount(all) === 3 && core.pendingCount([]) === 0 && core.pendingCount() === 0);
-ok('a tutor sees only their own, in any status, newest first', core.tutorQuestions(all, chem).map(function (q) { return q.id; }).join() === 'P3,P4,P1');
+  core.stampTutorQuestion({ id: 'P1', subject: 'Chemistry', text: 'older one' }, chem, {}, '2026-10-01T08:00:00.000Z').rec,
+  core.stampTutorQuestion({ id: 'P2', subject: 'Physics', text: 'newer one' }, phys, {}, '2026-10-05T08:00:00.000Z').rec,
+  core.stampTutorQuestion({ id: 'P3', subject: 'Chemistry', text: 'newest one' }, chem, {}, '2026-10-07T08:00:00.000Z').rec,
+  core.stampTutorQuestion({ id: 'P4', subject: 'Chemistry', text: 'second oldest' }, chem, {}, '2026-10-02T08:00:00.000Z').rec];
+ok('a tutor sees only their own, newest first', core.tutorQuestions(all, chem).map(function (q) { return q.id; }).join() === 'P3,P4,P1');
 ok('a tutor never sees another tutor\'s or the admin\'s', core.tutorQuestions(all, phys).map(function (q) { return q.id; }).join() === 'P2');
 ok('last upload is the newest stamp for the subject', core.lastTutorUpload(all, 'Chemistry') === '2026-10-07T08:00:00.000Z' && core.lastTutorUpload(all, 'Physics') === '2026-10-05T08:00:00.000Z');
 ok('no tutor upload gives blank', core.lastTutorUpload(all, 'Biology') === '' && core.lastTutorUpload([], 'Physics') === '');

@@ -1,5 +1,8 @@
-/* test-tutor-questions.js — Phase 3C slice 6, part 2: tutor questions and the approval routes, on the
-   real server over HTTP.
+/* test-tutor-questions.js — the tutor question routes on the real server over HTTP.
+   The approval queue these routes fed was retired in the Phase 1 sweep: a tutor's question
+   is live as soon as it is saved. This suite now checks the authorship, ownership, import
+   and withdraw/delete rules, and that a row left non-live before the sweep stays off a
+   student's paper.
    node test/test-tutor-questions.js */
 'use strict';
 var http = require('http');
@@ -89,16 +92,16 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   var c1 = await call('POST', '/api/tutor/questions', good, chem.token);
   ok('a good question is accepted', c1.status === 200 && c1.body.created && c1.body.question.id > 0, c1.raw);
   var q1 = c1.body.question;
-  ok('it is saved as Awaiting approval, stamped with the tutor and a time', q1.status === 'pending' && q1.addedBy === chem.id && q1.addedByName === 'Mrs Ada Obi' && /^\d{4}-/.test(q1.addedAt), JSON.stringify(q1));
+  ok('it is saved live, stamped with the tutor and a time', q1.status === 'live' && q1.addedBy === chem.id && q1.addedByName === 'Mrs Ada Obi' && /^\d{4}-/.test(q1.addedAt), JSON.stringify(q1));
   var forged = await call('POST', '/api/tutor/questions', Object.assign({}, good, { text: 'ZQXFORGED a forged live question', status: 'live', addedBy: 'GOC-A-001', reviewedBy: 'Founder' }), chem.token);
-  ok('a forged live status, author or review mark is ignored', forged.body.question.status === 'pending' && forged.body.question.addedBy === chem.id && forged.body.question.reviewedBy === undefined, forged.raw);
+  ok('a forged held-back status, author or review mark is ignored', forged.body.question.status === 'live' && forged.body.question.addedBy === chem.id && forged.body.question.reviewedBy === undefined, forged.raw);
   ok('a malformed question is refused with the same reason as the console', /at least two options/.test((await call('POST', '/api/tutor/questions', Object.assign({}, good, { options: ['only one'] }), chem.token)).body.error || ''));
   ok('a tutor cannot add to a subject they do not teach', (await call('POST', '/api/tutor/questions', Object.assign({}, good, { subject: 'Physics' }), chem.token)).status === 403);
   ok('a subject left blank means the tutor\'s own', (await call('POST', '/api/tutor/questions', Object.assign({}, good, { subject: '', text: 'ZQXLIME which gas turns limewater milky?' }), chem.token)).body.question.subject === 'Chemistry');
   var th = await call('POST', '/api/tutor/questions', { subject: 'Chemistry', section: 'theory', topic: 'Acids', text: 'ZQXTHEORY explain why hydrochloric acid is a strong acid.', expected: 'It ionises completely in water.', maxMark: 5 }, chem.token);
-  ok('a tutor can type a theory question for their subject', th.status === 200 && th.body.question.status === 'pending' && th.body.question.section === 'theory', th.raw);
+  ok('a tutor can type a theory question for their subject', th.status === 200 && th.body.question.status === 'live' && th.body.question.section === 'theory', th.raw);
 
-  console.log('\nstudents never see it');
+  console.log('\nwhat a student is served');
   /* Seed one live Chemistry question through the console, in the OBJECTIVE
      section on purpose: its job is the paper-depth check further down, which
      counts a new live objective row. (An older comment here said this row was
@@ -107,20 +110,21 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
      bank js/goc-core.js seeds, so nothing extra is needed for it.) */
   await call('POST', '/api/questions', { subject: 'Chemistry', section: 'objective', topic: 'Acids', text: 'ZQXSEED what is the pH of pure water?', options: ['5', '6', '7', '8'], answer: 2, difficulty: 'easy' }, adm);
   var viaAll = await call('GET', '/api/me/study?subject=Chemistry', null, gTok);
-  ok('the study screen is unchanged by pending questions', viaAll.status === 200, viaAll.raw.slice(0, 200));
-  ok('the question text is nowhere in what a student can read', viaAll.raw.indexOf('ZQX') < 0 || viaAll.raw.indexOf('ZQXSEED') > -1);
+  ok('the study screen still answers', viaAll.status === 200, viaAll.raw.slice(0, 200));
   var run = await call('POST', '/api/me/study/start', { mode: 'practice', subject: 'Chemistry', count: 50 }, gTok);
-  ok('a practice run never contains a pending question', run.status === 200 && run.raw.indexOf('ZQXALPHA') < 0 && run.raw.indexOf('ZQXLIME') < 0 && run.raw.indexOf('ZQXFORGED') < 0, run.raw.slice(0, 120));
+  ok('a practice run now contains the tutor\'s new questions, with no approval step',
+     run.status === 200 && run.raw.indexOf('ZQXALPHA') > -1 && run.raw.indexOf('ZQXLIME') > -1,
+     run.raw.slice(0, 120));
   var counts0 = await call('GET', '/api/tutor/analytics?subject=Chemistry', null, chem.token);
   ok('the tutor snapshot route still works', counts0.status === 200);
   var depth = await call('GET', '/api/tutor/subject?subject=Chemistry', null, chem.token);
-  ok('the paper depth excludes pending questions but counts the new live objective', depth.body.depth.theory === depth0.theory && depth.body.depth.objective === depth0.objective + 1, JSON.stringify({before: depth0, after: depth.body.depth}));
+  ok('the paper depth counts the new live rows', depth.body.depth.theory === depth0.theory + 1 && depth.body.depth.objective === depth0.objective + 1, JSON.stringify({before: depth0, after: depth.body.depth}));
   var consoleList = await call('GET', '/api/questions?subject=Chemistry', null, adm);
-  ok('the console bank does list them, with their status', consoleList.body.questions.some(function (q) { return q.id === q1.id && q.status === 'pending'; }));
+  ok('the console bank lists them, with their status', consoleList.body.questions.some(function (q) { return q.id === q1.id && q.status === 'live'; }));
 
   console.log('\ntheir own list');
   var mine = await call('GET', '/api/tutor/questions?subject=Chemistry', null, chem.token);
-  ok('a tutor sees their own questions with counts', mine.status === 200 && mine.body.questions.length === 4 && mine.body.counts.pending === 4 && mine.body.counts.live === 0, mine.raw.slice(0, 200));
+  ok('a tutor sees their own questions with counts', mine.status === 200 && mine.body.questions.length === 4 && mine.body.counts.live === 4 && mine.body.counts.held === 0, mine.raw.slice(0, 200));
   ok('another tutor sees none of them', (await call('GET', '/api/tutor/questions', null, phys.token)).body.questions.length === 0);
   ok('and cannot ask for another subject', (await call('GET', '/api/tutor/questions?subject=Chemistry', null, phys.token)).status === 403);
   var admQ = (await call('POST', '/api/questions', Object.assign({}, good, { text: 'ZQXADMIN an admin-added chemistry question' }), adm)).body;
@@ -134,39 +138,26 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
   ok('a tutor cannot move a question into another subject', (await call('PUT', '/api/tutor/questions/' + q1.id, Object.assign({}, good, { subject: 'Physics' }), chem.token)).status === 403);
   ok('a bad edit is refused and nothing changes', (await call('PUT', '/api/tutor/questions/' + q1.id, { text: 'x' }, chem.token)).status === 400);
 
-  console.log('\nthe admin reviews');
-  var queue = await call('GET', '/api/approvals', null, adm);
-  ok('the queue holds the four, oldest first', queue.status === 200 && queue.body.count === 4 && queue.body.queue[0].id === q1.id, queue.raw.slice(0, 160));
-  ok('the queue can be limited to a subject', (await call('GET', '/api/approvals?subject=Physics', null, adm)).body.count === 0);
-  ok('a tutor cannot open the queue or approve', (await call('GET', '/api/approvals', null, chem.token)).status === 403 && (await call('POST', '/api/approvals/' + q1.id + '/approve', {}, chem.token)).status === 403);
-  ok('a student cannot approve', [401, 403].indexOf((await call('POST', '/api/approvals/' + q1.id + '/approve', {}, gTok)).status) > -1);
-  var ret = await call('POST', '/api/approvals/' + q1.id + '/return', { reason: '' }, adm);
-  ok('a return without a reason is refused', ret.status === 400 && /Say why/.test(ret.body.error), ret.raw);
-  var ret2 = await call('POST', '/api/approvals/' + q1.id + '/return', { reason: 'Option C is also correct' }, adm);
-  ok('a return with a reason works', ret2.status === 200 && ret2.body.question.status === 'returned');
-  var afterRet = await call('GET', '/api/tutor/questions?subject=Chemistry', null, chem.token);
-  var retRow = afterRet.body.questions.filter(function (q) { return q.id === q1.id; })[0];
-  ok('the tutor sees it Returned, with the reason', retRow.status === 'returned' && retRow.returnReason === 'Option C is also correct' && afterRet.body.counts.returned === 1);
-  ok('a returned question is still hidden from students', (await call('POST', '/api/me/study/start', { mode: 'practice', subject: 'Chemistry', count: 50 }, gTok)).raw.indexOf('ZQXALPHA') < 0);
-  var fixed = await call('PUT', '/api/tutor/questions/' + q1.id, Object.assign({}, good, { text: 'ZQXALPHA which of the following is a strong mineral acid?', options: ['Ethanoic acid', 'Hydrochloric acid', 'Citric acid', 'Tartaric acid'] }), chem.token);
-  ok('editing a returned question sends it back to Awaiting approval and clears the reason', fixed.body.question.status === 'pending' && !fixed.body.question.returnReason, fixed.raw);
-  var ap = await call('POST', '/api/approvals/' + q1.id + '/approve', {}, adm);
-  ok('approve makes it live and records who', ap.status === 200 && ap.body.question.status === 'live' && ap.body.question.reviewedBy === 'Ernest Uzorchukwu', ap.raw);
-  ok('approving it twice is refused', (await call('POST', '/api/approvals/' + q1.id + '/approve', {}, adm)).status === 400);
-  var stored = readDb().questions.filter(function (q) { return q.id === q1.id; })[0];
-  ok('the stored question carries the approval fields and no stale return reason', stored.status === 'live' && stored.addedBy === chem.id && stored.reviewedBy === 'Ernest Uzorchukwu' && stored.returnReason === undefined, JSON.stringify(stored));
-  var served = await call('POST', '/api/me/study/start', { mode: 'practice', subject: 'Chemistry', count: 50 }, gTok);
-  ok('once approved, students can be served it', served.status === 200 && served.raw.indexOf('ZQXALPHA') > -1, served.raw.slice(0, 120));
-  ok('the other three are still hidden', served.raw.indexOf('ZQXFORGED') < 0 && served.raw.indexOf('ZQXLIME') < 0);
+  console.log('\nthe approval routes are gone');
+  ok('the queue endpoint no longer exists', (await call('GET', '/api/approvals', null, adm)).status === 404);
+  ok('a tutor, a student and management are all refused the same way',
+     [(await call('GET', '/api/approvals', null, chem.token)).status,
+      (await call('GET', '/api/approvals', null, gTok)).status].every(function (st) { return st === 404; }));
+  ok('approving or returning one question is gone',
+     (await call('POST', '/api/approvals/' + q1.id + '/approve', {}, adm)).status === 404 &&
+     (await call('POST', '/api/approvals/' + q1.id + '/return', { reason: 'no' }, adm)).status === 404);
+  ok('approving a whole import is gone', (await call('POST', '/api/approvals/batch/approve', { batch: 'X' }, adm)).status === 404);
 
   console.log('\nwithdraw, put back, delete');
-  ok('a pending question cannot be withdrawn', (await call('PUT', '/api/tutor/questions/' + forged.body.question.id + '/active', { active: false }, chem.token)).status === 400);
-  ok('an approved question can be withdrawn', (await call('PUT', '/api/tutor/questions/' + q1.id + '/active', { active: false }, chem.token)).status === 200);
+  ok('a live question can be withdrawn', (await call('PUT', '/api/tutor/questions/' + q1.id + '/active', { active: false }, chem.token)).status === 200);
   ok('a withdrawn question is not served', (await call('POST', '/api/me/study/start', { mode: 'practice', subject: 'Chemistry', count: 50 }, gTok)).raw.indexOf('ZQXALPHA') < 0);
-  ok('it can be put back live (no new approval needed)', (await call('PUT', '/api/tutor/questions/' + q1.id + '/active', { active: true }, chem.token)).status === 200);
+  ok('it can be put back live', (await call('PUT', '/api/tutor/questions/' + q1.id + '/active', { active: true }, chem.token)).status === 200);
   ok('a live, showing question cannot be deleted', (await call('DELETE', '/api/tutor/questions/' + q1.id, undefined, chem.token)).status === 400);
   ok('another tutor cannot delete it', (await call('DELETE', '/api/tutor/questions/' + q1.id, undefined, phys.token)).status === 404);
-  ok('a pending question can be deleted by its tutor', (await call('DELETE', '/api/tutor/questions/' + forged.body.question.id, undefined, chem.token)).body.deleted === forged.body.question.id);
+  ok('a withdrawn question can be deleted by its tutor', await (async function () {
+    await call('PUT', '/api/tutor/questions/' + forged.body.question.id + '/active', { active: false }, chem.token);
+    return (await call('DELETE', '/api/tutor/questions/' + forged.body.question.id, undefined, chem.token)).body.deleted === forged.body.question.id;
+  })());
   ok('the switch takes a true or false only', (await call('PUT', '/api/tutor/questions/' + q1.id + '/active', { active: 'no' }, chem.token)).status === 400);
 
   console.log('\nimporting a file');
@@ -177,29 +168,21 @@ function csvOf(rows) { return 'subject,section,topic,text,optionA,optionB,option
     'Chemistry,objective,Salts,"Too few options here",only one,,,,,A,,,medium,'
   ]);
   var imp = await call('POST', '/api/tutor/questions/import', { csv: csv, filename: 'salts.csv' }, chem.token);
-  ok('good rows are imported as Awaiting approval under one batch', imp.status === 200 && imp.body.added === 2 && /^IMP-/.test(imp.body.batch) && imp.body.status === 'pending', imp.raw.slice(0, 300));
+  ok('good rows are imported live under one batch', imp.status === 200 && imp.body.added === 2 && /^IMP-/.test(imp.body.batch) && imp.body.status === 'live', imp.raw.slice(0, 300));
   ok('rows for another subject or with faults are skipped and reported', imp.body.skipped === 2 && imp.body.errors.length === 2, imp.raw.slice(0, 300));
   var impRows = (await call('GET', '/api/tutor/questions?subject=Chemistry', null, chem.token)).body.questions.filter(function (q) { return q.batch === imp.body.batch; });
-  ok('each imported question is stamped with the tutor, the time and the batch', impRows.length === 2 && impRows.every(function (q) { return q.status === 'pending' && q.addedBy === chem.id && q.addedAt; }));
+  ok('each imported question is stamped with the tutor, the time and the batch', impRows.length === 2 && impRows.every(function (q) { return q.status === 'live' && q.addedBy === chem.id && q.addedAt; }));
   ok('nothing of the Physics row got in', readDb().questions.every(function (q) { return q.text !== 'A row for another subject entirely'; }));
   ok('a Chemistry tutor cannot import into Physics', (await call('POST', '/api/tutor/questions/import', { csv: csv, subject: 'Physics' }, chem.token)).status === 403);
   ok('an empty or bad file is refused', (await call('POST', '/api/tutor/questions/import', { csv: '' }, chem.token)).status === 400);
   ok('the import is in the console\'s history, by the tutor', (await call('GET', '/api/import/history', null, adm)).body.imports.some(function (i) { return i.filename === 'salts.csv' && i.by === chem.id; }));
   ok('importing the same file again is not blocked, each run is its own batch', (await call('POST', '/api/tutor/questions/import', { csv: csv }, chem.token)).body.batch !== imp.body.batch || true);
 
-  console.log('\napprove a whole import');
-  var qB = await call('GET', '/api/approvals?subject=Chemistry', null, adm);
-  ok('the import waits in the queue', qB.body.queue.filter(function (q) { return q.batch === imp.body.batch; }).length === 2);
-  ok('a tutor cannot approve a batch', (await call('POST', '/api/approvals/batch/approve', { batch: imp.body.batch }, chem.token)).status === 403);
-  ok('no batch named is refused', (await call('POST', '/api/approvals/batch/approve', {}, adm)).status === 400);
-  var ab = await call('POST', '/api/approvals/batch/approve', { batch: imp.body.batch }, adm);
-  ok('the admin approves the whole import in one go', ab.status === 200 && ab.body.approved === 2, ab.raw);
-  ok('only that batch went live', (await call('GET', '/api/approvals?subject=Chemistry', null, adm)).body.queue.every(function (q) { return q.batch !== imp.body.batch; }));
-
   console.log('\nsubjects and tutors');
   var ov = await call('GET', '/api/tutors/overview', null, adm);
   var chemRow = ov.body.subjects.filter(function (r) { return r.subject === 'Chemistry'; })[0];
-  ok('the overview shows pending questions and the last upload per subject', typeof chemRow.pending === 'number' && chemRow.pending >= 1 && /^\d{4}-/.test(chemRow.lastUpload), JSON.stringify(chemRow));
+  ok('the overview shows the last tutor upload per subject, with no approval backlog field',
+     chemRow.pending === undefined && /^\d{4}-/.test(chemRow.lastUpload), JSON.stringify(chemRow));
   ok('a subject with no tutor upload shows none', ov.body.subjects.filter(function (r) { return r.subject === 'Biology'; })[0].lastUpload === '');
 
   console.log('\nswitched-off tutor');

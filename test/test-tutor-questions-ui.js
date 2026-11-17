@@ -28,7 +28,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   };
   doc.getElementById = function (id) { return id === 'loginId' ? { focus: function () {} } : md.Doc.prototype.getElementById.call(doc, id); };
 
-  var calls = [], list = [], counts = { live: 1, pending: 1, returned: 1 }, nextError = null, confirmAnswer = true, importReply = null;
+  var calls = [], list = [], counts = { live: 2, held: 1 }, nextError = null, confirmAnswer = true, importReply = null;
   function reply(status, body) { return Promise.resolve({ ok: status < 400, status: status, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
   function fetchStub(url, opts) {
     var method = (opts && opts.method) || 'GET', body = opts && opts.body ? JSON.parse(opts.body) : null;
@@ -37,7 +37,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     if (/^api\/tutor\/subject/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: 0 } });
     if (/^api\/tutor\/analytics/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], snapshot: { gocStudents: 0, openStudents: 0, active: 0, activeDays: 7, practice: { answers: 0, correct: 0, average: null, small: false }, tests: { papers: 0, average: null, small: false } }, weakTopics: { items: [], hidden: 0, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } });
     if (nextError && /^api\/tutor\/questions/.test(url) && method !== 'GET') { var e = nextError; nextError = null; return reply(e.status, { error: e.error }); }
-    if (/^api\/tutor\/questions\/import/.test(url)) return reply(200, importReply || { read: 2, added: 2, skipped: 0, errors: [], batch: 'IMP-X', status: 'pending' });
+    if (/^api\/tutor\/questions\/import/.test(url)) return reply(200, importReply || { read: 2, added: 2, skipped: 0, errors: [], batch: 'IMP-X', status: 'live' });
     if (/^api\/tutor\/questions/.test(url)) {
       if (method === 'GET') return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], counts: counts, questions: list });
       return reply(200, { ok: true, question: {} });
@@ -68,17 +68,21 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
 
   console.log('\nthe dashboard card');
   ok('the questions are asked for with the subject and the token', qcalls()[0].url === 'api/tutor/questions?subject=Chemistry' && qcalls()[0].auth === 'Bearer tok-9', JSON.stringify(qcalls()[0]));
-  ok('the card shows the three counts', /Your questions in Chemistry/.test(text()) && /Awaiting approval/.test(text()) && /Returned/.test(text()), text());
-  ok('it says new questions wait for the admin', /wait for the admin before students see them/.test(text()));
+  ok('the card shows the live and held-back counts', /Your questions in Chemistry/.test(text()) && /Live/.test(text()) && /Held back/.test(text()), text());
+  ok('it says a new question is live at once, with no approval step',
+     /live straight away/.test(text()) && !/wait for the admin/.test(text()), text());
 
   console.log('\nthe list');
   click(btn('qopen'));
-  ok('the list shows every status badge', /Awaiting approval/.test(text()) && /Live/.test(text()) && /Returned/.test(text()), text());
-  ok('a returned question shows the admin\'s reason', /Returned:/.test(text()) && /is also right/.test(text()));
+  ok('the list shows a live badge and a held-back one', /Live/.test(text()) && /Held back/.test(text()), text());
+  ok('a row the retired queue left behind says it is held back, without a reviewer\'s reason',
+     /held back — students are not seeing it/.test(text()) && !/Returned:/.test(text()), text());
   ok('question text and reasons are escaped, never markup', raw().indexOf('<b>one</b>') < 0 && raw().indexOf('&lt;b&gt;one&lt;/b&gt;') > -1 && raw().indexOf('<i>C</i>') < 0);
-  ok('a pending question offers Edit and Delete, no withdraw', all('button[data-act=qedit]').length === 3 && all('button[data-act=qdelete]').length === 2 && all('button[data-act=qwithdraw]').length === 1);
-  click(all('button[data-act=qfilter]')[1]);
-  ok('the filter keeps only that status', /Pending/.test(text()) && !/A live question/.test(text()) && !/A returned question/.test(text()), text());
+  ok('a held-back question offers Edit and Delete, no withdraw', all('button[data-act=qedit]').length === 3 && all('button[data-act=qdelete]').length === 2 && all('button[data-act=qwithdraw]').length === 1);
+  /* chips are All · Live · Held back: index 1 is Live, index 2 Held back */
+  click(all('button[data-act=qfilter]')[2]);
+  ok('the Held back filter keeps only the non-live rows',
+     /A returned question/.test(text()) && /Pending/.test(text()) && !/A live question/.test(text()), text());
   click(all('button[data-act=qfilter]')[0]);
 
   console.log('\nwithdraw and delete');
@@ -95,7 +99,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
 
   console.log('\nadding a question');
   click(btn('qnew'));
-  ok('the form opens on Objective with five options', !!q('#zxText') && !!q('#zxO4') && !q('#zxExp') && /once the admin approves it/.test(text()));
+  ok('the form opens on Objective with five options', !!q('#zxText') && !!q('#zxO4') && !q('#zxExp') && /as soon as you save it/.test(text()), text());
   calls.length = 0;
   q('#zxTopic').value = 'Acids'; q('#zxText').value = 'Which is a strong acid?';
   q('#zxO0').value = 'Ethanoic acid'; q('#zxO1').value = 'Hydrochloric acid'; q('#zxO2').value = ''; q('#zxO3').value = ''; q('#zxO4').value = '';
@@ -107,7 +111,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   var post = calls.filter(function (c) { return c.method === 'POST'; })[1];
   ok('a good save sends the question for the open subject', post && post.url === 'api/tutor/questions' && post.body.subject === 'Chemistry' && post.body.section === 'objective' && post.body.answer === 1 && post.body.options.length === 5, JSON.stringify(post));
   ok('it never sends a status, author or review mark', post && post.body.status === undefined && post.body.addedBy === undefined && post.body.reviewedBy === undefined);
-  ok('after saving, the list shows a message about approval', /Sent for approval/.test(text()) && !q('#zxText'), text());
+  ok('after saving, the list says the question is live', /It is live on your paper now/.test(text()) && !q('#zxText'), text());
 
   console.log('\na theory question');
   click(btn('qnew'));
@@ -124,7 +128,8 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   click(btn('qopen'));
   var editBtns = all('button[data-act=qedit]');
   click(editBtns[editBtns.length - 1]);
-  ok('editing opens the form filled in, and warns that saving resends it', /Saving sends this question back to the admin/.test(text()) && /A returned question/.test(raw()) && !!q('#zxExp'), text());
+  ok('editing opens the form filled in, and warns the change goes straight on the paper',
+     /Saving puts the change straight on the paper/.test(text()) && /A returned question/.test(raw()) && !!q('#zxExp'), text());
   calls.length = 0;
   q('#zxText').value = 'A returned question, now fixed properly.';
   click(btn('qsave')); await tick(30);
@@ -146,7 +151,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
   click(btn('qimportgo')); await tick(30);
   var ic = calls.filter(function (c) { return /import/.test(c.url); })[0];
   ok('the file goes to the import route for this subject, section stamped', ic && ic.method === 'POST' && ic.body.subject === 'Chemistry' && ic.body.section === 'objective' && ic.body.stampSection === true && /Something long/.test(ic.body.csv), JSON.stringify(ic));
-  ok('the result says how many went for approval and how many were skipped', /2 questions sent for approval, 1 skipped/.test(text()), text());
+  ok('the result says how many were added and how many were skipped', /2 questions added, 1 skipped/.test(text()), text());
   ok('skipped rows are listed by line, escaped', /Line 4/.test(text()) && raw().indexOf('<b>4</b>') < 0);
 
   console.log('\nsession and sign-out');

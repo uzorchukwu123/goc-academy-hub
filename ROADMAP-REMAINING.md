@@ -13,7 +13,7 @@ _Status as of **17 October 2026** — updated from a full code audit. Tests: **1
 - ✅ **Phase 2** — Retention: Mistakes review, Streak freeze/repair, Daily & weekly quests, Spaced repetition, Study reminders (email; SMS stubbed; push deferred)
 - ✅ **Phase 3** — Exam content: JAMB depth gate, sit rules (one-sit theory/objective; JAMB repeatable with fresh-first), JAMB /400 score, past questions by year, comprehension passages (end to end), question images (end to end)
 - ✅ **Phase 3B** — Access tiers: GOC vs Open, all 23 parts including open sign-up, sign-up limits per address, registration approval flow
-- ✅ **Phase 3C** — Tutors: accounts, hidden entrance, analytics, at-risk list, top performers, student detail, tutor questions & approval queue, tutor notes, tutor theory marking, class notices, audit log + console screen
+- ✅ **Phase 3C** — Tutors: accounts, hidden entrance, analytics, at-risk list, top performers, student detail, tutor questions, tutor notes, tutor theory marking, class notices, audit log + console screen
 - ✅ **Phase 3D** — Shielding: robots.txt, noindex, crawler refusal, obfuscated build, hidden tutor bundle, deploy script
 - ✅ **Phase 3E.B** — Resit unblock via console-opened rounds (rounds open per section/subject, `roundId` stamped on attempts, `canSit` counts current-round attempts only)
 - ✅ **Phase 3E.C** — Import answer fix: pure rules, preview, replace on re-import, bank checker
