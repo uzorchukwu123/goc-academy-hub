@@ -4,7 +4,7 @@
 **Base commit:** `950c276` — "Hostname entry replaces Website Mode Control (removed)"
 **Sweep commit:** `c130a40` — "Phase 1 review corrections: preserve the planner engine for Study Plan, retire student video playback"
 **Video-exclusion commit:** `7de66c7` — "Exclude video from the student resource interface entirely (Phase 1 review)"
-**Route-order commit:** "Check video before the tier and download/view decisions on the resource file route"
+**Route-order commit:** `7335762` — "Check video before the tier and download/view decisions on the resource file route"
 **Status:** sweep complete + all review corrections applied, including the full video exclusion. **Stopped here** — Student Homepage work has not begun.
 
 > **Revision 4** supersedes revision 3. The only change is the **order of checks** on
