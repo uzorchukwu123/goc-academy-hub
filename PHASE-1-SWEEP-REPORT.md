@@ -1,14 +1,16 @@
-# Phase 1 — FEATURE SWEEP CLEAN: completion report (revision 2)
+# Phase 1 — FEATURE SWEEP CLEAN: completion report (revision 3)
 
 **Branch:** `arena/1f98403a-goc-academy-hub`
 **Base commit:** `950c276` — "Hostname entry replaces Website Mode Control (removed)"
 **Sweep commit:** `c130a40` — "Phase 1 review corrections: preserve the planner engine for Study Plan, retire student video playback"
-**Status:** sweep complete + the four review corrections applied. **Stopped here** — Student Homepage work has not begun.
+**Video-exclusion commit:** `7de66c7` — "Exclude video from the student resource interface entirely (Phase 1 review)"
+**Status:** sweep complete + all review corrections applied, including the full video exclusion. **Stopped here** — Student Homepage work has not begun.
 
-> **Revision 2** supersedes revision 1. Two things changed after ChatGPT's review: the weekly
-> planner is no longer owned by the Classes screen (§1), and student-facing video playback is
-> retired (§2). Everything else in the first report still holds and is restated here so this
-> document stands on its own.
+> **Revision 3** supersedes revision 2. Two things changed: the weekly planner is no longer owned
+> by the Classes screen (§1), and video is now excluded from the student interface **entirely** —
+> not just from its player (§2). Revision 2 had retired playback but still left a `.mp4` reachable
+> as a *download*; that is the defect this revision fixes. Everything else still holds and is
+> restated here so this document stands on its own.
 
 ---
 
@@ -18,13 +20,14 @@ Every feature on the off-limits list is gone from both the screen and the server
 the standalone Timetable screen, the Web Test entry point, the Next Activity card, daily and weekly
 quests, the Personal Notes feature (which did not exist), admin video upload/publish/delete, the
 Guardian PIN, tutor analytics, the console approval queue, and tutor question
-activation/approval/return. Video is now retired as a *student-facing medium* as well — no surface
-in the app plays a video — while the stored records and files are untouched and still served by
-their routes. The weekly planner is preserved as a **screen-independent engine** in `js/goc-core.js`
-rather than living on any page, because its permanent home is the redesigned Study Plan page. No
-data was destroyed: every retired item was an entry point or a write path, never a read of stored
-records. `node test/run.js` gives **199 suites passed / 4 FAILED**, and those four fail identically
-on the untouched base commit (§5).
+activation/approval/return. Video is **excluded from the app entirely** — a `.mp4` is not played,
+not listed and **not downloadable** as a student resource, enforced in one shared rule, on the
+screen and on the route that serves the bytes — while the stored records and files are untouched
+and still served by their own tier-guarded routes. The weekly planner is preserved as a
+**screen-independent engine** in `js/goc-core.js` rather than living on any page, because its
+permanent home is the redesigned Study Plan page. No data was destroyed: every retired item was an
+entry point or a write path, never a read of stored records. `node test/run.js` gives
+**200 suites passed / 4 FAILED**, and those four fail identically on the untouched base commit (§5).
 
 ---
 
@@ -71,9 +74,58 @@ deleted.
 
 ---
 
-## 2. CORRECTION 2 — Video is excluded, so student playback is retired
+## 2. CORRECTION 2 — Video is excluded from the app entirely: not playable, not downloadable
 
-**Retired (student-facing):**
+Revision 2 retired the *player* but left the *file* reachable: the resource viewer's video branch was
+gone, yet a `.mp4` resource was still listed, still had an open and a download button, and the route
+behind those buttons still served the bytes. That is not exclusion, it is removal of one way in. This
+revision excludes video as a **student resource**, everywhere the list and the bytes are decided.
+
+### The six requirements, one by one
+
+**1. Inline MP4 playback is not restored.** Nothing in the app can play a video. There is no
+`playVideo`, no `videoCard`, no `loadPublishedVideos`, no `#liveList`/`#lessonList`, no `<video>`
+element and no `video/mp4` media type anywhere in `js/`, `index.html` or `css/`;
+`resourceViewerKind` returns only `pdf`/`image`/null. The stored video routes were **not** ungated to
+compensate. `test-video-excluded.js` asserts each of these.
+
+**2. MP4 is not downloadable as a student resource either.** Three layers, so no single one is the
+only thing standing between a student and the file:
+
+| Layer | Where | What it does |
+|---|---|---|
+| **The rule** | `js/goc-core.js` — `resourceStudentAccessible()` / `isVideoResource()` | Decides on the **real file extension**, deliberately not on the record's category badge (the badge is a category relabel: an "other" resource can be an `.mp4`, and a badge can read "PDF" over a `.docx`). `.mp4 .m4v .mov .webm .avi .mkv .ogv .wmv .flv .3gp` are excluded. |
+| **The screen** | `js/app.js` — `renderResources()` | A video is dropped before it is counted or drawn, so it is never listed. Both the open **and** the download handler re-check at the click and toast the exclusion message — a list built before the rule existed still cannot open or fetch a video. |
+| **The route** | `server/server.js` | `GET /api/resources` filters video out of the list. `GET /api/resources/:id/file` answers **403** `video-excluded` **before** the download/view branch and before any file read, so `?download=1` cannot get past it — the one path revision 2 left open. |
+
+Unknown or blank extension is treated as a **document**, not as video: hiding a legitimate file
+because its type string is missing would be a real loss, and a file we cannot identify is not
+evidently a video.
+
+**3. Video records and bucket files are preserved.** Nothing was deleted, moved or rewritten. Every
+`videos` record and every stored file is where it was; `APPWRITE_VIDEOS_COLLECTION_ID` still
+declares the collection, `GET /api/videos` and `GET /api/videos/:id/file` are still registered and
+still tier-guarded by `core.videoAllowed` / `core.videoLockMessage`, and `server/verify-media.js`
+still audits every stored video file. The change is only in what a *student resource surface* offers.
+No admin video route was brought back in exchange.
+
+**4. Documents, PDFs and images are untouched.** The rule only ever *excludes* — it never widens a
+tier's access. PDF, `.doc/.docx`, `.xls/.xlsx`, `.ppt/.pptx`, `.jpg/.png/.gif`, `.zip` and plain text
+all still pass `resourceStudentAccessible()`, still list, still open in the viewer with
+zoom/full-screen, and still download. `test-resource-download.js` still passes, and the rule is
+asserted format-by-format. The comment on `RESOURCE_VIEW_LOCK_MESSAGE` was reworded so the Open-tier
+"download instead" message speaks about documents, PDFs and images only — it is not an invitation to
+a video.
+
+**5. A regression test proves it.** `test/test-video-excluded.js` — 36 checks in five sections: the
+rule, the student screen, the student route, records preserved, and no player returned. It is
+registered in `test/run.js`. It was verified to be able to fail: disabling the core rule makes 5
+checks fail, removing the server gate makes 3 fail, removing the screen filter makes 2 fail. A test
+that cannot fail would prove nothing.
+
+**6. Student Homepage work has not begun.** No Phase 2 file, screen or route was created or touched.
+
+### Also retired with the player (revision 2, unchanged)
 
 | Surface | Detail |
 |---|---|
@@ -81,26 +133,13 @@ deleted.
 | **Playback entry points** | `videoCard()` (the thumbnail/play-badge card), `playVideo()` (external-link hand-off and the streaming overlay), and the `vcard.onclick` that opened them. |
 | **The fetch that fed them** | `loadPublishedVideos()`, its `videos` array, `videosLocked`, `publishedVideosLoaded`, `videoGradient()`, `VIDEO_GRADIENTS`, and both call sites in the login/preview hydration arrays. |
 | **Client API** | `GOC.api.listPublishedVideos` and `GOC.api.getVideoFile` on all three drivers (demo, HTTP, facade re-export). |
-| **Inline video in the resource viewer** | The `kind === 'video'` branch of `openResourceMediaViewer` and the `mp4 → 'video'` case in `resourceViewerKind`. A `.mp4` **resource** now downloads like a Word file instead of playing inline. |
+| **Inline video in the resource viewer** | The `kind === 'video'` branch of `openResourceMediaViewer` and the `mp4 → 'video'` case in `resourceViewerKind`. |
 | **Video-only CSS** | `.vthumb`, `.vplay`, `.vbadge`, `.vbadge.live`, `.vdur`, `.player-stage`, `.player-stage .vplay`. `.vcard` / `.vmeta` / `.vtag` were kept because the interim scheduled-class rows use them. |
 | **Promises on public copy** | "Live classes, lesson videos and class replays" on the landing page and the sign-up tier cards, and "lesson videos" in the scholarship copy. |
 
-**Deliberately NOT deleted — stored data and records:**
-- Every video **record** in the Appwrite `videos` collection, and every **stored file** in the bucket.
-- `GET /api/videos` and `GET /api/videos/:id/file` remain registered and **still tier-guarded** by
-  `core.videoAllowed` / `core.videoLockMessage` (Open cannot read them, GOC can). The routes were
-  left in place precisely so nothing had to be deleted while the storage decision is pending. No
-  client method calls them any more; the code says why.
-- `server/verify-media.js` still audits every stored video file, and `DEPLOYMENT.md` now documents
-  video as excluded-but-preserved, with the file check as the way to confirm integrity.
-
-**Preserved unchanged:** all non-video resources and documents — past questions, notes, formula
-sheets, syllabus, PDFs and images still open in the app viewer with zoom/full-screen, and downloads
-are untouched.
-
-> **Decision needed from the owner.** The stored video records and files are now unreachable from the
-> app by design. Deleting either the records or the bucket files needs separate approval, so both are
-> left exactly as they are. Say the word and that is a separate, explicit piece of work.
+> **Decision still open for the owner.** The stored video records and files are now unreachable from
+> the app by design — preserved, not offered. Deleting either the records or the bucket files needs
+> separate approval, so both stay exactly as they are.
 
 ---
 
@@ -169,6 +208,7 @@ test/test-quest-weekly-route.js  test/test-quest-weekly-ui.js
 `test-approval.js` (the **sign-up** approval flow) is a different suite, kept and passing.
 
 **Added (2):** `test/test-study-plan-engine.js`, `PHASE-1-SWEEP-REPORT.md`.
+**Added in revision 3:** `test/test-video-excluded.js` (36 checks).
 
 **Modified (33):** `index.html`, `js/app.js`, `js/api.js`, `js/goc-core.js`, `server/server.js`,
 `server/tutor/tutor-app.js`, `server/lib/reminders.js`, `css/styles.css`,
@@ -197,6 +237,11 @@ Net against base: **1,443 insertions, 4,856 deletions.**
 `listPublishedVideos`, `getVideoFile`, `listApprovals`, `approveQuestion`, `returnQuestion`,
 `approveBatch`, `setGuardianPin`, `extendStudyTime`, `adminTutorAnalytics`, plus the quest clients.
 
+**Shared rule added (revision 3), in `js/goc-core.js`, used by both the screen and the server:**
+`resourceStudentAccessible()`, `isVideoResource()`, `resourceFileExtension()`,
+`VIDEO_FILE_EXTENSIONS`, `VIDEO_EXCLUDED_MESSAGE`. Both routes keep their paths and their tier
+guards; only their answer to a student changes.
+
 **Kept and re-verified:** `/api/videos`, `/api/videos/:id/file`, `/api/tutor/analytics`,
 `/api/tutor/questions*`, `/api/tutor/notes*`, `/api/tutor/scripts*`, `/api/notes*`, `/api/notices*`,
 `/api/broadcasts*`, `/api/alerts*`, `/api/flags*`, `/api/updates*`, `/api/classes`,
@@ -218,7 +263,8 @@ accessors, storage, crawler/content-protection. No migration, no API replacement
 
 ## 5. Tests executed and results (correction 3)
 
-`node test/run.js` — **199 suites passed, 4 FAILED.**
+`node test/run.js` — **200 suites passed, 4 FAILED** (revision 2 reported 199; the new
+`test-video-excluded.js` is the one addition).
 
 The four failures reproduce **identically against the original base commit `950c276`**, re-verified
 in a clean `git worktree` after these corrections:
@@ -230,10 +276,22 @@ in a clean `git worktree` after these corrections:
 | `test-backup-integrity` | 158 passed, 34 failed | 158 passed, 34 failed |
 | `test-migration-api-config` | 23 passed, 1 failed | 23 passed, 1 failed |
 
-Failure **names** were diffed, not just totals, and match name for name.
+Failure **names** were diffed, not just totals: identical in all four suites once the checkout path
+and the ephemeral test ports are normalised out of the message text (e.g. `lhost:38647` vs
+`lhost:42669`, `/home/user/goc-academy-hub/build/build.js` vs `/tmp/base/build/build.js`). The one
+`test-migration-api-config` failure is the same check failing for the same reason in both trees —
+`[both hosting builds complete] — Command failed: node build/build.js`.
 
-**New this revision:** `test/test-study-plan-engine.js` — 50 checks, all passing, and registered in
-`test/run.js`.
+**New:** `test/test-study-plan-engine.js` — 50 checks, all passing (revision 2).
+**New in revision 3:** `test/test-video-excluded.js` — 36 checks, all passing, registered in
+`test/run.js`. It covers the rule format-by-format, the screen filter **and** the click-time guards,
+the server list filter, the 403 on the file route and its position before the download/view branch,
+records/routes/audit-tool preservation, and the absence of any player. Proven able to fail: core rule
+disabled → 5 checks fail; server gate removed → 3; screen filter removed → 2.
+
+**Requirement 4 verified directly:** `test-resource-download.js` passes unchanged, and
+`resourceStudentAccessible()` returns `true` for `pdf/doc/docx/xls/xlsx/ppt/pptx/jpg/png/gif/zip/txt`
+and `false` only for the ten video containers.
 
 **Suites retargeted by these corrections** (loosened nowhere, only re-pointed at what now exists):
 - `test-tiers-videos.js` — the rules block is kept; the "screen" block now asserts that **no**
@@ -277,9 +335,11 @@ sections 27 → 25, route table 253 → 241).
    created with a typo'd status would be invisible to students — the safe direction, but a trap worth
    remembering in any future creation route. Commented in `goc-core.js`.
 4. **Stored video records and files are now unreachable from the app** and await a separate decision
-   (§2).
+   (§2). They are preserved, not offered: the app answers 403 `video-excluded`, it does not delete.
 5. **Video management has no in-app replacement, by design** — adding a lesson video would mean
-   writing an Appwrite record directly, though nothing in the app plays one now.
+   writing an Appwrite record directly, and it would still not appear to a student: the resource
+   interface refuses video by file extension, before the record's category, title or tier is
+   considered. That is the intended behaviour, not a gap to close.
 6. **No device pass.** The tutorial's six steps, the interim schedule block on Classes and the
    trimmed Classes layout have not been checked on a real phone; this carries the standing caveat in
    `DEPLOYMENT.md`.
