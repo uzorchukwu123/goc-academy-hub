@@ -500,19 +500,29 @@ function loadAffirmations(){
 function drawerEls(){
   return { d: document.getElementById('lpDrawer'), s: document.getElementById('lpScrim'), b: document.getElementById('lpBurger') };
 }
+/* There are two hamburgers — the landing page's and the dashboard's — and they
+   open the same drawer, so both have to report the drawer's state. Only the
+   landing one used to, which left the dashboard button telling assistive tech
+   the menu was closed while it was on screen. */
+function drawerToggles(){
+  return Array.prototype.slice.call(document.querySelectorAll('[aria-controls="lpDrawer"]'));
+}
+function setDrawerExpanded(v){
+  drawerToggles().forEach(function(b){ b.setAttribute('aria-expanded', v); });
+}
 function openDrawer(){
   var e = drawerEls(); if(!e.d) return;
   e.d.style.transform = '';
   e.d.classList.add('on'); e.s.classList.add('on');
   e.d.setAttribute('aria-hidden','false');
-  if(e.b) e.b.setAttribute('aria-expanded','true');
+  setDrawerExpanded('true');
 }
 function closeDrawer(){
   var e = drawerEls(); if(!e.d) return;
   e.d.style.transform = '';
   e.d.classList.remove('on'); e.s.classList.remove('on');
   e.d.setAttribute('aria-hidden','true');
-  if(e.b) e.b.setAttribute('aria-expanded','false');
+  setDrawerExpanded('false');
 }
 function dwGo(id){ closeDrawer(); setTimeout(function(){ go(id); }, 180); }
 function dwGoTo(secId){
@@ -589,6 +599,11 @@ function go(id){
     else if(!adminUnlocked){ id = 'admin-gate'; }
   }
   if(id === 'admin-gate' && role !== 'admin'){ toast('Admin only'); id = 'profile'; }
+  /* More is the phone's own menu: it lists what the desktop sidebar already
+     lists, so on a wide screen it is not a destination at all. The More tab is
+     already hidden above 900px; this stops the screen itself being opened there
+     by anything else, which would strand a phone menu on the desktop layout. */
+  if(id === 'more' && window.innerWidth >= 900) id = 'home';
   list(document.querySelectorAll('.screen')).forEach(function(s){
     s.classList.remove('active');
     /* Priority 1 — the richer entrance belongs to one arrival only, so it is
@@ -637,6 +652,10 @@ function go(id){
      so the filter row's sticky offset is set on the way in. */
   if(id === 'updates' && typeof upFiltersInit === 'function') upFiltersInit();
   if(id === 'scholarship' && typeof scholInit === 'function') scholInit();
+  /* The planner screen reads the account's saved plan on arrival; the write path
+     is spSave/spDelete, which repaint from the server's own reply. */
+  if(id === 'studyplan' && typeof spLoad === 'function') spLoad();
+  if(id === 'more' && typeof paintMoreHub === 'function') paintMoreHub();
   // A mock exam timer must never keep running on a screen the student left.
   if(id !== 'cbt' && typeof cbtTimerId !== 'undefined' && cbtTimerId){
     clearInterval(cbtTimerId); cbtTimerId = null;
@@ -652,7 +671,7 @@ function go(id){
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   }
   var tabbar = document.getElementById('tabbar');
-  var tabScreens = ['home','classes','study','league','profile'];
+  var tabScreens = ['home','classes','study','league','profile','more','studyplan'];
   var showTabs = tabScreens.indexOf(id) > -1;
   // Immersive flows (login, lesson/practice/CBT/results, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
@@ -673,7 +692,8 @@ function go(id){
      are distinct rows in the approved sidebar, so each one lights itself:
      Results, Resources and Examinations are not "Study" any more. Profile and
      the account rows share the More tab on a phone. */
-  var map = { lesson:'study', practice:'practice', studySet:'practice', reading:'study',
+  var map = { studyplan:'studyplan', more:'more',
+              lesson:'study', practice:'practice', studySet:'practice', reading:'study',
               bookmarks:'study', mistakes:'study', review:'study', studyRes:'study',
               cbt:'practice', results:'results', webtest:'webtest', wtRun:'webtest',
               wtResult:'webtest', classes:'classes', league:'league',
@@ -684,8 +704,13 @@ function go(id){
      is hidden — the phone's fifth tab, More, is what opens Profile. So when the
      section being shown has no visible tab of its own, More carries the
      highlight rather than the bar showing nothing current. */
+  /* Whether a tab is visible is a CSS question, so it is asked of the browser
+     only. A headless DOM without a style engine (the test harness) has no
+     getComputedStyle, and there the tab markup itself is what is under test —
+     so the probe is skipped rather than throwing the whole load away. */
   var moreTab = document.querySelector('.tabbar .tab[data-t="more"]');
-  if (moreTab && active !== 'more' && getComputedStyle(moreTab).display !== 'none') {
+  var styleEng = typeof getComputedStyle === 'function';
+  if (moreTab && styleEng && active !== 'more' && getComputedStyle(moreTab).display !== 'none') {
     var ownTabs = document.querySelectorAll('.tabbar .tab[data-t="' + active + '"]');
     var anyVisible = false;
     for (var i = 0; i < ownTabs.length; i++) {
@@ -9490,6 +9515,19 @@ function dashLoad(){
       dashPut('dashContinuePos', 'Your practice history is not available right now.');
     });
   }).then(function(){
+    /* The saved plan, so the My Study Plan card is right on the first paint
+       rather than only after the Study Plan page has been opened once. Its own
+       call, its own failure: a plan that cannot be read leaves the card saying
+       it has nothing for today, which is true. */
+    if(!GOC.api || !GOC.api.getPlan) return;
+    return GOC.api.getPlan().then(function(res){
+      applyPlanBlocks((res && res.blocks) || []);
+      dashPaintPlan();
+    }, function(){
+      applyPlanBlocks([]);
+      dashPaintPlan();
+    });
+  }).then(function(){
     /* Announcements: notices and broadcasts, whichever the academy sent. */
     var jobs = [];
     if(GOC.api.listMyNotices) jobs.push(GOC.api.listMyNotices().then(function(r){
@@ -9523,7 +9561,410 @@ function dashJambGo(){ openWebTest(); }
 /* Study Plan: the single study-planning destination. Today that is the Classes
    screen, which holds the academy's week from the planner engine; the
    redesigned Study Plan page will take over and this one line follows it. */
-function dashPlanGo(){ go('classes'); }
+/* ============================== MORE (the phone's hub) =======================
+   Navigation only. It fills in who the student is, and every row it draws calls
+   the same handler the desktop sidebar calls, so a destination reachable here is
+   a destination the app already had. No new screens, no invented links. */
+function paintMoreHub(){
+  /* The signed-in student's own record. dashMe is the live GET /api/me; the
+     profile block the identity pass writes (#profName) is the fallback for the
+     moment before that request lands, so the row never shows a placeholder
+     while a real name is already on screen. */
+  var name = (dashMe && dashMe.name) ||
+             ((document.getElementById('profName') || {}).textContent || '').trim();
+  var ini = GOC.core.dashInitials(name);
+  spPut('moreAva', ini);
+  spPut('moreName', name || 'Your account');
+  var papers = ((dashMe && dashMe.subjects) || studentSubjects() || []).length;
+  var lv = Math.max(1, Math.round(Number(dashMe && dashMe.level) || 1));
+  spPut('moreSub', 'Level ' + lv + ' · ' + GOC.core.dashScholarTitle(lv) +
+        (papers ? ' · ' + papers + ' subjects' : ''));
+}
+
+/* ======================== STUDY PLAN (the dedicated planner screen) =========
+   The surface for the planner engine in js/goc-core.js. It owns no rules of its
+   own: day keys, time parsing, block validation, overlap checks and the weekly
+   totals all come from GOC.core, which is also what the server validates with —
+   so a block the screen accepts is a block the route accepts, and vice versa.
+
+   State is the account's plan, read from GET /api/me/plan. There is no plan in
+   this file and none in localStorage: the array in `spPlan` is only the last
+   response the server gave us, and every mutation goes back through
+   PUT /api/me/plan and is re-painted from the server's own reply. If a save
+   fails, the list on screen does not change. */
+var spPlan = [];            /* [{id,day,start,end,minutes,subject,topic}] */
+var spTotals = null;        /* {perDay, weekMinutes, count} from the server */
+var spDay = null;           /* the day currently shown */
+var spEditingId = null;     /* null = adding a new block */
+var spLoaded = false;
+var spLoading = false;
+
+function spDays(){ return GOC.core.PLAN_DAYS; }
+
+/* The student's own papers, plus the planner's shared slots, as the subject
+   picker offers them. Same list planValidateBlock checks against. */
+function spSubjects(){
+  var mine = ((dashMe && dashMe.subjects) || studentSubjects() || []).slice();
+  var shared = GOC.core.PLAN_SHARED_SLOTS || [];
+  var out = [];
+  mine.forEach(function (sub) { if (sub && out.indexOf(sub) < 0) out.push(sub); });
+  shared.forEach(function (sub) { if (out.indexOf(sub) < 0) out.push(sub); });
+  return out;
+}
+function studentSubjects(){
+  try { return ((state && state.subjects) || []).map(function (x) { return x.subject || x; }); }
+  catch (e) { return []; }
+}
+
+function spTodayKey(){ return GOC.core.planDayKey(new Date()); }
+
+/* ---- which week ---------------------------------------------------------------
+   The saved plan is the student's weekly timetable: the same blocks apply every
+   week, which is the planner engine's own model (planWeek takes a date and
+   lays that week's blocks out). So the arrows move the week you are *looking*
+   at — they change the dates, not the plan. Offset 0 is the current week. */
+var spWeekOffset = 0;
+
+/* The Monday this view is anchored to, shifted by the current offset. */
+function spWeekAnchor(){
+  var now = new Date();
+  var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  monday.setDate(monday.getDate() + spWeekOffset * 7);
+  return monday;
+}
+
+/* A real date for a planner day key within the week being viewed. */
+function spDateFor(key){
+  var i = spDays().indexOf(key);
+  if (i < 0) return null;
+  var d = spWeekAnchor();
+  d.setDate(d.getDate() + i);
+  return d;
+}
+
+function spShiftWeek(step){
+  spWeekOffset = (spWeekOffset || 0) + step;
+  spPaintWeek();
+  spPaintWeekLabel();
+  spPaintProgress();
+}
+
+function spPaintWeekLabel(){
+  var el = document.getElementById('spWeekLabel');
+  if (!el) return;
+  var d = spWeekAnchor();
+  var end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6);
+  var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var span = d.getDate() + ' ' + m[d.getMonth()] + ' \u2013 ' + end.getDate() + ' ' + m[end.getMonth()];
+  el.textContent = (spWeekOffset === 0 ? 'This week \u00b7 ' : '') + span;
+  var prev = document.getElementById('spPrev'), next = document.getElementById('spNext');
+  if (prev) prev.disabled = false;
+  if (next) next.disabled = false;
+}
+
+/* ---- reading ---------------------------------------------------------------- */
+function spLoad(force){
+  if (spLoading) return;
+  if (spLoaded && !force) { spPaint(); return; }
+  spLoading = true;
+  var err = document.getElementById('spError');
+  if (err) err.hidden = true;
+  var call = (GOC.api && GOC.api.getPlan) ? GOC.api.getPlan() : Promise.reject(new Error('no api'));
+  call.then(function (res) {
+    spLoading = false;
+    spLoaded = true;
+    spApply(res);
+  }, function (e) {
+    spLoading = false;
+    /* The screen says the plan could not be read. It does not fall back to an
+       empty week — that would be indistinguishable from a genuinely empty plan,
+       and the student could not tell whether their blocks were lost. */
+    if (err) { err.hidden = false; var t = document.getElementById('spErrorText');
+      if (t) t.textContent = (e && e.message) || 'Try again in a moment.'; }
+    var host = document.getElementById('spBlocks');
+    if (host) host.innerHTML = '';
+  });
+}
+
+/* Take a server response as the truth and repaint. Both GET and PUT return this
+   exact shape, so a save needs no second read. */
+function spApply(res) {
+  spPlan = (res && Array.isArray(res.blocks)) ? res.blocks : [];
+  spTotals = (res && res.totals) || GOC.core.planTotals(spPlan);
+  if (!spDay) spDay = spTodayKey();
+  spPaint();
+  /* The dashboard card reads the same plan, so it is refreshed from the same
+     reply rather than re-fetched. */
+  applyPlanBlocks(spPlan);
+  if (typeof dashPaintPlan === 'function') dashPaintPlan();
+}
+
+/* ---- drawing ---------------------------------------------------------------- */
+function spPaint() {
+  spPaintStats();
+  spPaintWeek();
+  spPaintDay();
+  spPaintProgress();
+}
+
+function spMinsLabel(m) {
+  var n = Math.round(Number(m) || 0);
+  if (!n) return '0m';
+  return GOC.core.planDurationLabel(n) || (n + 'm');
+}
+
+function spPaintStats() {
+  var t = spTotals || GOC.core.planTotals(spPlan);
+  spPut('spWeekPlanned', spMinsLabel(t.weekMinutes));
+  spPut('spWeekCount', String(t.count));
+  /* Real recorded study time, from the server's own study window — the same
+     number the dashboard's plan card uses. Never derived from the plan. */
+  var used = Math.max(0, Number(state && state.used) || 0);
+  spPut('spStudiedToday', spMinsLabel(used));
+}
+
+function spPaintWeek() {
+  var host = document.getElementById('spWeek');
+  if (!host) return;
+  host.innerHTML = '';
+  spPaintWeekLabel();
+  var today = spWeekOffset === 0 ? spTodayKey() : '';
+  spDays().forEach(function (key) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sp-day' + (key === spDay ? ' on' : '') + (key === today ? ' is-today' : '');
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', key === spDay ? 'true' : 'false');
+    b.setAttribute('data-day', key);
+    var count = GOC.core.planBlocksForDay(spPlan, key).length;
+    var on = spDateFor(key);
+    var num = on ? String(on.getDate()) : '';
+    b.setAttribute('data-date', on ? (on.getFullYear() + '-' + ('0' + (on.getMonth() + 1)).slice(-2) + '-' + ('0' + on.getDate()).slice(-2)) : '');
+    b.setAttribute('aria-label', (GOC.core.PLAN_DAY_LABELS || {})[key] + ' ' + num + ', ' + count +
+                   (count === 1 ? ' study block' : ' study blocks'));
+    b.innerHTML = '<s>' + esc(key) + '</s><b>' + esc(num) + '</b><u>' + count + '</u>';
+    b.onclick = function () { spDay = key; spPaintWeek(); spPaintDay(); spPaintProgress(); };
+    host.appendChild(b);
+  });
+}
+
+function spPaintDay() {
+  var label = (GOC.core.PLAN_DAY_LABELS || {})[spDay] || spDay;
+  var d = spDateFor(spDay);
+  if (d) {
+    var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    label = label + ' \u00b7 ' + d.getDate() + ' ' + m[d.getMonth()];
+  }
+  spPut('spDayName', label);
+  var blocks = GOC.core.planBlocksForDay(spPlan, spDay);
+  var planned = blocks.reduce(function (n, b) { return n + (Number(b.minutes) || 0); }, 0);
+  spPut('spDayTotal', blocks.length
+    ? blocks.length + (blocks.length === 1 ? ' block' : ' blocks') + ' · ' + spMinsLabel(planned)
+    : 'Nothing planned');
+
+  var empty = document.getElementById('spEmpty');
+  if (empty) {
+    empty.hidden = blocks.length > 0;
+    /* the empty sentence wants the day name alone, without the date */
+    spPut('spEmptyDay', String((GOC.core.PLAN_DAY_LABELS || {})[spDay] || spDay).toLowerCase());
+  }
+
+  var host = document.getElementById('spBlocks');
+  if (!host) return;
+  host.innerHTML = '';
+  blocks.forEach(function (b) {
+    var row = document.createElement('div');
+    row.className = 'sp-block';
+    row.setAttribute('data-id', b.id);
+    row.innerHTML =
+      '<div class="sp-block-time"><b>' + esc(b.start) + '</b><s>' + esc(b.end || GOC.core.planEndLabel(b.start, b.minutes)) + '</s></div>' +
+      '<div class="sp-block-main"><b>' + esc(b.subject) + '</b><s>' + esc(b.topic) + '</s></div>' +
+      '<span class="sp-block-dur">' + esc(spMinsLabel(b.minutes)) + '</span>' +
+      '<button class="sp-block-edit" type="button" aria-label="Edit this block">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14 6l4 4"/></svg>' +
+      '</button>';
+    row.querySelector('.sp-block-edit').onclick = function (ev) {
+      ev.stopPropagation();
+      spOpenEditor(b);
+    };
+    row.onclick = function () { spOpenEditor(b); };
+    host.appendChild(row);
+  });
+}
+
+function spPaintProgress() {
+  var blocks = GOC.core.planBlocksForDay(spPlan, spDay);
+  var planned = blocks.reduce(function (n, b) { return n + (Number(b.minutes) || 0); }, 0);
+  var used = Math.max(0, Number(state && state.used) || 0);
+  var today = spTodayKey();
+  var isToday = spWeekOffset === 0 && spDay === today;
+
+  /* Progress is only meaningful for today: the study-time record the app keeps
+     is a today figure. For any other day this panel would have to invent a
+     studied number, so it shows what is planned instead and says so. */
+  var pct = 0, label, note;
+  if (!planned) {
+    label = (GOC.core.PLAN_DAY_LABELS || {})[spDay] + ' progress';
+    note = 'Nothing planned for this day yet.';
+  } else if (!isToday) {
+    label = (GOC.core.PLAN_DAY_LABELS || {})[spDay] + ' progress';
+    pct = 0;
+    note = spMinsLabel(planned) + ' planned. Progress is tracked on the day itself.';
+  } else {
+    label = 'Today\u2019s progress';
+    pct = Math.min(100, Math.round((used / planned) * 100));
+    note = used >= planned
+      ? 'Plan complete — ' + spMinsLabel(used) + ' studied of ' + spMinsLabel(planned) + ' planned.'
+      : spMinsLabel(Math.max(0, planned - used)) + ' left of ' + spMinsLabel(planned) + ' planned · ' + spMinsLabel(used) + ' studied today.';
+  }
+  spPut('spProgressLabel', label);
+  spPut('spProgressPct', planned ? (pct + '%') : '—');
+  var fill = document.getElementById('spBarFill');
+  if (fill) fill.style.width = (planned ? pct : 0) + '%';
+  var bar = document.getElementById('spBar');
+  if (bar) bar.setAttribute('aria-valuenow', String(planned ? pct : 0));
+  spPut('spProgressNote', note);
+}
+
+function spPut(id, text){ var e = document.getElementById(id); if (e) e.textContent = text; }
+
+/* ---- the editor ------------------------------------------------------------- */
+function spOpenEditor(block) {
+  if (!GOC.core) return;
+  spEditingId = block ? block.id : null;
+  var title = document.getElementById('spEditorTitle');
+  if (title) title.textContent = block ? 'Edit study block' : 'Add a study block';
+
+  var daySel = document.getElementById('spDay');
+  if (daySel) {
+    daySel.innerHTML = '';
+    spDays().forEach(function (k) {
+      var o = document.createElement('option');
+      o.value = k;
+      o.textContent = (GOC.core.PLAN_DAY_LABELS || {})[k] || k;
+      daySel.appendChild(o);
+    });
+    daySel.value = block ? block.day : (spDay || spTodayKey());
+  }
+
+  var subSel = document.getElementById('spSubject');
+  if (subSel) {
+    subSel.innerHTML = '';
+    spSubjects().forEach(function (sub) {
+      var o = document.createElement('option');
+      o.value = sub;
+      o.textContent = sub;
+      subSel.appendChild(o);
+    });
+    if (block && block.subject) subSel.value = block.subject;
+  }
+
+  var start = document.getElementById('spStart');
+  if (start) start.value = block ? block.start : '16:00';
+  var mins = document.getElementById('spMinutes');
+  if (mins) mins.value = block ? block.minutes : 60;
+  var topic = document.getElementById('spTopic');
+  if (topic) topic.value = block ? block.topic : '';
+
+  var msg = document.getElementById('spEditorMsg');
+  if (msg) { msg.textContent = ''; msg.className = 'form-msg'; }
+  var del = document.getElementById('spDeleteBtn');
+  if (del) del.hidden = !block;
+
+  var sheet = document.getElementById('spEditor');
+  if (sheet) sheet.classList.add('show');
+  if (topic) setTimeout(function () { try { topic.focus(); } catch (e) {} }, 60);
+}
+
+function spCloseEditor() {
+  var sheet = document.getElementById('spEditor');
+  if (sheet) sheet.classList.remove('show');
+  spEditingId = null;
+}
+
+/* Read the form as a block, validate it with the same engine the server uses,
+   and refuse locally with the engine's own message if it is not acceptable. */
+function spFormBlock() {
+  var day = (document.getElementById('spDay') || {}).value;
+  var start = ((document.getElementById('spStart') || {}).value || '').trim();
+  var minutes = Number((document.getElementById('spMinutes') || {}).value);
+  var subject = (document.getElementById('spSubject') || {}).value;
+  var topic = ((document.getElementById('spTopic') || {}).value || '').trim();
+  var others = spPlan.filter(function (b) { return b.id !== spEditingId; });
+  return GOC.core.planValidateStoredBlock({
+    id: spEditingId || spNewId(),
+    day: day, start: start, minutes: minutes, subject: subject, topic: topic
+  }, spSubjects(), others, null);
+}
+
+function spNewId() {
+  return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function spSave() {
+  var checked = spFormBlock();
+  var msg = document.getElementById('spEditorMsg');
+  if (checked.error) {
+    if (msg) { msg.textContent = checked.error; msg.className = 'form-msg err'; }
+    return;
+  }
+  if (msg) { msg.textContent = ''; msg.className = 'form-msg'; }
+  var btn = document.getElementById('spSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  /* The whole plan is sent, because PUT replaces it — the same contract the
+     route documents. The edited block is the only one that changed. */
+  var next = spPlan.filter(function (b) { return b.id !== spEditingId; });
+  next.push(checked.block);
+  spDay = checked.block.day;
+
+  spWrite(next, function (errText) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save block'; }
+    if (errText) {
+      if (msg) { msg.textContent = errText; msg.className = 'form-msg err'; }
+      return;
+    }
+    spCloseEditor();
+    toast('Study block saved');
+  });
+}
+
+function spDelete() {
+  if (!spEditingId) return;
+  if (!window.confirm('Delete this study block? This cannot be undone.')) return;
+  var going = spEditingId;
+  var next = spPlan.filter(function (b) { return b.id !== going; });
+  var msg = document.getElementById('spEditorMsg');
+  var btn = document.getElementById('spDeleteBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+  spWrite(next, function (errText) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete this block'; }
+    if (errText) {
+      if (msg) { msg.textContent = errText; msg.className = 'form-msg err'; }
+      return;
+    }
+    spCloseEditor();
+    toast('Study block deleted');
+  });
+}
+
+/* One write path. The list on screen only changes once the server has accepted
+   the plan and handed back the stored version. */
+function spWrite(blocks, done) {
+  var call = (GOC.api && GOC.api.savePlan)
+    ? GOC.api.savePlan({ blocks: blocks })
+    : Promise.reject(new Error('no api'));
+  call.then(function (res) {
+    spApply(res);
+    if (done) done(null);
+  }, function (e) {
+    if (done) done((e && e.message) || 'That plan could not be saved.');
+  });
+}
+
+/* Study Plan is its own destination now — the planner screen. */
+function dashPlanGo(){ go('studyplan'); }
 
 /* Support: the hub's own contact details, on the public homepage. */
 function dashSupportGo(){

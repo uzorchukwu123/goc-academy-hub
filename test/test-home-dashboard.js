@@ -96,25 +96,37 @@ async function main() {
   });
   /* Ten working entries then five in the foot (Support, Profile, Settings,
      Log Out and More on a phone). Log Out is a control, not a screen, so it is
-     checked separately below. */
+     checked separately below.
+
+     The planning destination is the dedicated Study Plan screen: the round-8
+     correction replaced the temporary Classes mapping, so `classes` is no
+     longer what the sidebar's Study Plan row names. */
   var want = ['home', 'study', 'practice', 'jamb', 'webtest', 'results',
-              'resources', 'qbank', 'classes', 'league'];
+              'resources', 'qbank', 'studyplan', 'league'];
   var order = sidebarIds.slice(0, 10);
-  ok('Study Plan is no longer its own entry (the planner lives on Classes)',
-     sidebarIds.indexOf('studyPlan') === -1, sidebarIds.join(','));
-  ok('the Classes screen is the study-planning destination',
-     sidebarIds.indexOf('classes') > -1, sidebarIds.join(','));
+  ok('the sidebar\'s planning row opens the dedicated Study Plan screen',
+     sidebarIds.indexOf('studyplan') > -1, sidebarIds.join(','));
+  ok('and no longer points at Classes',
+     sidebarIds.indexOf('classes') === -1, sidebarIds.join(','));
   ok('the ten working entries are present, in the approved order',
      want.every(function (x, i) { return order[i] === x; }), order.join(','));
   ok('and the foot holds Support, Profile, Settings and Log Out',
      ['support', 'profile', 'settings', 'logout'].every(function (x) {
        return sidebarIds.indexOf(x) > -1;
      }), sidebarIds.slice(10).join(','));
-  ok('every destination it names is a screen the app can show',
-     sidebarIds.filter(function (v) { return v !== 'logout'; }).every(function (v) {
-       return run('(function(){ try { go(' + JSON.stringify(v === 'jamb' ? 'webtest' :
-         v === 'qbank' ? 'pastquestions' : v) + '); return true; } catch(e){ return false; } })()');
-     }), sidebarIds.join(','));
+  /* More is checked separately: on a wide screen it deliberately lands on the
+     dashboard, so the walk skips it here. */
+  var walk = sidebarIds.filter(function (v) { return v !== 'logout' && v !== 'more'; });
+  var broken = walk.filter(function (v) {
+    var screen = v === 'jamb' ? 'webtest' : v === 'qbank' ? 'pastquestions' : v;
+    return !run('(function(){ try { go(' + JSON.stringify(screen) + '); return true; } catch(e){ return false; } })()');
+  });
+  ok('every destination it names is a screen the app can show', broken.length === 0,
+     'broken: ' + broken.join(','));
+  /* More is a phone menu, so its row exists in the markup for the phone bar and
+     must name a screen the app really has — even though go('more') lands on the
+     dashboard on a wide screen (checked in test-more-hub.js). */
+  ok('More names a screen that exists', doc.getElementById('more') !== null);
   ok('the retired standalone Timetable screen is still gone',
      id('timetable') === null && sidebarIds.indexOf('timetable') === -1);
   ok('no video resource screen came back with it',
@@ -132,8 +144,9 @@ async function main() {
   doc.getElementById('tabbar').querySelectorAll('.tab').forEach(function (t) {
     if (t.getAttribute('data-t') === 'more') moreTab = t;
   });
-  ok('and More opens a screen that exists, not a made-up one',
-     !!moreTab && /go\('profile'\)/.test(moreTab.getAttribute('onclick') || ''),
+  /* Round 8: More opens the real More hub, not Profile. */
+  ok('and More opens the More hub, not Profile',
+     !!moreTab && /go\('more'\)/.test(moreTab.getAttribute('onclick') || ''),
      moreTab && moreTab.getAttribute('onclick'));
 
   /* ------------------------------------------------------- an empty account */
@@ -264,8 +277,19 @@ async function main() {
 
   run('dashPlanGo()');
   await flush();
-  ok('My Study Plan opens the study-planning destination',
-     screenNow() === 'classes', screenNow());
+  ok('My Study Plan opens the dedicated Study Plan screen, not Classes',
+     screenNow() === 'studyplan', screenNow());
+
+  /* The card has to be right on the first paint, not only after the Study Plan
+     page has been opened once and pushed its plan back into the dashboard. With
+     nothing saved it says so; the honesty is the point, not a placeholder. */
+  run('go("home")');
+  await flush();
+  await flush();
+  ok('with nothing saved, the plan card says there is no plan for today',
+     /no plan/i.test(text('dashPlanHeadline')), text('dashPlanHeadline'));
+  ok('and nobody is shown an invented completion figure',
+     text('dashPlanPct') === '—', text('dashPlanPct'));
 
   run('go("home")');
   await flush();

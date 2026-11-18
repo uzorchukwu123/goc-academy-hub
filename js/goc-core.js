@@ -4218,6 +4218,160 @@
     };
   }
 
+  /* ======================================= STUDY PLAN PAYLOAD (the saved plan)
+     The rules for a whole saved plan — the shape GET/PUT /api/me/plan accept
+     and return. They live here rather than in the server so the screen that
+     builds a payload and the route that stores it cannot disagree about what a
+     valid plan is: the client validates before sending, the server validates
+     again on arrival and never trusts the first check.
+
+     A block is one study session:
+
+       id        stable string, unique within the plan (editing/deleting uses it)
+       day       Mon..Sun, the planner's own key (PLAN_DAYS)
+       start     "HH:MM", 24-hour, 00:00-23:59
+       minutes   5..240 — the same limits planValidateBlock already enforces
+       subject   one of the student's papers, or a shared slot (Revision/Review)
+       topic     what is being studied, 1..120 characters
+       kind      always 'study' for a block the student wrote (classes are the
+                 academy's and are never stored in a student's plan)
+
+     `end` is derived, not stored: it is start + minutes, so a block can never
+     hold a start and an end that disagree. Responses always include it.
+
+     This is deliberately not the retired Timetable screen's data — there is no
+     period list, no room, no teacher. A plan is the student's own week. */
+  var PLAN_MAX_BLOCKS = 80;
+  var PLAN_MIN_MINUTES = 5;
+  var PLAN_MAX_MINUTES = 240;
+  var PLAN_TOPIC_MAX = 120;
+
+  /* "HH:MM" -> minutes since midnight, or null if it is not a real 24-hour time.
+     Strict on purpose: the planner's display labels use a 12-hour convention
+     (planMinutesOf) and must not be confused with stored values, which are
+     always unambiguous 24-hour input. */
+  function planClockMinutes(value) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(value == null ? '' : value).trim());
+    if (!m) return null;
+    var h = parseInt(m[1], 10), min = parseInt(m[2], 10);
+    if (!(h >= 0 && h <= 23) || !(min >= 0 && min <= 59)) return null;
+    return h * 60 + min;
+  }
+
+  /* The player's end time, from start + minutes. Returns '' when either part is
+     unusable, so a bad block simply has no end rather than a wrong one. */
+  function planEndLabel(start, minutes) {
+    var s = planClockMinutes(start);
+    var m = Math.round(Number(minutes) || 0);
+    if (s === null || !m) return '';
+    var total = Math.min(s + m, 24 * 60 - 1);
+    var h = Math.floor(total / 60), min = total % 60;
+    return (h < 10 ? '0' + h : String(h)) + ':' + (min < 10 ? '0' + min : String(min));
+  }
+
+  /* Does this block collide with one already in the plan? Two blocks on the same
+     day may not overlap — a student cannot be in two places at once, and an
+     overlapping plan would make the weekly total a lie. `ignoreId` lets an edit
+     check against everything except itself. */
+  function planBlockOverlaps(block, others, ignoreId) {
+    if (!block) return false;
+    var start = planClockMinutes(block.start);
+    var mins = Math.round(Number(block.minutes) || 0);
+    if (start === null || !mins) return false;
+    var end = start + mins;
+    var list = Array.isArray(others) ? others : [];
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (!o || o.id === ignoreId) continue;
+      if (String(o.day) !== String(block.day)) continue;
+      var os = planClockMinutes(o.start);
+      var om = Math.round(Number(o.minutes) || 0);
+      if (os === null || !om) continue;
+      if (start < os + om && os < end) return true;
+    }
+    return false;
+  }
+
+  /* Validate one stored block. Returns { block } or { error }. `subjects` is the
+     student's own papers, exactly as planValidateBlock takes them. */
+  function planValidateStoredBlock(raw, subjects, others, ignoreId) {
+    if (!raw || typeof raw !== 'object') return { error: 'There is no block to save.' };
+    var day = String(raw.day == null ? '' : raw.day).slice(0, 3);
+    day = day.charAt(0).toUpperCase() + day.slice(1).toLowerCase();
+    if (planDayIndex(day) < 0) return { error: 'Choose a day of the week.' };
+    var start = String(raw.start == null ? '' : raw.start).trim();
+    if (planClockMinutes(start) === null) return { error: 'Pick a start time as HH:MM (24-hour).' };
+    var mins = Math.round(Number(raw.minutes));
+    if (!isFinite(mins) || mins < PLAN_MIN_MINUTES) return { error: 'Enter a duration of at least 5 minutes.' };
+    if (mins > PLAN_MAX_MINUTES) return { error: 'Keep a block under four hours — split it instead.' };
+    var subj = String(raw.subject == null ? '' : raw.subject).trim();
+    if (!subj) return { error: 'Choose a subject for this block.' };
+    var ok = planValidateBlock({ day: day, t: start, minutes: mins, subj: subj,
+                                 topic: raw.topic }, subjects);
+    if (ok.error) return ok;                    /* one set of subject rules, not two */
+    var topic = String(raw.topic == null ? '' : raw.topic).trim();
+    if (topic.length > PLAN_TOPIC_MAX) return { error: 'Keep the topic under 120 characters.' };
+    var block = {
+      id: String(raw.id == null ? '' : raw.id).trim().slice(0, 40),
+      day: day,
+      start: start,
+      minutes: mins,
+      end: planEndLabel(start, mins),
+      subject: subj,
+      topic: topic,
+      kind: 'study'
+    };
+    if (!block.id) return { error: 'This block is missing its ID.' };
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(block.id)) return { error: 'That block ID is not valid.' };
+    if (planBlockOverlaps(block, others, ignoreId)) {
+      return { error: 'That time is already taken on ' + PLAN_DAY_LABELS[day] + '.' };
+    }
+    return { block: block };
+  }
+
+  /* Validate a whole submitted plan. Every block is checked, IDs must be unique,
+     and the list is capped so one request cannot store an unbounded plan. On
+     success `blocks` is the cleaned list, in the order given. */
+  function planValidatePayload(payload, subjects, opts) {
+    var list = payload && payload.blocks;
+    if (list == null) return { blocks: [] };
+    if (!Array.isArray(list)) return { error: 'The plan must be a list of blocks.' };
+    if (list.length > PLAN_MAX_BLOCKS) return { error: 'A plan holds at most ' + PLAN_MAX_BLOCKS + ' blocks.' };
+    var seen = {}, out = [];
+    for (var i = 0; i < list.length; i++) {
+      var res = planValidateStoredBlock(list[i], subjects, out, null);
+      if (res.error) return { error: res.error };
+      if (seen[res.block.id]) return { error: 'Two blocks share the same ID.' };
+      seen[res.block.id] = true;
+      out.push(res.block);
+    }
+    return { blocks: out };
+  }
+
+  /* Which blocks fall on one planner day, sorted for reading. */
+  function planBlocksForDay(blocks, dayKey) {
+    var list = (Array.isArray(blocks) ? blocks : []).filter(function (b) {
+      return b && String(b.day) === String(dayKey);
+    });
+    return list.slice().sort(function (a, b) {
+      return (planClockMinutes(a.start) || 0) - (planClockMinutes(b.start) || 0);
+    });
+  }
+
+  /* Planned minutes for one day, and for the whole week. Both count only real
+     blocks, so an empty plan totals 0 rather than nothing at all. */
+  function planTotals(blocks) {
+    var perDay = {}, total = 0;
+    PLAN_DAYS.forEach(function (d) { perDay[d] = 0; });
+    (Array.isArray(blocks) ? blocks : []).forEach(function (b) {
+      if (!b || planDayIndex(b.day) < 0) return;
+      var m = Math.round(Number(b.minutes) || 0);
+      perDay[b.day] += m;
+      total += m;
+    });
+    return { perDay: perDay, weekMinutes: total, count: (blocks || []).length };
+  }
+
   /* Videos: a recording of a live class (type 'live') is the classRecordings
      feature, every other video is a lesson (the videos feature). Fails closed. */
   /* Video playback is excluded from the redesigned web application (owner
@@ -6974,6 +7128,17 @@
     dashMetrics: dashMetrics,
     dashContinue: dashContinue,
     dashStudyPlan: dashStudyPlan,
+    /* the saved-plan payload rules (GET/PUT /api/me/plan) */
+    PLAN_MAX_BLOCKS: PLAN_MAX_BLOCKS,
+    PLAN_MIN_MINUTES: PLAN_MIN_MINUTES,
+    PLAN_MAX_MINUTES: PLAN_MAX_MINUTES,
+    planClockMinutes: planClockMinutes,
+    planEndLabel: planEndLabel,
+    planBlockOverlaps: planBlockOverlaps,
+    planValidateStoredBlock: planValidateStoredBlock,
+    planValidatePayload: planValidatePayload,
+    planBlocksForDay: planBlocksForDay,
+    planTotals: planTotals,
     DASH_TITLE_BANDS: DASH_TITLE_BANDS,
     /* Video is excluded from the app entirely — not previewed, not downloadable. */
     VIDEO_FILE_EXTENSIONS: VIDEO_FILE_EXTENSIONS,

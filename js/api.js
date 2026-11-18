@@ -379,6 +379,31 @@
     /* Seconds of study time already spent today, same stamped-running-total
        shape as practiceXpToday above — real in this driver too, so a demo run
        with no server behaves exactly like the live one. */
+    /* The saved plan as one response shape, from the local record. Mirrors
+       planResponseFor() in server/server.js exactly, so a caller cannot tell
+       which driver answered. */
+    function planResponseForLocal(s) {
+      var raw = s && s.planBlocks;
+      var parsed = null;
+      if (raw) {
+        try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (_) { parsed = null; }
+      }
+      var list = parsed && Array.isArray(parsed.blocks) ? parsed.blocks : [];
+      var subjects = ((s && s.subjects) || []).map(function (sub) { return { subject: sub }; });
+      var clean = [];
+      list.forEach(function (b) {
+        var res = core.planValidateStoredBlock(b, subjects, clean, null);
+        if (res.block) clean.push(res.block);
+      });
+      var totals = core.planTotals(clean);
+      return {
+        ok: true,
+        blocks: clean,
+        totals: { perDay: totals.perDay, weekMinutes: totals.weekMinutes, count: totals.count },
+        savedAt: parsed && typeof parsed.savedAt === 'string' ? parsed.savedAt : null
+      };
+    }
+
     function studySecToday(s) {
       if (!s || s.studyDay !== core.dayStamp()) return 0;
       return Number(s.studySecToday) || 0;
@@ -1066,6 +1091,27 @@
 
       /* Reading mode. A student may only read notes for a paper they sit, and
          only notes management has left active. */
+      /* The saved weekly study plan, mirroring GET/PUT /api/me/plan exactly.
+         This driver keeps it on the student record in the local dataset, the
+         same place the server keeps it, so demo mode and server mode agree on
+         the shape and on every validation rule (both go through
+         core.planValidatePayload). */
+      getPlan: function () {
+        var e = requireStudent(); if (e) return e;
+        var s = find(students, session.id);
+        return ok(planResponseForLocal(s));
+      },
+
+      savePlan: function (payload) {
+        var e = requireStudent(); if (e) return e;
+        var s = find(students, session.id);
+        var subjects = (s.subjects || []).map(function (sub) { return { subject: sub }; });
+        var checked = core.planValidatePayload(payload, subjects);
+        if (checked.error) return fail(checked.error);
+        s.planBlocks = JSON.stringify({ blocks: checked.blocks, savedAt: new Date().toISOString() });
+        return ok(planResponseForLocal(s));
+      },
+
       listNotes: function (filter) {
         var e = requireStudent(); if (e) return e;
         var s = find(students, session.id);
@@ -2534,6 +2580,8 @@
       submitStudy:    function (d)     { return req('POST', '/me/study/submit', d); },
       pingStudyTime:  function (sec)   { return req('POST', '/me/study-time/ping', { seconds: Number(sec) || 0 }); },
       listNotes:      function (f)     { return req('GET', '/me/notes' + qs(f)); },
+      getPlan:        function ()      { return req('GET', '/me/plan'); },
+      savePlan:       function (d)     { return req('PUT', '/me/plan', d || {}); },
       listMyNotices:  function ()      { return req('GET', '/me/notices'); },
       listMyBroadcasts: function ()    { return req('GET', '/me/broadcasts'); },
       listMyFlags:    function ()      { return req('GET', '/me/flags'); },
@@ -2889,6 +2937,8 @@
     startStudy:     function (d)      { return active.startStudy(d); },
     submitStudy:    function (d)      { return active.submitStudy(d); },
     listNotes:      function (f)      { return active.listNotes(f); },
+    getPlan:        function ()       { return active.getPlan(); },
+    savePlan:       function (d)      { return active.savePlan(d); },
     listMyNotices:  function ()       { return active.listMyNotices(); },
     listMyBroadcasts: function ()     { return active.listMyBroadcasts(); },
     listMyFlags: function ()          { return active.listMyFlags(); },

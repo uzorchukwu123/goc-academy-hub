@@ -3572,12 +3572,16 @@ a.cv:hover{color:var(--red)}
 .dash-sec-head h3{ font-size:15.5px; font-weight:900; letter-spacing:-.01em; color:var(--ink); }
 .dash-quick-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
 .dash-quick-card{
-  display:flex; flex-direction:column; align-items:center; gap:6px;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  /* The approved target is ~148px tall. Padding and the icon do the lifting, not
+     the type: the titles, the subtitles and Question Bank's two-line wrap all
+     stay exactly as they are. */
+  gap:7px;
   background:#fff; border:1px solid #F1E9DE; border-radius:13px;
-  padding:11px 5px 10px; cursor:pointer; font-family:var(--font); text-align:center;
+  padding:16px 6px 14px; cursor:pointer; font-family:var(--font); text-align:center;
   box-shadow:0 1px 3px rgba(17,24,39,.05);
   transition:transform .12s ease, box-shadow .16s ease;
-  min-width:0;
+  min-width:0; min-height:148px;
 }
 /* Plain red icons on the white tile — no pink chip behind them, per the
    approved reference. */
@@ -3878,4 +3882,273 @@ a.cv:hover{color:var(--red)}
   .phone:not(.is-login) .side-flourish{ height:72px; }
   .side-nav-foot{ display:flex; margin-top:auto; border-top:1px solid var(--line); padding-top:8px; }
   .tabbar .tab[data-t="logout"]{ color:var(--red-deep); }
+}
+
+/* ======================================================================
+   MORE — the phone's navigation hub (A01 follow-up)
+   ----------------------------------------------------------------------
+   A phone-only destination. It exists so the five-tab bottom bar does not
+   have to pretend the rest of the app is not there; every row is a real
+   destination that the desktop sidebar also offers. On a wide screen the
+   sidebar does this job, so the hub is not reachable from the bar there
+   (More is hidden), but the screen itself is styled at both widths so a
+   direct link never lands on something broken.
+   ====================================================================== */
+.more-id{
+  display:flex; align-items:center; gap:12px;
+  background:#fff; border:1px solid #F1E9DE; border-radius:16px;
+  padding:13px 14px; margin-bottom:4px; cursor:pointer;
+  box-shadow:0 1px 3px rgba(17,24,39,.05);
+}
+.more-ava{
+  width:42px; height:42px; border-radius:50%; flex:none;
+  background:linear-gradient(140deg,#DC2626,#7F1D1D); color:#fff;
+  font:800 15px var(--font); display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 12px rgba(220,38,38,.28);
+}
+.more-who{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.more-who b{ font-size:14.5px; font-weight:900; color:var(--ink); line-height:1.25;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.more-who s{ text-decoration:none; font-size:11.5px; font-weight:700; color:var(--gray); margin-top:2px; }
+.more-chev{ flex:none; width:16px; height:16px; color:#B4BAC4; }
+
+.more-list{
+  background:#fff; border:1px solid #F1E9DE; border-radius:16px; overflow:hidden;
+  box-shadow:0 1px 3px rgba(17,24,39,.05);
+}
+.more-row{
+  display:flex; align-items:center; gap:12px; width:100%;
+  padding:13px 14px; border:0; background:none; cursor:pointer;
+  font-family:var(--font); text-align:left;
+  border-bottom:1px solid #F5EFE6;
+}
+.more-row:last-child{ border-bottom:0; }
+.more-row:active{ background:#FDF7F7; }
+.more-ico{ flex:none; display:flex; color:#C81E1E; }
+.more-ico svg{ width:22px; height:22px; }
+.more-txt{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.more-txt b{ font-size:13.5px; font-weight:800; color:var(--ink); line-height:1.3; }
+.more-txt s{ text-decoration:none; font-size:11px; font-weight:600; color:var(--gray); margin-top:1px; }
+.more-home{
+  display:flex; align-items:center; justify-content:center; gap:9px; width:100%;
+  margin-top:18px; padding:13px 16px; cursor:pointer; font-family:var(--font);
+  font-size:14px; font-weight:800; color:var(--red-deep);
+  background:#fff; border:1.5px solid #FADDDD; border-radius:14px;
+}
+.more-home .icon{ width:18px; height:18px; }
+.more-logout{ display:block; width:100%; text-align:center; margin-top:14px; color:var(--gray); }
+
+@media (min-width:900px){
+  #more .wrap{ max-width:760px; margin:0 auto; }
+  .more-row{ padding:15px 18px; }
+  .more-txt b{ font-size:14.5px; }
+  .more-txt s{ font-size:12px; }
+}
+
+/* ======================================================================
+   STUDY PLAN — the dedicated planner screen
+   ----------------------------------------------------------------------
+   The surface for the planner engine. Red and white like the rest of the
+   app, one card language, and a day strip that reads as a week rather than
+   as seven unrelated buttons.
+   ====================================================================== */
+.sp-add-top{
+  display:inline-flex; align-items:center; gap:6px; flex:none;
+  padding:9px 14px; border:0; border-radius:11px; cursor:pointer;
+  font-family:var(--font); font-size:12.5px; font-weight:800; color:#fff;
+  background:linear-gradient(140deg,#D42020,#A81616);
+  box-shadow:0 6px 16px rgba(200,30,30,.26);
+}
+.sp-add-top .icon{ width:15px; height:15px; }
+
+/* the three real figures at the top */
+.sp-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:2px 0 14px; }
+.sp-stat{
+  background:#fff; border:1px solid #F1E9DE; border-radius:14px;
+  padding:12px 8px; text-align:center; box-shadow:0 1px 3px rgba(17,24,39,.05);
+}
+.sp-stat b{ display:block; font-size:17px; font-weight:900; color:var(--ink);
+  font-variant-numeric:tabular-nums; line-height:1.15; }
+.sp-stat s{ text-decoration:none; display:block; font-size:9.5px; font-weight:700;
+  color:var(--gray); margin-top:4px; line-height:1.25; }
+
+/* the week strip */
+.sp-week{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-bottom:14px; }
+.sp-day{
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:9px 2px 8px; border:1px solid #F1E9DE; border-radius:12px;
+  background:#fff; cursor:pointer; font-family:var(--font);
+  transition:background .12s ease, border-color .12s ease;
+}
+.sp-day s{ text-decoration:none; font-size:10px; font-weight:800; color:var(--gray); letter-spacing:.02em; }
+.sp-day b{ font-size:13px; font-weight:900; color:var(--ink); font-variant-numeric:tabular-nums; }
+/* the block count, kept quiet under the date so the strip still reads as days */
+.sp-day u{ text-decoration:none; font-size:9px; font-weight:800; color:#B9AFA2; line-height:1; }
+.sp-day.is-today{ border-color:#FADDDD; background:#FEF7F7; }
+.sp-day.is-today s{ color:var(--red-deep); }
+.sp-day.on{
+  background:linear-gradient(142deg,#DC2626,#B01818); border-color:#B01818;
+  box-shadow:0 5px 14px rgba(200,30,30,.26);
+}
+.sp-day.on s, .sp-day.on b{ color:#fff; }
+.sp-day.on u{ color:rgba(255,255,255,.72); }
+
+/* ---- week navigation ---- */
+.sp-weeknav{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 8px; }
+.sp-weeklabel{
+  flex:1; text-align:center; font-size:12px; font-weight:800; color:var(--slate);
+  font-variant-numeric:tabular-nums; letter-spacing:.01em;
+}
+.sp-wkbtn{
+  width:32px; height:32px; flex:none; display:grid; place-items:center;
+  border:1px solid #EFE5D9; border-radius:10px; background:#fff; color:var(--slate);
+  cursor:pointer; padding:0; transition:background .12s ease, border-color .12s ease, color .12s ease;
+}
+.sp-wkbtn .icon{ width:16px; height:16px; }
+.sp-wkbtn:hover{ background:#FEF7F7; border-color:#FADDDD; color:var(--red-deep); }
+.sp-wkbtn:active{ transform:translateY(1px); }
+
+.sp-dayhead{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:9px; }
+.sp-dayname{ font-size:16px; font-weight:900; color:var(--ink); letter-spacing:-.01em; }
+.sp-daytotal{ font-size:11.5px; font-weight:700; color:var(--gray); }
+
+/* progress against the plan */
+.sp-progress{
+  background:#fff; border:1px solid #F1E9DE; border-radius:14px;
+  padding:12px 14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(17,24,39,.05);
+}
+.sp-progress-top{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.sp-progress-top span{ font-size:12px; font-weight:800; color:var(--slate); }
+.sp-progress-top b{ font-size:14px; font-weight:900; color:var(--ink); font-variant-numeric:tabular-nums; }
+.sp-bar{ height:8px; border-radius:99px; background:#EFE7DC; overflow:hidden; margin-top:9px; }
+.sp-bar i{ display:block; height:100%; border-radius:99px;
+  background:linear-gradient(90deg,#D42020,#B01818); transition:width .35s ease; }
+.sp-progress-note{ font-size:11px; font-weight:600; color:var(--gray); margin-top:7px; line-height:1.35; }
+
+/* the blocks */
+.sp-blocks{ display:flex; flex-direction:column; gap:8px; }
+.sp-block{
+  display:flex; align-items:center; gap:12px;
+  background:#fff; border:1px solid #F1E9DE; border-radius:14px;
+  padding:11px 12px; cursor:pointer;
+  box-shadow:0 1px 3px rgba(17,24,39,.05);
+}
+.sp-block-time{
+  flex:none; width:50px; display:flex; flex-direction:column; align-items:flex-start;
+  border-right:2px solid #FADDDD; padding-right:10px;
+}
+.sp-block-time b{ font-size:13px; font-weight:900; color:var(--red-deep); font-variant-numeric:tabular-nums; }
+.sp-block-time s{ text-decoration:none; font-size:10px; font-weight:700; color:var(--gray); }
+.sp-block-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.sp-block-main b{ font-size:13px; font-weight:800; color:var(--ink); }
+.sp-block-main s{ text-decoration:none; font-size:11.5px; font-weight:600; color:var(--gray);
+  margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sp-block-dur{ flex:none; font-size:11px; font-weight:800; color:var(--slate); }
+.sp-block-edit{
+  flex:none; width:30px; height:30px; border:0; border-radius:9px; cursor:pointer;
+  background:#FDF3F3; color:var(--red-deep); display:flex; align-items:center; justify-content:center;
+}
+.sp-block-edit svg{ width:15px; height:15px; }
+
+/* honest empty + error states */
+.sp-empty, .sp-error{
+  display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px;
+  background:#fff; border:1px dashed #E4D9CB; border-radius:16px;
+  padding:26px 20px; margin-top:4px; color:var(--slate);
+}
+.sp-empty[hidden], .sp-error[hidden]{ display:none; }
+.sp-empty svg{ color:#C9BCA9; }
+.sp-empty b, .sp-error b{ font-size:14px; font-weight:900; color:var(--ink); margin-top:4px; }
+.sp-empty p, .sp-error p{ font-size:12px; font-weight:600; color:var(--gray);
+  line-height:1.45; max-width:34ch; margin:0 0 8px; }
+.sp-empty .btn, .sp-error .btn{ padding:10px 18px; font-size:13px; }
+.sp-error{ border-style:solid; border-color:#FADDDD; background:#FEF7F7; }
+
+/* the add/edit sheet.
+   The overlay is viewport-fixed rather than screen-absolute: a screen scrolls,
+   so an absolutely-positioned overlay is as tall as the content and the sheet
+   would sit at the bottom of the *document* instead of the bottom of what the
+   student is looking at. Fixed keeps it where the thumb is. */
+#spEditor{ position:fixed; inset:0; }
+.sp-sheet{
+  position:absolute; left:0; right:0; bottom:0; z-index:2;
+  background:#fff; border-radius:20px 20px 0 0;
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow:0 -10px 34px rgba(17,24,39,.18);
+  transform:translateY(100%); transition:transform .22s cubic-bezier(.2,.7,.3,1);
+  max-height:88%; overflow-y:auto;
+}
+@media (max-width:899px){
+  #spEditor.show .sp-sheet{ transform:translateY(0); }
+}
+.sp-sheet-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.sp-sheet-head b{ font-size:16px; font-weight:900; color:var(--ink); }
+.sp-x{
+  width:32px; height:32px; border:0; border-radius:9px; background:#F5EFE6;
+  font-size:19px; line-height:1; color:var(--slate); cursor:pointer;
+}
+.sp-row2{ display:flex; gap:10px; }
+.sp-row2 .field{ flex:1; min-width:0; }
+.sp-sheet .field select,
+.sp-sheet .field input{
+  width:100%; border:1.5px solid var(--line); border-radius:12px; padding:11px 12px;
+  font-size:14px; font-family:var(--font); background:var(--bg); color:var(--ink);
+}
+.sp-sheet .field select:focus,
+.sp-sheet .field input:focus{ outline:none; border-color:var(--red); background:#fff; }
+.sp-sheet-actions{ display:flex; gap:10px; margin-top:6px; }
+.sp-sheet-actions .btn{ flex:1; }
+.sp-sheet .form-msg{ min-height:16px; }
+.sp-delete{
+  display:block; width:100%; margin-top:12px; padding:10px;
+  border:0; background:none; cursor:pointer;
+  font-family:var(--font); font-size:12.5px; font-weight:800; color:#B91C1C;
+}
+.sp-delete[hidden]{ display:none; }
+
+@media (min-width:900px){
+  .sp-stats{ gap:14px; margin:4px 0 18px; }
+  .sp-stat{ padding:16px 12px; border-radius:16px; }
+  .sp-stat b{ font-size:22px; }
+  .sp-stat s{ font-size:11px; }
+  .sp-week{ gap:8px; margin-bottom:18px; }
+  .sp-day{ padding:11px 4px 10px; border-radius:14px; }
+  .sp-day s{ font-size:11px; }
+  .sp-day b{ font-size:15px; }
+  .sp-day u{ font-size:10px; }
+  .sp-weeknav{ margin-bottom:10px; }
+  .sp-weeklabel{ font-size:13px; }
+  .sp-wkbtn{ width:36px; height:36px; }
+  .sp-dayname{ font-size:19px; }
+  .sp-daytotal{ font-size:13px; }
+  .sp-progress{ padding:15px 18px; border-radius:16px; }
+  .sp-progress-top span{ font-size:13px; }
+  .sp-progress-top b{ font-size:16px; }
+  .sp-block{ padding:14px 16px; border-radius:16px; }
+  .sp-block-time{ width:64px; }
+  .sp-block-time b{ font-size:15px; }
+  .sp-block-main b{ font-size:14.5px; }
+  .sp-block-main s{ font-size:12.5px; }
+  /* the sheet is a centred dialog rather than a bottom sheet on a wide screen */
+  /* On a wide screen the sheet becomes a centred dialog. Position only — the
+     .overlay it sits in is what decides whether it is on screen at all, so the
+     dialog can never end up transparent waiting for a class that never comes. */
+  .sp-sheet{
+    left:50%; right:auto; bottom:auto; top:50%;
+    transform:translate(-50%,-50%);
+    width:440px; max-width:92vw; border-radius:18px; max-height:88vh;
+    transition:transform .2s ease;
+  }
+}
+
+/* ============================ the phone frame's notch =========================
+   At the widths where the device frame is drawn (wide enough for the bezel,
+   narrow enough that it is still the phone layout) the notch sits over the top
+   of the content. Every screen's header began at the same inset, so the notch
+   was cutting through the first line of all of them — the dashboard's brand row
+   and the Study Plan title included. The inset is added here, after the rules
+   it has to beat, and only where the notch is actually drawn. */
+@media (min-width:481px) and (max-width:899px){
+  .hdr{ padding-top:34px; }
+  .dash-mobile-head{ padding-top:34px; }
 }

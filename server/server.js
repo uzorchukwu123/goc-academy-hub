@@ -269,6 +269,7 @@ async function createAppwriteStudent(rec) {
       practiceXpToday: Number(rec.practiceXpToday || 0),
       studyDay: rec.studyDay || null,
       studySecToday: Number(rec.studySecToday || 0),
+      planBlocks: typeof rec.planBlocks === 'string' ? rec.planBlocks : null,
       appwriteUserId: rec.appwriteUserId || null
     }
   );
@@ -328,6 +329,10 @@ function appwriteStudentToRecord(doc) {
     practiceCount: Number(doc.practiceCount || 0),
     studyDay: doc.studyDay || null,
     studySecToday: Number(doc.studySecToday || 0),
+    /* The saved weekly plan (GET/PUT /api/me/plan). Absent on a record written
+       before the Study Plan existed — studentPlanOf() reads that as an empty
+       plan, so a legacy account needs no migration and no write. */
+    planBlocks: typeof doc.planBlocks === 'string' ? doc.planBlocks : null,
     appwriteUserId: doc.appwriteUserId || null,
     cohort: doc.cohort || null,
     createdAt: doc.$createdAt || null,
@@ -1478,6 +1483,54 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
    A _savedAt ISO timestamp is injected on every write so that
    hydrateBlobFromStorage() can compare the blob against the local file and
    refuse to restore a stale blob over a newer local copy. */
+/* ============================================================================
+   SAVED STUDY PLAN — reading and shaping one student's `planBlocks`
+   ----------------------------------------------------------------------------
+   `planBlocks` holds a JSON string: { blocks: [...], savedAt: ISO }. It is
+   optional. A record written before the Study Plan existed has no such
+   attribute at all, and that is a perfectly good empty plan — not an error, and
+   not a reason to write anything. Nothing here migrates or repairs a record;
+   the first successful PUT is what creates the field.
+
+   The stored list is re-validated on the way out as well as on the way in. A
+   record edited by hand, or written by an older build with different rules,
+   cannot make GET return a block the current planner would reject: unreadable
+   entries are dropped and the rest are cleaned, so the response is always a
+   plan the screen can draw.
+   ========================================================================== */
+function studentPlanOf(student) {
+  const raw = student && student.planBlocks;
+  if (!raw) return { blocks: [], savedAt: null };
+  let parsed;
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (_) {
+    return { blocks: [], savedAt: null };
+  }
+  if (!parsed || typeof parsed !== 'object') return { blocks: [], savedAt: null };
+  const list = Array.isArray(parsed.blocks) ? parsed.blocks : [];
+  const subjects = ((student && student.subjects) || []).map(sub => ({ subject: sub }));
+  const clean = [];
+  for (const b of list) {
+    const res = core.planValidateStoredBlock(b, subjects, clean, null);
+    if (res.block) clean.push(res.block);
+  }
+  return { blocks: clean, savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null };
+}
+
+/* One response shape for GET, PUT and an empty plan alike. */
+function planResponseFor(plan) {
+  const blocks = (plan && Array.isArray(plan.blocks)) ? plan.blocks : [];
+  const totals = core.planTotals(blocks);
+  return {
+    ok: true,
+    blocks,
+    totals: { perDay: totals.perDay, weekMinutes: totals.weekMinutes, count: totals.count },
+    savedAt: (plan && plan.savedAt) || null
+  };
+}
+
+
 function writeData(db) {
   db._savedAt = new Date().toISOString();
   const tmp = DATA_FILE + '.tmp';
@@ -5893,6 +5946,70 @@ const ROUTES = [
       const eff = effectiveSettingsFor(db, cohort);
       okJson(res, core.studyWindowStatus(eff.dailyLimitMin, studySecToday(stu), studyBonusMinToday(stu)));
     } },
+  /* ---- the student's saved weekly study plan -------------------------------
+     GET  /api/me/plan   the plan this student owns, and nothing else
+     PUT  /api/me/plan   replace it, after validating every block
+
+     AUTHORITY: the record is always selected by `sess.data.id` — the ID the
+     session proved — never by anything in the request body. A body that names
+     another Scholar ID is not an error, it is simply ignored, so there is no
+     parameter to tamper with. A student therefore cannot read or overwrite
+     another student's plan even by forging the payload.
+
+     STORAGE: `planBlocks` on the student record, as a JSON string (the same
+     convention `subjects` already uses on this collection, so Appwrite needs no
+     new attribute type horror and a legacy record simply has no attribute). The
+     write preserves every other field: local mode assigns one property on the
+     record it already read, Appwrite mode sends a patch containing only
+     `planBlocks`.
+
+     RESPONSE (GET and PUT, identical shape whether the plan is empty or full):
+       { ok: true,
+         blocks: [ { id, day, start, end, minutes, subject, topic, kind } ],
+         totals: { perDay: {Mon..Sun}, weekMinutes, count },
+         savedAt: ISO string | null }
+
+     `end` is derived from start + minutes and is never stored, so a block can
+     never hold a start and an end that disagree. Validation lives in
+     js/goc-core.js (planValidatePayload) so the screen and the route apply the
+     identical rules — the server never trusts the client's copy of them. */
+  { method: 'GET', path: /^\/api\/me\/plan$/, need: 'student', handler: async (req, res, body, sess) => {
+      const db = readData();
+      const s = appwriteDatabases
+        ? await getAppwriteStudent(sess.data.id)
+        : db.students.find(x => x.id === sess.data.id);
+      if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+      okJson(res, planResponseFor(studentPlanOf(s)));
+    } },
+
+  { method: 'PUT', path: /^\/api\/me\/plan$/, need: 'student', handler: async (req, res, body, sess) => {
+      const db = readData();
+      const s = appwriteDatabases
+        ? await getAppwriteStudentOrNull(sess.data.id)
+        : db.students.find(x => x.id === sess.data.id);
+      if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+
+      /* The student's own papers, so a block for a subject they do not sit is
+         refused here exactly as planValidateBlock refuses it anywhere else. */
+      const subjects = (s.subjects || []).map(sub => ({ subject: sub }));
+      const checked = core.planValidatePayload(body, subjects);
+      if (checked.error) return errJson(res, 400, checked.error);
+
+      const stored = { blocks: checked.blocks, savedAt: new Date().toISOString() };
+      const serialised = JSON.stringify(stored);
+
+      if (appwriteDatabases) {
+        /* A patch, not a whole-record write: every other attribute is untouched. */
+        await updateAppwriteStudent(sess.data.id, { planBlocks: serialised });
+      } else {
+        /* One property on the record this handler already read; writeData()
+           persists the record, so nothing else on it changes. */
+        s.planBlocks = serialised;
+        writeData(db);
+      }
+      okJson(res, planResponseFor(stored));
+    } },
+
 
   /* A student reads only notes for a paper they sit, and only what management
      has left active. */

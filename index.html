@@ -1609,6 +1609,246 @@
       </div>
     </section>
 
+    <!-- ============ STUDY PLAN — the dedicated planner screen ============
+         The planner engine has lived in js/goc-core.js since the Timetable
+         screen was retired; this is the surface that mounts it. It is not the
+         Timetable: there is no academy period list and no room/teacher grid.
+         A plan here is the student's own week of study blocks, saved against
+         their account through GET/PUT /api/me/plan.
+
+         Every number on it is real: blocks come from the saved plan, the
+         "studied today" figure comes from the server's study-time record
+         (the same one the dashboard card reads), and planned time is summed
+         from the blocks. With no plan the screen says so — it never draws an
+         empty week as though it were a plan. -->
+    <section class="screen pad" id="studyplan">
+      <div class="hdr">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to the dashboard" onclick="go('home')">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div>
+            <div class="eyebrow">Study Plan</div>
+            <div class="h-title" style="font-size:19px">Your week</div>
+          </div>
+        </div>
+        <button class="sp-add-top" type="button" onclick="spOpenEditor(null)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          Add block
+        </button>
+      </div>
+
+      <div class="wrap">
+
+        <!-- this week's real figures: planned minutes and what the server says
+             was actually studied today -->
+        <div class="sp-stats" id="spStats">
+          <div class="sp-stat"><b id="spWeekPlanned">—</b><s>Planned this week</s></div>
+          <div class="sp-stat"><b id="spWeekCount">—</b><s>Study blocks</s></div>
+          <div class="sp-stat"><b id="spStudiedToday">—</b><s>Studied today</s></div>
+        </div>
+
+        <!-- Week navigation. The planner works in Monday-first weeks, so the
+             strip is the week you are looking at, not always this one: the
+             arrows walk forward and back a week at a time. -->
+        <div class="sp-weeknav">
+          <button class="sp-wkbtn" type="button" id="spPrev" onclick="spShiftWeek(-1)" aria-label="Previous week">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div class="sp-weeklabel" id="spWeekLabel" aria-live="polite">This week</div>
+          <button class="sp-wkbtn" type="button" id="spNext" onclick="spShiftWeek(1)" aria-label="Next week">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="sp-week" role="tablist" aria-label="Days of the week" id="spWeek"></div>
+
+        <!-- the selected day -->
+        <div class="sp-dayhead">
+          <div class="sp-dayname" id="spDayName">Monday</div>
+          <div class="sp-daytotal" id="spDayTotal"></div>
+        </div>
+
+        <!-- real study-time progress against the plan for the selected day -->
+        <div class="sp-progress" id="spProgress">
+          <div class="sp-progress-top">
+            <span id="spProgressLabel">Today's progress</span>
+            <b id="spProgressPct">—</b>
+          </div>
+          <div class="sp-bar" role="img" aria-label="Study progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="spBar"><i id="spBarFill" style="width:0%"></i></div>
+          <p class="sp-progress-note" id="spProgressNote"></p>
+        </div>
+
+        <!-- the blocks for that day -->
+        <div class="sp-blocks" id="spBlocks"></div>
+
+        <!-- honest empty state -->
+        <div class="sp-empty" id="spEmpty" hidden>
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
+          <b>No study blocks on <span id="spEmptyDay">this day</span> yet</b>
+          <p>Add your first block and it is saved to your account, so it is still here next time you sign in.</p>
+          <button class="btn btn-red" type="button" onclick="spOpenEditor(null)">Add a study block</button>
+        </div>
+
+        <div class="sp-error" id="spError" hidden>
+          <b>Your plan could not be read</b>
+          <p id="spErrorText">Try again in a moment.</p>
+          <button class="btn btn-outline" type="button" onclick="spLoad()">Try again</button>
+        </div>
+
+        <div class="spacer"></div>
+      </div>
+
+      <!-- the add/edit sheet. One form serves both: spOpenEditor(block) fills it
+           with that block, spOpenEditor(null) starts a new one. -->
+      <div class="overlay" id="spEditor" onclick="if(event.target===this) spCloseEditor()">
+        <div class="sp-sheet" role="dialog" aria-modal="true" aria-labelledby="spEditorTitle">
+          <div class="sp-sheet-head">
+            <b id="spEditorTitle">Add a study block</b>
+            <button class="sp-x" type="button" onclick="spCloseEditor()" aria-label="Close">×</button>
+          </div>
+
+          <div class="field">
+            <label for="spDay">Day</label>
+            <select id="spDay"></select>
+          </div>
+          <div class="sp-row2">
+            <div class="field">
+              <label for="spStart">Start time</label>
+              <input type="time" id="spStart" value="16:00" step="300">
+            </div>
+            <div class="field">
+              <label for="spMinutes">Minutes</label>
+              <input type="number" id="spMinutes" min="5" max="240" step="5" value="60" inputmode="numeric">
+            </div>
+          </div>
+          <div class="field">
+            <label for="spSubject">Subject</label>
+            <select id="spSubject"></select>
+          </div>
+          <div class="field">
+            <label for="spTopic">What will you study?</label>
+            <input type="text" id="spTopic" maxlength="120" placeholder="e.g. Quadratic equations" autocomplete="off">
+          </div>
+          <div class="form-msg" id="spEditorMsg"></div>
+          <div class="sp-sheet-actions">
+            <button class="btn btn-outline" type="button" onclick="spCloseEditor()">Cancel</button>
+            <button class="btn btn-red" type="button" id="spSaveBtn" onclick="spSave()">Save block</button>
+          </div>
+          <button class="sp-delete" type="button" id="spDeleteBtn" onclick="spDelete()" hidden>Delete this block</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ MORE — the phone's navigation hub ============
+         On a phone the bottom bar carries five destinations; everything else
+         the sidebar offers lives here. This is navigation only: every row calls
+         the same handler the desktop sidebar calls, so a student can never reach
+         a destination from More that the sidebar cannot, and nothing new is
+         invented to fill a category. The student's own name and paper count are
+         read from the account on the way in (paintMoreHub), never baked in. -->
+    <section class="screen pad" id="more">
+      <div class="hdr">
+        <div class="row gap12">
+          <button class="back" aria-label="Back to the dashboard" onclick="go('home')">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div>
+            <div class="eyebrow">More</div>
+            <div class="h-title" style="font-size:19px">Everything else</div>
+          </div>
+        </div>
+      </div>
+      <div class="wrap">
+
+        <!-- who this is, read from the account -->
+        <div class="more-id" id="moreId" onclick="go('profile')" role="button" tabindex="0"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();go('profile');}">
+          <span class="more-ava" id="moreAva">G</span>
+          <span class="more-who">
+            <b id="moreName">Your account</b>
+            <s id="moreSub">Open your profile</s>
+          </span>
+          <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+
+        <!-- Learning: the practice and reference side of the app -->
+        <div class="sec-head"><div class="section-t">Learning</div></div>
+        <div class="more-list">
+          <button class="more-row" onclick="go('study')">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg></span>
+            <span class="more-txt"><b>Study</b><s>Topics, notes and revision</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="dashJambGo()">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M9 21h6M12 17.5V21"/><path d="M7 12l2.5-3 2 2L15 7.5"/></svg></span>
+            <span class="more-txt"><b>JAMB CBT</b><s>Full UTME practice</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="go('resources')">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 6.5C9.6 5.2 7 4.9 4.6 5.6v12.9C7 17.8 9.6 18.1 12 19.4V6.5z"/><path d="M12 6.5c2.4-1.3 5-1.6 7.4-.9v12.9c-2.4-.7-5-.4-7.4.9V6.5z"/></svg></span>
+            <span class="more-txt"><b>Resources</b><s>Notes and study materials</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="openPastQuestions()">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3.2l8.4 4.4-8.4 4.4L3.6 7.6z"/><path d="M3.6 12.4L12 16.8l8.4-4.4M3.6 16.6L12 21l8.4-4.4"/></svg></span>
+            <span class="more-txt"><b>Question Bank</b><s>Browse past-paper questions</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="dashPlanGo()">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg></span>
+            <span class="more-txt"><b>Study Plan</b><s>Plan your study week</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="openResults()">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 20V10M12 20V4M18 20v-6"/></svg></span>
+            <span class="more-txt"><b>Results</b><s>Your marked papers and scores</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <!-- Communication and support -->
+        <div class="sec-head"><div class="section-t">Communication and support</div></div>
+        <div class="more-list">
+          <!-- "Messages" is the app's Updates & News screen: notices, broadcasts
+               and announcements from the academy. It is named for what it holds
+               rather than renamed into a inbox the app does not have. -->
+          <button class="more-row" onclick="go('updates')">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg></span>
+            <span class="more-txt"><b>Messages &amp; Updates</b><s>Notices from your academy</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <!-- Account -->
+        <div class="sec-head"><div class="section-t">Account</div></div>
+        <div class="more-list">
+          <button class="more-row" onclick="dashSupportGo()">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 114 2.1c-.9.6-1.6 1.1-1.6 2.2"/><path d="M12 17.2h.01"/></svg></span>
+            <span class="more-txt"><b>Contact the academy</b><s>Help, questions and support</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="go('profile')">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></span>
+            <span class="more-txt"><b>Profile</b><s>Your details and standing</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="more-row" onclick="go('profile')">
+            <span class="more-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></span>
+            <span class="more-txt"><b>Settings</b><s>Password and preferences</s></span>
+            <svg class="icon more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <!-- back to where they came from, and out -->
+        <button class="more-home" onclick="go('home')">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>
+          Back to dashboard
+        </button>
+        <button class="mini-link more-logout" onclick="logout()">Log out</button>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
     <!-- ============ LEADERBOARD ============ -->
     <section class="screen pad" id="league">
       <div class="lead-hero">
@@ -2440,13 +2680,13 @@
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>Resources</button>
       <button class="tab" data-t="qbank" onclick="openPastQuestions()">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M12 3.5l8 4.2-8 4.2-8-4.2z"/><path d="M4 12.2l8 4.2 8-4.2M4 16.6l8 4.2 8-4.2"/></svg>Question Bank</button>
-      <button class="tab" data-t="classes" onclick="dashPlanGo()">
+      <button class="tab" data-t="studyplan" onclick="dashPlanGo()">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>Study Plan</button>
       <button class="tab" data-t="league" onclick="go('league')">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M17 5h3v1.5a3 3 0 01-3 3M7 5H4v1.5a3 3 0 003 3"/><path d="M9 18h6M12 13v5"/></svg>League</button>
       <!-- Phone only: the approved fifth tab. It opens the account screen,
            where the rest of the app's sections are listed. -->
-      <button class="tab tab-m" data-t="more" onclick="go('profile')">
+      <button class="tab tab-m" data-t="more" onclick="go('more')">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg>More</button>
     </div>
     <div class="side-nav side-nav-foot">
