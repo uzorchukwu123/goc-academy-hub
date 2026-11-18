@@ -4069,6 +4069,12 @@ a.cv:hover{color:var(--red)}
    so an absolutely-positioned overlay is as tall as the content and the sheet
    would sit at the bottom of the *document* instead of the bottom of what the
    student is looking at. Fixed keeps it where the thumb is. */
+/* The desktop layout constrains every direct child of a screen to a centred
+   column (.phone:not(.is-login) .screen>*). This overlay is a direct child, so
+   without this it becomes a 1060px-wide column floating in the middle of the
+   page and the scrim leaves the sidebar uncovered. It is a dialog backdrop, not
+   page content: it has to span the window. */
+.phone:not(.is-login) #spEditor{ max-width:none; width:auto; margin:0; }
 #spEditor{ position:fixed; inset:0; }
 .sp-sheet{
   position:absolute; left:0; right:0; bottom:0; z-index:2;
