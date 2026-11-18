@@ -856,25 +856,128 @@
             </div>
             <p class="dash-msg">Stay consistent, learn deeply and build your UTME advantage.</p>
           </div>
-          <!-- The reference's open-book-and-cap illustration, drawn here rather
+          <!-- The reference's open-book-and-cap illustration. Drawn here rather
                than loaded from anywhere: the hub ships no third-party art. -->
-          <svg class="dash-welcome-art" viewBox="0 0 260 150" aria-hidden="true" focusable="false">
-            <ellipse cx="132" cy="136" rx="86" ry="9" fill="rgba(0,0,0,.16)"/>
-            <path d="M40 108c22-9 44-9 62 0v26c-18-9-40-9-62 0z" fill="#F7E9D2"/>
-            <path d="M102 108c22-9 44-9 62 0v26c-18-9-40-9-62 0z" fill="#FBF3E4"/>
-            <path d="M40 108c22-9 44-9 62 0 18-9 40-9 62 0" fill="none" stroke="#E4CFAE" stroke-width="2.5"/>
-            <path d="M60 104c16-6 30-6 42 0v22c-12-6-26-6-42 0z" fill="#FFFBF3"/>
-            <path d="M122 104c16-6 30-6 42 0v22c-12-6-26-6-42 0z" fill="#FFFBF3"/>
-            <path d="M78 96h104l-52 26z" fill="#8C1515"/>
-            <path d="M78 96h104v-8H78z" fill="#A8201F"/>
-            <path d="M86 88h88l6-10H80z" fill="#C4302B"/>
-            <path d="M106 34l30-12 30 12-30 11z" fill="#1F232B"/>
-            <path d="M118 41v12c0 4 36 4 36 0V41" fill="#2B313B"/>
-            <path d="M166 38v22" stroke="#F0A500" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="166" cy="63" r="4" fill="#F0A500"/>
-            <path d="M136 22v-9l16 4z" fill="#F0A500" opacity=".9"/>
-            <path d="M100 70c0-10 8-18 18-18s18 8 18 18z" fill="#FBF3E4" opacity=".35"/>
-          </svg>
+<svg class="dash-welcome-art" aria-hidden="true" focusable="false" viewBox="0 0 300 190" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="dwa-pgL" x1=".1" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#FFFDF6"/><stop offset=".45" stop-color="#FBF2E0"/><stop offset="1" stop-color="#E4CFAC"/>
+    </linearGradient>
+    <linearGradient id="dwa-pgR" x1=".9" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="#FFFDF6"/><stop offset=".45" stop-color="#FCF4E6"/><stop offset="1" stop-color="#E8D5B4"/>
+    </linearGradient>
+    <linearGradient id="dwa-blockL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D8C29C"/><stop offset="1" stop-color="#B99C71"/>
+    </linearGradient>
+    <linearGradient id="dwa-blockR" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DDC7A3"/><stop offset="1" stop-color="#C0A378"/>
+    </linearGradient>
+    <linearGradient id="dwa-redCov" x1="0" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#F0554A"/><stop offset=".35" stop-color="#D22222"/>
+      <stop offset="1" stop-color="#8E1010"/>
+    </linearGradient>
+    <linearGradient id="dwa-redSpine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B71919"/><stop offset="1" stop-color="#7A0C0C"/>
+    </linearGradient>
+    <linearGradient id="dwa-capTop" x1=".1" y1="0" x2=".9" y2="1">
+      <stop offset="0" stop-color="#4C5665"/><stop offset=".3" stop-color="#2A303A"/>
+      <stop offset=".75" stop-color="#171C23"/><stop offset="1" stop-color="#0C1015"/>
+    </linearGradient>
+    <linearGradient id="dwa-capSkull" x1=".1" y1="0" x2=".95" y2="1">
+      <stop offset="0" stop-color="#39414D"/><stop offset=".45" stop-color="#1E242C"/><stop offset="1" stop-color="#0B0E13"/>
+    </linearGradient>
+    <linearGradient id="dwa-capEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232A33"/><stop offset="1" stop-color="#080A0E"/>
+    </linearGradient>
+    <linearGradient id="dwa-gold" x1="0" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#FFE49A"/><stop offset=".4" stop-color="#F7B31E"/><stop offset="1" stop-color="#C48700"/>
+    </linearGradient>
+    <radialGradient id="dwa-glow" cx=".48" cy=".55" r=".52">
+      <stop offset="0" stop-color="#FFC08C" stop-opacity=".26"/><stop offset="1" stop-color="#FFC08C" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dwa-pageSheen" cx=".5" cy=".3" r=".7">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".55"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse cx="150" cy="128" rx="132" ry="72" fill="url(#dwa-glow)"/>
+
+  <!-- contact shadows -->
+  <ellipse cx="148" cy="170" rx="112" ry="11" fill="#5C0909" opacity=".42"/>
+  <ellipse cx="148" cy="166" rx="74" ry="6" fill="#3A0404" opacity=".38"/>
+
+  <!-- ================= open book, back page block ================= -->
+  <path d="M148 150 C120 128 92 119 44 121 L38 160 C90 157 122 161 148 172 Z" fill="url(#dwa-blockL)"/>
+  <path d="M148 150 C176 128 204 119 252 121 L258 160 C206 157 174 161 148 172 Z" fill="url(#dwa-blockR)"/>
+
+  <!-- ================= open book, top pages ================= -->
+  <path d="M148 146 C120 124 92 115 44 117 L40 150 C90 148 122 153 148 164 Z" fill="url(#dwa-pgL)"/>
+  <path d="M148 146 C176 124 204 115 252 117 L256 150 C206 148 174 153 148 164 Z" fill="url(#dwa-pgR)"/>
+  <path d="M148 146 C120 124 92 115 44 117 L40 150 C90 148 122 153 148 164 Z" fill="url(#dwa-pageSheen)"/>
+
+  <!-- fanned page layers at the fore-edge -->
+  <g fill="none" stroke="#D9C39E" stroke-width="1.15" opacity=".9">
+    <path d="M148 152 C122 142 96 137 52 138"/>
+    <path d="M148 156 C122 147 96 143 55 144"/>
+    <path d="M148 160 C122 152 96 149 58 150"/>
+    <path d="M148 152 C174 142 200 137 244 138"/>
+    <path d="M148 156 C174 147 200 143 241 144"/>
+    <path d="M148 160 C174 152 200 149 238 150"/>
+  </g>
+
+  <!-- spine seam and inner gutter shading -->
+  <path d="M148 146 L148 164" stroke="#C9AC80" stroke-width="1.5" opacity=".6"/>
+  <path d="M148 147 C138 141 128 137 116 135" stroke="#D6BE9A" stroke-width="1.2" fill="none" opacity=".8"/>
+  <path d="M148 147 C158 141 168 137 180 135" stroke="#D6BE9A" stroke-width="1.2" fill="none" opacity=".8"/>
+
+  <!-- ================= graduation cap: skull first, board on top ================= -->
+  <g transform="translate(-4 27)">
+    <path d="M116 74 C116 58 180 58 180 74 L180 100 C180 113 116 113 116 100 Z" fill="url(#dwa-capSkull)"/>
+    <path d="M119 76 C119 64 132 58 146 57" fill="none" stroke="#5A6675" stroke-width="1.6" opacity=".4"/>
+    <path d="M68 68 C92 79 122 91 148 100 C174 91 204 79 228 68 L228 76 C204 87 174 99 148 108 C122 99 92 87 68 76 Z" fill="url(#dwa-capEdge)"/>
+    <path d="M148 34 C178 44 210 56 228 68 C210 80 178 92 148 102 C118 92 86 80 68 68 C86 56 118 44 148 34 Z" fill="url(#dwa-capTop)"/>
+    <path d="M68 68 C86 80 118 92 148 102" fill="none" stroke="#8E99AA" stroke-width="1.3" opacity=".45"/>
+    <path d="M148 34 C118 44 86 56 68 68" fill="none" stroke="#A3AEBF" stroke-width="1.1" opacity=".28"/>
+    <path d="M148 34 C178 44 210 56 228 68" fill="none" stroke="#6E7887" stroke-width="1.1" opacity=".30"/>
+    <circle cx="148" cy="35" r="4.4" fill="url(#dwa-gold)"/>
+    <circle cx="146.6" cy="33.6" r="1.4" fill="#FFF4CC" opacity=".9"/>
+  </g>
+
+  <!-- ================= red closed book, right, leaning on the open one ============ -->
+  <ellipse cx="248" cy="168" rx="44" ry="7" fill="#5A0808" opacity=".40"/>
+  <g transform="rotate(-13 248 152)">
+    <!-- red closed book: covers top and bottom with a thick page block between -->
+    <rect x="210" y="152" width="76" height="10" rx="3.5" fill="url(#dwa-redSpine)"/>
+    <rect x="211" y="124" width="74" height="29" rx="2" fill="url(#dwa-pgL)"/>
+    <g stroke="#D6C09A" stroke-width="1" opacity=".95">
+      <path d="M213 129h70M213 134h70M213 139h70M213 144h70M213 149h70"/>
+    </g>
+    <rect x="208" y="112" width="80" height="13" rx="4.5" fill="url(#dwa-redCov)"/>
+    <rect x="208" y="112" width="80" height="4" rx="2" fill="#FF8E7C" opacity=".45"/>
+    <path d="M212 113 C234 111 260 111 284 113" fill="none" stroke="#FFB0A0" stroke-width="1" opacity=".30"/>
+  </g>
+
+  <!-- ================= cord and tassel, in front of everything ================= -->
+  <g transform="translate(-4 27)">
+    <path d="M150 36 C178 43 202 55 214 68" fill="none" stroke="url(#dwa-gold)" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M214 68 C220 76 222 87 219 96" fill="none" stroke="url(#dwa-gold)" stroke-width="2.9" stroke-linecap="round"/>
+    <ellipse cx="219" cy="100" rx="6" ry="4.3" fill="url(#dwa-gold)"/>
+    <ellipse cx="217.4" cy="98.6" rx="1.8" ry="1.2" fill="#FFF6D6" opacity=".7"/>
+    <rect x="213.6" y="101" width="10.8" height="15" rx="2.4" fill="url(#dwa-gold)"/>
+    <g stroke="#B87900" stroke-width=".9" opacity=".55">
+      <path d="M215.6 102v13M218.4 102v14M221.2 102v13"/>
+    </g>
+    <g stroke="url(#dwa-gold)" stroke-width="1.7" stroke-linecap="round">
+      <path d="M215.4 116.5v8.4"/>
+      <path d="M217.8 117v9.6"/>
+      <path d="M220.2 117v9.2"/>
+      <path d="M222.6 116.5v8.4"/>
+    </g>
+  </g>
+</svg>
+          <!-- The banner's vertical divider: greeting on the left, Scholar level
+               on the right, as in the approved reference. -->
+          <span class="dash-welcome-div" aria-hidden="true"></span>
           <!-- Scholar level badge -->
           <div class="dash-level" id="dashLevelBadge">
             <svg class="dash-level-laurel" viewBox="0 0 44 64" aria-hidden="true" focusable="false">
@@ -901,7 +1004,6 @@
             <div class="dash-metric-body">
               <div class="dash-metric-value"><b id="dashXp">—</b><i id="dashXpUnit">XP</i></div>
               <div class="dash-metric-label" id="dashXpLabel">Academy XP</div>
-              <div class="dash-metric-detail" id="dashXpDetail">Loading your record…</div>
             </div>
           </article>
           <article class="dash-metric is-streak" data-metric="streak">
@@ -911,7 +1013,6 @@
             <div class="dash-metric-body">
               <div class="dash-metric-value"><b id="dashStreak">—</b><i id="dashStreakUnit">Days</i></div>
               <div class="dash-metric-label" id="dashStreakLabel">Study Streak</div>
-              <div class="dash-metric-detail" id="dashStreakDetail">Loading your record…</div>
             </div>
           </article>
           <article class="dash-metric is-perf" data-metric="performance">
@@ -921,7 +1022,6 @@
             <div class="dash-metric-body">
               <div class="dash-metric-value"><b id="dashPerf">—</b><i id="dashPerfUnit"></i></div>
               <div class="dash-metric-label" id="dashPerfLabel">Overall Performance</div>
-              <div class="dash-metric-detail" id="dashPerfDetail">Loading your record…</div>
             </div>
           </article>
         </section>
@@ -938,6 +1038,48 @@
               <h3>Continue Learning</h3>
             </div>
             <p class="dash-continue-pos" id="dashContinuePos">Reading your record…</p>
+            <!-- The reference's red books, in the card's lower-right corner. Same
+                 hand-drawn-SVG approach as the banner art: no third-party assets. -->
+            <svg class="dash-continue-art" viewBox="0 0 160 120" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="dca-page" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#FFFDF7"/><stop offset="1" stop-color="#EAD9BC"/>
+                </linearGradient>
+                <linearGradient id="dca-red" x1="0" y1="0" x2=".8" y2="1">
+                  <stop offset="0" stop-color="#F4685C"/><stop offset=".38" stop-color="#D02424"/>
+                  <stop offset="1" stop-color="#8E1010"/>
+                </linearGradient>
+                <linearGradient id="dca-red2" x1="0" y1="0" x2=".8" y2="1">
+                  <stop offset="0" stop-color="#E24C40"/><stop offset=".4" stop-color="#B81B1B"/>
+                  <stop offset="1" stop-color="#7A0C0C"/>
+                </linearGradient>
+                <linearGradient id="dca-spine" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#C02222"/><stop offset="1" stop-color="#6E0A0A"/>
+                </linearGradient>
+              </defs>
+              <ellipse cx="86" cy="106" rx="62" ry="9" fill="#8E1010" opacity=".16"/>
+              <!-- lower book, tilted -->
+              <g transform="rotate(-8 78 84)">
+                <rect x="24" y="86" width="112" height="13" rx="4" fill="url(#dca-spine)"/>
+                <rect x="26" y="66" width="108" height="22" rx="2" fill="url(#dca-page)"/>
+                <g stroke="#D9C39E" stroke-width="1" opacity=".9">
+                  <path d="M28 71h104M28 76h104M28 81h104"/>
+                </g>
+                <rect x="22" y="56" width="116" height="13" rx="4.5" fill="url(#dca-red2)"/>
+                <rect x="22" y="56" width="116" height="4" rx="2" fill="#FF9C8C" opacity=".42"/>
+              </g>
+              <!-- upper book, tilted the other way -->
+              <g transform="rotate(10 84 48)">
+                <rect x="36" y="62" width="100" height="11" rx="3.5" fill="url(#dca-spine)"/>
+                <rect x="38" y="44" width="96" height="20" rx="2" fill="url(#dca-page)"/>
+                <g stroke="#D9C39E" stroke-width="1" opacity=".9">
+                  <path d="M40 49h92M40 54h92M40 59h92"/>
+                </g>
+                <rect x="34" y="33" width="104" height="13" rx="4.5" fill="url(#dca-red)"/>
+                <rect x="34" y="33" width="104" height="4" rx="2" fill="#FFA898" opacity=".45"/>
+                <path d="M38 34 C64 31 108 31 134 34" fill="none" stroke="#FFD2C6" stroke-width="1" opacity=".35"/>
+              </g>
+            </svg>
             <button class="dash-cta" type="button" id="dashContinueBtn" onclick="dashContinueGo()">
               <span id="dashContinueCta">Continue Studying</span>
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
@@ -945,7 +1087,7 @@
           </article>
 
           <!-- My Study Plan — today's plan, from the retained planner engine. -->
-          <article class="dash-card-lg dash-plan" id="dashPlanCard">
+          <article class="dash-card-lg dash-plan" id="dashPlanCard" onclick="dashPlanGo()">
             <div class="dash-card-head">
               <span class="dash-card-ico" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
@@ -958,10 +1100,13 @@
             </div>
             <div class="dash-plan-bar" role="img" aria-label="Study plan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dashPlanBar"><i id="dashPlanFill" style="width:0%"></i></div>
             <p class="dash-plan-detail" id="dashPlanDetail"></p>
-            <button class="dash-link" type="button" onclick="dashPlanGo()">
+            <button class="dash-link dash-plan-view" type="button" onclick="dashPlanGo()">
               View Plan
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
             </button>
+            <!-- phone only: the reference makes the whole card tappable and marks
+                 it with a chevron instead of a separate "View Plan" link -->
+            <svg class="icon dash-plan-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
           </article>
         </section>
 
@@ -1001,17 +1146,19 @@
              One line from the academy, from the notices and broadcasts this
              account is actually sent (GET /api/me/notices, /api/me/broadcasts).
              Hidden entirely when there is nothing — never filled with a sample. -->
-        <section class="dash-announce" id="dashAnnounce" hidden>
+        <section class="dash-announce" id="dashAnnounce" onclick="go('updates')" hidden>
           <span class="dash-announce-ico" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 9.5h3l9-4.2v13.4l-9-4.2H4z"/><path d="M7 14.5V19l3 .8V15.2"/><path d="M19.5 9.2a4 4 0 010 5.6"/></svg>
           </span>
           <div class="dash-announce-body">
-            <b>Announcements</b>
-            <p id="dashAnnounceText">—</p>
+            <b class="dash-announce-title">Announcements</b>
+            <span class="dash-announce-div" aria-hidden="true"></span>
+            <p class="dash-announce-msg" id="dashAnnounceText">—</p>
           </div>
-          <button class="dash-link sm" type="button" onclick="go('updates')">View
+          <button class="dash-link sm dash-announce-view" type="button" onclick="go('updates')">View
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
           </button>
+          <svg class="icon dash-announce-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </section>
 
         <!-- Detailed panels, kept from the previous dashboard: the full
@@ -2312,6 +2459,13 @@
       <button class="tab" data-t="logout" onclick="logout()">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 4H6a2 2 0 00-2 2v12a2 2 0 002 2h6"/></svg>Log Out</button>
     </div>
+    <!-- The approved sidebar's restrained red sweep along the bottom. Pure
+         decoration: it sits behind the nav rows and never takes a tap. -->
+    <svg class="side-flourish" viewBox="0 0 256 96" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <path d="M0 96V44c36 30 82 42 132 30 46-11 88-8 124 18z" fill="#C81E1E" opacity=".16"/>
+      <path d="M0 96V62c40 26 84 34 130 23 44-10 86-7 126 20z" fill="#B01818" opacity=".26"/>
+      <path d="M0 96V80c44 18 86 22 130 12 42-10 84-6 126 18z" fill="#A31515" opacity=".34"/>
+    </svg>
   </nav>
 
   <!-- ============ AFFIRMATION FLYER ============ -->

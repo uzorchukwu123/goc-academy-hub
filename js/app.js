@@ -680,6 +680,19 @@ function go(id){
               'change-password':'profile', 'staff-change-password':'profile',
               home:'home' };
   var active = map[id] || id;
+  /* Profile's own sidebar row lives in the sidebar foot, and on a phone that row
+     is hidden — the phone's fifth tab, More, is what opens Profile. So when the
+     section being shown has no visible tab of its own, More carries the
+     highlight rather than the bar showing nothing current. */
+  var moreTab = document.querySelector('.tabbar .tab[data-t="more"]');
+  if (moreTab && active !== 'more' && getComputedStyle(moreTab).display !== 'none') {
+    var ownTabs = document.querySelectorAll('.tabbar .tab[data-t="' + active + '"]');
+    var anyVisible = false;
+    for (var i = 0; i < ownTabs.length; i++) {
+      if (getComputedStyle(ownTabs[i]).display !== 'none') { anyVisible = true; break; }
+    }
+    if (!anyVisible) active = 'more';
+  }
   list(document.querySelectorAll('.tab')).forEach(function(t){
     var on = t.getAttribute('data-t') === active;
     t.classList.toggle('on', on);
@@ -9342,18 +9355,18 @@ function dashPaintIdentity(){
    none shows a dash and says so. */
 function dashPaintMetrics(){
   var m = dashMetricData = GOC.core.dashMetrics(dashMe, dashMe && dashMe.performanceDetail);
+  /* The approved card is icon + value + label and nothing else, so the engine's
+     `detail` strings are no longer drawn here. They are still computed (the
+     engine is shared and unchanged) — they are simply not a third line. */
   dashPut('dashXp', m.xp.value);
   dashPut('dashXpUnit', m.xp.unit);
   dashPut('dashXpLabel', m.xp.label);
-  dashPut('dashXpDetail', m.xp.detail);
   dashPut('dashStreak', m.streak.value);
   dashPut('dashStreakUnit', m.streak.unit);
   dashPut('dashStreakLabel', m.streak.label);
-  dashPut('dashStreakDetail', m.streak.detail);
   dashPut('dashPerf', m.performance.value);
   dashPut('dashPerfUnit', m.performance.unit);
   dashPut('dashPerfLabel', m.performance.label);
-  dashPut('dashPerfDetail', m.performance.detail);
   /* The level badge in the banner uses the same level and title, so the two
      can never disagree on one screen. */
   var lv = Math.max(1, Math.round(Number(dashMe && dashMe.level) || 1));
@@ -9464,7 +9477,7 @@ function dashLoad(){
     /* The account could not be read: say so in the three cards, once, rather
        than leaving a screen that looks loaded and is not. */
     var why = (err && err.message) || 'Your record is not available right now.';
-    ['dashXpDetail', 'dashStreakDetail', 'dashPerfDetail'].forEach(function(id){ dashPut(id, why); });
+    /* the three cards have no detail line to fill; the dashes already say it */
     dashPut('dashXp', '—'); dashPut('dashStreak', '—'); dashPut('dashPerf', '—');
     dashPut('dashLevel', 'Level —'); dashPut('dashLevelTitle', 'Scholar');
   }).then(function(){

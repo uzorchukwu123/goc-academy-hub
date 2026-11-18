@@ -979,7 +979,7 @@ a.cv:hover{color:var(--red)}
   .phone:not(.is-login) .tabbar{
     display:flex!important;flex-direction:column;align-items:stretch;
     top:0;bottom:0;left:0;right:auto;width:256px;height:auto;
-    background:#fff;backdrop-filter:none;border-top:none;border-right:1px solid var(--line);
+    background:#F9F6F6;backdrop-filter:none;border-top:none;border-right:1px solid var(--line);
     padding:0;z-index:60;box-shadow:2px 0 22px rgba(17,24,39,.05)}
   .phone.is-login .tabbar{display:none!important}
   .side-brand{display:flex;align-items:center;gap:11px;padding:22px 20px 18px;border-bottom:1px solid var(--line)}
@@ -987,9 +987,12 @@ a.cv:hover{color:var(--red)}
   .side-brand .bwrap{display:flex;flex-direction:column;line-height:1.12}
   .side-brand .bt{font-size:14.5px;font-weight:900;color:var(--ink);letter-spacing:-.01em}
   .side-brand .bs{font-size:11px;font-weight:700;color:var(--gray);margin-top:2px}
-  .tabbar .tab{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:14px;width:100%;padding:13px 20px;font-size:14.5px;color:var(--slate)}
+  .tabbar .tab{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:14px;width:auto;margin:2px 12px;padding:12px 16px;border-radius:11px;font-size:14.5px;color:var(--slate)}
   .tabbar .tab .icon{width:22px;height:22px}
-  .tabbar .tab.on{color:var(--red-deep);background:#FEECEC;box-shadow:inset 4px 0 0 var(--red)}
+  /* The approved active state: a solid red pill, inset from both sidebar edges,
+     white icon and label. No flush left bar. */
+  .tabbar .tab.on{color:#fff;background:linear-gradient(142deg,#DC2626,#B01818);box-shadow:0 6px 16px rgba(200,30,30,.28)}
+  .tabbar .tab.on .icon{stroke:#fff}
 
   /* content sits to the right of the sidebar; login stays full-bleed */
   .phone:not(.is-login) .screens{left:256px}
@@ -3380,8 +3383,10 @@ a.cv:hover{color:var(--red)}
    prefers-reduced-motion guard, like the rest of the app.
    ====================================================================== */
 
-/* ---- the screen itself: cream ground, no side padding of its own ---- */
-#home.dash-screen{ background:var(--bg); }
+/* ---- the screen itself: a near-white ground, no side padding of its own ----
+   The approved dashboard sits on white with a faintly grey sidebar; the cream
+   ground it used before made the whole screen read warmer than the reference. */
+#home.dash-screen{ background:#FEFEFE; }
 .dash-screen .dash-body{ padding:0 16px 8px; display:flex; flex-direction:column; }
 
 /* ---- desktop page header (hidden on a phone) ---- */
@@ -3392,11 +3397,19 @@ a.cv:hover{color:var(--red)}
   display:flex; align-items:center; gap:10px;
   padding:12px 14px 8px;
 }
+/* The hamburger. The bars are given an explicit width: the UA stylesheet sets
+   `align-items:flex-start` on <button>, so a bare `height:2px` child in a column
+   flex box measured 0px wide and the icon rendered invisible. The width and the
+   align-items:stretch below are the actual fix, not cosmetics. */
 .dash-burger{
   width:34px; height:34px; flex:none; border:0; background:none; cursor:pointer;
-  display:flex; flex-direction:column; justify-content:center; gap:4px; padding:6px;
+  display:flex; flex-direction:column; align-items:stretch; justify-content:center;
+  gap:4px; padding:7px; border-radius:9px;
 }
-.dash-burger span{ display:block; height:2px; border-radius:2px; background:var(--ink); }
+.dash-burger span{
+  display:block; width:100%; height:2px; border-radius:2px;
+  background:var(--ink); flex:none;
+}
 .dash-mbrand{ flex:1; display:flex; align-items:center; gap:8px; min-width:0; }
 .dash-mbrand span{ display:flex; flex-direction:column; line-height:1.05; min-width:0; }
 .dash-mbrand b{ font-size:13.5px; font-weight:900; color:var(--red-deep); letter-spacing:-.01em; }
@@ -3446,39 +3459,39 @@ a.cv:hover{color:var(--red)}
   position:absolute; right:-42px; bottom:-16px; width:190px; height:110px;
   opacity:.5; z-index:1; pointer-events:none;
 }
-/* the level badge rides the top-right corner on a phone */
+/* the banner divider — a desktop element, so the phone hides it */
+.dash-welcome-div{ display:none; }
+
+/* the level badge rides the top-right corner on a phone — no chip behind it */
 .dash-level{
-  position:absolute; top:10px; right:10px; z-index:3;
-  display:flex; align-items:center; gap:3px;
-  background:rgba(60,8,8,.34); border:1px solid rgba(255,214,150,.28);
-  border-radius:12px; padding:6px 8px; backdrop-filter:blur(2px);
+  position:absolute; top:12px; right:12px; z-index:3;
+  display:flex; align-items:center; gap:5px;
+  background:none; border:0; padding:0;
 }
-.dash-level b{ display:block; font-size:11.5px; font-weight:900; color:#fff; line-height:1.15; }
-.dash-level span{ display:block; font-size:9px; font-weight:700; color:#FFE2C0; line-height:1.15; margin-top:1px; }
-.dash-level-laurel{ width:13px; height:22px; flex:none; }
+.dash-level b{ display:block; font-size:13.5px; font-weight:900; color:#fff; line-height:1.15; }
+.dash-level span{ display:block; font-size:9.5px; font-weight:700; color:#FFE2C0; line-height:1.2; margin-top:1px; }
+.dash-level-laurel{ width:15px; height:34px; flex:none; }
 .dash-level-laurel.flip{ transform:scaleX(-1); }
 
 /* ---- three performance cards ---- */
 .dash-metrics{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+/* Icon, value, label. Centred on a phone, as in the approved mobile card. */
 .dash-metric{
-  display:flex; align-items:flex-start; gap:7px;
-  border-radius:14px; padding:11px 9px 10px; min-width:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; gap:5px;
+  border-radius:14px; padding:12px 8px 11px; min-width:0;
   border:1px solid transparent; box-shadow:0 1px 2px rgba(17,24,39,.05);
 }
-.dash-metric-ico{ flex:none; display:flex; align-items:center; justify-content:center; width:22px; height:22px; }
-.dash-metric-ico svg{ width:22px; height:22px; }
-.dash-metric-body{ min-width:0; flex:1; }
-.dash-metric-value{ display:flex; align-items:baseline; gap:2px; min-width:0; }
+.dash-metric-ico{ flex:none; display:flex; align-items:center; justify-content:center; width:24px; height:24px; }
+.dash-metric-ico svg{ width:24px; height:24px; }
+.dash-metric-body{ min-width:0; width:100%; }
+.dash-metric-value{ display:flex; align-items:baseline; justify-content:center; gap:2px; min-width:0; }
 .dash-metric-value b{
   font-size:19px; font-weight:900; letter-spacing:-.02em; line-height:1.1;
   color:var(--ink); font-variant-numeric:tabular-nums;
 }
 .dash-metric-value i{ font-style:normal; font-size:9.5px; font-weight:800; color:var(--gray); }
 .dash-metric-label{ font-size:9.5px; font-weight:800; color:var(--slate); margin-top:3px; line-height:1.2; }
-.dash-metric-detail{
-  font-size:9px; font-weight:600; color:var(--gray); margin-top:2px; line-height:1.25;
-  overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
-}
 .dash-metric.is-xp{ background:linear-gradient(150deg,#FEF1F1,#FDE7E7); border-color:#FADDDD; }
 .dash-metric.is-xp .dash-metric-ico{ color:#C81E1E; }
 .dash-metric.is-streak{ background:linear-gradient(150deg,#FFF8EC,#FDEFD9); border-color:#F8E4C4; }
@@ -3501,12 +3514,16 @@ a.cv:hover{color:var(--red)}
 .dash-continue{ position:relative; overflow:hidden; }
 .dash-continue-pos{
   font-size:12.5px; font-weight:700; color:var(--slate); margin:7px 0 11px;
-  line-height:1.35; overflow-wrap:break-word;
+  line-height:1.35; overflow-wrap:break-word; position:relative; z-index:1;
 }
+/* The corner art is a DESKTOP element: the approved phone card is just icon,
+   title, lesson and button, with no illustration. Showing it on a phone put the
+   books straight through the lesson line. */
+.dash-continue-art{ display:none; }
 .dash-continue::after{
-  content:""; position:absolute; right:-26px; bottom:-30px; width:120px; height:120px;
-  border-radius:50%; pointer-events:none;
-  background:radial-gradient(circle at 50% 50%, rgba(200,30,30,.10), rgba(200,30,30,0) 70%);
+  content:""; position:absolute; right:-40px; bottom:-46px; width:180px; height:180px;
+  border-radius:50%; pointer-events:none; z-index:0;
+  background:radial-gradient(circle at 50% 50%, rgba(200,30,30,.09), rgba(200,30,30,0) 68%);
 }
 .dash-cta{
   position:relative; z-index:1; display:flex; align-items:center; justify-content:center; gap:8px;
@@ -3526,8 +3543,15 @@ a.cv:hover{color:var(--red)}
 }
 .dash-plan-bar i{ display:block; height:100%; border-radius:99px;
   background:linear-gradient(90deg,#D42020,#B01818); transition:width .35s ease; }
-.dash-plan-detail{ font-size:10.5px; font-weight:600; color:var(--gray); margin-top:6px; min-height:13px; }
+/* The approved phone card is: title, goals, percent, bar, chevron — no extra
+   explanatory line and no separate "View Plan" link (the card itself taps
+   through). Both stay for the desktop composition, where the reference keeps them. */
+.dash-plan-detail{ display:none; font-size:10.5px; font-weight:600; color:var(--gray); margin-top:6px; }
 .dash-plan .dash-link{ align-self:flex-end; margin-top:8px; }
+.dash-plan{ cursor:pointer; position:relative; }
+.dash-plan-chev{ display:block; flex:none; width:17px; height:17px; color:var(--gray); }
+.dash-plan-row{ padding-right:24px; }
+.dash-plan-chev{ position:absolute; right:14px; top:50%; transform:translateY(-50%); margin-top:0; }
 
 /* ---- the small "View Plan" / "View All" links ---- */
 .dash-link{
@@ -3536,6 +3560,11 @@ a.cv:hover{color:var(--red)}
 }
 .dash-link .icon{ width:13px; height:13px; }
 .dash-link.sm{ font-size:11.5px; }
+/* The reference's phone card has no separate "View Plan" link — the whole card
+   taps through — while the desktop card keeps it. The selector is `.dash-link`
+   PLUS the class on purpose: a bare `.dash-plan-view` loses to the `.dash-link`
+   rule above, which is how this link was still showing on a phone. */
+.dash-plan .dash-link.dash-plan-view{ display:none; }
 
 /* ---- quick access ---- */
 .dash-quick{ margin-top:14px; }
@@ -3550,37 +3579,53 @@ a.cv:hover{color:var(--red)}
   transition:transform .12s ease, box-shadow .16s ease;
   min-width:0;
 }
+/* Plain red icons on the white tile — no pink chip behind them, per the
+   approved reference. */
 .dash-quick-ico{
-  display:flex; align-items:center; justify-content:center; width:30px; height:30px;
-  border-radius:10px; background:#FEF1F1; color:#C81E1E; flex:none;
+  display:flex; align-items:center; justify-content:center; width:32px; height:32px;
+  background:none; color:#C81E1E; flex:none;
 }
-.dash-quick-ico svg{ width:19px; height:19px; }
+.dash-quick-ico svg{ width:32px; height:32px; }
 .dash-quick-card b{
-  font-size:10.5px; font-weight:900; color:var(--ink); line-height:1.15;
+  font-size:11px; font-weight:900; color:var(--ink); line-height:1.2;
   overflow-wrap:break-word; hyphens:auto;
 }
+/* The subtitle stays on a phone — it is part of the approved mobile card. */
 .dash-quick-card s{
-  display:none; text-decoration:none; font-size:10px; font-weight:600; color:var(--gray); line-height:1.3;
+  display:block; text-decoration:none; font-size:9.5px; font-weight:600;
+  color:var(--gray); line-height:1.3; overflow-wrap:break-word;
 }
 
 /* ---- announcements ---- */
 .dash-announce{
-  display:flex; align-items:center; gap:10px; margin-top:12px;
-  background:#fff; border:1px solid #F1E9DE; border-radius:14px; padding:11px 12px;
-  box-shadow:0 1px 3px rgba(17,24,39,.05);
+  display:flex; align-items:center; gap:11px; margin-top:12px;
+  background:#fff; border:1px solid #F1E9DE; border-radius:14px; padding:12px;
+  box-shadow:0 1px 3px rgba(17,24,39,.05); cursor:pointer;
 }
 /* The card ships hidden and is only revealed when this account actually has a
    notice or a broadcast. Without this, `display:flex` beats the hidden
    attribute and an empty "Announcements" card sits on every dashboard. */
 .dash-announce[hidden]{ display:none; }
 .dash-announce-ico{ flex:none; color:#C81E1E; display:flex; }
-.dash-announce-ico svg{ width:22px; height:22px; }
-.dash-announce-body{ flex:1; min-width:0; }
-.dash-announce-body b{ display:block; font-size:12.5px; font-weight:900; color:var(--ink); }
-.dash-announce-body p{
-  font-size:11px; font-weight:600; color:var(--gray); margin-top:2px; line-height:1.35;
+.dash-announce-ico svg{ width:24px; height:24px; }
+/* Phone: icon, then a column holding the title over the message, then the
+   chevron. Desktop turns this same wrapper into the approved single row. */
+.dash-announce-body{
+  display:flex; flex-direction:column; gap:3px;
+  flex:1 1 auto; min-width:0;
+}
+.dash-announce-title{ display:block; font-size:13px; font-weight:900; color:var(--ink); flex:none; }
+.dash-announce-msg{
+  min-width:0; margin:0;
+  font-size:11px; font-weight:600; color:var(--gray); line-height:1.35;
   overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
 }
+.dash-announce-div{ display:none; }
+/* the phone marks the card with a chevron and taps through; "View →" is the
+   desktop form of the same action. Both selectors carry the real class so they
+   beat the plain `.dash-link` rule. */
+.dash-link.dash-announce-view{ display:none; }
+.dash-announce-chev{ display:block; flex:none; width:16px; height:16px; color:var(--gray); }
 
 /* ---- the detailed panels below the dashboard's summary ---- */
 .dash-more{ margin-top:20px; }
@@ -3609,19 +3654,22 @@ a.cv:hover{color:var(--red)}
 @media (min-width:900px){
   .dash-screen .dash-body{ padding:0 22px 12px; }
   .dash-metrics{ gap:12px; }
-  .dash-metric{ padding:14px 13px 12px; gap:9px; }
-  .dash-metric-ico, .dash-metric-ico svg{ width:26px; height:26px; }
-  .dash-metric-value b{ font-size:23px; }
-  .dash-metric-label{ font-size:10.5px; }
-  .dash-metric-detail{ font-size:9.5px; }
-  .dash-duo{ flex-direction:row; gap:12px; margin-top:12px; }
-  .dash-duo>*{ flex:1 1 0; }
+  .dash-metric{ padding:16px 18px; gap:12px; flex-direction:row; align-items:center; text-align:left; }
+  .dash-metric-ico, .dash-metric-ico svg{ width:34px; height:34px; }
+  .dash-metric-body{ width:auto; flex:1 1 auto; }
+  .dash-metric-value{ justify-content:flex-start; }
+  .dash-metric-value b{ font-size:26px; }
+  .dash-metric-label{ font-size:12px; }
+  .dash-duo{ flex-direction:row; gap:18px; margin-top:18px; align-items:stretch; }
+  /* The approved split: Continue Learning visibly wider than My Study Plan. */
+  .dash-continue{ flex:0 0 58%; max-width:58%; }
+  .dash-plan{ flex:1 1 auto; min-width:0; }
   .dash-quick-grid{ gap:10px; }
-  .dash-quick-card{ padding:14px 8px 12px; gap:7px; }
-  .dash-quick-card b{ font-size:12px; }
-  .dash-quick-card s{ display:block; }
-  .dash-quick-ico{ width:36px; height:36px; border-radius:12px; }
-  .dash-quick-ico svg{ width:21px; height:21px; }
+  .dash-quick-card{ padding:20px 12px 18px; gap:9px; min-height:132px; }
+  .dash-quick-card b{ font-size:13.5px; }
+  .dash-quick-card s{ font-size:11px; }
+  .dash-quick-ico{ width:38px; height:38px; }
+  .dash-quick-ico svg{ width:38px; height:38px; }
   .dash-more-grid{ flex-direction:row; gap:14px; }
   .dash-more-grid>*{ flex:1 1 0; min-width:0; }
   .dash-more .sec-head:first-child{ margin-top:0; }
@@ -3633,12 +3681,12 @@ a.cv:hover{color:var(--red)}
    one row, the two large cards side by side, and quick access in a row of
    four with their descriptions. */
 @media (min-width:900px){
-  #home.dash-screen{ background:var(--bg); }
+  #home.dash-screen{ background:#FEFEFE; }
 
   /* page header */
   .dash-topbar{
     display:flex; align-items:center; justify-content:space-between; gap:20px;
-    padding:22px 32px 16px; border-bottom:1px solid #EFE7DC; background:var(--bg);
+    padding:22px 32px 16px; border-bottom:1px solid #EFE7DC; background:#FEFEFE;
   }
   .dash-title{ font-size:27px; font-weight:900; letter-spacing:-.025em; color:var(--ink); }
   .dash-topbar-side{ display:flex; align-items:center; gap:14px; }
@@ -3675,58 +3723,94 @@ a.cv:hover{color:var(--red)}
     position:static; flex:0 1 300px; width:300px; height:172px; opacity:1;
     margin:-28px 0 -20px; align-self:center;
   }
+  /* the approved banner divider: a thin translucent rule between copy and level */
+  .dash-welcome-div{
+    display:block; flex:0 0 auto; align-self:center;
+    width:1px; height:104px; margin:0 4px;
+    background:linear-gradient(180deg,
+      rgba(255,255,255,0) 0%, rgba(255,255,255,.42) 18%,
+      rgba(255,255,255,.42) 82%, rgba(255,255,255,0) 100%);
+  }
+  /* the level badge: no chip, gold laurels flanking the text */
   .dash-level{
     position:static; flex:none; align-self:center;
-    flex-direction:column; gap:0; padding:14px 18px; border-radius:14px;
-    border-left:1px solid rgba(255,255,255,.22); border-top:0; border-right:0; border-bottom:0;
-    background:transparent; backdrop-filter:none;
+    flex-direction:row; gap:6px; padding:0 2px;
+    border:0; background:transparent; backdrop-filter:none;
   }
   .dash-level div{ text-align:center; }
-  .dash-level b{ font-size:19px; }
-  .dash-level span{ font-size:12px; }
-  .dash-level-laurel{ display:none; }
+  .dash-level b{ font-size:21px; letter-spacing:-.01em; }
+  .dash-level span{ font-size:13px; margin-top:2px; }
+  .dash-level-laurel{ display:block; width:26px; height:58px; }
 
   /* the three metrics as a row of proper cards */
   .dash-metrics{ gap:16px; margin-top:18px; }
-  .dash-metric{ padding:20px 22px; gap:14px; border-radius:20px; align-items:center; }
+  .dash-metric{
+    flex-direction:row; align-items:center; text-align:left;
+    padding:20px 22px; gap:14px; border-radius:20px;
+  }
   .dash-metric-ico, .dash-metric-ico svg{ width:44px; height:44px; }
+  .dash-metric-body{ width:auto; flex:1 1 auto; }
+  .dash-metric-value{ justify-content:flex-start; }
   .dash-metric-value b{ font-size:32px; }
   .dash-metric-value i{ font-size:15px; }
   .dash-metric-label{ font-size:14.5px; margin-top:4px; }
-  .dash-metric-detail{ font-size:12.5px; margin-top:4px; -webkit-line-clamp:1; }
 
   /* the two large cards */
-  .dash-duo{ gap:18px; margin-top:18px; }
+  .dash-duo{ gap:18px; margin-top:18px; align-items:stretch; }
   .dash-card-lg{ border-radius:20px; padding:22px 24px 18px; box-shadow:0 6px 20px rgba(17,24,39,.06); }
   .dash-card-head h3{ font-size:20px; }
   .dash-card-ico svg{ width:26px; height:26px; }
   .dash-continue-pos{ font-size:14px; margin:10px 0 16px; }
-  .dash-cta{ padding:14px 18px; font-size:15px; border-radius:12px; max-width:340px; }
+  /* ~130px of card, with the books filling the lower-right corner */
+  .dash-continue{ min-height:130px; }
+  .dash-continue-art{
+    display:block; position:absolute; right:-16px; bottom:-22px;
+    width:212px; height:158px; z-index:0; pointer-events:none; opacity:.95;
+  }
+  .dash-continue::after{ width:250px; height:250px; right:-60px; bottom:-70px; }
+  .dash-cta{ padding:14px 18px; font-size:15px; border-radius:12px; max-width:230px; }
   .dash-plan-headline{ font-size:14px; }
   .dash-plan-pct{ font-size:15px; }
   .dash-plan-bar{ height:10px; margin-top:10px; }
   .dash-plan-detail{ font-size:12px; }
   .dash-link{ font-size:13.5px; }
   .dash-plan .dash-link{ margin-top:12px; }
+  .dash-plan-detail{ display:block; min-height:13px; }
+  .dash-plan .dash-link.dash-plan-view{ display:inline-flex; }
+  .dash-plan-chev{ display:none; }
+  .dash-plan-row{ padding-right:0; }
 
   /* quick access */
   .dash-quick{ margin-top:26px; }
   .dash-sec-head h3{ font-size:19px; }
   .dash-quick-grid{ gap:16px; }
+  /* ~148px tall, matching the approved tile */
   .dash-quick-card{
-    align-items:center; padding:24px 16px 20px; gap:10px; border-radius:18px;
+    align-items:center; justify-content:flex-start;
+    padding:26px 16px 22px; gap:11px; border-radius:18px; min-height:148px;
     box-shadow:0 4px 14px rgba(17,24,39,.06);
   }
-  .dash-quick-ico{ width:46px; height:46px; border-radius:14px; }
-  .dash-quick-ico svg{ width:26px; height:26px; }
+  .dash-quick-ico{ width:44px; height:44px; }
+  .dash-quick-ico svg{ width:44px; height:44px; }
   .dash-quick-card b{ font-size:16px; }
-  .dash-quick-card s{ font-size:12px; margin-top:1px; }
+  .dash-quick-card s{ font-size:12.5px; margin-top:1px; line-height:1.35; }
 
-  /* announcements: one line across */
-  .dash-announce{ margin-top:18px; padding:16px 20px; border-radius:18px; gap:16px; }
+  /* announcements: the approved single row — icon, title, rule, message, View */
+  .dash-announce{ margin-top:18px; padding:16px 22px; border-radius:18px; gap:16px; }
   .dash-announce-ico svg{ width:28px; height:28px; }
-  .dash-announce-body b{ font-size:15px; }
-  .dash-announce-body p{ font-size:13px; -webkit-line-clamp:1; margin-top:3px; }
+  .dash-announce-title{ font-size:15.5px; }
+  .dash-announce-div{
+    display:block; flex:none; width:1px; align-self:stretch; margin:2px 2px;
+    background:#E6E1D8;
+  }
+  .dash-announce-body{
+    flex-direction:row; align-items:center; gap:16px;
+  }
+  .dash-announce-msg{
+    flex:1 1 auto; font-size:13.5px; -webkit-line-clamp:1; margin-left:2px;
+  }
+  .dash-link.dash-announce-view{ display:inline-flex; flex:none; font-size:13px; }
+  .dash-announce-chev{ display:none; }
 
   .dash-more{ margin-top:32px; }
   .dash-more-grid{ gap:22px; }
@@ -3752,17 +3836,46 @@ a.cv:hover{color:var(--red)}
    opens the same profile screen the sidebar's Settings row opens. A hidden
    tab here is not a deleted feature.
    ====================================================================== */
-.side-nav{ display:flex; flex-direction:column; min-width:0; }
+/* The nav wrapper is a COLUMN only where it is a sidebar. On a phone the same
+   <nav> is the bottom bar, so it must be a ROW — this used to be declared
+   unconditionally, which stacked the five phone tabs and pushed three of them
+   off the viewport. The row is restored below at phone widths. */
+.side-nav{ display:flex; flex-direction:row; min-width:0; }
 .side-nav-foot{ display:none; }
 
 @media (max-width:899px){
-  .tabbar .tab{ padding:0; }
+  /* the bar clears the iOS home indicator without growing over the content */
+  .phone:not(.is-login) .tabbar{
+    height:calc(74px + env(safe-area-inset-bottom, 0px));
+    padding-bottom:calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  /* ---- the phone's bottom bar: five tabs, one horizontal row ---- */
+  .side-nav{
+    flex:1 1 auto; flex-direction:row; align-items:stretch;
+    width:100%; min-width:0;
+  }
+  .tabbar .tab{ flex:1 1 0; width:auto; min-width:0; padding:0 2px; }
   .tabbar .tab:not(.tab-m){ display:none; }
+  /* the fifth tab belongs to the phone bar only; the desktop sidebar drops it */
+  .tabbar .tab-m{ display:flex; }
 }
 
+.side-flourish{ display:none; }
+
 @media (min-width:900px){
-  .phone:not(.is-login) .tabbar{ padding:0 0 10px; overflow-y:auto; }
-  .side-nav{ flex:0 0 auto; padding:8px 0; }
+  .phone:not(.is-login) .tabbar{ padding:0 0 10px; overflow-y:auto; position:relative; }
+  .side-nav{ flex:0 0 auto; flex-direction:column; padding:8px 0; }
+  /* More is a phone destination. On the desktop sidebar it is not a row. */
+  .tabbar .tab-m[data-t="more"]{ display:none; }
+  /* the sidebar's lower decoration: behind the rows, clear of Log Out */
+  .phone:not(.is-login) .side-flourish{
+    display:block; position:absolute; left:0; right:0; bottom:0;
+    width:100%; height:96px; pointer-events:none; z-index:0;
+  }
+  /* the foot (Support/Profile/Settings/Log Out) sits above the sweep, and the
+     sweep occupies the strip below it so it never runs through a row */
+  .phone:not(.is-login) .side-nav-foot{ position:relative; z-index:1; }
+  .phone:not(.is-login) .side-flourish{ height:72px; }
   .side-nav-foot{ display:flex; margin-top:auto; border-top:1px solid var(--line); padding-top:8px; }
   .tabbar .tab[data-t="logout"]{ color:var(--red-deep); }
 }

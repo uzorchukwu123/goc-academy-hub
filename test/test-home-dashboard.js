@@ -169,7 +169,16 @@ async function main() {
   ok('the streak too', text('dashStreak') === '0', text('dashStreak'));
   ok('performance has no marked paper, so it shows a dash',
      text('dashPerf') === '—', text('dashPerf'));
-  ok('and explains why', /marked paper/i.test(text('dashPerfDetail')), text('dashPerfDetail'));
+  /* The approved card is icon + value + label and nothing else, so there is no
+     third line to explain the dash with — the dash itself is the honest answer,
+     and the engine's own reason is still covered by the `dashMetrics` checks at
+     the bottom of this file. */
+  ok('and the card carries no extra explanatory line, per the approved design',
+     id('dashPerfDetail') === null && id('dashXpDetail') === null && id('dashStreakDetail') === null,
+     'detail elements present');
+  ok('the reason the dash appears is still the engine\'s, unchanged',
+     /marked paper/i.test(run('GOC.core.dashMetrics(null).performance.detail')),
+     run('GOC.core.dashMetrics(null).performance.detail'));
   ok('the level badge starts at the first level the engine allows',
      /^Level 1$/.test(text('dashLevel')), text('dashLevel'));
   ok('with the title that band carries', text('dashLevelTitle') === 'Foundation Scholar', text('dashLevelTitle'));
@@ -293,6 +302,45 @@ async function main() {
      run('GOC.core.dashStudyPlan({blocks:[{day:"Mon",subject:"Mathematics",minutes:60}],day:"Mon",studiedMinutes:36}).percent') === 60);
   ok('and an empty plan is flagged empty rather than drawn as 0%',
      run('GOC.core.dashStudyPlan({blocks:[],day:"Mon",studiedMinutes:0}).hasData') === false);
+
+  /* ------------------------------------------- the correction round's markup */
+  head('the phone bar, the sidebar and the banner carry the corrected structure');
+  /* The three defects fixed this round were structural, so they are asserted
+     structurally: the nav wrapper that used to stack the phone bar, the "More"
+     row that used to appear in the desktop sidebar, and the banner divider that
+     did not exist. Layout itself is verified in a real browser; these guard the
+     markup and CSS from regressing. */
+  var css = require('fs').readFileSync(__dirname + '/../css/styles.css', 'utf8');
+  ok('the nav wrapper is a row by default, so the phone bar cannot stack',
+     /\.side-nav\{\s*display:flex;\s*flex-direction:row;/.test(css),
+     'wrapper rule');
+  ok('and a column only inside the desktop sidebar rule',
+     /\.side-nav\{\s*flex:0 0 auto;\s*flex-direction:column;/.test(css),
+     'sidebar rule');
+  ok('the phone bar gives every tab an equal share of the row',
+     /\.tabbar \.tab\{\s*flex:1 1 0;\s*width:auto/.test(css), 'phone tab rule');
+  ok('More is hidden from the desktop sidebar',
+     /\.tabbar \.tab-m\[data-t="more"\]\{\s*display:none;\s*\}/.test(css), 'more rule');
+  ok('the hamburger bars are given an explicit width, not an auto one',
+     /\.dash-burger span\{[^}]*width:100%/.test(css), 'burger bar rule');
+  ok('the banner divider exists in the markup',
+     !!doc.querySelector('.dash-welcome-div'));
+  ok('the level badge is a markup chip-free badge beside it',
+     !!doc.querySelector('.dash-level') &&
+     !/rgba\(60,8,8/.test(css.split('.dash-level{')[1].split('}')[0]),
+     'level badge background');
+  ok('Quick Access shows its descriptions on a phone too',
+     !/\.dash-quick-card s\{\s*display:none/.test(css), 'quick subtitle rule');
+  ok('Quick Access icons are not sitting on pink chips',
+     !/\.dash-quick-ico\{[^}]*background:#FEF1F1/.test(css), 'quick icon chip');
+  ok('the phone announcement card ends in a chevron, not a View link',
+     !!doc.querySelector('.dash-announce-chev') &&
+     !!doc.querySelector('.dash-announce-title'));
+  ok('the plan card is tappable and carries its own chevron',
+     /onclick="dashPlanGo\(\)"/.test((doc.getElementById('dashPlanCard') || {}).outerHTML || '') &&
+     !!doc.querySelector('.dash-plan-chev'));
+  ok('the sidebar keeps its lower flourish',
+     !!doc.querySelector('.side-flourish'));
 
   console.log('\n  ' + passes + ' passed, ' + fails + ' failed');
   process.exit(fails ? 1 : 0);
