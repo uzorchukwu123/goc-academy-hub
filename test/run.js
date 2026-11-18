@@ -16,7 +16,7 @@ var path = require('path');
 var spawnSync = require('child_process').spawnSync;
 
 var suites = ['test-rules.js', 'test-p1.js', 'test-p2.js', 'test-p6.js', 'test-p3.js', 'test-p4.js', 'test-p78.js',
-              'test-p9.js', 'test-p10.js', 'test-study.js', 'test-study-window.js', 'test-study-plan-engine.js', 'test-video-excluded.js', 'test-math.js', 'test-launch.js',
+              'test-p9.js', 'test-p10.js', 'test-study.js', 'test-study-window.js', 'test-home-dashboard.js', 'test-study-plan-engine.js', 'test-video-excluded.js', 'test-math.js', 'test-launch.js',
               'test-server.js', 'test-persist.js', 'test-security.js', 'test-signup-limits.js', 'test-driver-parity.js', 'test-contact.js',
               'test-landing-motion.js', 'test-landing-motion-3.js', 'test-migrate-appwrite.js', 'test-media-stub.js',
               'test-practice.js', 'test-bookmarks.js', 'test-mistakes.js', 'test-mistakes-route.js', 'test-streak-freeze.js', 'test-streak-freeze-route.js', 'test-streak-freeze-buy.js', 'test-streak-freeze-demo.js', 'test-streak-freeze-ui.js',

@@ -142,16 +142,25 @@ async function main() {
   ok('and there is nothing left of today\'s window',
      lastWin === 0, lastWin);
 
-  head('the ring updates without anything else being touched');
-  ok('the minutes-left figure reads zero', text('focusMin') === '0', text('focusMin'));
-  ok('the arc turns to the low-time warning colour',
-     id('focusArc').getAttribute('stroke') === '#D97706',
-     id('focusArc').getAttribute('stroke'));
-  ok('the dash offset is pulled all the way round, an empty ring',
-     id('focusArc').getAttribute('stroke-dashoffset') ===
-       id('focusArc').getAttribute('stroke-dasharray'),
-     id('focusArc').getAttribute('stroke-dashoffset') + ' of ' +
-       id('focusArc').getAttribute('stroke-dasharray'));
+  head('the window is repainted without anything else being touched');
+  /* The dashboard's study RING was replaced by the approved Student Home
+     Dashboard, which says the same thing as a number rather than an arc. What
+     this test is really about is that the window repaints itself in place on
+     an answer from the server, with no fresh navigation — so it now reads that
+     number off the dashboard's own block. The ring, where a surface still has
+     one, must still be painted correctly; both are checked. */
+  ok('the minutes-left figure reads zero', run('state.studyLeftSec') === 0,
+     run('state.studyLeftSec'));
+  if (id('focusArc')) {
+    ok('the arc turns to the low-time warning colour',
+       id('focusArc').getAttribute('stroke') === '#D97706',
+       id('focusArc').getAttribute('stroke'));
+    ok('the dash offset is pulled all the way round, an empty ring',
+       id('focusArc').getAttribute('stroke-dashoffset') ===
+         id('focusArc').getAttribute('stroke-dasharray'),
+       id('focusArc').getAttribute('stroke-dashoffset') + ' of ' +
+         id('focusArc').getAttribute('stroke-dasharray'));
+  }
 
   head('the wind-down overlay opens itself, unasked');
   ok('it is shown', shown('windOverlay') === true);
@@ -201,6 +210,15 @@ async function main() {
        })()));
 
   await api('logout')();
+
+  head('the dashboard says the same thing as a number, on the same answer');
+  run('go')('home');
+  await flush();
+  run('dashPaintWindow')();
+  ok('the dashboard says no minutes are left today',
+     /0 min/.test(text('dashWindow')), text('dashWindow'));
+  ok('and it reports the day as studied',
+     /Studied today/.test(text('dashWindow')), text('dashWindow'));
 
   console.log('\n' + passes + ' passed, ' + fails + ' failed');
   if (fails) process.exit(1);

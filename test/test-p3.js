@@ -108,12 +108,20 @@ async function main() {
     ok('#' + x + ' exists', !!id(x));
   });
   var src = read('index.html');
-  /* The Web Test is no longer offered as a standalone entry point (Phase 1
-     sweep): its tile and the dashboard "Waiting for you" card are gone, while
-     the sitting engine, Results and Review stay. What must still hold is that
-     Results — how a student reaches a marked paper — is offered from Study. */
+  /* The Web Test's standalone entry points were retired in the Phase 1 sweep:
+     its tile on Study and the dashboard's "Waiting for you" card are gone,
+     while the sitting engine, Results and Review stay. The approved Student
+     Home Dashboard (A01) now carries an "Examinations" row in the sidebar and
+     a JAMB CBT quick-access card, both of which open the same Test hub — that
+     is a destination inside the approved navigation, not the retired tile.
+     What must still hold is that Results is offered, and that Study itself
+     still does not advertise a Web Test tile. */
   ok('Study still opens Results', src.indexOf("openResults()") > -1);
-  ok('and no standalone Web Test entry point is offered', src.indexOf('openWebTest()') < 0);
+  var studyScreen = src.slice(src.indexOf('id="study"'), src.indexOf('id="studySet"'));
+  ok('and Study no longer offers a Web Test tile of its own',
+     studyScreen.indexOf('openWebTest()') < 0 && studyScreen.indexOf('Web Test</span>') < 0);
+  ok('the retired dashboard "Waiting for you" card has not come back',
+     !id('dashNext') && src.indexOf('dashNext') < 0);
   ok('the logo symbol is untouched', src.indexOf('id="goc-mark"') > -1);
   ok('no in-app coins remain in the markup', src.indexOf('🪙') < 0);
 

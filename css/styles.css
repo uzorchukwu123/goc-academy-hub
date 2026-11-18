@@ -3364,3 +3364,405 @@ a.cv:hover{color:var(--red)}
 .jt-resume-t b { font-size: 14.5px; color: #9A3412; }
 .jt-resume-t span { font-size: 12.5px; color: #7C2D12; }
 .jt-resume-b { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ======================================================================
+   STUDENT HOME DASHBOARD (A01) — the approved design.
+   ----------------------------------------------------------------------
+   Mobile first: the composition below is the approved PHONE layout (compact
+   header, red welcome banner, three metric cards, learning card, plan card,
+   quick access, announcements) and it is not a shrunk desktop. The desktop
+   layout in the >=900px block further down is its own composition: page
+   header, a wide banner with the level badge, a three-across metric row, the
+   two large cards side by side, then a four-across quick-access row.
+
+   Red and cream throughout, restrained shadows, one rounded-card language.
+   Motion is limited to transform/opacity and lives inside a
+   prefers-reduced-motion guard, like the rest of the app.
+   ====================================================================== */
+
+/* ---- the screen itself: cream ground, no side padding of its own ---- */
+#home.dash-screen{ background:var(--bg); }
+.dash-screen .dash-body{ padding:0 16px 8px; display:flex; flex-direction:column; }
+
+/* ---- desktop page header (hidden on a phone) ---- */
+.dash-topbar{ display:none; }
+
+/* ---- mobile compact header ---- */
+.dash-mobile-head{
+  display:flex; align-items:center; gap:10px;
+  padding:12px 14px 8px;
+}
+.dash-burger{
+  width:34px; height:34px; flex:none; border:0; background:none; cursor:pointer;
+  display:flex; flex-direction:column; justify-content:center; gap:4px; padding:6px;
+}
+.dash-burger span{ display:block; height:2px; border-radius:2px; background:var(--ink); }
+.dash-mbrand{ flex:1; display:flex; align-items:center; gap:8px; min-width:0; }
+.dash-mbrand span{ display:flex; flex-direction:column; line-height:1.05; min-width:0; }
+.dash-mbrand b{ font-size:13.5px; font-weight:900; color:var(--red-deep); letter-spacing:-.01em; }
+.dash-mbrand s{ text-decoration:none; font-size:9.5px; font-weight:700; color:var(--gray); margin-top:1px; }
+.dash-mhead-side{ display:flex; align-items:center; gap:4px; flex:none; }
+.dash-bell{
+  position:relative; width:36px; height:36px; border-radius:50%; border:0;
+  background:transparent; color:var(--slate); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.dash-bell .icon{ width:21px; height:21px; }
+.dash-bell-dot[hidden]{ display:none; }
+.dash-bell-dot{
+  position:absolute; top:7px; right:8px; width:8px; height:8px; border-radius:50%;
+  background:var(--red); border:2px solid var(--bg);
+}
+.dash-ava{
+  width:38px; height:38px; border-radius:50%; flex:none; border:0; cursor:pointer;
+  background:linear-gradient(140deg,#DC2626,#7F1D1D); color:#fff;
+  font:800 14px var(--font); display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 12px rgba(220,38,38,.30);
+}
+.dash-ava-sm{ width:34px; height:34px; font-size:13px; }
+
+/* ---- the welcome banner ---- */
+.dash-welcome{
+  position:relative; overflow:hidden; isolation:isolate;
+  border-radius:18px; padding:18px 16px 20px;
+  background:
+    radial-gradient(120% 130% at 88% 6%, rgba(240,165,0,.30), rgba(240,165,0,0) 52%),
+    linear-gradient(148deg,#C81E1E 0%,#A31515 46%,#7F1414 100%);
+  color:#fff;
+  box-shadow:0 14px 32px rgba(127,20,20,.30), inset 0 1px 0 rgba(255,255,255,.16);
+}
+.dash-welcome-copy{ position:relative; z-index:2; max-width:100%; }
+.dash-hello{ font-size:15.5px; font-weight:900; letter-spacing:-.01em; }
+.dash-name{
+  font-size:25px; font-weight:900; letter-spacing:-.02em; line-height:1.1;
+  margin-top:1px; display:flex; align-items:center; gap:6px;
+}
+.dash-msg{
+  font-size:12.5px; line-height:1.45; color:rgba(255,255,255,.92);
+  margin-top:8px; max-width:26ch; font-weight:500;
+}
+/* the illustration sits behind the copy on a phone, where it is a texture */
+.dash-welcome-art{
+  position:absolute; right:-42px; bottom:-16px; width:190px; height:110px;
+  opacity:.5; z-index:1; pointer-events:none;
+}
+/* the level badge rides the top-right corner on a phone */
+.dash-level{
+  position:absolute; top:10px; right:10px; z-index:3;
+  display:flex; align-items:center; gap:3px;
+  background:rgba(60,8,8,.34); border:1px solid rgba(255,214,150,.28);
+  border-radius:12px; padding:6px 8px; backdrop-filter:blur(2px);
+}
+.dash-level b{ display:block; font-size:11.5px; font-weight:900; color:#fff; line-height:1.15; }
+.dash-level span{ display:block; font-size:9px; font-weight:700; color:#FFE2C0; line-height:1.15; margin-top:1px; }
+.dash-level-laurel{ width:13px; height:22px; flex:none; }
+.dash-level-laurel.flip{ transform:scaleX(-1); }
+
+/* ---- three performance cards ---- */
+.dash-metrics{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+.dash-metric{
+  display:flex; align-items:flex-start; gap:7px;
+  border-radius:14px; padding:11px 9px 10px; min-width:0;
+  border:1px solid transparent; box-shadow:0 1px 2px rgba(17,24,39,.05);
+}
+.dash-metric-ico{ flex:none; display:flex; align-items:center; justify-content:center; width:22px; height:22px; }
+.dash-metric-ico svg{ width:22px; height:22px; }
+.dash-metric-body{ min-width:0; flex:1; }
+.dash-metric-value{ display:flex; align-items:baseline; gap:2px; min-width:0; }
+.dash-metric-value b{
+  font-size:19px; font-weight:900; letter-spacing:-.02em; line-height:1.1;
+  color:var(--ink); font-variant-numeric:tabular-nums;
+}
+.dash-metric-value i{ font-style:normal; font-size:9.5px; font-weight:800; color:var(--gray); }
+.dash-metric-label{ font-size:9.5px; font-weight:800; color:var(--slate); margin-top:3px; line-height:1.2; }
+.dash-metric-detail{
+  font-size:9px; font-weight:600; color:var(--gray); margin-top:2px; line-height:1.25;
+  overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+}
+.dash-metric.is-xp{ background:linear-gradient(150deg,#FEF1F1,#FDE7E7); border-color:#FADDDD; }
+.dash-metric.is-xp .dash-metric-ico{ color:#C81E1E; }
+.dash-metric.is-streak{ background:linear-gradient(150deg,#FFF8EC,#FDEFD9); border-color:#F8E4C4; }
+.dash-metric.is-streak .dash-metric-ico{ color:#EA8A28; }
+.dash-metric.is-perf{ background:linear-gradient(150deg,#EFF8F1,#E4F3E8); border-color:#D5EBDC; }
+.dash-metric.is-perf .dash-metric-ico{ color:#187A3B; }
+.dash-metric.is-empty .dash-metric-value b{ color:var(--gray); }
+
+/* ---- the two large cards ---- */
+.dash-duo{ display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+.dash-card-lg{
+  background:#fff; border:1px solid #F1E9DE; border-radius:16px;
+  padding:14px 14px 12px; box-shadow:0 2px 8px rgba(17,24,39,.05);
+  display:flex; flex-direction:column; min-width:0;
+}
+.dash-card-head{ display:flex; align-items:center; gap:9px; }
+.dash-card-head h3{ font-size:15px; font-weight:900; letter-spacing:-.01em; color:var(--ink); }
+.dash-card-ico{ display:flex; align-items:center; justify-content:center; color:var(--red); flex:none; }
+.dash-card-ico svg{ width:21px; height:21px; }
+.dash-continue{ position:relative; overflow:hidden; }
+.dash-continue-pos{
+  font-size:12.5px; font-weight:700; color:var(--slate); margin:7px 0 11px;
+  line-height:1.35; overflow-wrap:break-word;
+}
+.dash-continue::after{
+  content:""; position:absolute; right:-26px; bottom:-30px; width:120px; height:120px;
+  border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle at 50% 50%, rgba(200,30,30,.10), rgba(200,30,30,0) 70%);
+}
+.dash-cta{
+  position:relative; z-index:1; display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; border:0; cursor:pointer; font-family:var(--font);
+  font-size:13.5px; font-weight:800; color:#fff; border-radius:11px; padding:12px 14px;
+  background:linear-gradient(140deg,#D42020,#A81616);
+  box-shadow:0 8px 18px rgba(200,30,30,.28);
+  transition:transform .1s ease, filter .15s ease;
+}
+.dash-cta .icon{ width:17px; height:17px; }
+.dash-cta:active{ transform:scale(.985); }
+.dash-plan-row{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:7px; }
+.dash-plan-headline{ font-size:12.5px; font-weight:700; color:var(--slate); line-height:1.35; }
+.dash-plan-pct{ font-size:13px; font-weight:900; color:var(--ink); flex:none; font-variant-numeric:tabular-nums; }
+.dash-plan-bar{
+  height:8px; border-radius:99px; background:#EFE7DC; overflow:hidden; margin-top:8px;
+}
+.dash-plan-bar i{ display:block; height:100%; border-radius:99px;
+  background:linear-gradient(90deg,#D42020,#B01818); transition:width .35s ease; }
+.dash-plan-detail{ font-size:10.5px; font-weight:600; color:var(--gray); margin-top:6px; min-height:13px; }
+.dash-plan .dash-link{ align-self:flex-end; margin-top:8px; }
+
+/* ---- the small "View Plan" / "View All" links ---- */
+.dash-link{
+  display:inline-flex; align-items:center; gap:5px; border:0; background:none; cursor:pointer;
+  font-family:var(--font); font-size:12px; font-weight:900; color:var(--red-deep); padding:2px 0;
+}
+.dash-link .icon{ width:13px; height:13px; }
+.dash-link.sm{ font-size:11.5px; }
+
+/* ---- quick access ---- */
+.dash-quick{ margin-top:14px; }
+.dash-sec-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; }
+.dash-sec-head h3{ font-size:15.5px; font-weight:900; letter-spacing:-.01em; color:var(--ink); }
+.dash-quick-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
+.dash-quick-card{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  background:#fff; border:1px solid #F1E9DE; border-radius:13px;
+  padding:11px 5px 10px; cursor:pointer; font-family:var(--font); text-align:center;
+  box-shadow:0 1px 3px rgba(17,24,39,.05);
+  transition:transform .12s ease, box-shadow .16s ease;
+  min-width:0;
+}
+.dash-quick-ico{
+  display:flex; align-items:center; justify-content:center; width:30px; height:30px;
+  border-radius:10px; background:#FEF1F1; color:#C81E1E; flex:none;
+}
+.dash-quick-ico svg{ width:19px; height:19px; }
+.dash-quick-card b{
+  font-size:10.5px; font-weight:900; color:var(--ink); line-height:1.15;
+  overflow-wrap:break-word; hyphens:auto;
+}
+.dash-quick-card s{
+  display:none; text-decoration:none; font-size:10px; font-weight:600; color:var(--gray); line-height:1.3;
+}
+
+/* ---- announcements ---- */
+.dash-announce{
+  display:flex; align-items:center; gap:10px; margin-top:12px;
+  background:#fff; border:1px solid #F1E9DE; border-radius:14px; padding:11px 12px;
+  box-shadow:0 1px 3px rgba(17,24,39,.05);
+}
+/* The card ships hidden and is only revealed when this account actually has a
+   notice or a broadcast. Without this, `display:flex` beats the hidden
+   attribute and an empty "Announcements" card sits on every dashboard. */
+.dash-announce[hidden]{ display:none; }
+.dash-announce-ico{ flex:none; color:#C81E1E; display:flex; }
+.dash-announce-ico svg{ width:22px; height:22px; }
+.dash-announce-body{ flex:1; min-width:0; }
+.dash-announce-body b{ display:block; font-size:12.5px; font-weight:900; color:var(--ink); }
+.dash-announce-body p{
+  font-size:11px; font-weight:600; color:var(--gray); margin-top:2px; line-height:1.35;
+  overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+}
+
+/* ---- the detailed panels below the dashboard's summary ---- */
+.dash-more{ margin-top:20px; }
+.dash-more-grid{ display:flex; flex-direction:column; gap:0; }
+.dash-more .sec-head{ margin-top:16px; }
+.dash-more .id-strip{ margin-top:0; }
+
+/* ---------------------------------------------------------------- motion */
+@media (prefers-reduced-motion: no-preference){
+  @media (hover:hover) and (pointer:fine){
+    .dash-quick-card:hover{ transform:translateY(-2px); box-shadow:0 8px 18px rgba(17,24,39,.10); }
+    .dash-cta:hover{ filter:brightness(1.06); }
+    .dash-link:hover{ text-decoration:underline; }
+  }
+}
+
+/* ============================================================ TABLET
+   Between the phone composition and the desktop one. The two large cards
+   sit side by side first — they are the pair the eye reads together — and
+   the quick-access row gains its captions back. */
+/* The app keeps a fixed 430px phone frame until 900px (see the adaptive block
+   at the end of this file), so a viewport-width breakpoint here would reshape
+   the dashboard *inside* that frame and cramp it — the tablet shot showed the
+   two cards and three metrics squeezed into one narrow column. The dashboard
+   therefore only leaves its mobile composition at the app's own breakpoint. */
+@media (min-width:900px){
+  .dash-screen .dash-body{ padding:0 22px 12px; }
+  .dash-metrics{ gap:12px; }
+  .dash-metric{ padding:14px 13px 12px; gap:9px; }
+  .dash-metric-ico, .dash-metric-ico svg{ width:26px; height:26px; }
+  .dash-metric-value b{ font-size:23px; }
+  .dash-metric-label{ font-size:10.5px; }
+  .dash-metric-detail{ font-size:9.5px; }
+  .dash-duo{ flex-direction:row; gap:12px; margin-top:12px; }
+  .dash-duo>*{ flex:1 1 0; }
+  .dash-quick-grid{ gap:10px; }
+  .dash-quick-card{ padding:14px 8px 12px; gap:7px; }
+  .dash-quick-card b{ font-size:12px; }
+  .dash-quick-card s{ display:block; }
+  .dash-quick-ico{ width:36px; height:36px; border-radius:12px; }
+  .dash-quick-ico svg{ width:21px; height:21px; }
+  .dash-more-grid{ flex-direction:row; gap:14px; }
+  .dash-more-grid>*{ flex:1 1 0; min-width:0; }
+  .dash-more .sec-head:first-child{ margin-top:0; }
+}
+
+/* ============================================================ DESKTOP
+   Its own composition, not a stretched phone: a page header across the top,
+   the banner with the level badge in its right column, the three metrics in
+   one row, the two large cards side by side, and quick access in a row of
+   four with their descriptions. */
+@media (min-width:900px){
+  #home.dash-screen{ background:var(--bg); }
+
+  /* page header */
+  .dash-topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+    padding:22px 32px 16px; border-bottom:1px solid #EFE7DC; background:var(--bg);
+  }
+  .dash-title{ font-size:27px; font-weight:900; letter-spacing:-.025em; color:var(--ink); }
+  .dash-topbar-side{ display:flex; align-items:center; gap:14px; }
+  .dash-topbar .dash-bell{ width:40px; height:40px; background:#fff; border:1px solid #EFE7DC; box-shadow:0 1px 3px rgba(17,24,39,.06); }
+  .dash-topbar .dash-bell .icon{ width:19px; height:19px; }
+  .dash-topbar .dash-bell-dot{ top:8px; right:9px; border-color:#fff; }
+  .dash-who{
+    display:flex; align-items:center; gap:10px; border:0; background:none; cursor:pointer;
+    font-family:var(--font); padding:2px 0;
+  }
+  .dash-who-name{ font-size:14px; font-weight:800; color:var(--ink); white-space:nowrap; }
+  .dash-who-chev{ width:16px; height:16px; color:var(--gray); }
+  .dash-topbar .dash-ava{ width:36px; height:36px; }
+
+  /* the phone's own compact header stands down */
+  .dash-mobile-head{ display:none; }
+
+  .dash-screen .dash-body{ padding:20px 32px 16px; max-width:1180px; margin:0 auto; width:100%; }
+
+  /* banner: copy on the left, illustration in the middle, level on the right */
+  .dash-welcome{
+    display:flex; align-items:center; gap:24px;
+    min-height:212px; border-radius:22px; padding:26px 30px;
+    background:
+      radial-gradient(105% 120% at 92% 12%, rgba(240,165,0,.26), rgba(240,165,0,0) 55%),
+      linear-gradient(142deg,#CC2020 0%,#A51616 48%,#7C1313 100%);
+    box-shadow:0 20px 44px rgba(124,19,19,.28), inset 0 1px 0 rgba(255,255,255,.15);
+  }
+  .dash-welcome-copy{ flex:1 1 auto; min-width:0; }
+  .dash-hello{ font-size:32px; }
+  .dash-name{ font-size:40px; margin-top:2px; }
+  .dash-msg{ font-size:16px; max-width:36ch; margin-top:12px; line-height:1.5; }
+  .dash-welcome-art{
+    position:static; flex:0 1 300px; width:300px; height:172px; opacity:1;
+    margin:-28px 0 -20px; align-self:center;
+  }
+  .dash-level{
+    position:static; flex:none; align-self:center;
+    flex-direction:column; gap:0; padding:14px 18px; border-radius:14px;
+    border-left:1px solid rgba(255,255,255,.22); border-top:0; border-right:0; border-bottom:0;
+    background:transparent; backdrop-filter:none;
+  }
+  .dash-level div{ text-align:center; }
+  .dash-level b{ font-size:19px; }
+  .dash-level span{ font-size:12px; }
+  .dash-level-laurel{ display:none; }
+
+  /* the three metrics as a row of proper cards */
+  .dash-metrics{ gap:16px; margin-top:18px; }
+  .dash-metric{ padding:20px 22px; gap:14px; border-radius:20px; align-items:center; }
+  .dash-metric-ico, .dash-metric-ico svg{ width:44px; height:44px; }
+  .dash-metric-value b{ font-size:32px; }
+  .dash-metric-value i{ font-size:15px; }
+  .dash-metric-label{ font-size:14.5px; margin-top:4px; }
+  .dash-metric-detail{ font-size:12.5px; margin-top:4px; -webkit-line-clamp:1; }
+
+  /* the two large cards */
+  .dash-duo{ gap:18px; margin-top:18px; }
+  .dash-card-lg{ border-radius:20px; padding:22px 24px 18px; box-shadow:0 6px 20px rgba(17,24,39,.06); }
+  .dash-card-head h3{ font-size:20px; }
+  .dash-card-ico svg{ width:26px; height:26px; }
+  .dash-continue-pos{ font-size:14px; margin:10px 0 16px; }
+  .dash-cta{ padding:14px 18px; font-size:15px; border-radius:12px; max-width:340px; }
+  .dash-plan-headline{ font-size:14px; }
+  .dash-plan-pct{ font-size:15px; }
+  .dash-plan-bar{ height:10px; margin-top:10px; }
+  .dash-plan-detail{ font-size:12px; }
+  .dash-link{ font-size:13.5px; }
+  .dash-plan .dash-link{ margin-top:12px; }
+
+  /* quick access */
+  .dash-quick{ margin-top:26px; }
+  .dash-sec-head h3{ font-size:19px; }
+  .dash-quick-grid{ gap:16px; }
+  .dash-quick-card{
+    align-items:center; padding:24px 16px 20px; gap:10px; border-radius:18px;
+    box-shadow:0 4px 14px rgba(17,24,39,.06);
+  }
+  .dash-quick-ico{ width:46px; height:46px; border-radius:14px; }
+  .dash-quick-ico svg{ width:26px; height:26px; }
+  .dash-quick-card b{ font-size:16px; }
+  .dash-quick-card s{ font-size:12px; margin-top:1px; }
+
+  /* announcements: one line across */
+  .dash-announce{ margin-top:18px; padding:16px 20px; border-radius:18px; gap:16px; }
+  .dash-announce-ico svg{ width:28px; height:28px; }
+  .dash-announce-body b{ font-size:15px; }
+  .dash-announce-body p{ font-size:13px; -webkit-line-clamp:1; margin-top:3px; }
+
+  .dash-more{ margin-top:32px; }
+  .dash-more-grid{ gap:22px; }
+}
+
+@media (min-width:1280px){
+  .dash-screen .dash-body{ max-width:1240px; }
+  .dash-welcome{ min-height:236px; padding:30px 36px; }
+  .dash-hello{ font-size:36px; }
+  .dash-name{ font-size:46px; }
+  .dash-welcome-art{ width:340px; height:196px; }
+}
+
+/* ======================================================================
+   SIDEBAR (desktop) / BOTTOM BAR (phone) — the approved navigation.
+   ----------------------------------------------------------------------
+   The same <nav> serves both. At >=900px it is the left sidebar: the brand
+   at the top, the app's sections in the middle, the account rows at the
+   bottom. Below that it is the phone's bottom bar, and only the five
+   entries the approved mobile reference shows carry the .tab-m class —
+   Home, Study, Practice, Results and More. Everything else still exists in
+   the markup and in the sidebar; on a phone it is reached from More, which
+   opens the same profile screen the sidebar's Settings row opens. A hidden
+   tab here is not a deleted feature.
+   ====================================================================== */
+.side-nav{ display:flex; flex-direction:column; min-width:0; }
+.side-nav-foot{ display:none; }
+
+@media (max-width:899px){
+  .tabbar .tab{ padding:0; }
+  .tabbar .tab:not(.tab-m){ display:none; }
+}
+
+@media (min-width:900px){
+  .phone:not(.is-login) .tabbar{ padding:0 0 10px; overflow-y:auto; }
+  .side-nav{ flex:0 0 auto; padding:8px 0; }
+  .side-nav-foot{ display:flex; margin-top:auto; border-top:1px solid var(--line); padding-top:8px; }
+  .tabbar .tab[data-t="logout"]{ color:var(--red-deep); }
+}

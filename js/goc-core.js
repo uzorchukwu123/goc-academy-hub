@@ -4031,6 +4031,193 @@
     if (!r) return false;
     return !isVideoResource(r);
   }
+  /* ============================================ STUDENT HOME DASHBOARD (A01)
+     The rules behind the student dashboard, kept here for the same reason the
+     planner is: the browser and the server can both read them, and the screen
+     can be rebuilt without re-deriving any of it.
+
+     Nothing in this block invents a figure. Every function takes what the
+     account's own record already reports and answers one of two things: what
+     the dashboard should say, or that there is nothing to say yet. A surface
+     mounting these must be able to render an empty state from the same call
+     that renders a full one — that is what `nothing`/`hasData` are for. */
+
+  /* How the dashboard addresses a student. The greeting is the local hour,
+     which is the only thing the client knows better than the server does. */
+  function dashGreeting(hour) {
+    var h = Number(hour);
+    if (!isFinite(h)) return 'Hello,';
+    h = ((Math.floor(h) % 24) + 24) % 24;
+    if (h < 5) return 'Good night,';
+    if (h < 12) return 'Good morning,';
+    if (h < 17) return 'Good afternoon,';
+    if (h < 21) return 'Good evening,';
+    return 'Good night,';
+  }
+
+  /* The first name only. A stored name can be empty, one word, or padded; the
+     dashboard says something honest rather than rendering a blank. */
+  function dashFirstName(name) {
+    var first = String(name == null ? '' : name).trim().split(/\s+/)[0] || '';
+    return first ? first.slice(0, 40) : 'Scholar';
+  }
+
+  function dashInitials(name) {
+    var parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'G';
+    var a = parts[0].charAt(0), b = parts.length > 1 ? parts[parts.length - 1].charAt(0) : '';
+    return (a + b).toUpperCase();
+  }
+
+  /* The scholar standing, in the dashboard's two tiers of language: a level
+     number, and the title that goes under it. Level comes from XP through the
+     same levelFor() the rest of the app uses — it is never passed in ready-made,
+     so a stored level that disagreed with a stored XP could not show here. */
+  var DASH_TITLE_BANDS = [
+    { from: 1, title: 'Foundation Scholar' },
+    { from: 3, title: 'Rising Scholar' },
+    { from: 6, title: 'Independent Scholar' },
+    { from: 10, title: 'Advanced Scholar' },
+    { from: 16, title: 'Distinction Scholar' },
+    { from: 24, title: 'Academy Laureate' }
+  ];
+  function dashScholarTitle(level) {
+    var lv = Math.max(1, Math.round(Number(level) || 1));
+    var title = DASH_TITLE_BANDS[0].title;
+    for (var i = 0; i < DASH_TITLE_BANDS.length; i++) {
+      if (lv >= DASH_TITLE_BANDS[i].from) title = DASH_TITLE_BANDS[i].title;
+    }
+    return title;
+  }
+
+  function dashNum(n) {
+    return String(Math.max(0, Math.round(Number(n) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  /* The three performance cards. Each answers `value` (already a string, so the
+     screen never formats), plus the detail line under it and whether there is
+     anything real behind it. Performance is the one that can honestly be
+     absent: it is the average of MARKED papers, so a student with none has no
+     figure — the card says so rather than showing a 0% that reads as failure. */
+  function dashMetrics(me, perf) {
+    var p = perf || (me && me.performanceDetail) || null;
+    var hasPerf = !!(p && p.hasData && Number(p.markedAttempts) > 0);
+    var xp = Number(me && me.xp) || 0;
+    var level = Math.max(1, Math.round(Number(me && me.level) || levelFor(xp)));
+    var streak = Math.max(0, Math.round(Number(me && me.streak) || 0));
+    return {
+      xp: {
+        key: 'xp', value: dashNum(xp), unit: 'XP', label: 'Academy XP',
+        detail: 'Level ' + level + ' · ' + dashScholarTitle(level),
+        hasData: xp > 0
+      },
+      streak: {
+        key: 'streak', value: String(streak), unit: streak === 1 ? 'Day' : 'Days', label: 'Study Streak',
+        detail: streak > 0 ? 'Keep it going today' : 'Study today to begin one',
+        hasData: streak > 0
+      },
+      performance: {
+        key: 'performance', value: hasPerf ? String(Math.round(Number(p.overall) || 0)) : '—',
+        unit: hasPerf ? '%' : '', label: 'Overall Performance',
+        detail: hasPerf
+          ? (p.markedAttempts === 1 ? 'Across 1 marked paper' : 'Across ' + p.markedAttempts + ' marked papers')
+          : 'No marked paper yet',
+        hasData: hasPerf
+      }
+    };
+  }
+
+  /* ---------------------------------------------------------- continue learning
+     "Where the student actually is." There are exactly three honest answers, in
+     this order, and the dashboard must not invent a fourth:
+
+       1. an unfinished practice run this account already started (resume it),
+       2. the last run's subject and topics (start the next one there),
+       3. nothing yet (offer the first step).
+
+     A run is unfinished when it stored its progress and has no completion time
+     — the same shape GET /api/me/practice returns. Anything else is history. */
+  function dashContinue(runs) {
+    var list = (Array.isArray(runs) ? runs : []).filter(function (r) { return r && typeof r === 'object'; });
+    if (!list.length) {
+      return {
+        hasData: false, resume: false, subject: '', topic: '',
+        title: 'Start your first practice',
+        detail: 'Choose a paper and a topic — your progress will wait here.',
+        action: 'Start practising'
+      };
+    }
+    var open = list.filter(function (r) { return r.resume && !r.done && !r.finishedAt; });
+    var pick = open[0] || list[0];
+    var subject = String(pick.subject || '').trim();
+    var topics = (Array.isArray(pick.topics) ? pick.topics : []).map(function (t) {
+      return String(t == null ? '' : (t.topic || t)).trim();
+    }).filter(Boolean);
+    var topic = topics.length ? topics.slice(0, 2).join(', ') : '';
+    var resuming = !!open.length;
+    return {
+      hasData: !!subject || !!topic,
+      resume: resuming,
+      subject: subject || 'Practice',
+      topic: topic,
+      title: subject ? (subject + (topic ? ' – ' + topic : '')) : 'Your practice',
+      detail: resuming
+        ? 'You have an unfinished run here.'
+        : (Number(pick.answered) > 0
+            ? 'Last time: ' + (Number(pick.correct) || 0) + ' of ' + (Number(pick.answered) || 0) + ' correct.'
+            : 'Pick up where you left off.'),
+      action: 'Continue Studying'
+    };
+  }
+
+  /* -------------------------------------------------------------- study plan
+     The plan card shows one thing: how much of today's plan is done. It reads
+     the same planner engine the Study Plan page mounts (planWeek) and the same
+     progress rule (planDayProgress), so the two surfaces can never disagree
+     about the same day.
+
+     `blocks` is the student's stored plan for the week. `studiedMinutes` is
+     what the study window reports as used today. With no plan at all the card
+     says so and points at the planner — it does not report 0% of nothing. */
+  function dashStudyPlan(opts) {
+    var o = opts || {};
+    var blocks = Array.isArray(o.blocks) ? o.blocks : [];
+    var dayKey = String(o.day || '');
+    var dayBlocks = blocks.filter(function (b) {
+      return b && planDayIndex(b.day) >= 0 && (!dayKey || String(b.day) === dayKey);
+    });
+    var planned = dayBlocks.reduce(function (n, b) {
+      return n + (b.kind === 'rest' ? 0 : Math.round(Number(b.minutes) || 0));
+    }, 0);
+    var goals = dayBlocks.filter(function (b) { return b.kind !== 'rest'; });
+    var studied = Math.max(0, Math.round(Number(o.studiedMinutes) || 0));
+    var prog = planDayProgress(planned, studied);
+    if (!planned) {
+      return {
+        hasData: false, percent: 0, goalsDone: 0, goalsTotal: 0,
+        headline: 'No plan for today yet',
+        detail: 'Build your week on the Study Plan page.',
+        plannedMinutes: 0, studiedMinutes: studied
+      };
+    }
+    /* A goal is met once the minutes studied cover the blocks in order — the
+       engine has no per-block completion, so this counts whole blocks the
+       student's minutes could have carried, which is the only reading that
+       cannot overstate progress. */
+    var carry = studied, done = 0;
+    goals.forEach(function (b) {
+      var m = Math.round(Number(b.minutes) || 0);
+      if (m && carry >= m) { done++; carry -= m; }
+    });
+    return {
+      hasData: true, percent: prog.percent, goalsDone: done, goalsTotal: goals.length,
+      headline: done + ' of ' + goals.length + (goals.length === 1 ? ' goal completed' : ' goals completed'),
+      detail: prog.met ? 'Today\u2019s plan is done — well held.'
+                        : prog.remaining + ' min left of ' + planned + ' planned',
+      plannedMinutes: planned, studiedMinutes: studied
+    };
+  }
+
   /* Videos: a recording of a live class (type 'live') is the classRecordings
      feature, every other video is a lesson (the videos feature). Fails closed. */
   /* Video playback is excluded from the redesigned web application (owner
@@ -6778,6 +6965,16 @@
     videoAllowed: videoAllowed,
     videoLockMessage: videoLockMessage,
     RESOURCE_VIEW_LOCK_MESSAGE: RESOURCE_VIEW_LOCK_MESSAGE,
+    /* Student Home Dashboard (A01) — the rules behind the screen. */
+    dashGreeting: dashGreeting,
+    dashFirstName: dashFirstName,
+    dashInitials: dashInitials,
+    dashScholarTitle: dashScholarTitle,
+    dashNum: dashNum,
+    dashMetrics: dashMetrics,
+    dashContinue: dashContinue,
+    dashStudyPlan: dashStudyPlan,
+    DASH_TITLE_BANDS: DASH_TITLE_BANDS,
     /* Video is excluded from the app entirely — not previewed, not downloadable. */
     VIDEO_FILE_EXTENSIONS: VIDEO_FILE_EXTENSIONS,
     VIDEO_EXCLUDED_MESSAGE: VIDEO_EXCLUDED_MESSAGE,

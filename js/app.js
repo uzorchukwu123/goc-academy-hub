@@ -669,7 +669,16 @@ function go(id){
     'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard'];
   document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1);
   // highlight tab (map sub-screens to their section)
-  var map = { lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
+  /* Sub-screens light the section that owns them. The dashboard's own entries
+     are distinct rows in the approved sidebar, so each one lights itself:
+     Results, Resources and Examinations are not "Study" any more. Profile and
+     the account rows share the More tab on a phone. */
+  var map = { lesson:'study', practice:'practice', studySet:'practice', reading:'study',
+              bookmarks:'study', mistakes:'study', review:'study', studyRes:'study',
+              cbt:'practice', results:'results', webtest:'webtest', wtRun:'webtest',
+              wtResult:'webtest', classes:'classes', league:'league',
+              'change-password':'profile', 'staff-change-password':'profile',
+              home:'home' };
   var active = map[id] || id;
   list(document.querySelectorAll('.tab')).forEach(function(t){
     var on = t.getAttribute('data-t') === active;
@@ -2123,12 +2132,20 @@ function updateFocus(){
   var leftMin = Math.ceil(leftSec / 60);
   var frac = limitSec ? Math.max(0, Math.min(1, leftSec / limitSec)) : 0;
   var r=40, c=2*Math.PI*r;
+  /* The dashboard's study ring was replaced by the approved metric cards, so
+     every one of these elements is optional now: the window is still tracked
+     and still painted on the dashboard's details block, and this only decorates
+     whatever ring happens to be on the page. */
   var arc = document.getElementById('focusArc');
-  arc.setAttribute('stroke-dasharray', c);
-  arc.setAttribute('stroke-dashoffset', c*(1-frac));
-  arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
-  document.getElementById('focusMin').textContent = leftMin;
-  document.getElementById('focusText').textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
+  if(arc){
+    arc.setAttribute('stroke-dasharray', c);
+    arc.setAttribute('stroke-dashoffset', c*(1-frac));
+    arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
+  }
+  var minEl = document.getElementById('focusMin');
+  if(minEl) minEl.textContent = leftMin;
+  var txtEl = document.getElementById('focusText');
+  if(txtEl) txtEl.textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
   // The wind-down card is the whole point of the daily limit, so show it when it is spent —
   // exhausted comes from the server whenever it's known, never guessed client-side.
   var exhausted = state.studyExhausted || (state.studyLeftSec != null && leftSec <= 0);
@@ -2140,6 +2157,10 @@ function updateFocus(){
    actually returned. */
 function paintStudyWindow(win){
   if(!win) return;
+  /* The dashboard's plan card and window block read what this folds in, so
+     they are repainted from it rather than holding a stale minute count. */
+  if(typeof dashPaintPlan === 'function' && document.getElementById('dashPlanCard')) dashPaintPlan();
+  if(typeof dashPaintWindow === 'function' && document.getElementById('dashWindow')) dashPaintWindow();
   if(win.dailyLimitMin != null) state.limit = Number(win.dailyLimitMin) || state.limit;
   if(win.usedMin != null) state.used = Number(win.usedMin) || 0;
   state.studyLeftSec = (win.leftSec != null) ? Number(win.leftSec) : null;
@@ -9274,10 +9295,239 @@ function dashPaintBroadcasts(){
   }, function(){ dashBroadcastsAll = []; dashBroadcastsRender(); });
 }
 
+/* ======================================================================
+   STUDENT HOME DASHBOARD (A01) — the screen's own painting.
+   ----------------------------------------------------------------------
+   Everything here reads the account that is already signed in. There is no
+   demonstration value anywhere: each panel starts from a loading state in
+   the markup, is filled from the same APIs the rest of the app uses, and
+   falls back to a sentence that says the data is not there rather than to
+   a plausible-looking number.
+
+   The rules (greeting, metrics, continue-learning, plan progress) live in
+   js/goc-core.js so the server can share them and so this file only ever
+   decides what to draw, never what is true.
+   ====================================================================== */
+var dashMe = null;          /* the last GET /api/me for this screen */
+var dashPlans = [];         /* this student's own study blocks, if any */
+var dashContinue = null;    /* what the engine answered for Continue Learning */
+var dashMetricData = null;
+
+function dashPut(id, text){
+  var e = document.getElementById(id);
+  if(e) e.textContent = text;
+}
+function dashAttr(id, name, value){
+  var e = document.getElementById(id);
+  if(e) e.setAttribute(name, value);
+}
+
+/* ---- the header: who is signed in, on both the desktop bar and the phone head --- */
+function dashPaintIdentity(){
+  var name = (dashMe && dashMe.name) || studentName || '';
+  var first = GOC.core.dashFirstName(name);
+  var ini = GOC.core.dashInitials(name);
+  dashPut('dashName', first + ' 👋');
+  dashPut('dashTopName', name || 'Your account');
+  dashPut('dashAva', ini);
+  dashPut('dashAvaSm', ini);
+  dashPut('profAva', ini);
+  if(role === 'student') dashPut('dashHello', GOC.core.dashGreeting(new Date().getHours()));
+}
+
+/* ---- the three performance cards -------------------------------------------------
+   XP, streak, level and performance all come from GET /api/me, which is the
+   same record the league and the profile read. The performance card is the one
+   that can be honestly empty: it averages MARKED papers, so an account with
+   none shows a dash and says so. */
+function dashPaintMetrics(){
+  var m = dashMetricData = GOC.core.dashMetrics(dashMe, dashMe && dashMe.performanceDetail);
+  dashPut('dashXp', m.xp.value);
+  dashPut('dashXpUnit', m.xp.unit);
+  dashPut('dashXpLabel', m.xp.label);
+  dashPut('dashXpDetail', m.xp.detail);
+  dashPut('dashStreak', m.streak.value);
+  dashPut('dashStreakUnit', m.streak.unit);
+  dashPut('dashStreakLabel', m.streak.label);
+  dashPut('dashStreakDetail', m.streak.detail);
+  dashPut('dashPerf', m.performance.value);
+  dashPut('dashPerfUnit', m.performance.unit);
+  dashPut('dashPerfLabel', m.performance.label);
+  dashPut('dashPerfDetail', m.performance.detail);
+  /* The level badge in the banner uses the same level and title, so the two
+     can never disagree on one screen. */
+  var lv = Math.max(1, Math.round(Number(dashMe && dashMe.level) || 1));
+  dashPut('dashLevel', 'Level ' + lv);
+  dashPut('dashLevelTitle', GOC.core.dashScholarTitle(lv));
+  /* Keep the rest of the app's own hooks fed from the same numbers. */
+  dashPut('dashStreakChip', '🔥 ' + (Number(dashMe && dashMe.streak) || 0));
+  var metrics = document.getElementById('dashMetrics');
+  if(metrics) metrics.classList.toggle('is-empty', !m.xp.hasData && !m.streak.hasData && !m.performance.hasData);
+}
+
+/* ---- Continue Learning ----------------------------------------------------------
+   Three honest answers, in this order: an unfinished run (resume it), the last
+   run's subject and topics (carry on there), or the first step. The engine
+   decides which; this only draws it and remembers where the button goes. */
+function dashPaintContinue(runs){
+  var c = dashContinue = GOC.core.dashContinue(runs);
+  dashPut('dashContinuePos', c.title);
+  dashPut('dashContinueCta', c.action);
+  var card = document.getElementById('dashContinueCard');
+  if(card) card.classList.toggle('is-empty', !c.hasData);
+}
+function dashContinueGo(){
+  var c = dashContinue;
+  /* Straight back into the run the student actually has, when there is one;
+     otherwise the practice set-up already knows which paper to open. */
+  if(c && c.resume && c.subject) openStudySet('practice', c.subject);
+  else if(c && c.hasData && c.subject) openStudySet('practice', c.subject);
+  else openPractice();
+}
+
+/* ---- My Study Plan ---------------------------------------------------------------
+   Today's plan, read through the same planner engine the Study Plan page
+   mounts. Nothing here stores a plan: the blocks come from this account's
+   record (applyPlanBlocks) and the minutes studied come from the study window
+   the server already tracks. With no plan the card says so. */
+function dashPaintPlan(){
+  var today = GOC.core.planDayKey(new Date());
+  var usedMin = Math.max(0, Number(state && state.used) || 0);
+  var p = GOC.core.dashStudyPlan({ blocks: dashPlans, day: today, studiedMinutes: usedMin });
+  dashPut('dashPlanHeadline', p.headline);
+  dashPut('dashPlanPct', p.hasData ? p.percent + '%' : '—');
+  dashPut('dashPlanDetail', p.detail);
+  var fill = document.getElementById('dashPlanFill');
+  if(fill) fill.style.width = (p.hasData ? p.percent : 0) + '%';
+  dashAttr('dashPlanBar', 'aria-valuenow', String(p.hasData ? p.percent : 0));
+  var card = document.getElementById('dashPlanCard');
+  if(card) card.classList.toggle('is-empty', !p.hasData);
+}
+/* The study plan the student builds lives on the Study Plan page, which mounts
+   the planner engine over this session. Until a plan is stored against the
+   account the dashboard reads an empty list — and says so — rather than
+   presenting the academy's timetable as if the student had planned it. */
+function applyPlanBlocks(blocks){
+  dashPlans = Array.isArray(blocks) ? blocks : [];
+}
+
+/* ---- announcements -----------------------------------------------------------------
+   One line on the dashboard, from the notices and broadcasts this account is
+   actually sent. Hidden entirely when there is nothing. */
+var dashAnnounceItems = [];
+function dashPaintAnnounce(){
+  var wrap = document.getElementById('dashAnnounce');
+  if(!wrap) return;
+  var first = dashAnnounceItems[0];
+  if(!first){ wrap.hidden = true; dashPut('dashAnnounceText', ''); return; }
+  wrap.hidden = false;
+  dashPut('dashAnnounceText', String(first.title || first.text || 'New from the academy'));
+  var dot = document.getElementById('dashBellDot');
+  if(dot) dot.hidden = false;
+}
+
+/* ---- the daily study window, spelled out in the details section ------------------- */
+function dashPaintWindow(){
+  var host = document.getElementById('dashWindow');
+  if(!host) return;
+  var left = state && state.studyLeftSec != null
+    ? Math.ceil(Math.max(0, Number(state.studyLeftSec)) / 60)
+    : null;
+  if(left === null){ host.innerHTML = '<div class="wt-none">Your study window is not available right now.</div>'; return; }
+  var used = Math.max(0, Number(state.used) || 0);
+  host.innerHTML = '';
+  host.appendChild(dashStatEl('Minutes left today', left + ' min'));
+  host.appendChild(dashStatEl('Studied today', used + ' min'));
+}
+function dashStatEl(k, v){
+  var d = document.createElement('div');
+  d.className = 'wt-stat';
+  d.innerHTML = '<span>' + esc(k) + '</span><b>' + esc(v) + '</b>';
+  return d;
+}
+
+/* ---- one load, in this order ---------------------------------------------------------
+   The account is read first because every other panel needs it; the panels
+   that fail say so individually, so one unavailable service never blanks the
+   whole dashboard. */
+function dashLoad(){
+  if(role !== 'student' && !previewing) return;
+  if(!GOC.api || !GOC.api.myProfile) return;
+  return GOC.api.myProfile().then(function(me){
+    dashMe = me || null;
+    dashPaintIdentity();
+    dashPaintMetrics();
+    dashPaintPlan();
+    dashPaintWindow();
+  }, function(err){
+    dashMe = null;
+    /* The account could not be read: say so in the three cards, once, rather
+       than leaving a screen that looks loaded and is not. */
+    var why = (err && err.message) || 'Your record is not available right now.';
+    ['dashXpDetail', 'dashStreakDetail', 'dashPerfDetail'].forEach(function(id){ dashPut(id, why); });
+    dashPut('dashXp', '—'); dashPut('dashStreak', '—'); dashPut('dashPerf', '—');
+    dashPut('dashLevel', 'Level —'); dashPut('dashLevelTitle', 'Scholar');
+  }).then(function(){
+    /* Continue Learning reads practice history — its own call, its own failure. */
+    if(!GOC.api || !GOC.api.listPractice) return;
+    return GOC.api.listPractice().then(function(r){
+      dashPaintContinue((r && r.runs) || []);
+    }, function(){
+      dashPaintContinue([]);
+      dashPut('dashContinuePos', 'Your practice history is not available right now.');
+    });
+  }).then(function(){
+    /* Announcements: notices and broadcasts, whichever the academy sent. */
+    var jobs = [];
+    if(GOC.api.listMyNotices) jobs.push(GOC.api.listMyNotices().then(function(r){
+      return (r && !r.locked && Array.isArray(r.notices)) ? r.notices.map(function(n){
+        return { kind: 'notice', title: n.title || n.body, at: n.at };
+      }) : [];
+    }, function(){ return []; }));
+    if(GOC.api.listMyBroadcasts) jobs.push(GOC.api.listMyBroadcasts().then(function(r){
+      return (r && !r.locked && Array.isArray(r.broadcasts)) ? r.broadcasts.map(function(b){
+        return { kind: 'broadcast', title: b.title || b.body, at: b.at };
+      }) : [];
+    }, function(){ return []; }));
+    if(!jobs.length) return;
+    return Promise.all(jobs).then(function(lists){
+      dashAnnounceItems = [].concat.apply([], lists)
+        .filter(function(x){ return x && x.title; })
+        .sort(function(a, b){ return String(b.at || '').localeCompare(String(a.at || '')); });
+      dashPaintAnnounce();
+    });
+  });
+}
+
+/* ---- the destinations the dashboard offers --------------------------------------------
+   Each is an existing route with an existing handler. Nothing new is asked of
+   the backend, and nothing is opened that the app did not already do. */
+
+/* JAMB CBT: the Test hub lists the JAMB-oriented sitting beside the other two,
+   and refuses it honestly when its bank is not deep enough yet. */
+function dashJambGo(){ openWebTest(); }
+
+/* Study Plan: the single study-planning destination. Today that is the Classes
+   screen, which holds the academy's week from the planner engine; the
+   redesigned Study Plan page will take over and this one line follows it. */
+function dashPlanGo(){ go('classes'); }
+
+/* Support: the hub's own contact details, on the public homepage. */
+function dashSupportGo(){
+  go('landing');
+  setTimeout(function(){
+    var el = document.getElementById('contact');
+    if(el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
+}
+
 function renderDash(){
   if(role !== 'student' && !previewing) return;
   var helloEl = document.getElementById('dashHello');
   if(helloEl && role === 'student') helloEl.textContent = greetingWord();
+  /* Student Home Dashboard (A01): its own panels are re-read on the way in, so
+     the screen always shows this account's record as it stands now. */
+  dashLoad();
   dashPaintStanding();
   dashPaintLast();
   dashPaintBroadcasts();

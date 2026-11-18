@@ -798,114 +798,300 @@
     </section>
 
     <!-- ============ DASHBOARD ============ -->
-    <section class="screen pad" id="home">
-      <!-- Ambient aurora — the homepage's "impossible graphics" language, carried
-           onto the dashboard. Decorative, so hidden from assistive tech and
-           stilled entirely under prefers-reduced-motion. -->
-      <div class="dash-aura" aria-hidden="true"><span class="au a"></span><span class="au b"></span><span class="au c"></span></div>
-      <div class="dash-hero" id="tut-hero">
-        <span class="hero-glow" aria-hidden="true"></span>
-        <svg class="hero-mark" aria-hidden="true" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg>
-        <div class="statusbar"><span class="brandline"><svg class="gmark" style="width:22px;height:22px;color:#fff" viewBox="0 0 100 100"><use href="#goc-mark" xlink:href="#goc-mark"/></svg><b>G.O.C Academy Hub</b></span><span id="dashExamLine">UTME 2027 · Sciences</span></div>
-        <div class="row between">
-          <div>
-            <div class="hello" id="dashHello">Good afternoon,</div>
-            <div class="name" id="dashName">Amara 👋</div>
-          </div>
-          <div class="row gap8">
-            <span class="chip" style="background:rgba(255,255,255,.16);color:#fff" id="dashStreakChip">🔥 12</span>
-          </div>
+    <section class="screen pad dash-screen" id="home">
+      <!-- ==================================================================
+           STUDENT HOME DASHBOARD (A01) — the approved build.
+           Every figure on this screen is drawn by js/app.js from this
+           account's own record on the way in (renderDash → dashPaint*), and
+           nothing here holds a demonstration value: the markup ships dashes
+           and loading states, so an empty account reads as empty rather than
+           as somebody else's good week. The rules it renders live in
+           js/goc-core.js (dashGreeting, dashMetrics, dashContinue,
+           dashStudyPlan), shared with the server so both sides agree.
+           ================================================================== -->
+
+      <!-- Desktop page header: title, notifications, profile. Hidden on a
+           phone, where the compact header below takes over. -->
+      <header class="dash-topbar">
+        <h1 class="dash-title">Student Dashboard</h1>
+        <div class="dash-topbar-side">
+          <button class="dash-bell" type="button" id="dashBell" onclick="go('updates')" aria-label="Updates and news">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7z"/><path d="M10 20a2 2 0 004 0"/></svg>
+            <span class="dash-bell-dot" id="dashBellDot" hidden aria-hidden="true"></span>
+          </button>
+          <button class="dash-who" type="button" onclick="go('profile')" aria-label="Open your profile">
+            <span class="dash-ava" id="dashAva">G</span>
+            <span class="dash-who-name" id="dashTopName">Your account</span>
+            <svg class="icon dash-who-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
         </div>
-        <div class="hero-stats">
-          <div class="hstat"><div class="v" id="dashLevel">Lv 8</div><div class="l">Scholar</div></div>
-          <div class="hstat"><div class="v gold" id="dashXp">1,240</div><div class="l">Academy XP</div></div>
-          <div class="hstat"><div class="v gold" id="dashStreak">12 🔥</div><div class="l">Day streak</div></div>
+      </header>
+
+      <!-- Mobile compact header: brand, bell, avatar. The hamburger opens the
+           app's existing menu; the brand is the same mark used everywhere. -->
+      <div class="dash-mobile-head">
+        <button class="dash-burger" type="button" onclick="openDrawer()" aria-label="Open menu" aria-controls="lpDrawer" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="dash-mbrand">
+          <svg viewBox="0 0 100 100" style="width:26px;height:26px;color:#DC2626" aria-hidden="true"><use href="#goc-mark" xlink:href="#goc-mark"/></svg>
+          <span><b>G.O.C</b><s>Academy Hub</s></span>
+        </div>
+        <div class="dash-mhead-side">
+          <button class="dash-bell" type="button" onclick="go('updates')" aria-label="Updates and news">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7z"/><path d="M10 20a2 2 0 004 0"/></svg>
+          </button>
+          <button class="dash-ava dash-ava-sm" type="button" id="dashAvaSm" onclick="go('profile')" aria-label="Open your profile">G</button>
         </div>
       </div>
 
-      <!-- Scholar ID: the student's permanent key back into this dashboard -->
-      <div class="id-strip" id="idStrip">
-        <div class="s-l"><span>Your Scholar ID</span><code id="dashId">—</code></div>
-        <button onclick="copyId()">Copy</button>
-      </div>
+      <div class="dash-body">
 
-      <!-- SIGNATURE: daily study window (limit set by management) -->
-      <div class="focus-card" id="tut-focus">
-        <div class="ring" id="focusRing">
-          <svg width="96" height="96" viewBox="0 0 96 96">
-            <circle class="rc" cx="48" cy="48" r="40" stroke="#EEF0F3"/>
-            <circle class="rc" id="focusArc" cx="48" cy="48" r="40" stroke="#DC2626"/>
+        <!-- ============================ WELCOME BANNER ============================ -->
+        <section class="dash-welcome" id="tut-hero" aria-labelledby="dashName">
+          <div class="dash-welcome-copy">
+            <div class="dash-hello" id="dashHello">Good afternoon,</div>
+            <div class="dash-name-row">
+              <h2 class="dash-name" id="dashName">Scholar 👋</h2>
+            </div>
+            <p class="dash-msg">Stay consistent, learn deeply and build your UTME advantage.</p>
+          </div>
+          <!-- The reference's open-book-and-cap illustration, drawn here rather
+               than loaded from anywhere: the hub ships no third-party art. -->
+          <svg class="dash-welcome-art" viewBox="0 0 260 150" aria-hidden="true" focusable="false">
+            <ellipse cx="132" cy="136" rx="86" ry="9" fill="rgba(0,0,0,.16)"/>
+            <path d="M40 108c22-9 44-9 62 0v26c-18-9-40-9-62 0z" fill="#F7E9D2"/>
+            <path d="M102 108c22-9 44-9 62 0v26c-18-9-40-9-62 0z" fill="#FBF3E4"/>
+            <path d="M40 108c22-9 44-9 62 0 18-9 40-9 62 0" fill="none" stroke="#E4CFAE" stroke-width="2.5"/>
+            <path d="M60 104c16-6 30-6 42 0v22c-12-6-26-6-42 0z" fill="#FFFBF3"/>
+            <path d="M122 104c16-6 30-6 42 0v22c-12-6-26-6-42 0z" fill="#FFFBF3"/>
+            <path d="M78 96h104l-52 26z" fill="#8C1515"/>
+            <path d="M78 96h104v-8H78z" fill="#A8201F"/>
+            <path d="M86 88h88l6-10H80z" fill="#C4302B"/>
+            <path d="M106 34l30-12 30 12-30 11z" fill="#1F232B"/>
+            <path d="M118 41v12c0 4 36 4 36 0V41" fill="#2B313B"/>
+            <path d="M166 38v22" stroke="#F0A500" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="166" cy="63" r="4" fill="#F0A500"/>
+            <path d="M136 22v-9l16 4z" fill="#F0A500" opacity=".9"/>
+            <path d="M100 70c0-10 8-18 18-18s18 8 18 18z" fill="#FBF3E4" opacity=".35"/>
           </svg>
-          <div class="rt"><b id="focusMin">—</b><s>min left</s></div>
-        </div>
-        <div class="focus-info">
-          <span class="focus-tag">Set by your academy</span>
-          <h4>Daily study window</h4>
-          <p id="focusText">Learn here, then read on your own, apply it, and bring questions to your tutor.</p>
-        </div>
-      </div>
-
-      <!-- Everything below is drawn by js/app.js from this account's own record:
-           the papers the academy has actually published for this combination,
-           this scholar's place in the league, and their most recent result. No
-           panel here invents a number — an empty record says so plainly. -->
-      <div class="wrap">
-        <!-- Journey: the Duolingo-style path. Drawn by paintJourney() in js/app.js from
-             this account's own level and XP; nothing here is a fixed figure. -->
-        <!-- Updates & News entry — accessible from the sidebar menu -->
-        <!-- Broadcasts (Phase 4 slice 5): messages from the academy, GOC students only. Filled by
-             dashPaintBroadcasts() from GET /api/me/broadcasts; hidden when there is nothing to show. -->
-        <div class="card" id="dashBroadcasts" style="display:none;margin-bottom:16px;padding:14px 16px">
-          <div class="eyebrow">From the academy</div>
-          <div id="dashBroadcastsList"></div>
-          <button type="button" class="btn btn-block" id="dashBroadcastsMore" style="display:none;margin-top:10px" onclick="dashBroadcastsToggle()">Show more</button>
-        </div>
-        <!-- Class notices (Phase 3C slice 7): posted by your subject tutors, GOC students only. Filled by
-             dashPaintNotices() from GET /api/me/notices; hidden when there is nothing to show. -->
-        <div class="card" id="dashNotices" style="display:none;margin-bottom:16px;padding:14px 16px">
-          <div class="eyebrow">Class notices</div>
-          <div id="dashNoticesList"></div>
-          <button type="button" class="btn btn-block" id="dashNoticesMore" style="display:none;margin-top:10px" onclick="dashNoticesToggle()">Show more</button>
-        </div>
-        <div class="sec-head"><div class="section-t">Your journey</div><button class="ss-link" onclick="openPractice()">Practise</button></div>
-        <div class="card wrap dash-card journey" id="dashJourney" data-tut="tut-journey">
-          <div class="jn-mascot">
-            <button class="jn-owl" id="jnOwl" type="button" aria-label="Talk to Goc the owl" onclick="jnTalk()">
-              <svg viewBox="0 0 80 80" aria-hidden="true">
-                <ellipse cx="40" cy="74" rx="20" ry="3.5" fill="rgba(17,24,39,.12)"/>
-                <path d="M30 70l-2 5M38 70v6M50 70l2 5" stroke="#F0A500" stroke-width="3.5" stroke-linecap="round"/>
-                <ellipse cx="40" cy="46" rx="26" ry="27" fill="#DC2626"/>
-                <ellipse cx="40" cy="53" rx="15" ry="17" fill="#FDECC8"/>
-                <ellipse cx="15" cy="50" rx="6" ry="14" fill="#B91C1C" transform="rotate(12 15 50)"/>
-                <ellipse cx="65" cy="50" rx="6" ry="14" fill="#B91C1C" transform="rotate(-12 65 50)"/>
-                <g class="jn-eyes">
-                  <circle cx="30" cy="36" r="9.5" fill="#fff"/><circle cx="50" cy="36" r="9.5" fill="#fff"/>
-                  <circle cx="31.5" cy="37" r="4.6" fill="#20242C"/><circle cx="48.5" cy="37" r="4.6" fill="#20242C"/>
-                  <circle cx="33" cy="35" r="1.5" fill="#fff"/><circle cx="50" cy="35" r="1.5" fill="#fff"/>
-                </g>
-                <path d="M36 44l4 7 4-7z" fill="#F0A500"/>
-                <path d="M14 22l26-10 26 10-26 9z" fill="#20242C"/>
-                <path d="M26 27v8c0 3 28 3 28 0v-8" fill="#2F3540"/>
-                <path d="M62 24v11" stroke="#F0A500" stroke-width="2.5" stroke-linecap="round"/><circle cx="62" cy="37" r="2.6" fill="#F0A500"/>
-              </svg>
-            </button>
-            <div class="jn-bubble" id="jnBubble" aria-live="polite">Hi, I'm Goc! Let's climb — one question at a time.</div>
+          <!-- Scholar level badge -->
+          <div class="dash-level" id="dashLevelBadge">
+            <svg class="dash-level-laurel" viewBox="0 0 44 64" aria-hidden="true" focusable="false">
+              <path d="M30 4c-9 8-13 18-13 28s4 20 13 28" fill="none" stroke="#F0C86A" stroke-width="3" stroke-linecap="round"/>
+              <path d="M22 12c5-1 8 1 9 5-4 1-7 0-9-5zM17 24c5-1 9 1 10 5-4 1-8-1-10-5zM17 38c5 1 8 4 8 8-4 0-7-3-8-8zM22 50c5 1 8 4 9 8-4 0-8-2-9-8z" fill="#F0C86A"/>
+            </svg>
+            <div>
+              <b id="dashLevel">Level —</b>
+              <span id="dashLevelTitle">Scholar</span>
+            </div>
+            <svg class="dash-level-laurel flip" viewBox="0 0 44 64" aria-hidden="true" focusable="false">
+              <path d="M30 4c-9 8-13 18-13 28s4 20 13 28" fill="none" stroke="#F0C86A" stroke-width="3" stroke-linecap="round"/>
+              <path d="M22 12c5-1 8 1 9 5-4 1-7 0-9-5zM17 24c5-1 9 1 10 5-4 1-8-1-10-5zM17 38c5 1 8 4 8 8-4 0-7-3-8-8zM22 50c5 1 8 4 9 8-4 0-8-2-9-8z" fill="#F0C86A"/>
+            </svg>
           </div>
-          <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
+        </section>
+
+        <!-- ======================== THREE PERFORMANCE CARDS ======================== -->
+        <section class="dash-metrics" id="dashMetrics" aria-label="Your performance">
+          <article class="dash-metric is-xp" data-metric="xp">
+            <span class="dash-metric-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.5l9-4 9 4-9 4z"/><path d="M7 11v4.2c0 1.6 10 1.6 10 0V11"/><path d="M21 9.4v4.2"/></svg>
+            </span>
+            <div class="dash-metric-body">
+              <div class="dash-metric-value"><b id="dashXp">—</b><i id="dashXpUnit">XP</i></div>
+              <div class="dash-metric-label" id="dashXpLabel">Academy XP</div>
+              <div class="dash-metric-detail" id="dashXpDetail">Loading your record…</div>
+            </div>
+          </article>
+          <article class="dash-metric is-streak" data-metric="streak">
+            <span class="dash-metric-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.6 2c.4 3.1-1.7 4.6-3.2 6.3-1.5 1.7-2.6 3.3-2.6 5.6A5.2 5.2 0 0012 19.1a5.2 5.2 0 005.2-5.2c0-2.6-1.3-4.3-2.9-6-.9-1-1.7-2.1-1.7-3.4 0-.9.3-1.7.8-2.5-1.2.2-2.1.9-2.4 2z" opacity=".95"/><path d="M12.2 11c.3 1.6-1.1 2.3-1.1 3.9 0 1.2.8 2.1 1.9 2.1s1.9-.9 1.9-2.1c0-1.3-.9-2.1-1.4-2.9-.3-.5-.5-1-.5-1.6z" fill="#FB923C"/></svg>
+            </span>
+            <div class="dash-metric-body">
+              <div class="dash-metric-value"><b id="dashStreak">—</b><i id="dashStreakUnit">Days</i></div>
+              <div class="dash-metric-label" id="dashStreakLabel">Study Streak</div>
+              <div class="dash-metric-detail" id="dashStreakDetail">Loading your record…</div>
+            </div>
+          </article>
+          <article class="dash-metric is-perf" data-metric="performance">
+            <span class="dash-metric-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            </span>
+            <div class="dash-metric-body">
+              <div class="dash-metric-value"><b id="dashPerf">—</b><i id="dashPerfUnit"></i></div>
+              <div class="dash-metric-label" id="dashPerfLabel">Overall Performance</div>
+              <div class="dash-metric-detail" id="dashPerfDetail">Loading your record…</div>
+            </div>
+          </article>
+        </section>
+
+        <!-- ==================== CONTINUE LEARNING + STUDY PLAN ==================== -->
+        <section class="dash-duo">
+          <!-- Continue learning — the student's actual position, or an honest
+               "start your first" when the record holds no run yet. -->
+          <article class="dash-card-lg dash-continue" id="dashContinueCard">
+            <div class="dash-card-head">
+              <span class="dash-card-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 6.5C9.6 5.2 7 4.9 4.6 5.6v12.9C7 17.8 9.6 18.1 12 19.4V6.5z"/><path d="M12 6.5c2.4-1.3 5-1.6 7.4-.9v12.9c-2.4-.7-5-.4-7.4.9V6.5z"/></svg>
+              </span>
+              <h3>Continue Learning</h3>
+            </div>
+            <p class="dash-continue-pos" id="dashContinuePos">Reading your record…</p>
+            <button class="dash-cta" type="button" id="dashContinueBtn" onclick="dashContinueGo()">
+              <span id="dashContinueCta">Continue Studying</span>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </article>
+
+          <!-- My Study Plan — today's plan, from the retained planner engine. -->
+          <article class="dash-card-lg dash-plan" id="dashPlanCard">
+            <div class="dash-card-head">
+              <span class="dash-card-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
+              </span>
+              <h3>My Study Plan</h3>
+            </div>
+            <div class="dash-plan-row">
+              <p class="dash-plan-headline" id="dashPlanHeadline">Reading your plan…</p>
+              <b class="dash-plan-pct" id="dashPlanPct">—</b>
+            </div>
+            <div class="dash-plan-bar" role="img" aria-label="Study plan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dashPlanBar"><i id="dashPlanFill" style="width:0%"></i></div>
+            <p class="dash-plan-detail" id="dashPlanDetail"></p>
+            <button class="dash-link" type="button" onclick="dashPlanGo()">
+              View Plan
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </article>
+        </section>
+
+        <!-- ============================== QUICK ACCESS ============================== -->
+        <section class="dash-quick" aria-labelledby="dashQuickTitle">
+          <div class="dash-sec-head">
+            <h3 id="dashQuickTitle">Quick Access</h3>
+            <button class="dash-link sm" type="button" onclick="go('study')">View All
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <div class="dash-quick-grid">
+            <button class="dash-quick-card" type="button" onclick="dashJambGo()">
+              <span class="dash-quick-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M9 21h6M12 17.5V21"/><path d="M7 12l2.5-3 2 2L15 7.5"/></svg></span>
+              <b>JAMB CBT</b><s>Full UTME practice</s>
+            </button>
+            <button class="dash-quick-card" type="button" onclick="openPractice()">
+              <span class="dash-quick-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></span>
+              <b>Practice</b><s>Topic and subject practice</s>
+            </button>
+            <button class="dash-quick-card" type="button" onclick="go('resources')">
+              <span class="dash-quick-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 6.5C9.6 5.2 7 4.9 4.6 5.6v12.9C7 17.8 9.6 18.1 12 19.4V6.5z"/><path d="M12 6.5c2.4-1.3 5-1.6 7.4-.9v12.9c-2.4-.7-5-.4-7.4.9V6.5z"/></svg></span>
+              <b>Resources</b><s>Notes and study materials</s>
+            </button>
+            <!-- Question Bank: the hub has no student question-search screen, so
+                 this opens the real destination for the bank it holds — past
+                 papers, drawn from the same published questions. A tile that
+                 led nowhere would be a promise the app cannot keep. -->
+            <button class="dash-quick-card" type="button" onclick="openPastQuestions()">
+              <span class="dash-quick-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3.2l8.4 4.4-8.4 4.4L3.6 7.6z" fill="currentColor" fill-opacity=".12"/><path d="M12 3.2l8.4 4.4-8.4 4.4L3.6 7.6z"/><path d="M3.6 12.4L12 16.8l8.4-4.4M3.6 16.6L12 21l8.4-4.4"/></svg></span>
+              <b>Question Bank</b><s>Browse past-paper questions</s>
+            </button>
+          </div>
+        </section>
+
+        <!-- ============================== ANNOUNCEMENTS ==============================
+             One line from the academy, from the notices and broadcasts this
+             account is actually sent (GET /api/me/notices, /api/me/broadcasts).
+             Hidden entirely when there is nothing — never filled with a sample. -->
+        <section class="dash-announce" id="dashAnnounce" hidden>
+          <span class="dash-announce-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 9.5h3l9-4.2v13.4l-9-4.2H4z"/><path d="M7 14.5V19l3 .8V15.2"/><path d="M19.5 9.2a4 4 0 010 5.6"/></svg>
+          </span>
+          <div class="dash-announce-body">
+            <b>Announcements</b>
+            <p id="dashAnnounceText">—</p>
+          </div>
+          <button class="dash-link sm" type="button" onclick="go('updates')">View
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </section>
+
+        <!-- Detailed panels, kept from the previous dashboard: the full
+             announcements and tutor notices (with Show more), the student's
+             standing in the league, their last result and their learning
+             journey. Nothing here is new; it is the same real record, moved
+             below the dashboard's summary. -->
+        <div class="dash-more">
+          <div class="card" id="dashBroadcasts" style="display:none;margin-bottom:16px;padding:14px 16px">
+            <div class="eyebrow">From the academy</div>
+            <div id="dashBroadcastsList"></div>
+            <button type="button" class="btn btn-block" id="dashBroadcastsMore" style="display:none;margin-top:10px" onclick="dashBroadcastsToggle()">Show more</button>
+          </div>
+          <div class="card" id="dashNotices" style="display:none;margin-bottom:16px;padding:14px 16px">
+            <div class="eyebrow">Class notices</div>
+            <div id="dashNoticesList"></div>
+            <button type="button" class="btn btn-block" id="dashNoticesMore" style="display:none;margin-top:10px" onclick="dashNoticesToggle()">Show more</button>
+          </div>
+
+          <div class="dash-more-grid">
+            <div class="dash-more-col">
+              <div class="sec-head" id="tut-league"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
+              <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
+            </div>
+            <div class="dash-more-col">
+              <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
+              <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
+            </div>
+          </div>
+
+          <div class="sec-head"><div class="section-t">Your journey</div><button class="ss-link" onclick="openPractice()">Practise</button></div>
+          <div class="card wrap dash-card journey" id="dashJourney" data-tut="tut-journey">
+            <div class="jn-mascot">
+              <button class="jn-owl" id="jnOwl" type="button" aria-label="Talk to Goc the owl" onclick="jnTalk()">
+                <svg viewBox="0 0 80 80" aria-hidden="true">
+                  <ellipse cx="40" cy="74" rx="20" ry="3.5" fill="rgba(17,24,39,.12)"/>
+                  <path d="M30 70l-2 5M38 70v6M50 70l2 5" stroke="#F0A500" stroke-width="3.5" stroke-linecap="round"/>
+                  <ellipse cx="40" cy="46" rx="26" ry="27" fill="#DC2626"/>
+                  <ellipse cx="40" cy="53" rx="15" ry="17" fill="#FDECC8"/>
+                  <ellipse cx="15" cy="50" rx="6" ry="14" fill="#B91C1C" transform="rotate(12 15 50)"/>
+                  <ellipse cx="65" cy="50" rx="6" ry="14" fill="#B91C1C" transform="rotate(-12 65 50)"/>
+                  <g class="jn-eyes">
+                    <circle cx="30" cy="36" r="9.5" fill="#fff"/><circle cx="50" cy="36" r="9.5" fill="#fff"/>
+                    <circle cx="31.5" cy="37" r="4.6" fill="#20242C"/><circle cx="48.5" cy="37" r="4.6" fill="#20242C"/>
+                    <circle cx="33" cy="35" r="1.5" fill="#fff"/><circle cx="50" cy="35" r="1.5" fill="#fff"/>
+                  </g>
+                  <path d="M36 44l4 7 4-7z" fill="#F0A500"/>
+                  <path d="M14 22l26-10 26 10-26 9z" fill="#20242C"/>
+                  <path d="M26 27v8c0 3 28 3 28 0v-8" fill="#2F3540"/>
+                  <path d="M62 24v11" stroke="#F0A500" stroke-width="2.5" stroke-linecap="round"/><circle cx="62" cy="37" r="2.6" fill="#F0A500"/>
+                </svg>
+              </button>
+              <div class="jn-bubble" id="jnBubble" aria-live="polite">Hi, I'm Goc! Let's climb — one question at a time.</div>
+            </div>
+            <div class="jn-path" id="jnPath"><div class="wt-none">Mapping your journey…</div></div>
+          </div>
+
+          <div class="dash-more-grid">
+            <div class="dash-more-col">
+              <div class="sec-head"><div class="section-t">Your Scholar ID</div></div>
+              <div class="id-strip" id="idStrip">
+                <div class="s-l"><span>Scholar ID</span><code id="dashId">—</code></div>
+                <button onclick="copyId()">Copy</button>
+              </div>
+            </div>
+            <div class="dash-more-col">
+              <div class="sec-head"><div class="section-t">Daily study window</div></div>
+              <div class="card wrap" style="padding:16px"><div id="dashWindow" class="wt-none">Reading your window…</div></div>
+            </div>
+          </div>
+
+          <div class="sec-head"><div class="section-t">Carry on</div></div>
+          <div class="dash-jump" id="tut-jump">
+            <button class="dj" onclick="openReading()"><span class="dj-i" style="background:#0E7490"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg></span><b>Read / Learn</b><s>Notes published for your papers</s></button>
+            <button class="dj" onclick="go('bookmarks')"><span class="dj-i" style="background:#7C3AED"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg></span><b>Saved</b><s>Questions you kept</s></button>
+            <button class="dj" onclick="go('mistakes')"><span class="dj-i" style="background:#DC2626"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></span><b>Mistakes</b><s>Review what went wrong</s></button>
+            <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Live classes</b><s>Your academy's timetable</s></button>
+          </div>
         </div>
 
-        <div class="sec-head" id="tut-league"><div class="section-t">Where you stand</div><button class="ss-link" onclick="go('league')">Full league</button></div>
-        <div class="card wrap dash-card"><div id="dashStand"><div class="wt-none">Reading the standings…</div></div></div>
-
-        <div class="sec-head"><div class="section-t">Your last result</div><button class="ss-link" onclick="openResults()">All results</button></div>
-        <div class="card wrap dash-card"><div id="dashLast"><div class="wt-none">Reading your record…</div></div></div>
-
-        <div class="sec-head"><div class="section-t">Carry on</div></div>
-        <div class="dash-jump" id="tut-jump">
-          <button class="dj" onclick="openPractice()"><span class="dj-i" style="background:#15803D"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg></span><b>Practice</b><s>Your topics, at your pace</s></button>
-          <button class="dj" onclick="go('classes')"><span class="dj-i" style="background:#4F46E5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 6.5A2.5 2.5 0 016.5 4H20v16H6.5A2.5 2.5 0 004 22z"/><path d="M4 6.5V19"/></svg></span><b>Classes</b><s>Lessons and recordings</s></button>
-          <button class="dj" onclick="go('profile')"><span class="dj-i" style="background:#D97706"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg></span><b>Profile</b><s>Your ID and settings</s></button>
-        </div>
         <div class="spacer"></div>
       </div>
     </section>
@@ -2078,20 +2264,54 @@
     </span>
   </div>
   <nav class="tabbar" id="tabbar" style="display:none" aria-label="Main">
+    <!-- The approved sidebar: brand, the app's own sections, then account.
+         Every entry is an existing destination with an existing handler — no
+         screen was invented to fill a row. The three that have no standalone
+         screen of their own point at the real screen that holds them, so a
+         student never taps a label that goes nowhere:
+           Study Plan  → the single study-planning destination (Classes today)
+           Question Bank → past papers, the bank the app actually serves
+           Examinations  → the Test hub (Web Test, the only graded route)    -->
     <div class="side-brand">
       <span class="bmk"><svg viewBox="0 0 100 100" style="width:22px;height:22px" aria-hidden="true" focusable="false"><use href="#goc-mark" xlink:href="#goc-mark"/></svg></span>
       <span class="bwrap"><span class="bt">G.O.C Academy Hub</span><span class="bs">Independent Scholars</span></span>
     </div>
-    <button class="tab on" data-t="home" onclick="go('home')" aria-current="page" id="tut-nav-home">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
-    <button class="tab" data-t="classes" onclick="go('classes')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z" stroke-linejoin="round"/></svg>Classes</button>
-    <button class="tab" data-t="study" onclick="go('study')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg>Study</button>
-    <button class="tab" data-t="league" onclick="go('league')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M17 5h3v1.5a3 3 0 01-3 3M7 5H4v1.5a3 3 0 003 3"/><path d="M9 18h6M12 13v5"/></svg>League</button>
-    <button class="tab" data-t="profile" onclick="go('profile')">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>Profile</button>
+    <div class="side-nav">
+      <button class="tab tab-m on" data-t="home" onclick="go('home')" aria-current="page" id="tut-nav-home">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
+      <button class="tab tab-m" data-t="study" onclick="go('study')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M12 5C9 3.8 6 3.8 4 5v14c2-1.2 5-1.2 8 0V5z"/><path d="M12 5c3-1.2 6-1.2 8 0v14c-2-1.2-5-1.2-8 0V5z"/></svg>Study</button>
+      <button class="tab tab-m" data-t="practice" onclick="openPractice()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>Practice</button>
+      <button class="tab" data-t="jamb" onclick="dashJambGo()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M9 21h6M12 17.5V21"/></svg>JAMB CBT</button>
+      <button class="tab" data-t="webtest" onclick="openWebTest()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9h17M8 3v3M16 3v3"/></svg>Examinations</button>
+      <button class="tab tab-m" data-t="results" onclick="openResults()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 20V10M12 20V4M18 20v-6"/></svg>Results</button>
+      <button class="tab" data-t="resources" onclick="go('resources')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>Resources</button>
+      <button class="tab" data-t="qbank" onclick="openPastQuestions()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M12 3.5l8 4.2-8 4.2-8-4.2z"/><path d="M4 12.2l8 4.2 8-4.2M4 16.6l8 4.2 8-4.2"/></svg>Question Bank</button>
+      <button class="tab" data-t="classes" onclick="dashPlanGo()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>Study Plan</button>
+      <button class="tab" data-t="league" onclick="go('league')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M17 5h3v1.5a3 3 0 01-3 3M7 5H4v1.5a3 3 0 003 3"/><path d="M9 18h6M12 13v5"/></svg>League</button>
+      <!-- Phone only: the approved fifth tab. It opens the account screen,
+           where the rest of the app's sections are listed. -->
+      <button class="tab tab-m" data-t="more" onclick="go('profile')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg>More</button>
+    </div>
+    <div class="side-nav side-nav-foot">
+      <button class="tab" data-t="support" onclick="dashSupportGo()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 114 2.1c-.9.6-1.6 1.1-1.6 2.2"/><path d="M12 17.2h.01"/></svg>Support</button>
+      <button class="tab" data-t="profile" onclick="go('profile')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>Profile</button>
+      <button class="tab" data-t="settings" onclick="go('profile')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</button>
+      <button class="tab" data-t="logout" onclick="logout()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" aria-hidden="true" focusable="false"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 4H6a2 2 0 00-2 2v12a2 2 0 002 2h6"/></svg>Log Out</button>
+    </div>
   </nav>
 
   <!-- ============ AFFIRMATION FLYER ============ -->
