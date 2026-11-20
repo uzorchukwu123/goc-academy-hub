@@ -33,11 +33,16 @@ function grab(name) {
 
 head('the JAMB sitting is gone from the website');
 ok('no dashboard JAMB card', !/id="dashJamb"/.test(index) && !/<div class="section-t">JAMB \/ UTME<\/div>/.test(index));
-ok('no JAMB CBT Study tile', !/onclick="openJambTest\(\)"/.test(index) && !/>JAMB CBT</.test(index));
+ok('no JAMB CBT Study tile', !/onclick="openJambTest\(\)"/.test(index) && !/id="sg-jamb"/.test(index));
+ok('JAMB CBT appears on the dashboard and in the navigation only as not open yet (owner decision, Phase 3)', (function () {
+  var cards = index.match(/<[^>]*class="db-q is-soon"[^>]*aria-label="JAMB CBT[^"]*"/g) || [];
+  var tab = /<button type="button" class="tab is-soon" data-t="jamb" aria-disabled="true"[^>]*>/.test(index);
+  var live = /data-t="jamb"[^>]*onclick=|onclick="[^"]*(jambStart|jambConfirmStart|openCBT)\(/.test(index);
+  return cards.length === 1 && tab && !live;
+})());
 ok('no JAMB Study card survives under any retired id', !/id="sg-jamb"/.test(index) && !/id="dashJamb"/.test(index));
-var wtDef = app.slice(app.indexOf('var WT_SECTIONS = ['), app.indexOf('];', app.indexOf('var WT_SECTIONS = [')));
-ok('the Study/Web Test catalogue offers only theory and objective sessions',
-  /key:'theory'/.test(wtDef) && /key:'objective'/.test(wtDef) && !/key:'jamb'/.test(wtDef), wtDef.slice(0, 120));
+ok('the Web Test catalogue itself is retired (clean sweep): no section list, no screen',
+  app.indexOf('var WT_SECTIONS = [') < 0 && !/id="webtest"/.test(index) && !/id="sg-webtest"/.test(index));
 ok('the legitimate Study features remain after the JAMB removal',
   /id="sg-practice"/.test(index) && /id="pracHist"/.test(index)
   && /id="sg-bookmarks"/.test(index) && /onclick="atMyOpen\(\)"/.test(index));
@@ -47,31 +52,12 @@ ok('the legitimate Study features remain after the JAMB removal',
 ok('no call site remains in renderDash',
   !/dashPaintJamb\(|dashPaintUp\(|dashPaintSubjects\(/.test(grab('renderDash')));
 
-head('the dashboard still lists legitimate papers, never the retired sitting');
-function fakeEl() { return { innerHTML: '' }; }
-var els = { dashNext: fakeEl() };
-var sandbox = {
-  document: { getElementById: function (id) { return els[id] || null; } },
-  esc: function (x) { return String(x == null ? '' : x); },
-  wtMinutes: function (sec) { return Math.round((Number(sec) || 0) / 60) + ' min'; },
-  GOC: { api: { listMyTests: function () {
-    return Promise.resolve({ tests: [
-      { section: 'objective', subject: 'All subjects', questions: 180, durationSec: 5400 },
-      { section: 'theory', subject: 'Physics', questions: 4, durationSec: 0 },
-      { section: 'jamb', subject: 'All subjects', questions: 180, durationSec: 7200 }
-    ] });
-  } } },
-  Promise: Promise
-};
-var ctx = vm.createContext(sandbox);
-vm.runInContext(grab('dashSet') + '\n' + grab('dashRow') + '\n' + grab('dashPaintNext'), ctx);
-sandbox.dashPaintNext();
-Promise.resolve().then(function () { return Promise.resolve(); }).then(function () {
-  var h = els.dashNext.innerHTML;
-  ok('the Objective sitting is still offered', /Objective sitting/.test(h), h);
-  ok('the Theory papers are still offered', /Theory papers/.test(h), h);
-  ok('the retired JAMB row is not rendered', !/JAMB/i.test(h) && !/dashJambSit/.test(h), h);
-
+head('the dashboard renders no paper list at all (Next Activity retired in the clean sweep)');
+ok('dashPaintNext is no longer defined', app.indexOf('function dashPaintNext(') < 0);
+ok('dashRow is no longer defined', app.indexOf('function dashRow(') < 0);
+ok('no #dashNext host remains', !/id="dashNext"/.test(index));
+ok('the retired JAMB row is not rendered anywhere on the dashboard', !/dashJambSit/.test(index) && !/dashJambSit/.test(app));
+Promise.resolve().then(function () {
   head('the server sitting and its safety gate are untouched');
   ok('the catalogue still gates JAMB behind jambOffered',
     /if \(jTotal && core\.jambOffered\(allQuestions, subs, db\.settings\.jambReadyMin\)\)/.test(server));

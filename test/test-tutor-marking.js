@@ -3,6 +3,7 @@
    on the real server over HTTP.
    node test/test-tutor-marking.js */
 'use strict';
+var legacy = require('./legacy-attempts.js');
 var http = require('http');
 var path = require('path');
 var fs = require('fs');
@@ -76,12 +77,12 @@ function readDb() { return JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server
   await theoryQ('Chemistry', 'Acids', 'ZQXCHEM Define a strong acid.');
   await theoryQ('Physics', 'Waves', 'ZQXPHYS Define wavelength.');
   await theoryQ('Physics', 'Waves', 'ZQXPHYS State the law of reflection.');
+  /* Theory sittings are retired (clean sweep): these scripts are historical
+     records written before the retirement — test/legacy-attempts.js. */
   async function sit(subject) {
-    var th = await call('POST', '/api/me/tests/start', { period: 'weekly', section: 'theory', subject: subject }, gTok);
-    var resp = {};
-    (th.body.questions || []).forEach(function (q) { resp[q.id] = 'ZQXANSWER written for ' + subject; });
-    var sub = await call('POST', '/api/me/tests/submit', { attemptId: th.body.attemptId, responses: resp }, gTok);
-    return { id: sub.body.id, status: sub.body.status, start: th.status };
+    var r = legacy.sit(path.join(SANDBOX, 'server', 'data.json'), g.body.student.id,
+      { section: 'theory', subject: subject, answer: function () { return 'ZQXANSWER written for ' + subject; } });
+    return { id: r.attemptId, status: r.status };
   }
   var cScript = await sit('Chemistry');
   var pScript = await sit('Physics');

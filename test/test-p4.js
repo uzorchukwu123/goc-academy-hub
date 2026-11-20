@@ -88,11 +88,13 @@ async function main() {
   // every student now has full GOC access — no promotion step exists
   await api('logout')();
 
-  /* A theory paper that nobody has marked yet — the console needs one, and the
-     only honest way to get one is for a student to sit it. */
+  /* A theory paper that nobody has marked yet — the console needs one. Theory
+     sittings are retired (clean sweep), so this is a historical script opened
+     through the demo driver's test-only _openLegacyPaper hook and submitted
+     through the real submitTest path. */
   head('a student sits a theory paper, so there is something to mark');
   await api('login')(SID, SPW);
-  var paper = await api('startTest')({ period: 'monthly', section: 'theory', subject: 'Physics' });
+  var paper = await api('_drivers.mock._openLegacyPaper')('theory', 'Physics');
   var responses = {};
   paper.questions.forEach(function (q, i) {
     responses[q.id] = 'Written answer number ' + (i + 1) + ' for the marker to read.';
@@ -403,7 +405,7 @@ async function main() {
   SID2 = reg2.student.id;
 
   await api('login')(SID2, SPW2);
-  var objPaper = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' });
+  var objPaper = await api('_drivers.mock._openLegacyPaper')('objective', 'Physics');
   var objResponses = {};
   objPaper.questions.forEach(function (q) { objResponses[q.id] = 0; });
   var objMine = await api('submitTest')({ attemptId: objPaper.attemptId, responses: objResponses, timeUsedSec: 200 });
@@ -543,7 +545,7 @@ async function main() {
      as SID2 instead, who has never sat Physics theory. */
   await api('logout')();
   await api('login')(SID2, SPW2);
-  var wk = await api('startTest')({ period: 'weekly', section: 'theory', subject: 'Physics' });
+  var wk = await api('_drivers.mock._openLegacyPaper')('theory', 'Physics');
   ok('the paper carries every published theory question, the new one included',
      wk.questions.length === expectQ, wk.questions.length + ' vs ' + expectQ);
   var wr = {};
@@ -555,7 +557,10 @@ async function main() {
   await api('login')(SID, SPW);
 
   head('13 — the paper a student is given never contains the answer key');
-  var op = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' });
+  var retiredStart = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' })
+    .then(function () { return '(opened!)'; }, function (e) { return e.message; });
+  ok('a new Objective sitting is refused as retired (clean sweep)', /have been retired/.test(retiredStart), retiredStart);
+  var op = await api('_drivers.mock._openLegacyPaper')('objective', 'Physics');
   ok('no correct answer is sent to the browser',
      op.questions.every(function (q) {
        return q.answer === undefined && q.expected === undefined && q.isCorrect === undefined;

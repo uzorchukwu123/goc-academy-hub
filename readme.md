@@ -15,17 +15,14 @@ read each part on its own — and it now has a real backend behind it.
 | `css/styles.css` | Everything about how it looks: colours, spacing, the phone frame, the desktop layout. |
 | `js/goc-core.js` | **The rules, written once.** Marking, XP, levels, performance, the league order, the study set-up limits. The browser and the server both use this same file, so neither can drift from the other. |
 | `js/api.js` | **Where data comes from.** The only file that knows. Holds two drivers: demo data, and a real server. |
-| `js/app.js` | Everything it does: screen switching, login, the console, the timetable, the Web Test, practice and reading mode. Never touches data directly — it asks `js/api.js`. |
+| `js/app.js` | Everything it does: screen switching, login, the console, study, practice, the JAMB mock, results and reading mode. Never touches data directly — it asks `js/api.js`. |
 | `js/pwa.js` | Six lines that register the service worker so the app can be installed. Skipped when opened from a file. |
-| `sw.js` | The offline cache list. Bump `CACHE` (currently `goc-v184`) whenever you change a file, or phones keep the old copy. |
+| `sw.js` | The offline cache list. Bump `CACHE` (currently `goc-v227`) whenever you change a file, or phones keep the old copy. |
 | `manifest.webmanifest` | The app's name, colours, and icons for "Add to home screen". |
 | `icons/` | The app icons. |
 | `start-server.ps1` | Right-click → Run with PowerShell. Starts the server and opens the app. |
 | `server/server.js` | The backend. Real accounts, hashed passwords, expiring logins. Uses local JSON or Appwrite Storage in production. |
 | `server/data.json` | The database — written on first run. Passwords are hashed here, never plain. |
-| `server/schema.sql` | **Planned, not written yet** — the same database as Postgres tables, for when you move to Supabase. `server/export-questions.js` already emits the question inserts it would follow. |
-| `server/supabase.md` | **Planned, not written yet** — the step-by-step map for moving to Supabase later. Until it exists, `DEPLOYMENT.md` is the deployment guide. |
-| `server/export-questions.js` | Writes the question bank out as a spreadsheet you can edit and re-import. |
 | `test/` | The checks. One command tells you whether anything is broken — see below. |
 
 ## Checking it still works
@@ -200,31 +197,85 @@ each answer is marked the moment it is tapped, with the correct answer and an
 explanation. It earns XP up to 120 a day, and it never goes on the academic
 record — it is study, not assessment.
 
-**Web Test** — the assessed one. A theory paper per subject, and one objective
-sitting covering the whole subject combination, with a clock shown in hours. A
-student may move between subjects during the objective sitting. Objective papers
-are marked by the server the moment they are submitted; theory papers wait for a
-human in the console. Students are never shown which is which — that is the
-academy's business, not theirs.
-
 **Results & Review** — every paper sat, its score once marked, weak topics, and
-the explanations.
+the explanations. This includes Objective and Theory papers sat before the Web
+Test was retired (see *Clean sweep* below); theory scripts still wait for a
+human marker in the console or the tutor app.
 
 **League** — position is decided by academic performance across marked papers
 first; XP only separates two scholars on the same performance. Activity alone
 cannot outrank stronger results.
 
 Not open yet: the timed CBT mock set-up (built and tested, but no tile until the
-question bank is deep enough) and the JAMB-oriented session on the Web Test
-screen, which says so when tapped. Nothing else on the Study screen is advertised
-without opening something real.
+question bank is deep enough) and the JAMB CBT examination (engine, timer,
+palette, calculator, submission prompt, session recovery and scoring are all
+kept, but it has no student entry until its own page is designed). Nothing else
+on the Study screen is advertised without opening something real.
+
+## Clean sweep (Phase 2, 18 Nov 2026)
+
+These features were retired on the product owner's instruction, ahead of the
+page-by-page redesign. Their interfaces, routes and feature-specific code are
+gone; **no stored record was deleted or changed**. Full detail, with the routes
+removed and kept, is in `CLEAN-SWEEP-REPORT.md`.
+
+- **Next Activity** — the dashboard's "Waiting for you" card.
+- **Guardian PIN** — the "Add 15 min" study-time extension and its console
+  setting (`POST /api/me/study-time/extend`). Stored PIN values and bonus
+  minutes are kept; the daily study window itself is unchanged.
+- **Standalone Timetable** — the screen and its Home shortcut. The planner model
+  (`week`, `loadUpcomingClasses`, `dayBlocks`, `addStudyBlock`) is kept, without
+  an interface, for the future Study Plan.
+- **Web Test** — the catalogue, the Objective and Theory sittings and their
+  runner. `POST /api/me/tests/start` now answers 410 for those sections. JAMB CBT
+  keeps its engine, result screen and recovery (dormant, no entry).
+- **Student video** — the "Classes" tab (Lesson videos) and `GET /api/videos*`.
+- **Admin video management** — Console -> Videos and `/api/admin/videos*`.
+- **Approval queue / return workflow** — Console -> Approvals and `/api/approvals*`.
+  (The interim Question Bank publish step was retired in the final cleanup below.)
+- **Admin tutor analytics** — the card in Console -> Tutors and
+  `GET /api/admin/tutors/analytics`. The tutor's own analytics is unchanged.
+
+## Final cleanup (18 Nov 2026)
+
+Full detail is in `FINAL-PROJECT-CLEANUP-REPORT.md`.
+
+- **One student group: GOC Students.** The Open Student tier was removed in an
+  earlier stage; its 22 leftover test suites and helper are now gone too.
+  Stored `tier` values on older records are still loaded and ignored.
+- **Tutor questions go straight into the Question Bank.** A question that passes
+  validation is saved live and served at once; there is no approval, publish or
+  return step (`POST /api/questions/:id/publish` removed). Records still carrying
+  a historical `pending` or `returned` status are kept as stored and not served
+  until their tutor edits and saves them.
+- **Unused files removed:** the retired Timetable artwork, orphaned JAMB CBT
+  screenshots, the stale roadmap and task log, an unused demo question file, the
+  Supabase export script, an unfinished live-Appwrite script, and the unused
+  browser `appwrite` package.
+
+## Student Home Dashboard (Phase 3, 18 Nov 2026)
+
+Home was rebuilt to the approved "Red and Cream Student Dashboard" reference. Full detail,
+data sources and screenshots are in `PHASE3-DASHBOARD-REPORT.md`.
+
+- **Navigation (shared by every student screen):** a left sidebar from 900px wide; below
+  that a bottom bar of Home, Study, Practice, Results and More, where More opens the full
+  menu. JAMB CBT shows as *Not open yet*; Question Bank, Study Plan, Support and Settings
+  show as *Coming soon*. None of them can be opened.
+- **Home:** greeting, Scholar level and today's study-window minutes; Academy XP, Study
+  Streak and Overall Performance (the league's assessed figure); Continue Learning (the
+  newest practice run); My Study Plan (Coming soon); Quick Access; the newest academy
+  broadcast. Class notices and broadcasts are in the bell, which marks what is new on
+  this device only.
+- **Left Home:** the level journey path, the Scholar ID card (still in Profile), the
+  standing and last-result panels (still on League and Results).
 
 ## Before you launch
 
-1. **Delete `server/data.json` first.** A seeded demo copy ships with these
-   files, and the passwords below are already hashed into it — which means the
-   environment variables in the next step would be ignored. Deleting it makes
-   the next start a first start.
+1. **Make sure there is no old `server/data.json`.** None ships with these files
+   (it is gitignored), but if you have run the server before, the passwords are
+   already hashed into it — so the environment variables in the next step would
+   be ignored. Starting without one makes the next start a first start.
 2. Set the two console passwords and the passcode as environment variables, then
    start the server (see *Before real students use it* above). Sign-up is open, so
    check the per-connection limits in *Console → Access & firewall*.
@@ -262,51 +313,8 @@ only `js/api.js` changes. `app.js`, `index.html`, and the CSS are untouched.
 
 ## Planned fix — Web Test runner showing blank screen
 
-**Symptom.** When the app is opened (or a tab is reloaded) while the server has
-restarted, the Web Test runner (`id="wtRun"`) can appear with an empty question
-area — no text, no options — and the header still shows the default "Web Test" /
-"Loading your papers…" placeholder. The timer is running but nothing is there to
-answer.
-
-**Root cause.** The server keeps active (in-progress) test papers in an in-memory
-`openPapers` map. A server restart wipes that map. If a student had already called
-`startTest` (which called `go('wtRun')` and stored the paper object in the JS
-variable `wtPaper`), then the tab was refreshed *after* the server restarted, the
-session restore (`restoreSession`) correctly calls `go('home')` — but the `wtPaper`
-JS variable is still set from the previous JS execution context. Any code path that
-then calls `go('wtRun')` again (or re-enters the runner) finds `wtPaper.questions`
-populated but the matching server record gone, leaving `wtRender()` rendering a
-question object whose content is empty, and `wtPaintHead()` never updating
-`wtRunSub` because `wtPaper` is considered valid.
-
-**Planned fix (client-side guard in `js/app.js`).**
-
-1. **`wtRender()` — guard against an undefined question.** At the top of the
-   function, after `var q = wtPaper.questions[wtCur];`, add a check:
-   ```js
-   if (!q) { wtPaper = null; wtResp = {}; go('webtest'); return; }
-   ```
-   This means: if the question slot is missing for any reason, wipe the stale
-   paper state and send the student back to the Web Test hub rather than rendering
-   a blank screen.
-
-2. **`wtPaintHead()` — clear `wtRunSub` when `wtPaper` is absent.** The function
-   already guards with `if(!wtPaper) return;`, but that leaves `wtRunSub` holding
-   whatever it was last set to. Add a fallback before the guard so the subtitle
-   is always accurate:
-   ```js
-   var s = document.getElementById('wtRunSub');
-   if (!wtPaper) { if (s) s.textContent = '\u00a0'; return; }
-   ```
-
-3. **`restoreSession()` — reset `wtPaper` on every page restore.** The function
-   already sets `wtCatalogue = null`. Add `wtPaper = null; wtResp = {};` alongside
-   it, so a session restore can never inherit a stale exam state from a previous
-   JS context.
-
-**No server-side change is needed** — the `openPapers` in-memory design is
-intentional (a restart signs everyone out of in-progress papers, which is correct
-behaviour). The fix is purely defensive client-side hygiene.
+Applied, then superseded: the guard was added to `wtRender()`, and the Web Test
+runner itself was later retired in the clean sweep (see above).
 
 ---
 
@@ -370,4 +378,4 @@ behaviour). The fix is purely defensive client-side hygiene.
 
 **Status:** APPLIED — GOC_Fix6_Fix01.zip
 
-**Pending fixes (Fix 02–07 + A–D):** See ROADMAP-REMAINING.md.
+**Pending fixes (Fix 02–07 + A–D):** the old roadmap file was retired in the final cleanup (18 Nov 2026); see `FINAL-PROJECT-CLEANUP-REPORT.md` for what remains open.

@@ -2,6 +2,7 @@
    Theory and Objective be sat once, and JAMB-oriented as often as wanted,
    keeping every attempt.   node test/test-sit-rules-route.js */
 'use strict';
+var legacy = require('./legacy-attempts.js');
 var activeStudent = require('./active-student.js');
 var http = require('http');
 var path = require('path');
@@ -100,26 +101,24 @@ waitForBoot(40).then(async function () {
     fs.writeFileSync(DATA, JSON.stringify(dbf));
   })();
 
-  head('Objective: one sitting, then closed for good');
+  /* Clean sweep (Phase 2): the Web Test's Objective and Theory sittings are
+     retired. No new one opens — for anyone, under any period label — and the
+     refusal opens nothing. Attempts made before the retirement stay on the
+     record; this suite writes one of each (test/legacy-attempts.js) so the
+     JAMB-vs-Objective comparisons below still have a real Objective row. */
+  head('Objective and Theory: retired — no new sitting opens');
   var o1 = await call('POST', '/api/me/tests/start', { period: 'test', section: 'objective' }, tok);
-  ok('the first Objective sitting opens', o1.status === 200 && !!o1.body.attemptId, o1.status + ' ' + o1.raw.slice(0, 120));
-  var os1 = await call('POST', '/api/me/tests/submit', { attemptId: o1.body.attemptId, responses: answers(o1.body) }, tok);
-  ok('and is submitted', os1.status === 200, os1.status + ' ' + os1.raw.slice(0, 120));
-  var o2 = await call('POST', '/api/me/tests/start', { period: 'test', section: 'objective' }, tok);
-  ok('a second Objective sitting is refused with 403', o2.status === 403 && /cannot be sat again/.test(o2.raw), o2.status + ' ' + o2.raw);
-  ok('nothing is opened by the refusal', !/attemptId/.test(o2.raw));
+  ok('an Objective sitting is refused as retired (410)', o1.status === 410 && /retired/.test(o1.raw), o1.status + ' ' + o1.raw);
+  ok('nothing is opened by the refusal', !/attemptId/.test(o1.raw));
   var o3 = await call('POST', '/api/me/tests/start', { period: 'weekly', section: 'objective' }, tok);
-  ok('a different period label does not get round it', o3.status === 403, o3.status);
+  ok('a different period label does not get round it', o3.status === 410, o3.status);
   var o4 = await call('POST', '/api/me/tests/start', { period: 'test', section: 'objective' }, tok2);
-  ok('another student is unaffected', o4.status === 200 && !!o4.body.attemptId, o4.status + ' ' + o4.raw.slice(0, 100));
-
-  head('Theory: one sitting per subject, then closed');
+  ok('another student is refused the same way', o4.status === 410 && !/attemptId/.test(o4.raw), o4.status);
   var t1 = await call('POST', '/api/me/tests/start', { period: 'test', section: 'theory', subject: 'Physics' }, tok);
-  ok('the first Physics theory sitting opens', t1.status === 200 && !!t1.body.attemptId, t1.status + ' ' + t1.raw.slice(0, 120));
-  var ts1 = await call('POST', '/api/me/tests/submit', { attemptId: t1.body.attemptId, responses: {} }, tok);
-  ok('and is submitted', ts1.status === 200, ts1.status + ' ' + ts1.raw.slice(0, 120));
-  var t2 = await call('POST', '/api/me/tests/start', { period: 'test', section: 'theory', subject: 'Physics' }, tok);
-  ok('a second Physics theory sitting is refused', t2.status === 403 && /cannot be sat again/.test(t2.raw), t2.status + ' ' + t2.raw);
+  ok('a Theory sitting is refused as retired (410)', t1.status === 410 && !/attemptId/.test(t1.raw), t1.status + ' ' + t1.raw);
+  var os1 = { body: legacy.sit(DATA, su.body.student.id, { section: 'objective', answer: function (q) { return q.answer; } }) };
+  var ts1 = { body: legacy.sit(DATA, su.body.student.id, { section: 'theory', subject: 'Physics' }) };
+  ok('earlier Objective and Theory attempts are on the record (historical)', !!os1.body.attemptId && !!ts1.body.attemptId);
 
   head('JAMB-oriented: may be sat again, and every attempt is kept');
   var j1 = await call('POST', '/api/me/tests/start', { period: 'test', section: 'jamb' }, tok);
@@ -180,13 +179,8 @@ waitForBoot(40).then(async function () {
   head('the catalogue tells the card what to show');
   var cat = await call('GET', '/api/me/tests', undefined, tok);
   var rowsC = (cat.body && cat.body.tests) || [];
-  var cObj = rowsC.filter(function (r) { return r.section === 'objective'; })[0];
-  var cThp = rowsC.filter(function (r) { return r.section === 'theory' && r.subject === 'Physics'; })[0];
-  var cThc = rowsC.filter(function (r) { return r.section === 'theory' && r.subject === 'Chemistry'; })[0];
   var cJ = rowsC.filter(function (r) { return r.section === 'jamb'; })[0];
-  ok('a sat Objective row is completed, not repeatable, with 1 attempt', !!cObj && cObj.completed === true && cObj.repeatable === false && cObj.attempts === 1, JSON.stringify(cObj));
-  ok('a sat Theory row is completed', !!cThp && cThp.completed === true && cThp.repeatable === false && cThp.attempts === 1, JSON.stringify(cThp));
-  ok('an unsat Theory row is open with 0 attempts', !cThc || (cThc.completed === false && cThc.attempts === 0), JSON.stringify(cThc));
+  ok('the catalogue lists no retired Objective or Theory row', !rowsC.some(function (r) { return r.section === 'objective' || r.section === 'theory'; }), JSON.stringify(rowsC.map(function (r) { return r.section; })));
   ok('the JAMB-oriented row is NOT completed, is repeatable, and counts submitted attempts', !!cJ && cJ.completed === false && cJ.repeatable === true && cJ.attempts === 2, JSON.stringify(cJ));
   var cat2 = await call('GET', '/api/me/tests', undefined, tok2);
   var cJ2 = ((cat2.body && cat2.body.tests) || []).filter(function (r) { return r.section === 'jamb'; })[0];

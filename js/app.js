@@ -264,73 +264,6 @@ function checkLevelCelebration(level){
   if(celebKnownLevel !== null && level > celebKnownLevel) celebrateLevel(level);
   celebKnownLevel = level;
 }
-/* ================= THE JOURNEY (Duolingo-style path) =================
-   The student's own level and XP drawn as a winding path: the level just
-   cleared, the level they are on (with a progress ring), and the next levels
-   ahead. Goc the owl says something true about where they stand. Nothing here
-   is invented — every figure comes from the account's profile. */
-var journeyKey = '';
-var jnMsgs = [], jnMsgI = 0;
-function jnPer(me){
-  var per = Number(me && me.xpPerLevel);
-  if(!per && window.GOC && GOC.core && typeof GOC.core.xpPerLevel === 'function') per = GOC.core.xpPerLevel();
-  return per > 0 ? per : 160;
-}
-function paintJourney(me){
-  var host = document.getElementById('jnPath');
-  if(!host || !me) return;
-  var xp = Number(me.xp) || 0, per = jnPer(me), lv = Number(me.level) || 1, streak = Number(me.streak) || 0;
-  var into = (me.xpIntoLevel !== undefined && me.xpIntoLevel !== null) ? Number(me.xpIntoLevel) : xp % per;
-  var key = [lv, into, per, streak].join('|');
-  if(key === journeyKey) return;
-  journeyKey = key;
-  var C = 2 * Math.PI * 34, frac = Math.max(0, Math.min(1, into / per));
-  var first = Math.max(1, lv - 1), h = '';
-  for(var n = first; n <= lv + 2; n++){
-    var st = n < lv ? 'done' : (n === lv ? 'cur' : 'lock');
-    var label = st === 'cur' ? (into + ' / ' + per + ' XP') : (st === 'done' ? 'Cleared' : 'Locked');
-    var inner;
-    if(st === 'cur'){
-      inner = '<svg class="jn-ring" viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="34" class="jn-rt"/>'
-        + '<circle cx="38" cy="38" r="34" class="jn-rp" stroke-dasharray="' + (C * frac).toFixed(1) + ' ' + C.toFixed(1) + '"/></svg>'
-        + '<span class="jn-n">' + n + '</span>';
-    } else if(st === 'done'){
-      inner = '<span class="jn-n">✓</span>';
-    } else {
-      inner = '<span class="jn-n">🔒</span>';
-    }
-    h += '<div class="jn-row jn-o' + ((n - first) % 4) + '">'
-      + (st === 'cur' ? '<span class="jn-tag">START</span>' : '')
-      + '<button type="button" class="jn-node ' + st + '" onclick="jnTap(' + n + ')" aria-label="Level ' + n + ', '
-      + (st === 'cur' ? 'current level, tap to practise' : (st === 'done' ? 'cleared' : 'locked')) + '">' + inner + '</button>'
-      + '<span class="jn-lab">Level ' + n + ' · ' + label + '</span></div>';
-  }
-  host.innerHTML = h;
-  jnMsgs = [];
-  if(xp === 0) jnMsgs.push("Hi, I'm Goc! Answer your first question and the climb begins.");
-  jnMsgs.push((per - into) + ' XP to Level ' + (lv + 1) + ' — you can do it!');
-  if(streak > 0) jnMsgs.push(streak + '-day streak. Study today and keep it alive!');
-  jnMsgs.push('Tap the glowing circle to practise.');
-  jnMsgI = 0;
-  var b = document.getElementById('jnBubble');
-  if(b) b.textContent = jnMsgs[0];
-}
-function jnTalk(){
-  if(!jnMsgs.length) return;
-  jnMsgI = (jnMsgI + 1) % jnMsgs.length;
-  var b = document.getElementById('jnBubble');
-  if(b){
-    b.textContent = jnMsgs[jnMsgI];
-    b.classList.remove('say'); void b.offsetWidth; b.classList.add('say');
-  }
-}
-function jnTap(n){
-  var lvText = document.getElementById('dashLevel');
-  var lv = parseInt(String(lvText ? lvText.textContent : '').replace(/[^\d]/g, ''), 10) || 1;
-  if(n === lv){ openPractice(); return; }
-  if(n < lv){ toast('Level ' + n + ' cleared — well done!'); return; }
-  toast('Keep going — Level ' + n + ' is ahead of you.');
-}
 /* Counts a number up to its new value so a gain is felt rather than just
    swapped in. Reduced motion, or no animation frames, sets it straight away. */
 var countShown = {};
@@ -408,8 +341,7 @@ function toggleIosInstallHelp(){
    see paintStudyWindow(). */
 var state = { limit:90, used:0, sessionMin:120, sessionWarn:5,
               studyLeftSec:null, studyExhausted:false,
-              studyBonusMin:0, studyExtensionsLeft:0,
-              hasGuardianPin:false, guardianPin:'' };
+              studyBonusMin:0 };
 /* The student's first name, for the wind-down screen's copy. Set by
    applyIdentity(); '' before anyone is signed in. */
 var studentFirst = '';
@@ -607,8 +539,15 @@ function isDemoSurface(id){
   if(id === 'studyRes' && typeof srLast !== 'undefined' && srLast && srLast.mode === 'demo') return true;
   return false;
 }
+/* Screens retired in the clean sweep (Phase 2, 18 Nov 2026). Their markup is
+   gone; any stale call, deep link or cached handler that still asks for one is
+   sent to the student's Home instead of an empty page. */
+var RETIRED_SCREENS = { timetable: true, webtest: true, wtRun: true, classes: true };
 function go(id){
+  if(RETIRED_SCREENS[id]) id = 'home';
   if(typeof closeDrawer === 'function') closeDrawer();
+  if(typeof dbPopClose === 'function') dbPopClose(true);
+  if(typeof navSheetClose === 'function') navSheetClose();
   /* Priority 9 — no in-app screen may be reached once the session has run out,
      so a tab left open cannot be clicked back into the dashboard. The server
      refuses the data anyway; this stops the empty shell being shown at all.
@@ -650,7 +589,7 @@ function go(id){
   /* B#2 slice 7 — show/hide the scholarship banner depending on current status. */
   if(id === 'landing') scholBannerInit();
   if(id === 'admin' && typeof admMenuApply === 'function') admMenuApply();
-  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof admApBadge === 'function') admApBadge(); if(typeof tourConsoleAuto === 'function') tourConsoleAuto(); }
+  if(id === 'admin'){ admOpen('overview'); admKpiLoad(); if(typeof tourConsoleAuto === 'function') tourConsoleAuto(); }
   /* Priority 12 — the standings are re-read on the way in, so they are current
      whenever the student looks rather than only just after logging in. */
   if(id === 'league' && typeof renderLeague === 'function') renderLeague();
@@ -661,10 +600,15 @@ function go(id){
      practice" list is re-read every time the Study hub is opened — a student can
      review a run days later, after logging out and back in. */
   if(id === 'study' && typeof refreshPracHistory === 'function') refreshPracHistory();
-  if((id === 'study' || id === 'bookmarks') && typeof refreshBookmarks === 'function') refreshBookmarks();
-  if((id === 'study' || id === 'mistakes') && typeof refreshMistakes === 'function') refreshMistakes();
+  if(id === 'practicehub' && typeof phOpen === 'function') phOpen();
+  if((id === 'study' || id === 'bookmarks' || id === 'practicehub') && typeof refreshBookmarks === 'function') refreshBookmarks();
+  if((id === 'study' || id === 'mistakes' || id === 'practicehub') && typeof refreshMistakes === 'function') refreshMistakes();
   if(id === 'review' && typeof rvOpen === 'function') rvOpen();
   if(id === 'study' && typeof refreshChallenge === 'function') refreshChallenge();
+  /* JAMB CBT session recovery: an interrupted sitting saved in this tab is offered here. */
+  if(id === 'study' && typeof jambPaintResume === 'function') jambPaintResume();
+  /* Study Hub: subject tabs + subject card + topics + continue/recent panels */
+  if(id === 'study' && typeof stPaintStudy === 'function') stPaintStudy();
   // Install-state can change between visits (installed elsewhere, prompt
   // captured after the screen first loaded), so it's re-read on the way in.
   if(id === 'profile'){ renderInstallRow(); renderProfileBadges(); if(typeof tourHelpPaint === 'function') tourHelpPaint(); }
@@ -677,9 +621,6 @@ function go(id){
     clearInterval(cbtTimerId); cbtTimerId = null;
   }
   // Same rule for the Web Test runner's clock.
-  if(id !== 'wtRun' && typeof wtTimerId !== 'undefined' && wtTimerId){
-    clearInterval(wtTimerId); wtTimerId = null;
-  }
   // The preview banner belongs only to student-facing screens.
   if(id === 'admin' || id === 'admin-gate' || id === 'landing' || id === 'login-v2' || id === 'free-admin' || demoSurface){
     previewing = false;
@@ -687,7 +628,7 @@ function go(id){
     var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   }
   var tabbar = document.getElementById('tabbar');
-  var tabScreens = ['home','timetable','classes','study','league','profile','webtest'];
+  var tabScreens = ['home','study','league','profile','practicehub'];
   var showTabs = tabScreens.indexOf(id) > -1;
   // Immersive flows (login, lesson/practice/CBT/results, video player, resources)
   // hide the tab bar so it never overlaps their own bottom action bars.
@@ -704,7 +645,10 @@ function go(id){
     'free-home','free-register','free-login','free-portal','free-exam','free-result','free-leaderboard','demo'];
   document.getElementById('phone').classList.toggle('is-login', publicScreens.indexOf(id) > -1 || demoSurface);
   // highlight tab (map sub-screens to their section)
-  var map = { timetable:'home', lesson:'study', practice:'study', cbt:'study', results:'study', resources:'study', webtest:'study', wtRun:'study', wtResult:'study' };
+  /* Phase 3 navigation: Practice, Results and Resources are their own sidebar items now. */
+  var map = { lesson:'study', reading:'study', bookmarks:'study', mistakes:'study', review:'study', mynotes:'study',
+              studySet:'practice', practice:'practice', practicehub:'practice', cbt:'practice', studyRes:'practice',
+              results:'results', wtResult:'results', resources:'resources' };
   var active = map[id] || id;
   list(document.querySelectorAll('.tab')).forEach(function(t){
     var on = t.getAttribute('data-t') === active;
@@ -802,12 +746,11 @@ function loginNow(raw, pw){
        not yet supporting some server-only feature) only logs a warning
        instead of throwing the whole chain into the outer .catch() below,
        which used to strand an authenticated user on the login screen. */
-    [buildWeek, renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
+    [renderResources, loadPublishedResources, refreshMe, renderLeague]
       .forEach(function(fn){
         try{ fn(); }
         catch(e){ console.warn('[login] dashboard widget failed to hydrate:', e); }
       });
-    wtCatalogue = null;                  // the papers belong to whoever just logged in
     // Management lands on the secure access portal, not the student dashboard.
     if(role === 'admin'){
       /* A new manager must replace the starting password the Founder typed before the console
@@ -855,7 +798,7 @@ function admPreview(){
   document.body.classList.add('previewing');
   var b = document.getElementById('pvBar'); if(b) b.style.display = 'flex';
   go('home');
-  updateFocus(); buildWeek(); renderClasses(); renderResources(); renderUpdates();
+  updateFocus(); renderResources(); renderUpdates();
   renderLeague();
   toast('Previewing as a student — your console session stays unlocked');
 }
@@ -1186,14 +1129,22 @@ function admReject(id){
 }
 /* Copy the signed-in scholar's ID. No clipboard permissions in the prototype —
    we select the text so the student can copy it with one gesture. */
+/* Profile's "Copy ID". The Scholar ID card left the Home dashboard in Phase 3,
+   so the ID is taken from the signed-in account itself (studentId), with the
+   profile line as the fallback, and copied where the browser allows it. */
 function copyId(){
-  var c = document.getElementById('idCode') || document.getElementById('dashId');
-  if(!c) return;
+  var code = studentId || '';
+  if(!code){
+    var p = document.getElementById('profId');
+    code = p ? String(p.textContent || '').replace(/^.*·\s*/, '').trim() : '';
+  }
+  if(!code || code === '\u2014') return;
+  var said = function(){ toast('Scholar ID ' + code + ' copied'); };
+  var shown = function(){ toast('Your Scholar ID is ' + code); };
   try{
-    var r = document.createRange(); r.selectNodeContents(c);
-    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(code).then(said, shown); return; }
   }catch(e){}
-  toast('Scholar ID '+c.textContent+' selected — tap Copy on your keyboard');
+  shown();
 }
 /* Identity: the ID prefix decides the account type.
    GOC-A-…  = management / staff  → console available (behind the access portal)
@@ -1230,8 +1181,14 @@ function applyIdentity(user){
   set('idRole', isStaff ? ('Management · ' + staff.title) : 'Student');
   set('idLabel', isStaff ? 'Staff ID' : 'Scholar ID');
   set('idCode', code);
-  set('dashId', code);
   set('profName', name);
+  /* Phase 3 dashboard header: the account's own full name and its initial. */
+  set('dbUserName', isStaff ? 'Management' : name);
+  var ini = String(isStaff ? 'M' : first).charAt(0).toUpperCase() || '·';
+  set('dbAva', ini); set('dbAvaM', ini);
+  /* Study Hub header: mirror the same name + initial */
+  set('stUserName', isStaff ? 'Management' : name);
+  set('stAva', ini); set('stAvaM', ini);
   set('profAva', initials(name));
   set('profId', (isStaff ? 'Staff ID · ' : 'Scholar ID · ') + code);
   if(isStaff) set('admWho', staff.name + ' · ' + staff.title);
@@ -1245,8 +1202,6 @@ function applyIdentity(user){
   set('idNote', isStaff
     ? 'Staff IDs are issued to management only and cannot be self-registered — the console is limited to the Founder and the Academic Director, and still requires the secure access passcode.'
     : 'Your Scholar ID identifies you across lessons, practice, CBT and the league — keep it safe, you log in with it.');
-  var strip = document.getElementById('idStrip');
-  if(strip) strip.style.display = isStaff ? 'none' : 'flex';
   var entry = document.getElementById('adminEntry');
   if(entry) entry.style.display = isStaff ? 'inline-flex' : 'none';
   /* The account's stored JAMB combination drives every subject-aware surface.
@@ -1338,20 +1293,19 @@ function logout(){
   if(typeof ssStop === 'function') ssStop();   // and stop watching the clock
   if(typeof swStop === 'function') swStop();   // and stop the study-window heartbeat
   staffData = [];
-  celebKnownLevel = null; countShown = {}; journeyKey = '';   // the next student starts from their own baseline
+  celebKnownLevel = null; countShown = {};   // the next student starts from their own baseline
+  if(typeof dbReset === 'function') dbReset();
   role = 'student'; adminUnlocked = false;
   studentsData = [];                     // the next user must re-fetch the roster
   mySubjects = null;                     // and the next user must not inherit this one's papers
-  wtCatalogue = null;                    // nor this one's web-test catalogue
-  wtPaper = null; wtResp = {}; cbtPaper = null; cbtGroups = null;
-  if(wtTimerId){ clearInterval(wtTimerId); wtTimerId = null; }
+  cbtPaper = null; cbtGroups = null;
   previewing = false;
   revealed = {};                        // no revealed password survives a logout
   document.body.classList.remove('previewing');
   var pb = document.getElementById('pvBar'); if(pb) pb.style.display = 'none';
   var entry = document.getElementById('adminEntry'); if(entry) entry.style.display='none';
   // Blank the identity fields so a signed-out page never shows the last user.
-  ['idName','idCode','dashId','dashName','profName','profId','admWho','dashLevel','dashXp','dashStreak','dashStreakChip'].forEach(function(k){
+  ['idName','idCode','dashName','profName','profId','admWho','dashLevel','dashXp','dashStreak','dashPerf','dbUserName','dbAva','dbAvaM','stUserName','stAva','stAvaM'].forEach(function(k){
     var e = document.getElementById(k); if(e) e.textContent = '\u2014';
   });
   go('landing');
@@ -1538,23 +1492,7 @@ function applySubjects(subs){
   paintSubjectSurfaces();
 }
 function paintSubjectSurfaces(){
-  renderClassFilters();
-  renderClasses();
   renderResources();
-  if(document.getElementById('weekStrip') && document.getElementById('ttBlocks')) renderDay();
-}
-function renderClassFilters(){
-  var host = document.getElementById('classFilters');
-  if(!host) return;
-  var subs = orderedSubjects();
-  // A filter for a paper the student dropped would show an empty shelf.
-  if(classFilter !== 'all' && subs.indexOf(canonSubject(classFilter)) < 0) classFilter = 'all';
-  var html = '<button class="fchip' + (classFilter === 'all' ? ' on' : '') + '" data-f="all" onclick="setClassFilter(\'all\')" aria-pressed="' + (classFilter === 'all') + '">All</button>';
-  subs.forEach(function(s){
-    html += '<button class="fchip' + (classFilter === s ? ' on' : '') + '" data-f="' + esc(s) + '" ' +
-            'onclick="setClassFilter(&quot;' + esc(s) + '&quot;)" aria-pressed="' + (classFilter === s) + '">' + esc(s) + '</button>';
-  });
-  host.innerHTML = html;
 }
 /* ---- Deployment identity, first-run notice, and affirmation gating ----
 /* /api/health reports the service-worker cache name (sw.js) as deployId.
@@ -2396,11 +2334,12 @@ function updateFocus(){
   var frac = limitSec ? Math.max(0, Math.min(1, leftSec / limitSec)) : 0;
   var r=40, c=2*Math.PI*r;
   var arc = document.getElementById('focusArc');
-  arc.setAttribute('stroke-dasharray', c);
-  arc.setAttribute('stroke-dashoffset', c*(1-frac));
-  arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
-  document.getElementById('focusMin').textContent = leftMin;
-  document.getElementById('focusText').textContent = 'Learn here, then read on your own, apply it, and bring questions to your tutor.';
+  if(arc){
+    arc.setAttribute('stroke-dasharray', c);
+    arc.setAttribute('stroke-dashoffset', c*(1-frac));
+    arc.setAttribute('stroke', leftMin<=15 ? '#D97706' : '#DC2626');
+  }
+  var fm = document.getElementById('focusMin'); if(fm) fm.textContent = leftMin;
   // The wind-down card is the whole point of the daily limit, so show it when it is spent —
   // exhausted comes from the server whenever it's known, never guessed client-side.
   var exhausted = state.studyExhausted || (state.studyLeftSec != null && leftSec <= 0);
@@ -2416,18 +2355,10 @@ function paintStudyWindow(win){
   if(win.usedMin != null) state.used = Number(win.usedMin) || 0;
   state.studyLeftSec = (win.leftSec != null) ? Number(win.leftSec) : null;
   state.studyExhausted = !!win.exhausted;
-  // Any guardian-granted bonus minutes for today, and how many "Add 15 min"
-  // grants are still available today. Derived the same way server.js derives
-  // them (bonusMin / EXTRA_TIME_GRANT_MIN) rather than guessed, so the
-  // wind-down copy and the extend button can never promise a grant the
-  // server would refuse. Falls back to the same defaults core.js ships with
-  // if the rulebook isn't reachable yet.
+  // Bonus minutes already on today's record (granted before the Guardian PIN
+  // extension was retired in the clean sweep) still count toward today's
+  // window, exactly as the server counts them. No new grant can be made.
   state.studyBonusMin = (win.bonusMin != null) ? Math.max(0, Number(win.bonusMin) || 0) : 0;
-  var rb0 = rulebook();
-  var grantMin = (rb0 && rb0.EXTRA_TIME_GRANT_MIN) || 15;
-  var maxGrants = (rb0 && rb0.EXTRA_TIME_MAX_GRANTS_PER_DAY != null) ? rb0.EXTRA_TIME_MAX_GRANTS_PER_DAY : 2;
-  var grantsUsed = grantMin ? Math.round(state.studyBonusMin / grantMin) : 0;
-  state.studyExtensionsLeft = Math.max(0, maxGrants - grantsUsed);
   updateFocus();
   // If a student is sitting on a screen whose Start button depends on this,
   // relabel it immediately rather than waiting for the next navigation —
@@ -2436,7 +2367,6 @@ function paintStudyWindow(win){
   var active = document.querySelector('.screen.active');
   var activeId = active && active.id;
   if(activeId === 'studySet' && typeof renderStudySet === 'function') renderStudySet();
-  if(activeId === 'webtest' && typeof renderWebTest === 'function') renderWebTest();
 }
 function showWinddown(){
   paintWinddownText();
@@ -2500,32 +2430,27 @@ function suInstructions(){
     ]
   };
 }
-/* Same idea for a Web Test row: names the actual paper (subject, section,
-   question count, its real clock or the lack of one, and the papers inside
-   an objective sitting) rather than a one-size-fits-all notice. */
-function wtInstructions(t){
-  var timed = Number(t.durationSec) > 0;
-  var about = t.subject + ' \u00b7 ' + wtSectionLabel(t.section) + ' \u00b7 ' + t.questions
-    + ' question' + (t.questions !== 1 ? 's' : '') + ' \u00b7 ' + (timed ? wtMinutes(t.durationSec) : 'no time limit');
+/* Names the actual JAMB sitting (subjects, question count, its clock) before it
+   starts. Dormant with jambStart() — see the JAMB CBT section below. */
+function jambInstructions(t){
+  var about = t.subject + ' \u00b7 ' + wtSectionLabel('jamb') + ' \u00b7 ' + t.questions
+    + ' question' + (t.questions !== 1 ? 's' : '') + ' \u00b7 ' + wtMinutes(t.durationSec);
   if(t.papers && t.papers.length) about += ' \u00b7 ' + wtPapersLine(t.papers);
   return {
     title: 'Before you start',
     about: about,
     rules: [
-      timed ? 'The clock starts the moment you press Start below and cannot be paused or restarted.'
-            : 'There is no clock on this paper \u2014 work at your own pace.',
+      'The clock starts the moment you press Start below and cannot be paused or restarted.',
       'Once you submit, your answers are final and sent for marking.',
       t.repeatable ? 'This is a rehearsal \u2014 you may sit it again, and every attempt is kept on your record.' : null,
-      t.section === 'jamb'
-        ? 'This sitting runs in the UTME examination room: A, B, C or D answers a question, N and P move between questions, S starts submission, and a calculator is on screen. If the page refreshes, return here and resume \u2014 your answers and the clock are kept, never restarted.'
-        : 'Stay on this screen until you submit \u2014 closing or refreshing the tab can end your attempt.',
+      'This sitting runs in the UTME examination room: A, B, C or D answers a question, N and P move between questions, S starts submission, and a calculator is on screen. If the page refreshes, return here and resume \u2014 your answers and the clock are kept, never restarted.',
       'This counts toward today\u2019s study window.'
     ].filter(Boolean)
   };
 }
-function wtConfirmStart(t, btn){
-  var info = wtInstructions(t);
-  showTestInfo(info.title, info.about, info.rules, function(){ wtStart(t.period, t.section, t.subject, btn); });
+function jambConfirmStart(t, btn){
+  var info = jambInstructions(t);
+  showTestInfo(info.title, info.about, info.rules, function(){ jambStart(t.period, t.subject, btn); });
 }
 /* The wind-down card used to carry a fixed "90-minute… Amara" sentence no
    matter who was signed in or what the academy's limit actually was. This
@@ -2541,17 +2466,6 @@ function paintWinddownText(){
   if(bonus) msg += ' (already includes ' + bonus + ' extra minute' + (bonus === 1 ? '' : 's') + ' added today)';
   msg += '. Great work, ' + who + ' — rest lets what you learned settle. Come back tomorrow to keep your streak. \uD83D\uDD25';
   p.textContent = msg;
-  // Keeps a stale error from an earlier attempt from lingering into the
-  // next time the overlay is shown.
-  var e = document.getElementById('windPinErr'); if(e) e.textContent = '';
-  // The PIN field only makes sense to show if a guardian PIN is actually
-  // set — swExtend() would otherwise just no-op with "Enter the guardian
-  // PIN." forever. state.hasGuardianPin is populated either by
-  // paintGuardianPin() (console) or, for a real student session, directly
-  // from getMySettings()'s hasGuardianPin flag in loadSettings() — both
-  // land in the same state field, so this check works for either session.
-  var wrap = document.getElementById('windExtendWrap');
-  if(wrap) wrap.style.display = state.hasGuardianPin ? 'block' : 'none';
 }
 /* The daily study window is an academy-wide setting, so it is stored on the
    server. The screen updates once the save is confirmed, never before. */
@@ -2576,14 +2490,6 @@ function loadSettings(){
   return call.then(function(cfg){
     paintLimit(cfg.dailyLimitMin);
     paintSession(cfg);
-    // An admin's settings response carries both the yes/no flag and (for
-    // prefilling the edit form) the actual digits, so it gets the full
-    // paint. getMySettings() now carries the flag too (effectiveSettingsFor()
-    // on the server, the mock driver's getMySettings() offline) but never the
-    // digits — a student only needs to know whether the wind-down overlay's
-    // PIN field should show at all.
-    if(!isStudent) paintGuardianPin(cfg);
-    else if(cfg && cfg.hasGuardianPin != null) state.hasGuardianPin = !!cfg.hasGuardianPin;
     // Only getMySettings() carries this student's real usage today — the
     // academy-wide getSettings() an admin gets back has no personal window.
     if(isStudent && cfg && cfg.exhausted != null) paintStudyWindow(cfg);
@@ -2680,8 +2586,7 @@ function ssShow(left){
 function ssEnd(){
   if(ss.ending) return;
   ss.ending = true;
-  var unsent = !!(typeof wtPaper !== 'undefined' && wtPaper) ||
-               !!(typeof cbtPaper !== 'undefined' && cbtPaper);
+  var unsent = !!(typeof cbtPaper !== 'undefined' && cbtPaper);
   ssStop();
   logout();
   go('login-v2');
@@ -2729,35 +2634,6 @@ function swPing(){
     paintStudyWindow(win);
   }).catch(function(){ /* network hiccup — the next beat will try again */ });
 }
-/* The wind-down overlay's "Add 15 min (guardian PIN)" button — see
-   DAILY-STUDY-WINDOW-STATUS.txt and core.EXTRA_TIME_GRANT_MIN. Reads
-   whatever was typed into the PIN input (Task 4 restores that input; the
-   ids below are what it will use), asks the server to check and grant it,
-   and only ever repaints from what the server actually sends back. A wrong
-   PIN or an already-exhausted daily grant count comes back as a plain
-   inline error next to the input — never a toast, and the message is
-   always the server's own ("That PIN is not correct." /
-   "Today's extra time has already been used up.") so it can never hint at
-   what the correct PIN is or how many tries are left. */
-function swExtend(){
-  var input = document.getElementById('windPinInput');
-  var errEl = document.getElementById('windPinErr');
-  if(errEl) errEl.textContent = '';
-  var pin = input ? String(input.value || '').trim() : '';
-  if(!pin){
-    if(errEl) errEl.textContent = 'Enter the guardian PIN.';
-    return;
-  }
-  GOC.api.extendStudyTime(pin).then(function(win){
-    if(input) input.value = '';
-    if(errEl) errEl.textContent = '';
-    paintStudyWindow(win);
-  }).catch(function(err){
-    if(input) input.value = '';
-    if(errEl) errEl.textContent = err.message || 'Could not add that time.';
-  });
-}
-
 /* The console's view of the same two settings. */
 function paintSession(cfg){
   if(!cfg) return;
@@ -2789,50 +2665,6 @@ function admSetWarn(delta){
     paintSession(cfg);
     toast('Students are warned '+state.sessionWarn+' minutes before the end');
   }).catch(function(err){ toast(err.message || 'Could not save that setting'); });
-}
-/* The console's view of the same guardian PIN swExtend() checks (see
-   DAILY-STUDY-WINDOW-STATUS.txt and core.EXTRA_TIME_GRANT_MIN). Only
-   console ever gets the actual digits back — see server.js's GET
-   /api/settings, which sends hasGuardianPin to everyone but the raw
-   guardianPin only to an unlocked admin session — so this fills in
-   whichever of the two the response actually carried, never guesses.
-   Task 4 adds the elements these ids reference (#admGuardianStatus,
-   #admGuardianPinInput, #admGuardianPinErr); until then this keeps state
-   in sync and no-ops on the DOM, the same way paintWinddownText() did
-   before its own ids existed. */
-function paintGuardianPin(cfg){
-  if(!cfg) return;
-  if(cfg.hasGuardianPin != null) state.hasGuardianPin = !!cfg.hasGuardianPin;
-  else if(cfg.guardianPin !== undefined) state.hasGuardianPin = !!cfg.guardianPin;
-  if(cfg.guardianPin !== undefined) state.guardianPin = cfg.guardianPin || '';
-  var s = document.getElementById('admGuardianStatus');
-  if(s) s.textContent = state.hasGuardianPin ? 'A guardian PIN is set.' : 'No guardian PIN set.';
-  var i = document.getElementById('admGuardianPinInput');
-  if(i && document.activeElement !== i) i.value = state.guardianPin || '';
-  var e = document.getElementById('admGuardianPinErr'); if(e){ e.textContent = ''; e.classList.remove('ok-note'); }
-}
-/* Sets or clears the academy-wide guardian PIN — the adminSetLimit()/
-   admSetSession() pattern: read the console's own input, ask the server,
-   and only ever repaint from what it actually sends back. An empty field
-   clears the PIN; anything else must be 4-8 digits, the same rule
-   server.js enforces in PUT /api/settings, so a typo can never lock the
-   feature into an unusable PIN silently. A wrong-shaped PIN comes back as
-   a plain inline error next to the input, never a toast — the save
-   itself (not a guess) gets the toast, same as adminSetLimit(). */
-function admSetGuardianPin(){
-  var input = document.getElementById('admGuardianPinInput');
-  var errEl = document.getElementById('admGuardianPinErr');
-  if(errEl) errEl.textContent = '';
-  var pin = input ? String(input.value || '').trim() : '';
-  GOC.api.setGuardianPin(pin).then(function(cfg){
-    paintGuardianPin(cfg);
-    if(errEl){
-      errEl.textContent = pin ? 'Guardian PIN updated.' : 'Guardian PIN cleared.';
-      errEl.classList.add('ok-note');
-    }
-  }).catch(function(err){
-    if(errEl){ errEl.classList.remove('ok-note'); errEl.textContent = err.message || 'Could not save that PIN.'; }
-  });
 }
 /* ===== Secure access portal (firewall) ===== */
 function gatePaint(){
@@ -3193,7 +3025,6 @@ var ADM_TILE_META = {
   notes:        { label: 'Notes' },
   passages:     { label: 'Passages' },
   'import':     { label: 'Import' },
-  videos:       { label: 'Videos' },
   resources:    { label: 'Resources' },
   classes:      { label: 'Live classes' },
   broadcast:    { label: 'Broadcast' },
@@ -3207,7 +3038,6 @@ var ADM_TILE_META = {
   window:       { label: 'Study window' },
   tutors:       { label: 'Tutors' },
   managers:     { label: 'Managers' },
-  approvals:    { label: 'Approvals' },
   flags:        { label: 'Flags' },
   challenges:   { label: 'Challenges' },
   access:       { label: 'Access' },
@@ -3404,21 +3234,6 @@ function admOpen(section){
       '<p class="ad-note" id="admLgBasis">Reading the ranking basis…</p>'+
       '<div class="ad-actions"><button class="ad-btn" onclick="admLgLoad()">Refresh</button><button class="ad-btn pri" onclick="admPreview()">View as student</button></div></div>'
     ); },
-    videos: function(){ return (
-      '<div class="ad-card"><div class="ad-h">Recorded videos</div><p class="ad-p">Upload a recorded class, or link one hosted elsewhere (Zoom cloud, unlisted YouTube).</p>'+
-      subjSeg()+
-      '<div class="ad-field"><label>Video title</label><input id="admVidTitle" placeholder="e.g. '+admSubj+' — Live Class 04"></div>'+
-      '<div class="ad-field"><label>Type</label><select id="admVidType"><option value="live">Live class replay</option><option value="lesson">Lesson video</option></select></div>'+
-      '<div class="ad-field"><label>Tutor / instructor</label><input id="admVidTutor" placeholder="e.g. Mr. Okafor"></div>'+
-      '<div class="ad-field"><label>Duration</label><input id="admVidDuration" placeholder="e.g. 48:00"></div>'+
-      '<div class="ad-drop" onclick="document.getElementById(\'admVidFile\').click()">'+upIcon()+'<b id="admVidFileLabel">Choose an MP4 file (optional)</b><span>MP4 · maximum 50 MB</span></div>'+
-      '<input id="admVidFile" type="file" accept=".mp4" style="display:none" onchange="admVideoFilePicked(this)">'+
-      '<div class="ad-field"><label>Link (used if no file is chosen)</label><input id="admVidLink" placeholder="Zoom cloud / YouTube unlisted link"></div>'+
-      '<div class="ad-actions"><button class="ad-btn pri" id="admVidUploadBtn" onclick="admUploadVideo()">Add video</button></div>'+
-      '<div id="admVidStatus" class="ad-note"></div>'+
-      '<div class="ad-field"><label>Uploaded videos</label><div id="admVideoList"><div class="ad-note">Loading videos…</div></div></div>'+
-      '</div>'
-    ); },
     resources: function(){ return (
       '<div class="ad-card"><div class="ad-h">Resources</div><p class="ad-p">Upload past questions, notes and downloadable materials.</p>'+
       subjSeg(true)+
@@ -3559,21 +3374,7 @@ function admOpen(section){
       '<div class="ad-win"><div class="big"><span id="admLimit">'+L+'</span> <s>min / day</s></div></div>'+
       '<div class="stepper" style="justify-content:center;margin-top:10px"><button onclick="adminSetLimit(-15)">−</button><b id="admLimitVal">'+L+' min</b><button onclick="adminSetLimit(15)">+</button></div>'+
       '<div class="ad-actions" style="justify-content:center"><button class="ad-btn" onclick="admPreview()">Check on student dashboard</button></div>'+
-      /* Guardian PIN — lets a parent/guardian grant a student a few extra
-         minutes past the window above from the wind-down screen (see
-         swExtend() / #windExtendWrap), without handing the student the
-         console passcode. Lives next to the stepper because it's a
-         setting on the same window. paintGuardianPin() repaints
-         #admGuardianStatus/#admGuardianPinInput/#admGuardianPinErr from
-         whatever the server actually sends back — this markup just gives
-         it somewhere to write. */
-      '<div class="ad-field" style="margin-top:14px"><label>Guardian PIN</label>'+
-        '<p class="ad-note" id="admGuardianStatus" style="margin:6px 0 8px">'+(state.hasGuardianPin?'A guardian PIN is set.':'No guardian PIN set.')+'</p>'+
-        '<input id="admGuardianPinInput" type="text" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4 to 8 digits" value="'+esc(state.guardianPin||'')+'">'+
-        '<div class="gate-err" id="admGuardianPinErr"></div>'+
       '</div>'+
-      '<p class="ad-note">Lets a guardian add '+((rulebook().EXTRA_TIME_GRANT_MIN)||15)+' minutes to a student\'s day from the wind-down screen, up to '+((rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY)!=null?rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY:2)+' time'+(((rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY)!=null?rulebook().EXTRA_TIME_MAX_GRANTS_PER_DAY:2)===1?'':'s')+' a day. Leave blank and save to turn it off.</p>'+
-      '<div class="ad-actions" style="justify-content:center"><button class="ad-btn pri" onclick="admSetGuardianPin()">Save guardian PIN</button></div></div>'+
       /* Priority 9 — the session threshold sits beside the daily study window
          because they are the same kind of setting: how long a student spends in
          the app, decided by the academy. The expiry is enforced on the server;
@@ -3675,7 +3476,7 @@ function admOpen(section){
       '<div class="ad-field"><label>Starting password</label><input id="admTutPw" type="text" autocomplete="off" placeholder="at least 8 characters"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" id="admTutNewBtn" onclick="admTutCreate()">Create tutor</button></div></div>'+
       '<div class="ad-card"><div class="ad-h">Tutors</div><div id="admTutList"><div class="ad-loading">Loading tutors…</div></div></div>'+
-      '<div class="ad-card"><div class="ad-h">Tutor Analytics</div><p class="ad-p">Subject activity and student performance overview.</p><div id="admTutAnalytics"><div class="ad-loading">Loading analytics…</div></div></div><div class="ad-card"><div class="ad-h">Subjects &amp; tutors</div><p class="ad-p">Who teaches each subject and where a paper is empty or thin.</p><div id="admTutOver"><div class="ad-loading">Loading…</div></div></div>'+
+      '<div class="ad-card"><div class="ad-h">Subjects &amp; tutors</div><p class="ad-p">Who teaches each subject and where a paper is empty or thin.</p><div id="admTutOver"><div class="ad-loading">Loading…</div></div></div>'+
       '<div class="ad-card"><div class="ad-h">Tutor access log</div><p class="ad-p">Every time a tutor opens a student\u2019s page or shows their contact details. Kept for 12 months. Times are Nigeria time.</p>'+
       '<div class="ad-field"><label>Tutor</label><select id="admAudTutor"><option value="">Any tutor</option></select></div>'+
       '<div class="ad-field"><label>Scholar ID</label><input id="admAudStudent" placeholder="e.g. GOC-0001 (leave empty for all)" autocomplete="off"></div>'+
@@ -3699,14 +3500,6 @@ function admOpen(section){
       '<div class="ad-field"><label>To</label><input id="admMgLogTo" type="date"></div>'+
       '<div class="ad-actions"><button class="ad-btn pri" onclick="admMgLogLoad()">Show</button><button class="ad-btn" onclick="admMgLogClear()">Clear filters</button><button class="ad-btn" id="admMgLogCsvBtn" onclick="admMgLogExport()" disabled>Export CSV</button></div>'+
       '<div id="admMgLogList"><div class="ad-empty">Press Show to load the log.</div></div></div>'
-    ); },
-    approvals: function(){ return (
-      '<div class="ad-card"><div class="ad-h">Awaiting approval</div>'+
-      '<p class="ad-p">Questions your tutors typed or imported wait here. Students never see one until you approve it. Oldest first.</p>'+
-      '<div class="ad-field"><label>Subject</label><select id="admApSubject" onchange="admApLoad()"><option value="">All subjects</option>'+
-      GOC.core.ALL_SUBJECTS.map(function(sj){ return '<option value="'+esc(sj)+'">'+esc(sj)+'</option>'; }).join('')+'</select></div>'+
-      '<div class="ad-actions"><button class="ad-btn" onclick="admApLoad()">Refresh</button></div></div>'+
-      '<div id="admApList"><div class="ad-loading">Loading…</div></div>'
     ); },
     scholarship: function(){ return (
       '<div class="ad-card"><div class="ad-h">Scholarship applications</div>'+
@@ -3793,7 +3586,6 @@ function admOpen(section){
   if(section === 'overview'){ admOverviewLoad(); admAlLoad(); }
   if(section === 'overview' && typeof admNoLoad === 'function') admNoLoad();
   if(section === 'resources') admLoadResources();
-  if(section === 'videos') admLoadVideos();
   if(section === 'classes') admLoadClasses();
   if(section === 'cohorts') admLoadCohorts();
   if(section === 'students'){ admLoadCohorts(); admRegLoad(); }
@@ -3802,9 +3594,8 @@ function admOpen(section){
   if(section === 'league') admLgLoad();
   if(section === 'access') admAccessLoad();
   if(section === 'siteanalytics') saLoad();
-  if(section === 'tutors'){ admTutLoad(); admAuditLoad(); admTutOverLoad(); admTutAnalyticsLoad(); }
+  if(section === 'tutors'){ admTutLoad(); admAuditLoad(); admTutOverLoad(); }
   if(section === 'managers'){ setTimeout(admMgLoad, 0); setTimeout(admMgLogLoad, 0); }
-  if(section === 'approvals') admApLoad();
   if(section === 'flags') admFlagsLoad();
   if(section === 'scholarship') admScLoad();
   if(section === 'challenges'){ if(!admCohortsCache.length) admLoadCohorts().then(function(){ admOpen('challenges'); }); admChLoad(); }
@@ -3838,7 +3629,7 @@ function subjSeg(includeMaterials){
 function upIcon(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>'; }
 /* Overview panel — one call, four numbers filled in after the markup
    lands, same "fill itself in after the panel renders" pattern every
-   other live admin panel uses (admLoadResources/admLoadVideos below,
+   other live admin panel uses (admLoadResources below,
    admObjLoad, etc). */
 /* KPI strip at the top of the console — real numbers, not placeholders.
    Students comes from the roster cache (kept current by loadStudents()),
@@ -4179,114 +3970,12 @@ function admDeleteResource(id, title){
   });
 }
 
-function admLoadVideos(){
-  var host = document.getElementById('admVideoList');
-  if(!host) return;
 
-  host.innerHTML = '<div class="ad-loading">Loading videos…</div>';
 
-  GOC.api.listVideos().then(function(result){
-    var videos = result && Array.isArray(result.videos) ? result.videos : [];
-    admRenderVideos(videos);
-  }, function(err){
-    host.innerHTML = '<div class="ad-note warn">' +
-      esc(err.message || 'Could not load videos.') +
-      '</div>';
-  });
-}
 
-function admRenderVideos(videos){
-  var host = document.getElementById('admVideoList');
-  if(!host) return;
-
-  var filtered = videos.filter(function(v){
-    return String(v.subject || '').toLowerCase() === String(admSubj || '').toLowerCase();
-  });
-
-  if(!filtered.length){
-    if(videos.length){
-      var bySubj = {};
-      videos.forEach(function(v){
-        var s = v.subject || 'Unspecified';
-        bySubj[s] = (bySubj[s] || 0) + 1;
-      });
-      var breakdown = Object.keys(bySubj).map(function(s){
-        return esc(s) + ' (' + bySubj[s] + ')';
-      }).join(', ');
-
-      host.innerHTML = '<div class="ad-empty">No videos uploaded for ' + esc(admSubj) +
-        ' yet.<br>' + videos.length + ' video' + (videos.length === 1 ? '' : 's') +
-        ' exist under other subjects — switch the subject above to view them: ' + breakdown + '.</div>';
-    } else {
-      host.innerHTML = '<div class="ad-empty">No videos uploaded for ' +
-        esc(admSubj) + ' yet.</div>';
-    }
-    return;
-  }
-
-  host.innerHTML = filtered.map(function(v){
-    var published = !!v.published;
-    var status = published ? 'Published' : 'Draft';
-    var statusClass = published ? 'published' : 'draft';
-    var typeLabel = v.type === 'live' ? 'Live' : 'Lesson';
-    var source = v.storageFileId ? 'MP4' : 'Link';
-
-    return '<div class="goc-resource-item">' +
-      '<div class="goc-resource-icon">' + esc(typeLabel) + '</div>' +
-      '<div class="goc-resource-main">' +
-        '<span class="goc-resource-title">' +
-          esc(v.title || 'Untitled video') +
-        '</span>' +
-        '<div class="goc-resource-meta">' +
-          '<span>' + esc(v.subject || '') + '</span>' +
-          '<span>' + esc(v.tutor || '') + '</span>' +
-          '<span>' + esc(v.duration || '') + '</span>' +
-          '<span>' + esc(source) + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="goc-resource-actions">' +
-        '<span class="goc-resource-status ' + statusClass + '">' +
-          status +
-        '</span>' +
-        '<button class="ad-btn" onclick="admSetVideoPublished(\'' +
-          esc(v.videoId) + '\',' + (!published) + ')">' +
-          (published ? 'Unpublish' : 'Publish') +
-        '</button>' +
-        (published ? '' :
-          '<button class="ad-btn danger" onclick="admDeleteVideo(\'' +
-            esc(v.videoId) + '\',\'' + esc((v.title || 'this video').replace(/'/g, "\\'")) + '\')">' +
-            'Delete' +
-          '</button>'
-        ) +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
-
-function admSetVideoPublished(id, published){
-  GOC.api.setVideoPublished(id, published).then(function(){
-    toast(published ? 'Video published.' : 'Video unpublished.');
-    admLoadVideos();
-  }, function(err){
-    toast(err.message || 'Could not update the video.');
-  });
-}
-
-function admDeleteVideo(id, title){
-  if(!confirm('Permanently delete "' + title + '"?\n\nThis removes the database record and its stored file (if any) for good — it cannot be undone. Only unpublished (draft) videos can be deleted; a published video must be unpublished first.')) return;
-
-  GOC.api.deleteVideo(id).then(function(){
-    toast('Video deleted.');
-    admLoadVideos();
-  }, function(err){
-    toast(err.message || 'Could not delete the video.');
-  });
-}
 
 /* ================= LIVE CLASSES (admin) =================
-   Function-for-function against the admin video pattern above
-   (admLoadVideos/admRenderVideos/admDeleteVideo) rather than a new shape —
-   a scheduled class filtered by admSubj, one form to create, cancel/mark
+   A scheduled class filtered by admSubj, one form to create, cancel/mark
    complete/delete to manage what already exists. */
 function admLoadClasses(){
   var host = document.getElementById('admClassList');
@@ -5070,146 +4759,6 @@ function admMgDelete(id){
   }, function(err){ toast(err.message || 'Could not delete that manager.'); });
 }
 
-/* ---------------------------------------------------------------- awaiting approval (Phase 3C, slice 6.4)
-   Console -> Awaiting approval: the questions tutors typed or imported, oldest first. Approve,
-   Edit then approve, Return (with a reason), or approve everything from one import. The rules
-   (who may review, the reason length, nobody approving their own) are the server's; this only
-   shows them and relays the server's words. */
-var admApCache = [];
-var admApMode = {};      // question id -> 'edit' | 'return' while its inline form is open
-var admApBusy = false;
-
-function admApBadge(){
-  var sel = document.getElementById('admSelect');
-  if(!sel || !GOC.api.listApprovals) return Promise.resolve();
-  return GOC.api.listApprovals('').then(function(r){
-    admApSetBadge(r && typeof r.count === 'number' ? r.count : 0);
-  }, function(){});
-}
-function admApSetBadge(n){
-  var sel = document.getElementById('admSelect');
-  if(!sel || !sel.options) return;
-  for(var i = 0; i < sel.options.length; i++){
-    if(sel.options[i].value === 'approvals'){
-      sel.options[i].textContent = n > 0 ? 'Awaiting approval (' + n + ')' : 'Awaiting approval';
-    }
-  }
-}
-function admApLoad(){
-  var host = document.getElementById('admApList');
-  if(host) host.innerHTML = '<div class="ad-loading">Loading…</div>';
-  var f = document.getElementById('admApSubject');
-  var subject = f ? String(f.value || '') : '';
-  return GOC.api.listApprovals(subject).then(function(r){
-    admApCache = (r && Array.isArray(r.queue)) ? r.queue : [];
-    if(!subject) admApSetBadge(admApCache.length);
-    admApRender();
-  }, function(err){
-    admApCache = [];
-    var h = document.getElementById('admApList');
-    if(h) h.innerHTML = '<div class="ad-note warn">' + esc(err.message || 'Could not load the questions waiting for approval.') + '</div>';
-  });
-}
-function admApOptionsHTML(q){
-  if(q.kind === 'theory'){
-    return '<div class="ac-cell" style="margin-top:8px"><label>Reference answer · out of '+esc(q.maxMark)+'</label><div>'+esc(q.expected || '')+'</div></div>';
-  }
-  var letters = ['A','B','C','D','E'];
-  return '<div style="margin-top:8px">'+(q.options || []).map(function(o, i){
-    var right = Number(q.answer) === i;
-    return '<div class="ad-metric"><span>'+letters[i]+'. '+esc(o)+'</span><b>'+(right ? '✓ correct' : '')+'</b></div>';
-  }).join('')+'</div>';
-}
-function admApRender(){
-  var host = document.getElementById('admApList');
-  if(!host) return;
-  if(!admApCache.length){ host.innerHTML = '<div class="ad-card"><div class="ad-empty">Nothing is waiting for approval.</div></div>'; return; }
-  var seen = {};
-  host.innerHTML = admApCache.map(function(q){
-    var id = esc(String(q.id)), mode = admApMode[q.id] || '';
-    var top = '<div class="ac-top"><div class="ac-who"><b>'+esc(q.subject)+' · '+esc(q.topic || 'General')+'</b>'+
-      '<span>'+esc(q.section || '')+' · added by '+esc(q.addedByName || q.addedBy || 'a tutor')+(q.addedAt ? ' · '+esc(admWhen(q.addedAt)) : '')+'</span></div>'+
-      '<span class="ad-tag a">Awaiting</span></div>';
-    var body = '<div style="margin-top:8px;white-space:pre-wrap">'+esc(q.text)+'</div>'+admApOptionsHTML(q)+
-      (q.explanation ? '<p class="ad-note">Explanation: '+esc(q.explanation)+'</p>' : '');
-    var batchBtn = '';
-    if(q.batch && !seen[q.batch]){
-      seen[q.batch] = true;
-      var n = admApCache.filter(function(x){ return x.batch === q.batch; }).length;
-      batchBtn = '<div class="ad-note">From import <code>'+esc(q.batch)+'</code> · '+n+' waiting</div>'+
-        '<div class="ac-btns"><button class="ad-btn" onclick="admApBatch(\''+esc(q.batch)+'\','+n+')">Approve all '+n+' from this import</button></div>';
-    }
-    var actions;
-    if(mode === 'edit'){
-      var isT = q.kind === 'theory';
-      actions = '<div class="ad-field"><label>Question</label><textarea id="admApE_text_'+id+'">'+esc(q.text)+'</textarea></div>'+
-        '<div class="ad-field"><label>Topic</label><input id="admApE_topic_'+id+'" value="'+esc(q.topic || '')+'"></div>'+
-        (isT
-          ? '<div class="ad-field"><label>Reference answer</label><textarea id="admApE_expected_'+id+'">'+esc(q.expected || '')+'</textarea></div>'+
-            '<div class="ad-field"><label>Maximum mark</label><input id="admApE_max_'+id+'" type="number" value="'+esc(q.maxMark)+'"></div>'
-          : '<div class="ad-field"><label>Options (one per line)</label><textarea id="admApE_opts_'+id+'">'+esc((q.options || []).join('\n'))+'</textarea></div>'+
-            '<div class="ad-field"><label>Correct option (1 = first line)</label><input id="admApE_ans_'+id+'" type="number" value="'+(Number(q.answer) + 1)+'"></div>')+
-        '<div class="ad-field"><label>Explanation</label><textarea id="admApE_expl_'+id+'">'+esc(q.explanation || '')+'</textarea></div>'+
-        '<div class="ac-btns"><button class="ad-btn pri" onclick="admApSaveApprove(\''+id+'\')">Save and approve</button><button class="ad-btn" onclick="admApSetMode(\''+id+'\',\'\')">Cancel</button></div>';
-    } else if(mode === 'return'){
-      actions = '<div class="ad-field"><label>Why is it being returned? (3 to 300 characters; the tutor reads this)</label><textarea id="admApR_'+id+'"></textarea></div>'+
-        '<div class="ac-btns"><button class="ad-btn danger" onclick="admApReturn(\''+id+'\')">Return to tutor</button><button class="ad-btn" onclick="admApSetMode(\''+id+'\',\'\')">Cancel</button></div>';
-    } else {
-      actions = '<div class="ac-btns"><button class="ad-btn pri" onclick="admApApprove(\''+id+'\')">Approve</button>'+
-        '<button class="ad-btn" onclick="admApSetMode(\''+id+'\',\'edit\')">Edit then approve</button>'+
-        '<button class="ad-btn danger" onclick="admApSetMode(\''+id+'\',\'return\')">Return</button></div>';
-    }
-    return '<div class="ad-card">'+top+body+actions+batchBtn+'</div>';
-  }).join('');
-}
-function admApSetMode(id, mode){
-  if(mode) admApMode[id] = mode; else delete admApMode[id];
-  admApRender();
-}
-function admApDone(msg){
-  toast(msg);
-  admApBusy = false;
-  return admApLoad();
-}
-function admApFail(err, fallback){
-  admApBusy = false;
-  toast((err && err.message) || fallback);
-}
-function admApApprove(id){
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.approveQuestion(Number(id)).then(function(){ delete admApMode[id]; admApDone('Approved. Students can now see it.'); },
-    function(err){ admApFail(err, 'Could not approve that question.'); });
-}
-function admApVal(id){ var el = document.getElementById(id); return el ? String(el.value == null ? '' : el.value) : ''; }
-function admApSaveApprove(id){
-  var q = admApCache.filter(function(x){ return String(x.id) === String(id); })[0];
-  if(!q) return;
-  var edit = { text: admApVal('admApE_text_'+id), topic: admApVal('admApE_topic_'+id), explanation: admApVal('admApE_expl_'+id) };
-  if(q.kind === 'theory'){
-    edit.expected = admApVal('admApE_expected_'+id);
-    edit.maxMark = Number(admApVal('admApE_max_'+id));
-  } else {
-    edit.options = admApVal('admApE_opts_'+id).split('\n').map(function(o){ return o.trim(); }).filter(function(o){ return o; });
-    edit.answer = Number(admApVal('admApE_ans_'+id)) - 1;
-  }
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.approveQuestion(Number(id), edit).then(function(){ delete admApMode[id]; admApDone('Saved and approved.'); },
-    function(err){ admApFail(err, 'Could not save that question.'); });
-}
-function admApReturn(id){
-  var why = admApVal('admApR_'+id).trim();
-  if(why.length < GOC.core.RETURN_REASON_MIN){ toast('Say why it is being returned (at least ' + GOC.core.RETURN_REASON_MIN + ' characters).'); return; }
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.returnQuestion(Number(id), why).then(function(){ delete admApMode[id]; admApDone('Returned to the tutor with your reason.'); },
-    function(err){ admApFail(err, 'Could not return that question.'); });
-}
-function admApBatch(batch, n){
-  if(!confirm('Approve all ' + n + ' questions from this import? Students will see them straight away.')) return;
-  if(admApBusy) return; admApBusy = true;
-  GOC.api.approveBatch(batch).then(function(r){
-    admApDone('Approved ' + ((r && r.approved) || 0) + ' questions' + (r && r.skipped ? ' (' + r.skipped + ' left alone)' : '') + '.');
-  }, function(err){ admApFail(err, 'Could not approve that import.'); });
-}
 
 function admCreateCohort(){
   var nameEl = document.getElementById('admCohName');
@@ -6347,120 +5896,7 @@ function admUploadResource(){
   });
 }
 
-function admVideoFilePicked(input){
-  var label = document.getElementById('admVidFileLabel');
-  if(!label) return;
 
-  var file = input && input.files && input.files[0];
-
-  if(!file){
-    label.textContent = 'Choose an MP4 file (optional)';
-    return;
-  }
-
-  label.textContent = file.name + ' · ' + Math.round(file.size / 1024 / 1024 * 10) / 10 + ' MB';
-}
-
-function admUploadVideo(){
-  var titleEl = document.getElementById('admVidTitle');
-  var typeEl = document.getElementById('admVidType');
-  var tutorEl = document.getElementById('admVidTutor');
-  var durationEl = document.getElementById('admVidDuration');
-  var fileEl = document.getElementById('admVidFile');
-  var linkEl = document.getElementById('admVidLink');
-  var btn = document.getElementById('admVidUploadBtn');
-  var status = document.getElementById('admVidStatus');
-
-  var title = titleEl ? String(titleEl.value || '').trim() : '';
-  var type = typeEl ? String(typeEl.value || 'lesson').trim() : 'lesson';
-  var tutor = tutorEl ? String(tutorEl.value || '').trim() : '';
-  var duration = durationEl ? String(durationEl.value || '').trim() : '';
-  var file = fileEl && fileEl.files ? fileEl.files[0] : null;
-  var link = linkEl ? String(linkEl.value || '').trim() : '';
-
-  if(!title){
-    toast('Enter a video title first.');
-    return;
-  }
-
-  if(!admSubj){
-    toast('Select a subject first.');
-    return;
-  }
-
-  if(!tutor){
-    toast('Enter the tutor / instructor name.');
-    return;
-  }
-
-  if(!duration){
-    toast('Enter the video duration.');
-    return;
-  }
-
-  if(!file && !link){
-    toast('Choose an MP4 file or paste a link.');
-    return;
-  }
-
-  if(file && file.size > 50 * 1024 * 1024){
-    toast('The video file must not exceed 50 MB.');
-    return;
-  }
-
-  if(link && !/^https?:\/\//i.test(link)){
-    toast('The link must start with http:// or https://');
-    return;
-  }
-
-  var form = new FormData();
-  form.append('title', title);
-  form.append('subject', admSubj);
-  form.append('type', type);
-  form.append('tutor', tutor);
-  form.append('duration', duration);
-  form.append('externalUrl', link);
-  if(file) form.append('file', file);
-
-  if(btn){
-    btn.disabled = true;
-    btn.textContent = 'Uploading…';
-  }
-
-  if(status){
-    status.textContent = file ? ('Uploading ' + file.name + '…') : 'Saving link…';
-  }
-
-  GOC.api.uploadVideo(form).then(function(result){
-    if(status){
-      status.textContent = 'Added successfully. The video is saved as a draft — publish it below to make it visible to students.';
-    }
-
-    toast('Video added successfully.');
-
-    if(titleEl) titleEl.value = '';
-    if(tutorEl) tutorEl.value = '';
-    if(durationEl) durationEl.value = '';
-    if(linkEl) linkEl.value = '';
-    if(fileEl) fileEl.value = '';
-
-    var label = document.getElementById('admVidFileLabel');
-    if(label) label.textContent = 'Choose an MP4 file (optional)';
-
-    admLoadVideos();
-  }, function(err){
-    if(status){
-      status.textContent = err.message || 'The video could not be added.';
-    }
-
-    toast(err.message || 'Video upload failed.');
-  }).then(function(){
-    if(btn){
-      btn.disabled = false;
-      btn.textContent = 'Add video';
-    }
-  });
-}
 
 var admNSelected = {};   // ids checked in the notes list, for bulk delete
 
@@ -7317,6 +6753,17 @@ function admQRender(){
   });
   host.innerHTML = out;
 }
+/* Tutor questions go straight into the Question Bank, live (final cleanup,
+   18 Nov 2026 — no approval or publish step). A record still carrying a
+   'pending' or 'returned' status from the retired approval process is kept
+   as stored and is not served to students; the tag says so plainly. Its tutor
+   can edit and save it, which makes it live. */
+function admQStatusTag(q){
+  var st = GOC.core.questionStatus(q);
+  if(st === 'live') return '';
+  return '<span class="ad-tag r">Not shown to students · held from the retired approval step'
+    + (q.addedByName ? ' · ' + esc(q.addedByName) : '') + '</span>';
+}
 function admQCardHTML(q){
   var live = q.active !== false;
   var body;
@@ -7333,12 +6780,14 @@ function admQCardHTML(q){
     + ' onchange="admQToggleSelect(' + esc(q.id) + ', this.checked)"' + (admQSelected[q.id] ? ' checked' : '') + '>'
     + '<code>#' + esc(q.id) + '</code>'
     + '<span class="ad-tag ' + (live ? 'g' : 'r') + '">' + (live ? 'Active' : 'Inactive') + '</span>'
+    + admQStatusTag(q)
     + '<code>' + esc(q.difficulty || 'medium') + '</code>'
     + (q.section === 'practice' && q.year ? '<code>' + esc(q.year) + '</code>' : '')
     + (q.topic ? '<code>' + esc(q.topic) + '</code>' : '')
     + '</div><div class="qt">' + mth(q.text, {breaks:true}) + '</div>' + body
     + (q.explanation ? '<div class="qm">Explanation: ' + mth(q.explanation, {breaks:true}) + '</div>' : '')
-    + '<div class="ad-actions"><button class="ad-btn" onclick="admQEditQ(' + esc(q.id) + ')">Edit '
+    + '<div class="ad-actions">'
+    + '<button class="ad-btn" onclick="admQEditQ(' + esc(q.id) + ')">Edit '
     + (q.kind === 'theory' ? '' : '/ answer') + '</button>'
     + '<button class="ad-btn" onclick="admQToggle(' + esc(q.id) + ',' + (live ? 'false' : 'true') + ')">'
     + (live ? 'Deactivate' : 'Activate') + '</button>'
@@ -7938,7 +7387,22 @@ function mathHelp(){
     + out + '</div>';
 }
 
-/* ================= TIMETABLE ================= */
+/* ================= STUDY PLAN — PLANNER MODEL (no interface) =================
+   The standalone Timetable screen, its week strip, day view, "Add a study
+   block" form and every entry point to it were retired in the clean sweep
+   (Phase 2, 18 Nov 2026). The selected Study Plan will be designed and built
+   at its own page-design stage. Until then only this DOM-free planner model
+   is kept, so that stage starts from the same rules:
+     week / dayKeys / dayNums / curDay  the Mon-Sun week a plan is laid out on
+     loadUpcomingClasses()              fills `week` from GET /api/classes (live
+                                        classes, with Zoom link + lock state)
+     dayBlocks(key)                     a day's blocks, limited to own papers
+     addStudyBlock(key, ...)            adds a student's own study block
+     timeInputTo12 / blockSortKey /
+     sortDayBlocks                      the planner's time-label rules
+   Nothing here touches the page and nothing here runs at boot. Student study
+   blocks were never persisted (in-memory only), so there is no stored planning
+   data; live-class records stay in the liveclasses collection, untouched. */
 var week = {
   Mon:{label:'Monday', blocks:[]},
   Tue:{label:'Tuesday', blocks:[]},
@@ -7950,7 +7414,7 @@ var week = {
 };
 var dayKeys = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 /* The strip always shows the current Mon-Sun week, so the prototype never looks
-   stale. BACKEND: the real week should come from the server with the timetable. */
+   stale. BACKEND: the real week should come from the server with the plan. */
 var dayNums = (function(){
   var t = new Date(), dow = t.getDay();            // 0 = Sunday
   var mon = new Date(t.getFullYear(), t.getMonth(), t.getDate() - (dow === 0 ? 6 : dow - 1));
@@ -7963,10 +7427,7 @@ var dayNums = (function(){
 })();
 var curDay = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
 
-/* Real classes replace the hardcoded `week` above once loaded. Kept as the
-   honest fallback for a brand-new deployment (or an academy with nothing
-   scheduled yet) — same "keep the demo data only when the server returns
-   nothing real" rule loadPublishedResources()/loadPublishedVideos() use. */
+/* Real classes replace the empty `week` above once loaded. */
 function loadUpcomingClasses(){
   if(!GOC.api || !GOC.api.listUpcomingClasses) return;
 
@@ -7982,7 +7443,6 @@ function loadUpcomingClasses(){
         Sat:{label:'Saturday', blocks:[]},
         Sun:{label:'Sunday', blocks:[]}
       };
-      buildWeek();
       return;
     }
 
@@ -8011,71 +7471,31 @@ function loadUpcomingClasses(){
     });
 
     week = byDay;
-    buildWeek();
   }, function(err){
     console.warn('[goc] Could not load upcoming classes:', err && err.message);
   });
 }
 
-function buildWeek(){
-  var strip = document.getElementById('weekStrip');
-  strip.innerHTML = '';
-  dayKeys.forEach(function(k,i){
-    var b = document.createElement('button');
-    b.className = 'wday' + (k===curDay?' on':'');
-    b.innerHTML = '<div class="d">'+k+'</div><div class="n">'+dayNums[i]+'</div>';
-    b.onclick = function(){ curDay=k; buildWeek(); renderDay(); };
-    strip.appendChild(b);
-  });
-  renderDay();
-}
-/* The timetable is the student's own week: a block for a paper they do not sit
-   is not their study block. CBT, Review and Revision belong to everyone, which
-   studiesSubject() already allows because they are not subjects. */
 function dayBlocks(key){
   var day = week[key];
   if(!day) return [];
   return day.blocks.filter(function(bl){ return bl.rest || studiesSubject(bl.subj); });
 }
-function renderDay(){
-  var day = week[curDay];
-  var blocks = dayBlocks(curDay);
-  document.getElementById('ttDayLabel').textContent = day.label;
-  var real = blocks.filter(function(x){return !x.rest;});
-  document.getElementById('ttDaySummary').textContent = real.length+' study block'+(real.length!==1?'s':'')+' planned';
-  var host = document.getElementById('ttBlocks');
-  host.innerHTML = '';
-  if(!blocks.length){
-    var e = document.createElement('div');
-    e.className = 'rest';
-    e.innerHTML = 'Nothing scheduled for your combination today';
-    host.appendChild(e);
-    return;
-  }
-  blocks.forEach(function(bl){
-    if(bl.rest){
-      var r = document.createElement('div');
-      r.className='rest';
-      r.innerHTML='🌙 Rest & recharge — you earned it';
-      host.appendChild(r); return;
-    }
-    var d = document.createElement('div');
-    d.className='tt-block';
-    d.innerHTML =
-      '<div class="tt-bar" style="background:'+bl.color+'"></div>'+
-      '<div class="tt-time">'+esc(bl.t)+'</div>'+
-      '<div class="tt-main"><h4>'+esc(bl.topic)+'</h4><p>'+esc(bl.dur)+' · '+esc(bl.subj)+'</p>'+
-      '<span class="tt-tag" style="background:'+hexA(bl.color)+';color:'+bl.color+'">'+esc(bl.subj)+'</span>'+
-      (bl.joinLocked ? '<span class="tt-tag" style="background:#f3f4f6;color:#6b7280;margin-left:6px">Join link unavailable</span>' : '')+'</div>';
-    // A real class carries its own Zoom link — open it the same way a
-    // video's externalUrl already does. A demo block has no link, so it
-    // still just names itself.
-    d.onclick=function(){
-      if(bl.joinLocked){ toast('Live classes are not available right now.'); }
-      else if(bl.zoomLink){ window.open(bl.zoomLink, '_blank'); } else { toast(bl.subj+' · '+bl.topic); }
-    };
-    host.appendChild(d);
-  });
+/* Adds a student's own study block to `week` — the data step of the retired
+   "Add a study block" form, separated from its interface. Returns the block,
+   or null when the input is not a usable block. Not persisted. */
+function addStudyBlock(key, hhmm, mins, subj, topic){
+  if(!week[key] || !hhmm || !(mins > 0) || !String(topic || '').trim()) return null;
+  var block = {
+    t: timeInputTo12(hhmm),
+    dur: mins % 60 === 0 ? (mins / 60) + 'h' : mins + 'm',
+    subj: subj,
+    topic: String(topic).trim(),
+    color: (SUBJECT_META[subj] || {}).color || '#334155'
+  };
+  week[key].blocks.push(block);
+  sortDayBlocks(key);
+  return block;
 }
 function hexA(hex){
   var h=hex.replace('#','');
@@ -8083,64 +7503,9 @@ function hexA(hex){
   return 'rgba('+r+','+g+','+b+',0.10)';
 }
 
-/* ================= ADD STUDY BLOCK (student's own session) =================
-   The button in the markup had no onclick at all, so tapping it did nothing —
-   that was the bug. This wires it up: a small inline form that adds a block
-   to whichever day is currently open in the strip. Pushed straight into the
-   in-memory `week` object alongside real classes, so — same as everything
-   else in this file (see the header note) — it lasts for this session and
-   resets on refresh. BACKEND: once a student's own blocks should persist and
-   sync across devices, save it through the API instead of into `week`
-   directly, the same way a scheduled class already round-trips. */
-function toggleAddBlock(){
-  var form = document.getElementById('ttAddForm');
-  var opening = form.style.display === 'none' || !form.style.display;
-  if(!opening){ form.style.display = 'none'; return; }
-  populateAddBlockSubjects();
-  document.getElementById('ttNewTime').value = '';
-  document.getElementById('ttNewDuration').value = '30';
-  document.getElementById('ttNewTopic').value = '';
-  form.style.display = 'block';
-  document.getElementById('ttNewTime').focus();
-}
-/* Only the papers this student actually sits, plus the shared, non-subject
-   slots studiesSubject() already treats as belonging to everyone. */
-function populateAddBlockSubjects(){
-  var sel = document.getElementById('ttNewSubject');
-  var opts = orderedSubjects().concat(['Revision', 'Review']);
-  sel.innerHTML = opts.map(function(s){ return '<option value="'+esc(s)+'">'+esc(s)+'</option>'; }).join('');
-}
-function submitStudyBlock(){
-  var timeEl = document.getElementById('ttNewTime');
-  var durEl = document.getElementById('ttNewDuration');
-  var subjEl = document.getElementById('ttNewSubject');
-  var topicEl = document.getElementById('ttNewTopic');
-
-  if(!timeEl.value){ toast('Pick a time for this block.'); timeEl.focus(); return; }
-  var mins = parseInt(durEl.value, 10);
-  if(!mins || mins <= 0){ toast('Enter a duration in minutes.'); durEl.focus(); return; }
-  var topic = topicEl.value.trim();
-  if(!topic){ toast('Give this block a topic to study.'); topicEl.focus(); return; }
-
-  var subj = subjEl.value;
-  var color = (SUBJECT_META[subj] || {}).color || '#334155';
-
-  week[curDay].blocks.push({
-    t: timeInputTo12(timeEl.value),
-    dur: mins % 60 === 0 ? (mins / 60) + 'h' : mins + 'm',
-    subj: subj,
-    topic: topic,
-    color: color
-  });
-  sortDayBlocks(curDay);
-
-  toggleAddBlock();
-  renderDay();
-  toast('Study block added to ' + week[curDay].label + '.');
-}
-/* Matches the "H:MM, no am/pm" label the rest of the timetable already uses
-   (see loadUpcomingClasses above), so a student-added block looks identical
-   to a real class. */
+/* Matches the "H:MM, no am/pm" label the planner already uses (see
+   loadUpcomingClasses above), so a student-added block looks identical to a
+   real class. */
 function timeInputTo12(hhmm){
   var p = hhmm.split(':');
   var h = parseInt(p[0], 10) % 12; if(h === 0) h = 12;
@@ -8150,7 +7515,7 @@ function timeInputTo12(hhmm){
    classes grouped in the chronological order the server returns them in), so
    this only needs to place ONE new block correctly among them. The label has
    no am/pm marker, so reading it back to minutes is a heuristic, not a fact:
-   it assumes the 1–6 o'clock hours on this timetable are always afternoon,
+   it assumes the 1–6 o'clock hours in this planner are always afternoon,
    which holds for every block this app currently produces (school hours run
    from morning classes into evening revision, never past-midnight study). */
 function blockSortKey(label){
@@ -8248,7 +7613,7 @@ function openStudySet(mode, subject, past){
     var live = suSubjects().filter(function(e){ return e.questions > 0 && (!suPast || (e.years || []).length); });
     if(!live.length){
       toast(suPast ? 'No past questions have been published for your papers yet — Practice is still available'
-                   : 'No questions have been published for your papers yet — your Web Test is still available');
+                   : 'No questions have been published for your papers yet');
       go('study');
       return;
     }
@@ -8270,8 +7635,204 @@ function openStudySet(mode, subject, past){
    Nothing else is advertised and then withheld: every tile on the Study screen
    opens something real, so there is no "coming soon" left to say. */
 function openCBT(){ openStudySet('cbt'); }
-function openPractice(){ openStudySet('practice'); }
+function openPractice(){ go('practicehub'); }
 function openPastQuestions(){ openStudySet('practice', null, true); }
+
+/* ================================================================
+   PRACTICE HUB  (#practicehub)
+   Hub tabs: Practice | Revision | My Mistakes | Bookmarks
+   ================================================================ */
+var phActiveTab = 'practice';
+
+function phOpen(){
+  phPopulateSubjects();
+  /* Topic lists come from the real, per-subject question bank (the same
+     catalogue the Study screen uses) — fetch/cache it, then repaint the
+     Topic dropdown for whatever subject is currently selected. */
+  loadStudyCat().then(function(){
+    var sel = document.getElementById('phSubjSel');
+    phOnSubjChange(sel ? sel.value : '');
+  }).catch(function(){});
+  phSwitchTab(phActiveTab, true);
+  refreshPracHistory();
+  refreshBookmarks();
+  phRenderRevisionProgress();
+  if(typeof refreshMistakes === 'function') refreshMistakes();
+}
+
+/* Switch hub tabs */
+function phSwitchTab(tab, silent){
+  phActiveTab = tab;
+  /* update tab strip */
+  document.querySelectorAll('#phTabs .ph-tab').forEach(function(b){
+    var on = b.getAttribute('data-ph') === tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  /* show/hide panes */
+  document.querySelectorAll('#practicehub .ph-pane').forEach(function(p){
+    var match = p.id === 'phPane-' + tab;
+    p.classList.toggle('active', match);
+    p.hidden = !match;
+  });
+  /* refresh pane data on switch */
+  if(!silent){
+    if(tab === 'practice') { phRenderRecent(); }
+    if(tab === 'bookmarks') { refreshBookmarks(); phSyncBmList(); }
+    if(tab === 'mistakes') { if(typeof refreshMistakes === 'function') refreshMistakes(); phSyncMkList(); }
+  }
+}
+
+/* Copy rendered content from study-hub elements into hub panes */
+function phSyncBmList(){
+  var src = document.getElementById('bmList');
+  var dst = document.getElementById('phBmList');
+  if(src && dst) dst.innerHTML = src.innerHTML;
+}
+function phSyncMkList(){
+  var src = document.getElementById('mkList');
+  var dst = document.getElementById('phMkList');
+  if(src && dst) dst.innerHTML = src.innerHTML;
+}
+
+/* Populate Subject dropdown from mySubjectList */
+function phPopulateSubjects(){
+  var sel = document.getElementById('phSubjSel');
+  if(!sel) return;
+  var subs = mySubjectList();
+  sel.innerHTML = '<option value="">All Subjects (Mixed)</option>' +
+    subs.map(function(s){ return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
+  phOnSubjChange(sel.value);
+}
+
+/* On subject change, update topic dropdown. Topics come from this
+   student's own study catalogue (GET /api/me/study, cached in studyCat) —
+   the same real, per-subject breakdown of the live question bank the Study
+   screen uses — never a hardcoded list, so a topic only ever shows here if
+   there are actual published questions in it. */
+function phOnSubjChange(subj){
+  var topicField = document.getElementById('phTopicField');
+  var topicSel = document.getElementById('phTopicSel');
+  if(!topicSel) return;
+  if(!subj){
+    topicSel.innerHTML = '<option value="">All Topics</option>';
+    if(topicField) topicField.style.display = 'none';
+    return;
+  }
+  if(topicField) topicField.style.display = '';
+  var topics = [];
+  try {
+    var entries = (studyCat && studyCat.subjects) || [];
+    var found = null;
+    entries.forEach(function(e){ if(e.subject === subj) found = e; });
+    if(found && Array.isArray(found.topics)) topics = found.topics;
+  } catch(e){}
+  topicSel.innerHTML = '<option value="">All Topics</option>' +
+    topics.map(function(t){
+      var label = t.topic + (t.questions ? ' (' + t.questions + ')' : '');
+      return '<option value="' + esc(t.topic) + '">' + esc(label) + '</option>';
+    }).join('');
+  if(!topics.length && topicField) topicField.style.display = 'none';
+}
+
+/* Start Practice button handler */
+function phStartPractice(){
+  var subj  = (document.getElementById('phSubjSel')  || {}).value || '';
+  var topic = (document.getElementById('phTopicSel') || {}).value || '';
+  var count = Number((document.getElementById('phCountSel') || {}).value) || 20;
+  /* Set up the study-set state that openStudySet reads */
+  suSubj = subj ? canonSubject(subj) : '';
+  suPick = {};
+  if(subj && topic){
+    suPick[topic] = true;
+  } else if(subj){
+    suTopicList().forEach(function(t){ suPick[t.topic] = true; });
+  }
+  suCount = count;
+  /* Route into the existing practice flow */
+  openStudySet('practice', subj || null);
+}
+
+/* Quick-launch shortcuts */
+function phQuickLaunch(mode){
+  if(mode === 'topic'){
+    /* switch to Practice tab, show subject+topic select */
+    phSwitchTab('practice');
+    var subSel = document.getElementById('phSubjSel');
+    var subs = mySubjectList();
+    if(subSel && subs.length) {
+      subSel.value = subs[0];
+      phOnSubjChange(subs[0]);
+    }
+    var el = document.querySelector('.ph-start-card');
+    if(el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+  } else if(mode === 'subject'){
+    phSwitchTab('practice');
+    var el2 = document.querySelector('.ph-start-card');
+    if(el2) el2.scrollIntoView({behavior:'smooth', block:'nearest'});
+  } else if(mode === 'mixed'){
+    suSubj = ''; suPick = {}; suCount = 20;
+    openStudySet('practice', null);
+  } else if(mode === 'revision'){
+    phSwitchTab('revision');
+  }
+}
+
+/* Render recent practice list from pracHistCache */
+/* Revision Progress: a real stat from this student's own spaced-repetition
+   queue (GET /api/me/review) — never a placeholder. "Mastered" = mistakes
+   the SR schedule has retired for good; "due" + "upcoming" are mistakes still
+   being worked through. The card hides itself when the student has no
+   mistakes on record at all, rather than show a hollow 0-of-0. */
+function phRenderRevisionProgress(){
+  var card = document.getElementById('phRevProgCard');
+  if(!card || !GOC || !GOC.api || typeof GOC.api.listReview !== 'function') return;
+  GOC.api.listReview().then(function(r){
+    var q = (r && r.review) || {};
+    var mastered = Number(q.mastered) || 0;
+    var due = Number(q.dueCount) || 0;
+    var upcoming = Number(q.upcoming) || 0;
+    var total = mastered + due + upcoming;
+    if(!total){ card.hidden = true; return; }
+    card.hidden = false;
+    var pct = Math.round((mastered / total) * 100);
+    var CIRC = 251.2; /* 2 * PI * r(40), matches the SVG circle in index.html */
+    var arc = document.getElementById('phRevRingArc');
+    if(arc) arc.setAttribute('stroke-dashoffset', String(CIRC - (CIRC * pct / 100)));
+    var pctEl = document.getElementById('phRevRingPct');
+    if(pctEl) pctEl.textContent = pct + '%';
+    var numEl = document.getElementById('phRevProgNum');
+    if(numEl) numEl.textContent = mastered + ' of ' + total;
+  }).catch(function(){ /* leave the card hidden on any failure */ });
+}
+
+function phRenderRecent(){
+  var host = document.getElementById('phRecentList');
+  if(!host) return;
+  var list = pracHistCache;
+  if(!list || !list.length){
+    host.innerHTML = '<div class="wt-none">No practice runs yet. Start one above and it will appear here.</div>';
+    return;
+  }
+  host.innerHTML = list.slice(0, 5).map(function(r, i){
+    var pct = r.percent || 0;
+    var scoreClass = pct >= 70 ? 'good' : pct >= 40 ? 'mid' : 'bad';
+    var meta = (SUBJECT_META[r.subject] || {});
+    var color = meta.color || '#6B7280';
+    var ab = meta.ab || String(r.subject || '?').substr(0,2);
+    var when = wtWhen(r.ts);
+    var mode = r.mode === 'practice' ? 'Practice' : 'CBT';
+    return '<button class="ph-row" onclick="reopenPrac(' + i + ')">' +
+      '<div class="ph-row-ico" style="background:' + color + '">' + esc(ab) + '</div>' +
+      '<div class="ph-row-info">' +
+        '<div class="ph-row-name">' + esc(r.subject || 'Practice') + '</div>' +
+        '<div class="ph-row-meta">' + mode + ' · ' + r.correct + '/' + r.total + ' · ' + esc(when) + '</div>' +
+      '</div>' +
+      '<span class="ph-row-score ' + scoreClass + '">' + pct + '%</span>' +
+      '<svg class="ph-row-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>' +
+      '</button>';
+  }).join('');
+}
 
 function suSetSubject(s){
   if(s === suSubj) return;
@@ -8858,23 +8419,26 @@ function savePracResult(res){
 }
 function renderPracHistory(){
   var host = document.getElementById('pracHist');
-  if(!host) return;
-  var list = pracHistCache;
-  if(!list.length){
-    host.innerHTML = '<div class="wt-none">No practice or CBT runs yet — finish one and it will wait here for you to review, even after you log out.</div>';
-    return;
+  if(host){
+    var list = pracHistCache;
+    if(!list.length){
+      host.innerHTML = '<div class="wt-none">No practice or CBT runs yet — finish one and it will wait here for you to review, even after you log out.</div>';
+    } else {
+      host.innerHTML = list.map(function(r, i){
+        var when = wtWhen(r.ts);
+        var band = r.percent >= 70 ? '#15803D' : r.percent >= 40 ? '#E08600' : '#DC2626';
+        var kind = r.mode === 'practice' ? 'Practice' : 'CBT set-up';
+        return '<button class="ph-row" onclick="reopenPrac(' + i + ')">' +
+          '<span class="ph-dot" style="background:' + band + '"></span>' +
+          '<span class="ph-main"><b>' + esc(r.subject || 'Practice') + '</b>' +
+          '<s>' + kind + ' · ' + r.correct + '/' + r.total + ' · ' + esc(when) + '</s></span>' +
+          '<span class="ph-score" style="color:' + band + '">' + r.percent + '%</span>' +
+          '<svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>';
+      }).join('');
+    }
   }
-  host.innerHTML = list.map(function(r, i){
-    var when = wtWhen(r.ts);
-    var band = r.percent >= 70 ? '#15803D' : r.percent >= 40 ? '#E08600' : '#DC2626';
-    var kind = r.mode === 'practice' ? 'Practice' : 'CBT set-up';
-    return '<button class="ph-row" onclick="reopenPrac(' + i + ')">' +
-      '<span class="ph-dot" style="background:' + band + '"></span>' +
-      '<span class="ph-main"><b>' + esc(r.subject || 'Practice') + '</b>' +
-      '<s>' + kind + ' · ' + r.correct + '/' + r.total + ' · ' + esc(when) + '</s></span>' +
-      '<span class="ph-score" style="color:' + band + '">' + r.percent + '%</span>' +
-      '<svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>';
-  }).join('');
+  /* also refresh the hub pane if it exists */
+  if(typeof phRenderRecent === 'function') phRenderRecent();
 }
 /* ================= BOOKMARKS (Phase 1, part 2) =================
    A student saves a question to revisit. The server holds the list per Scholar
@@ -9497,6 +9061,8 @@ function openNote(id){
   rdNote = n;
   go('lesson');
   renderLesson();
+  /* Record a "first read" (or update "last read") timestamp for this lesson. */
+  GOC.api.recordReading({ noteId: String(n.id) });
   var wm = document.getElementById('wmLesson');
   if(wm && !wm.dataset.done){
     /* The watermark carries whoever is signed in, read off the identity strip
@@ -9530,35 +9096,38 @@ function renderLesson(){
              '</b><span>' + (x.locked ? 'Locked · GOC' : x.minutes + ' min read') + '</span></span></button>';
     }).join('') : '') +
     '<div class="spacer"></div>';
+  /* Auto-complete: fire done=true when the student scrolls the last paragraph
+     into view, using IntersectionObserver so there is no polling. */
+  if(window.IntersectionObserver){
+    var allP = body.querySelectorAll('p');
+    var lastP = allP[allP.length - 1];
+    if(lastP && !rdNote._doneObserved){
+      rdNote._doneObserved = true;
+      var obs = new IntersectionObserver(function(entries, observer){
+        if(entries[0].isIntersecting){
+          observer.disconnect();
+          GOC.api.recordReading({ noteId: String(rdNote.id), done: true });
+        }
+      }, { threshold: 0.9 });
+      obs.observe(lastP);
+    }
+  }
 }
 /* The bottom bar of the reader: practise the very topic just read. */
-/* ================= WEB TEST (Priority 3) =================
-   A paper's questions, its clock and its marking all belong to the backend.
-   This module draws what GOC.api reports and posts back only what the student
-   typed or picked — so a correct answer is never in the page before marking,
-   and a score is never writable from here. */
-var wtCatalogue = null;   // { subjects:[], tests:[{period,section,subject,questions,durationSec}] }
-var wtPaper = null;       // the paper in progress, exactly as startTest returned it
-var wtGroups = null;      // the papers inside an objective sitting, in served order
-var wtResp = {};          // questionId -> chosen option index, or typed answer
-var wtCur = 0;
-var wtSecs = 0, wtTimerId = null, wtBusy = false, wtArmed = false;
-var wtUntimed = false, wtOpenedAt = 0;
+/* ================= JAMB CBT START (dormant) + RESULT HELPERS =================
+   The Web Test catalogue (#webtest), its Objective and Theory sittings, their
+   runner (#wtRun), its clock, palette and submission were retired in the clean
+   sweep (Phase 2, 18 Nov 2026). What is left here belongs to the selected JAMB
+   CBT and to the shared result screen (#wtResult):
+     jambStart()      opens a JAMB sitting (GOC.api.startTest section 'jamb') in
+                      the JAMB CBT room (#cbt, jambModeOn). DORMANT by the product
+                      owner's decision: no student interface calls it until JAMB
+                      CBT's own page is designed. The server's readiness gate
+                      (core.jambOffered) still decides whether a sitting opens.
+     label helpers    used by the result screen, Results and the dashboard.
+   A paper's questions, its clock and its marking all belong to the backend. */
 var OPT_KEYS = ['A','B','C','D','E','F','G','H'];
 
-/* One entry per session the website offers. The JAMB-oriented session was
-   retired from the student site in Part Two; the server and the question bank
-   still hold it (no data is deleted), and a sitting saved before the change can
-   still be resumed and submitted, but no new one can be started here. How a
-   paper is marked is the academy's business, not the student's. */
-var WT_SECTIONS = [
-  { key:'theory', title:'Theory session', colour:'#0E7490',
-    note:'A written paper in each subject that has one, sat without a clock. Write your answers in full and submit when you are ready.',
-    icon:'<path d="M4 20h16"/><path d="M6.2 16.4L16.9 5.7a2 2 0 112.8 2.8L9 19.2l-4.3.8.5-3.6z"/>' },
-  { key:'objective', title:'Objective session', colour:'#DC2626',
-    note:'One sitting of your whole combination, on a clock set by the academy. Move between your papers freely until you submit.',
-    icon:'<circle cx="6.5" cy="8" r="2.4"/><circle cx="6.5" cy="16" r="2.4"/><path d="M12 8h8M12 16h8"/>' }
-];
 function wtSectionLabel(s){ return s === 'jamb' ? 'JAMB-oriented' : (s === 'theory' ? 'Theory' : (s === 'practice' ? 'Practice only' : 'Objective')); }
 /* There is one test. Every paper — and every record of one, however it was
    stored — reads as that test. */
@@ -9575,146 +9144,6 @@ function wtWhen(ms){
   return d.getDate() + ' ' + mon + ' · ' + (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
 }
 
-function openWebTest(){ go('webtest'); wtLoad(); }
-function wtLoad(){
-  var host = document.getElementById('wtSections');
-  if(host && !wtCatalogue) host.innerHTML = '<div class="wt-none">Loading your papers…</div>';
-  GOC.api.listMyTests().then(function(r){
-    wtCatalogue = { subjects: (r && r.subjects) || [], tests: (r && r.tests) || [] };
-    renderWebTest();
-  }, function(err){
-    wtCatalogue = null;
-    if(host) host.innerHTML = '<div class="wt-none">' + esc(err.message || 'Your papers are not available right now.') + '</div>';
-  });
-  wtLoadHistory();
-}
-/* The hub only ever lists papers in the student's own combination, because the
-   catalogue itself is built from the account's stored subjects (Priority 6). */
-function renderWebTest(){
-  jambPaintResume();
-  var host = document.getElementById('wtSections');
-  if(!host) return;
-  var lead = document.getElementById('wtLead');
-  if(lead && wtCatalogue){
-    var n = wtCatalogue.subjects.length;
-    lead.textContent = n + ' registered subject' + (n !== 1 ? 's' : '') + ' · ' + wtPeriodLabel().toLowerCase();
-  }
-  host.innerHTML = '';
-  if(!wtCatalogue){ host.innerHTML = '<div class="wt-none">Log in with your Scholar ID to sit a web test.</div>'; return; }
-  WT_SECTIONS.forEach(function(sec){
-    /* No period filter: there is one test, so every published paper for this
-       session belongs on this card however it was stored. */
-    var rows = wtCatalogue.tests.filter(function(t){ return t.section === sec.key; });
-    var card = document.createElement('div');
-    card.className = 'wt-sec' + (sec.soon ? ' soon' : '');
-    card.innerHTML = '<div class="wt-sec-top">'
-      + '<div class="wt-si" style="background:' + sec.colour + '"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">' + sec.icon + '</svg></div>'
-      + '<div class="wt-st"><h4>' + esc(sec.title) + '</h4><p>' + esc(sec.note) + '</p></div>'
-      + '</div>';
-    /* A session that is not built yet says so once, and offers no Start at all.
-       Nothing here is the control — the data layer refuses it as well. */
-    if(sec.soon){
-      var soon = document.createElement('button');
-      soon.className = 'wt-none soon';
-      soon.type = 'button';
-      soon.textContent = 'Coming soon. Sit the Objective session for a full timed sitting of your whole combination.';
-      soon.onclick = function(){ toast('The JAMB-oriented session is coming soon'); };
-      card.appendChild(soon);
-      host.appendChild(card);
-      return;
-    }
-    if(!rows.length && sec.key === 'jamb'){
-      /* Held back until the question bank is deep enough in every one of the
-         student's subjects (the server and demo driver both enforce it). */
-      var hold = document.createElement('div');
-      hold.className = 'wt-none';
-      hold.textContent = 'Coming soon. The JAMB-oriented sitting opens once its question bank is ready in all of your subjects. Sit the Objective session for a full timed sitting meanwhile.';
-      card.appendChild(hold);
-      host.appendChild(card);
-      return;
-    }
-    if(!rows.length){
-      var none = document.createElement('div');
-      none.className = 'wt-none';
-      none.textContent = 'No ' + wtSectionLabel(sec.key).toLowerCase()
-        + ' paper has been published for your subjects yet.';
-      card.appendChild(none);
-    }
-    rows.forEach(function(t, i){
-      card.appendChild(wtRowEl(t, i === 0));
-    });
-    /* A student who takes a subject with no written paper is told so plainly,
-       rather than left looking for a paper that will never appear. */
-    if(sec.key === 'theory'){
-      var off = wtNoTheorySubjects();
-      if(off.length){
-        var why = document.createElement('div');
-        why.className = 'wt-none';
-        why.textContent = off.join(' and ') + (off.length > 1 ? ' are' : ' is')
-          + ' examined in the objective sitting only, so there is no written paper to sit.';
-        card.appendChild(why);
-      }
-    }
-    host.appendChild(card);
-  });
-}
-/* Which of this student's own subjects offer no written paper. The rule lives in
-   the data layer; this only reports it. */
-function wtNoTheorySubjects(){
-  var subs = (wtCatalogue && wtCatalogue.subjects) || [];
-  return subs.filter(function(s){ return !GOC.api.rules.theoryAllowed(s); });
-}
-/* A row states what the paper actually is: how many questions, and either the
-   clock the academy set or, for a written paper, that there is no clock. The
-   objective sitting also names the papers inside it, so a student can see the
-   whole combination before pressing Start. */
-function wtRowEl(t, first){
-  var row = document.createElement('div');
-  row.className = 'wt-row' + (first ? ' first' : '');
-  var nm = document.createElement('div');
-  nm.className = 'nm';
-  var when = Number(t.durationSec) > 0 ? wtMinutes(t.durationSec) : 'no time limit';
-  var line = '<b>' + esc(t.subject) + '</b><span>' + t.questions + ' question' + (t.questions !== 1 ? 's' : '')
-    + ' · ' + esc(when) + '</span>';
-  if(t.papers && t.papers.length){
-    line += '<span class="papers">' + esc(wtPapersLine(t.papers)) + '</span>';
-  }
-  /* SIT RULES: the JAMB-oriented session is a rehearsal that may be sat again,
-     so it says how many times it has been sat. Theory and Objective just say
-     Submitted (below) — they are closed for good. */
-  var sat = Number(t.attempts) || 0;
-  if(t.repeatable && sat > 0){
-    line += '<span class="papers">Sat ' + sat + ' time' + (sat !== 1 ? 's' : '') + ' \u00b7 you can sit it again</span>';
-  }
-  if(t.locked){
-    line += '<span class="papers">Not available right now</span>';
-  }
-  nm.innerHTML = line;
-  var b = document.createElement('button');
-  b.className = 'wt-start';
-  // ONE-SIT RULE: a submitted paper never offers Start again — the backend
-  // refuses it too (see hasSubmittedAttempt), this is just the courtesy of
-  // not letting a student tap a button that can only ever fail.
-  if(t.locked){
-    b.disabled = true;
-    b.className = 'wt-start locked';
-    b.textContent = 'Locked';
-  } else if(t.completed){
-    b.disabled = true;
-    b.className = 'wt-start done';
-    b.textContent = 'Submitted';
-  } else if(state.studyExhausted){
-    b.disabled = true;
-    b.textContent = 'Window used up';
-  } else {
-    if(t.repeatable && sat > 0) b.className = 'wt-start retake';
-    b.textContent = (t.repeatable && sat > 0) ? 'Sit again' : 'Start';
-    b.onclick = function(){ wtConfirmStart(t, b); };
-  }
-  row.appendChild(nm);
-  row.appendChild(b);
-  return row;
-}
 function wtPapersLine(papers){
   var parts = [];
   papers.forEach(function(p){
@@ -9723,207 +9152,8 @@ function wtPapersLine(papers){
   return parts.join(' · ');
 }
 
-/* The record is read from the backend, never from anything this page holds, so
-   what a student sees is exactly what was stored against their Scholar ID. */
-function wtLoadHistory(){
-  var host = document.getElementById('wtHistory');
-  if(!host) return;
-  GOC.api.myResults().then(function(r){
-    var rows = (r && r.attempts) || [];
-    host.innerHTML = '';
-    if(!rows.length){
-      host.innerHTML = '<div class="wt-none">You have not submitted a web test yet.</div>';
-      return;
-    }
-    rows.slice(0, 8).forEach(function(a){
-      var marked = a.status === 'marked';
-      var pct = marked ? Math.round(Number(a.percent) || 0) : null;
-      var col = pct === null ? '#D97706' : (pct >= 70 ? '#15803D' : (pct >= 50 ? '#D97706' : '#DC2626'));
-      var b = document.createElement('button');
-      b.className = 'wt-his';
-      b.innerHTML = '<div class="score" style="background:' + col + '">' + (pct === null ? '⏳' : pct + '%') + '</div>'
-        + '<div class="nm"><b>' + esc(a.subject) + ' · ' + esc(wtSectionLabel(a.section)) + '</b>'
-        + '<span>' + esc(wtPeriodLabel()) + ' · ' + esc(wtWhen(a.submittedAt)) + ' · '
-        + (marked ? (a.score + ' / ' + a.maxScore + ' marks') : 'awaiting your result') + '</span></div>'
-        + '<svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>';
-      b.onclick = function(){ wtOpenResult(a.id); };
-      host.appendChild(b);
-    });
-  }, function(err){
-    host.innerHTML = '<div class="wt-none">' + esc(err.message || 'Your test record is not available right now.') + '</div>';
-  });
-}
-
-/* Starting a paper is a request, not a local decision: the backend checks the
-   sitting is really the student's, opens the attempt and stamps the start time.
-   The objective sitting carries the whole combination, so nothing is chosen
-   here but the moment to begin. */
-function wtStart(period, section, subject, btn){
-  if(wtBusy) return;
-  if(state.studyExhausted){ showWinddown(); return; }
-  wtBusy = true;
-  if(btn){ btn.disabled = true; btn.textContent = '…'; }
-  GOC.api.startTest({ period: period, section: section, subject: subject }).then(function(p){
-    wtBusy = false;
-    if(btn){ btn.disabled = false; btn.textContent = 'Start'; }
-    /* The JAMB-oriented sitting runs in the full CBT screen — numbered
-       questions, a navigation panel and a running clock — the same screen a
-       student-configured CBT run uses. It submits as a real, marked attempt
-       (cbtOpenPaper → submitTest → wtShowResult). The Objective and Theory
-       sittings stay on the wtRun screen below. */
-    if((p && p.section === 'jamb') || section === 'jamb'){
-      cbtOpenPaper(p);
-      return;
-    }
-    wtPaper = p;
-    wtResp = {};
-    wtCur = 0;
-    wtArmed = false;
-    wtBuildGroups();
-    /* A duration of zero is a real answer, not a missing one: the paper is sat
-       without a clock. Time is still recorded, from the moment it opened. */
-    wtUntimed = !(Number(p.durationSec) > 0);
-    wtSecs = wtUntimed ? 0 : Number(p.durationSec);
-    wtOpenedAt = Date.now();
-    go('wtRun');
-    wtPaintHead(); wtBuildNav(); wtRender();
-    if(wtUntimed) wtNoClock(); else wtStartClock();
-  }, function(err){
-    wtBusy = false;
-    if(btn){ btn.disabled = false; btn.textContent = 'Start'; }
-    toast(err.message || 'Could not start that test');
-  });
-}
-
-function wtPaintHead(){
-  var s = document.getElementById('wtRunSub');
-  if (!wtPaper) { if (s) s.textContent = '\u00a0'; return; }
-  var t = document.getElementById('wtRunTitle'), s = document.getElementById('wtRunSub');
-  if(t) t.textContent = wtPaper.subject + ' · ' + wtSectionLabel(wtPaper.section);
-  if(s){
-    var line = wtPeriodLabel() + ' · ' + wtPaper.total
-      + ' question' + (wtPaper.total !== 1 ? 's' : '') + ' · '
-      + (Number(wtPaper.durationSec) > 0 ? wtMinutes(wtPaper.durationSec) : 'no time limit');
-    if(wtPaper.papers && wtPaper.papers.length) line += ' · ' + wtPapersLine(wtPaper.papers);
-    s.textContent = line;
-  }
-  var el = document.getElementById('wtTime');
-  if(el) el.textContent = wtUntimed ? 'No limit' : mmss(wtSecs);
-}
-
-/* ---- the papers inside one objective sitting ----
-   The objective session is a single clock over the whole combination, exactly as
-   a sitting runs in the hall: a scholar may leave Physics, answer a Chemistry
-   question and come back before submitting. The groups below are derived from
-   the order the backend served the paper in — this page never decides which
-   question belongs to which subject, and never reorders them. */
-function wtBuildGroups(){
-  wtGroups = null;
-  if(!wtPaper || !wtPaper.papers || wtPaper.papers.length < 2) return;
-  var total = wtPaper.questions.length, at = 0, g = [], bad = false;
-  wtPaper.papers.forEach(function(p){
-    var n = Math.max(0, Math.round(Number(p.questions) || 0));
-    if(n === 0) return;
-    if(at + n > total){ bad = true; return; }
-    g.push({ subject: p.subject, from: at, to: at + n - 1, count: n });
-    at += n;
-  });
-  /* If the counts do not account for the paper exactly, the switcher would be
-     lying about which questions it opens — so it simply is not offered. */
-  if(bad || at !== total || g.length < 2) return;
-  wtGroups = g;
-}
-function wtGroupAt(i){
-  if(!wtGroups) return null;
-  for(var k = 0; k < wtGroups.length; k++){
-    if(i >= wtGroups[k].from && i <= wtGroups[k].to) return wtGroups[k];
-  }
-  return null;
-}
-function wtGroupDone(g){
-  var n = 0;
-  for(var i = g.from; i <= g.to; i++){ if(wtAnswered(i)) n++; }
-  return n;
-}
-/* Opening a paper lands on its first unanswered question, or on its first
-   question if it is already complete — the courtesy of turning to a page. */
-function wtOpenSubject(k){
-  var g = wtGroups && wtGroups[k];
-  if(!g) return;
-  var at = g.from;
-  for(var i = g.from; i <= g.to; i++){ if(!wtAnswered(i)){ at = i; break; } }
-  wtGo(at);
-}
-function wtPaintSubjects(){
-  var host = document.getElementById('wtSubjects');
-  if(!host) return;
-  if(!wtGroups){ host.hidden = true; host.innerHTML = ''; return; }
-  host.hidden = false;
-  host.innerHTML = '';
-  var cur = wtGroupAt(wtCur);
-  wtGroups.forEach(function(g, k){
-    var done = wtGroupDone(g);
-    var b = document.createElement('button');
-    b.className = 'wt-sub' + (g === cur ? ' cur' : '') + (done === g.count ? ' done' : '');
-    b.type = 'button';
-    b.innerHTML = '<b>' + esc(g.subject) + '</b><span>' + done + '/' + g.count + '</span>';
-    b.onclick = function(){ wtOpenSubject(k); };
-    host.appendChild(b);
-  });
-}
-function wtAnswered(i){
-  if(!wtPaper) return false;
-  var q = wtPaper.questions[i];
-  if(!q) return false;
-  var v = wtResp[q.id];
-  if(q.kind === 'theory') return typeof v === 'string' && v.replace(/\s+/g,'') !== '';
-  return v !== undefined && v !== null && v !== '';
-}
-function wtBuildNav(){
-  if(!wtPaper) return;
-  wtPaintSubjects();
-  /* Inside a sitting of several papers the panel shows the paper being sat,
-     numbered from 1 the way that subject's question paper is numbered. The
-     subject strip above moves between papers. */
-  var g = wtGroupAt(wtCur);
-  var from = g ? g.from : 0;
-  var to = g ? g.to : wtPaper.questions.length - 1;
-  var span = to - from + 1;
-  var nav = document.getElementById('wtNav');
-  if(nav){
-    nav.innerHTML = '';
-    for(var i = from; i <= to; i++){
-      (function(i){
-        var b = document.createElement('button');
-        b.className = 'qn' + (i === wtCur ? ' cur' : '') + (wtAnswered(i) ? ' ans' : '');
-        b.textContent = i - from + 1;
-        b.onclick = function(){ wtGo(i); qPanelClose(); };
-        nav.appendChild(b);
-      })(i);
-    }
-  }
-  /* The strip is a quick glance for a short paper; on a long one the numbered
-     panel above already carries the same information without 40 slivers. */
-  var prog = document.getElementById('wtProg');
-  if(prog){
-    prog.innerHTML = '';
-    if(span > 12){ prog.style.display = 'none'; }
-    else {
-      prog.style.display = 'flex';
-      for(var j = from; j <= to; j++){
-        var s = document.createElement('span');
-        s.className = j === wtCur ? 'cur' : (wtAnswered(j) ? 'on' : '');
-        prog.appendChild(s);
-      }
-    }
-  }
-
-  /* Update exam-bar label */
-  var wtLbl = document.getElementById('wtPanelLabel');
-  if(wtLbl && wtPaper) wtLbl.textContent = 'Q '+(wtCur+1)+' / '+wtPaper.total;
-  /* If the panel is open, refresh its grid */
-  if(qPanelCurrentMode === 'wt') qPanelRefreshGrid();
-}
+/* Shared with the CBT runner (#cbt): draw a question's passage and picture.
+   Kept from the retired Web Test runner, where they used to live. */
 /* Comprehension passage (Phase 3, slice 4): when a question carries an attached
    passage ({id, title, text}) it is shown above the question, in a box that stays put
    for every question that shares it. Plain text only — esc() then line breaks. */
@@ -9963,137 +9193,27 @@ function paintQImage(boxId, q){
     box.innerHTML = '<div class="q-image-msg">' + esc(im.alt || 'The picture could not be loaded.') + '</div>';
   });
 }
-function wtRender(){
-  if(!wtPaper) return;
-  var q = wtPaper.questions[wtCur];
-  if (!q) { wtPaper = null; wtResp = {}; go('webtest'); return; }
-  var num = document.getElementById('wtNum'), txt = document.getElementById('wtQ');
-  var g = wtGroupAt(wtCur);
-  if(num) num.textContent = g
-    ? g.subject + ' · Question ' + (wtCur - g.from + 1) + ' of ' + g.count
-    : 'Question ' + (wtCur + 1) + ' of ' + wtPaper.total;
-  if(txt) txt.innerHTML = mth(q.text, {breaks:true});
-  paintPassage('wtPassage', q);
-  paintQImage('wtImage', q);
-  var opts = document.getElementById('wtOpts'), thy = document.getElementById('wtTheory');
-  if(opts) opts.innerHTML = '';
-  if(q.kind === 'theory'){
-    if(opts) opts.hidden = true;
-    if(thy) thy.hidden = false;
-    var box = document.getElementById('wtAnswer');
-    if(box) box.value = typeof wtResp[q.id] === 'string' ? wtResp[q.id] : '';
-    var hint = document.getElementById('wtMarkHint');
-    /* What the mark is worth is the student's business; who awards it is not. */
-    if(hint) hint.textContent = 'Worth ' + (q.maxMark || 0) + ' mark' + ((q.maxMark || 0) !== 1 ? 's' : '')
-      + ' · write your full working';
-  } else {
-    if(thy) thy.hidden = true;
-    if(opts){
-      opts.hidden = false;
-      (q.options || []).forEach(function(o, i){
-        var b = document.createElement('button');
-        b.className = 'opt' + (Number(wtResp[q.id]) === i ? ' sel' : '');
-        b.innerHTML = '<span class="key">' + OPT_KEYS[i] + '</span>' + mth(o);
-        b.onclick = function(){ wtPick(i); };
-        opts.appendChild(b);
-      });
-    }
-  }
-  var btn = document.getElementById('wtSubmitBtn');
-  if(btn) btn.textContent = wtArmed ? 'Submit anyway' : 'Submit';
-}
-function wtPick(i){
-  if(!wtPaper) return;
-  wtResp[wtPaper.questions[wtCur].id] = i;
-  wtRender(); wtBuildNav();
-}
-function wtTyped(){
-  if(!wtPaper) return;
-  var box = document.getElementById('wtAnswer');
-  wtResp[wtPaper.questions[wtCur].id] = box ? box.value : '';
-  wtBuildNav();
-}
-function wtGo(i){
-  if(!wtPaper) return;
-  wtCur = Math.max(0, Math.min(wtPaper.questions.length - 1, i));
-  wtRender(); wtBuildNav();
-}
-function wtMove(d){ wtGo(wtCur + d); }
 
-/* The clock on screen is a courtesy. The backend stamped the start time and
-   clamps the time used on submit, so pausing or editing this timer cannot buy a
-   student a single extra minute. */
-function wtStartClock(){
-  if(wtTimerId) clearInterval(wtTimerId);
-  var el = document.getElementById('wtTime'), box = document.getElementById('wtTimer');
-  if(box) box.classList.remove('none');
-  if(el) el.textContent = mmss(wtSecs);
-  wtTimerId = setInterval(function(){
-    wtSecs--;
-    if(wtSecs <= 0){
-      wtSecs = 0;
-      clearInterval(wtTimerId); wtTimerId = null;
-      if(el) el.textContent = mmss(0);
-      toast('Time up — submitting your paper');
-      wtSubmit(true);
-      return;
-    }
-    if(el) el.textContent = mmss(wtSecs);
-    if(box) box.classList.toggle('warn', wtSecs < 300);
-  }, 1000);
-}
-/* A written paper is not a race. There is no countdown to run, nothing to
-   auto-submit, and the badge says so plainly rather than showing --:--. */
-function wtNoClock(){
-  if(wtTimerId !== null){ clearInterval(wtTimerId); wtTimerId = null; }
-  var el = document.getElementById('wtTime'), box = document.getElementById('wtTimer');
-  if(box){ box.classList.remove('warn'); box.classList.add('none'); }
-  if(el) el.textContent = 'No limit';
-}
-function wtUnanswered(){
-  var n = 0;
-  if(!wtPaper) return 0;
-  for(var i = 0; i < wtPaper.questions.length; i++){ if(!wtAnswered(i)) n++; }
-  return n;
-}
-function wtSubmit(auto){
-  if(!wtPaper || wtBusy) return;
-  var btn = document.getElementById('wtSubmitBtn');
-  var left = wtUnanswered();
-  /* One warning, then the student's decision — no blocking dialog. */
-  if(!auto && left && !wtArmed){
-    wtArmed = true;
-    if(btn) btn.textContent = 'Submit anyway';
-    toast(left + ' question' + (left !== 1 ? 's' : '') + ' still unanswered — tap Submit again');
-    return;
-  }
-  wtArmed = false;
-  wtBusy = true;
-  if(btn){ btn.disabled = true; btn.textContent = 'Submitting…'; }
-  if(wtTimerId){ clearInterval(wtTimerId); wtTimerId = null; }
-  var used = wtUntimed
-    ? Math.max(0, Math.round((Date.now() - wtOpenedAt) / 1000))
-    : Math.max(0, (Number(wtPaper.durationSec) || 0) - wtSecs);
-  GOC.api.submitTest({ attemptId: wtPaper.attemptId, responses: wtResp, timeUsedSec: used })
-    .then(function(res){
-      wtBusy = false;
-      if(btn){ btn.disabled = false; btn.textContent = 'Submit'; }
-      wtPaper = null; wtResp = {}; wtCur = 0; wtGroups = null;
-      wtShowResult(res);
-      wtLoadHistory();
-      refreshMe();
-      renderLeague();      // Priority 12 — the standings move when the data does
-    }, function(err){
-      wtBusy = false;
-      if(btn){ btn.disabled = false; btn.textContent = 'Submit'; }
-      toast(err.message || 'Could not submit your paper');
-    });
-}
-function wtExit(){
-  if(wtTimerId){ clearInterval(wtTimerId); wtTimerId = null; }
-  wtPaper = null; wtResp = {}; wtCur = 0; wtArmed = false; wtGroups = null;
-  go('webtest');
-  toast('Paper closed — nothing was submitted');
+var jambStarting = false;
+/* Starting a sitting is a request, not a local decision: the backend checks
+   the sitting is really the student's and ready, opens the attempt and stamps
+   the start time. The JAMB sitting runs in the full CBT screen and submits as
+   a real, marked attempt (cbtOpenPaper -> submitCBT -> submitTest ->
+   wtShowResult). */
+function jambStart(period, subject, btn){
+  if(jambStarting) return;
+  if(state.studyExhausted){ showWinddown(); return; }
+  jambStarting = true;
+  if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  GOC.api.startTest({ period: period, section: 'jamb', subject: subject }).then(function(p){
+    jambStarting = false;
+    if(btn){ btn.disabled = false; btn.textContent = 'Start'; }
+    cbtOpenPaper(p);
+  }, function(err){
+    jambStarting = false;
+    if(btn){ btn.disabled = false; btn.textContent = 'Start'; }
+    toast(err.message || 'Could not start that sitting');
+  });
 }
 
 function wtOpenResult(id){
@@ -10236,13 +9356,12 @@ function refreshMe(){
     /* A stored consent record follows the student to any device they sign
        in on: it re-enables the (consent-gated) visit counter here. */
     if(me.privacyConsent && me.privacyConsent.at) notePrivacyConsent(me.privacyConsent.version);
-    set('dashLevel', 'Lv ' + (me.level || 1));
+    set('dashLevel', 'Level ' + (me.level || 1));
     countUpText('dashXp', me.xp || 0, function(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); });
-    set('dashStreak', (me.streak || 0) + ' 🔥');
-    set('dashStreakChip', '🔥 ' + (me.streak || 0));
+    var days = Number(me.streak) || 0;
+    set('dashStreak', days + (days === 1 ? ' Day' : ' Days'));
     checkStreakCelebration(me.streak || 0);
     checkLevelCelebration(me.level || 1);
-    paintJourney(me);
     checkBadgeCelebrations(me);
     /* The combination is re-read here too, so a change management makes to the
        account reaches every subject-aware surface on the next refresh rather
@@ -10256,12 +9375,10 @@ function refreshMe(){
 }
 
 /* ================= THE DASHBOARD'S OWN PANELS =================
-   The home screen used to end in blank space. What fills it now is the same data
-   the rest of the app is built on, re-read each time the screen is opened: the
-   papers the academy has actually published for this scholar's own combination,
-   their place in the league, and their most recent result. Nothing here is
-   invented and nothing is decided here — an account with no record says exactly
-   that, and every figure comes from GOC.api. */
+   Re-read each time Home is opened (renderDash). Class notices and academy
+   broadcasts are listed in the dashboard's notifications panel; the newest
+   broadcast is also the Announcements card. Nothing here is invented — an
+   account with no record says exactly that, and every figure comes from GOC.api. */
 /* Class notices (Phase 3C slice 7). Tutors post them; only GOC students taking that subject are sent any, and
    The newest three show; the rest sit behind Show more. The text is
    escaped, with line breaks kept. A tutor's name is never sent: a notice says which subject's tutor it is from. */
@@ -10270,12 +9387,12 @@ var DASH_NOTICES_FIRST = 3;
 function dashNoticesRender(){
   var card = document.getElementById('dashNotices'), host = document.getElementById('dashNoticesList'), more = document.getElementById('dashNoticesMore');
   if(!card || !host) return;
-  if(!dashNoticesAll.length){ card.style.display = 'none'; host.innerHTML = ''; if(more) more.style.display = 'none'; return; }
+  if(!dashNoticesAll.length){ card.style.display = 'none'; host.innerHTML = ''; if(more) more.style.display = 'none'; if(typeof dbNotifRefresh === 'function') dbNotifRefresh(); return; }
   var shown = dashNoticesOpen ? dashNoticesAll : dashNoticesAll.slice(0, DASH_NOTICES_FIRST);
   host.innerHTML = shown.map(function(n){
-    return '<div style="margin-top:10px"><div style="font-weight:600">' + esc(n.title) + '</div>' +
-      '<div style="white-space:pre-wrap;margin-top:2px">' + esc(n.body) + '</div>' +
-      '<div style="font-size:13px;opacity:.75;margin-top:4px">' + esc(n.from || 'Your tutor') + (n.at ? ' · ' + esc(admWhen(n.at)) : '') + (n.edited ? ' · edited' : '') + '</div></div>';
+    return '<div class="db-nitem' + (typeof dbIsUnread === 'function' && dbIsUnread(n) ? ' is-new' : '') + '"><b>' + esc(n.title) + '</b>' +
+      '<p>' + esc(n.body) + '</p>' +
+      '<span>' + esc(n.from || 'Your tutor') + (n.at ? ' · ' + esc(admWhen(n.at)) : '') + (n.edited ? ' · edited' : '') + '</span></div>';
   }).join('');
   card.style.display = '';
   if(more){
@@ -10283,15 +9400,17 @@ function dashNoticesRender(){
     more.style.display = extra > 0 ? '' : 'none';
     more.textContent = dashNoticesOpen ? 'Show fewer' : 'Show ' + extra + ' more';
   }
+  if(typeof dbNotifRefresh === 'function') dbNotifRefresh();
 }
 function dashNoticesToggle(){ dashNoticesOpen = !dashNoticesOpen; dashNoticesRender(); }
 function dashPaintNotices(){
   if(!GOC.api || typeof GOC.api.listMyNotices !== 'function') return Promise.resolve();
   return GOC.api.listMyNotices().then(function(r){
     dashNoticesAll = (r && !r.locked && Array.isArray(r.notices)) ? r.notices : [];
+    dbNotifFailed = false;
     dashNoticesOpen = false;
     dashNoticesRender();
-  }, function(){ dashNoticesAll = []; dashNoticesRender(); });
+  }, function(){ dashNoticesAll = []; dbNotifFailed = true; dashNoticesRender(); });
 }
 
 /* Broadcasts (Phase 4 slice 5). The console sends them; only GOC students whose audience includes them are sent
@@ -10302,12 +9421,12 @@ var DASH_BROADCASTS_FIRST = 3;
 function dashBroadcastsRender(){
   var card = document.getElementById('dashBroadcasts'), host = document.getElementById('dashBroadcastsList'), more = document.getElementById('dashBroadcastsMore');
   if(!card || !host) return;
-  if(!dashBroadcastsAll.length){ card.style.display = 'none'; host.innerHTML = ''; if(more) more.style.display = 'none'; return; }
+  if(!dashBroadcastsAll.length){ card.style.display = 'none'; host.innerHTML = ''; if(more) more.style.display = 'none'; if(typeof dbNotifRefresh === 'function') dbNotifRefresh(); return; }
   var shown = dashBroadcastsOpen ? dashBroadcastsAll : dashBroadcastsAll.slice(0, DASH_BROADCASTS_FIRST);
   host.innerHTML = shown.map(function(b){
-    return '<div style="margin-top:10px"><div style="font-weight:600">' + esc(b.title) + '</div>' +
-      '<div style="white-space:pre-wrap;margin-top:2px">' + esc(b.body) + '</div>' +
-      '<div style="font-size:13px;opacity:.75;margin-top:4px">' + esc(b.from || 'G.O.C Academy') + (b.at ? ' · ' + esc(admWhen(b.at)) : '') + '</div></div>';
+    return '<div class="db-nitem' + (typeof dbIsUnread === 'function' && dbIsUnread(b) ? ' is-new' : '') + '"><b>' + esc(b.title) + '</b>' +
+      '<p>' + esc(b.body) + '</p>' +
+      '<span>' + esc(b.from || 'G.O.C Academy') + (b.at ? ' · ' + esc(admWhen(b.at)) : '') + '</span></div>';
   }).join('');
   card.style.display = '';
   if(more){
@@ -10315,15 +9434,17 @@ function dashBroadcastsRender(){
     more.style.display = extra > 0 ? '' : 'none';
     more.textContent = dashBroadcastsOpen ? 'Show fewer' : 'Show ' + extra + ' more';
   }
+  if(typeof dbNotifRefresh === 'function') dbNotifRefresh();
 }
 function dashBroadcastsToggle(){ dashBroadcastsOpen = !dashBroadcastsOpen; dashBroadcastsRender(); }
 function dashPaintBroadcasts(){
   if(!GOC.api || typeof GOC.api.listMyBroadcasts !== 'function') return Promise.resolve();
   return GOC.api.listMyBroadcasts().then(function(r){
     dashBroadcastsAll = (r && !r.locked && Array.isArray(r.broadcasts)) ? r.broadcasts : [];
+    dbAnnFailed = false; dbAnnLoaded = true;
     dashBroadcastsOpen = false;
     dashBroadcastsRender();
-  }, function(){ dashBroadcastsAll = []; dashBroadcastsRender(); });
+  }, function(){ dashBroadcastsAll = []; dbAnnFailed = true; dashBroadcastsRender(); });
 }
 
 function renderDash(){
@@ -10344,97 +9465,536 @@ function renderDash(){
     }, 900);
   }
 
-  dashPaintNext();
-  dashPaintStanding();
-  dashPaintLast();
+  dbPaintPerformance();
+  dbPaintContinue();
   dashPaintBroadcasts();
   dashPaintNotices();
 }
-function dashSet(id, html){
-  var e = document.getElementById(id);
-  if(e) e.innerHTML = html;
+
+/* ================= STUDY HUB — PHASE 3 (19 Nov 2026) =================
+   Displays the student's enrolled subjects as tabs; for the active subject
+   it renders a progress-ring card, the numbered topic list (each expandable
+   inline to show its lessons), a "Continue Learning" card for the most
+   recently read lesson, a "Recent Lessons" row, and a Practice & Review
+   tools strip at the foot.
+   Reading progress (noteReads) is fetched from GOC.api.getMyReading() on
+   every entry so the ring and lesson dots are always live.  Completion is
+   set automatically by the IntersectionObserver in renderLesson(). */
+
+var stSubject = '';          /* currently selected subject tab */
+var stReads   = {};          /* cache of { noteId: { first, last, done? } } */
+var stNotes   = [];          /* all active notes for the selected subject */
+
+/* Entry point — called by go('study'). */
+function stPaintStudy(){
+  var subs = mySubjects || [];
+  if(!subs.length){
+    var el = document.getElementById('stTabs');
+    if(el) el.innerHTML = '';
+    el = document.getElementById('stCard');
+    if(el) el.innerHTML = '';
+    el = document.getElementById('stTopics');
+    if(el) el.innerHTML = '';
+    el = document.getElementById('stContinue');
+    if(el) el.innerHTML = '';
+    el = document.getElementById('stRecent');
+    if(el) el.innerHTML = '';
+    return;
+  }
+  if(!stSubject || subs.indexOf(stSubject) === -1) stSubject = subs[0];
+  stPaintTabs(subs);
+  /* Fetch reading progress then paint subject-dependent panels. */
+  GOC.api.getMyReading().then(function(r){
+    stReads = (r && r.reads) ? r.reads : {};
+    stLoadSubject(stSubject);
+  }, function(){ stLoadSubject(stSubject); });
 }
-function dashRow(title, sub, cta){
-  return '<div class="wt-row"><div class="nm"><b>' + esc(title) + '</b><span>' + esc(sub)
-    + '</span></div><button class="wt-start" onclick="openWebTest()">' + esc(cta) + '</button></div>';
+
+/* Subject icon SVGs and short labels. */
+var ST_SUBJ_META = {
+  'Mathematics':    { short: 'Maths', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 7h16M4 12h8M4 17h16"/><path d="M16 10l3 3-3 3"/></svg>' },
+  'Physics':        { short: 'Phys',  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/></svg>' },
+  'Chemistry':      { short: 'Chem',  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v8l3 9H6l3-9V3z"/><path d="M6 17h12"/></svg>' },
+  'Biology':        { short: 'Bio',   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c0 0 4 4 4 9s-4 9-4 9"/><path d="M12 2c0 0-4 4-4 9s4 9 4 9"/><path d="M4 11h16"/></svg>' },
+  'Use of English': { short: 'Eng',   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M4 19h16"/><path d="M9 9h6M9 13h4"/></svg>' }
+};
+function stSubjMeta(s){ return ST_SUBJ_META[s] || { short: s.length > 5 ? s.slice(0,4) : s, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>' }; }
+
+/* Render subject tabs — mobile shows short label, desktop shows full name via CSS. */
+function stPaintTabs(subs){
+  var el = document.getElementById('stTabs');
+  if(!el) return;
+  el.innerHTML = subs.map(function(s){
+    var m = stSubjMeta(s);
+    var active = s === stSubject;
+    return '<button class="st-tab' + (active ? ' is-active' : '') + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" aria-label="' + esc(s) + '" onclick="stSelectSubject(' + JSON.stringify(s) + ')">' +
+             '<span class="st-tab-icon">' + m.icon + '</span>' +
+             '<span class="st-tab-label"><span class="st-tab-short">' + esc(m.short) + '</span><span class="st-tab-fullname">' + esc(s) + '</span></span>' +
+           '</button>';
+  }).join('');
 }
-function dashStat(k, v){
-  return '<div class="wt-stat"><span>' + esc(k) + '</span><b>' + esc(v) + '</b></div>';
+
+/* Switch to a different subject. */
+function stSelectSubject(subj){
+  stSubject = subj;
+  var subs = mySubjects || [];
+  stPaintTabs(subs);
+  stLoadSubject(subj);
 }
-/* What is actually published for this student, in the order they would sit it. */
-function dashPaintNext(){
-  if(!GOC.api.listMyTests) return;
-  GOC.api.listMyTests().then(function(r){
-    var rows = (r && r.tests) || [];
-    if(!rows.length){
-      dashSet('dashNext', '<div class="wt-none">No paper has been published for your subjects yet. One will appear here the moment it is.</div>');
-      return;
-    }
-    var thy = [], obj = null;
-    rows.forEach(function(t){
-      if(t.section === 'objective') obj = t;
-      else if(t.section === 'theory') thy.push(t);
-    });
-    var h = '';
-    if(obj){
-      h += dashRow('Objective sitting',
-        obj.questions + ' question' + (obj.questions !== 1 ? 's' : '')
-        + ' · ' + wtMinutes(obj.durationSec) + ' · your whole combination', 'Sit it');
-    }
-    if(thy.length){
-      var q = 0;
-      thy.forEach(function(t){ q += Number(t.questions) || 0; });
-      h += dashRow('Theory papers',
-        thy.length + ' paper' + (thy.length !== 1 ? 's' : '')
-        + ' · ' + q + ' question' + (q !== 1 ? 's' : '') + ' · no time limit', 'Open');
-    }
-    dashSet('dashNext', h || '<div class="wt-none">No paper has been published for your subjects yet.</div>');
+
+/* Load all notes for `subj` then paint the panels. */
+function stLoadSubject(subj){
+  /* Show a loading skeleton while we wait */
+  var card = document.getElementById('stCard');
+  if(card) card.innerHTML = '<div class="st-card" style="opacity:.4"><div class="st-card-body"><div class="st-card-subj">' + esc(subj) + '</div><div class="st-card-meta">Loading…</div></div><div class="st-ring-wrap"><svg class="st-ring" viewBox="0 0 72 72"><circle class="st-track" cx="36" cy="36" r="30"/><circle class="st-fill" cx="36" cy="36" r="30" stroke-dasharray="188" stroke-dashoffset="188"/></svg><div class="st-pct">—</div></div></div>';
+  GOC.api.listNotes({ subject: subj }).then(function(res){
+    stNotes = (res && res.notes) ? res.notes.filter(function(n){ return n.active; }) : [];
+    stPaintSubjectCard(subj);
+    stPaintTopics(subj);
+    stPaintContinue();
+    stPaintRecent();
   }, function(){
-    dashSet('dashNext', '<div class="wt-none">Your papers are not available right now.</div>');
+    stNotes = [];
+    stPaintSubjectCard(subj);
+    stPaintTopics(subj);
+    stPaintContinue();
+    stPaintRecent();
   });
 }
-/* The same standing the league screen shows, spelled out on the way past. */
-function dashPaintStanding(){
-  if(!GOC.api.league) return;
+
+/* Subject progress card with SVG ring. */
+function stPaintSubjectCard(subj){
+  var el = document.getElementById('stCard');
+  if(!el) return;
+  var total = stNotes.length;
+  var done  = stNotes.filter(function(n){ return stReads[String(n.id)] && stReads[String(n.id)].done; }).length;
+  var pct   = total ? Math.round((done / total) * 100) : 0;
+  /* SVG ring: r=30, circumference = 2π*30 ≈ 188.5 */
+  var C = 188.5;
+  var offset = C - (C * pct / 100);
+  var topics = stGetTopics();
+  var doneTopics = topics.filter(function(t){
+    return t.notes.length > 0 && t.notes.every(function(n){ return stReads[String(n.id)] && stReads[String(n.id)].done; });
+  }).length;
+  el.innerHTML =
+    '<div class="st-card">' +
+      '<div class="st-card-body">' +
+        '<div class="st-card-subj">' + esc(subj) + '</div>' +
+        '<div class="st-card-meta">' + total + ' Lesson' + (total !== 1 ? 's' : '') + ' &nbsp;·&nbsp; ' + topics.length + ' Topic' + (topics.length !== 1 ? 's' : '') + '</div>' +
+      '</div>' +
+      '<div class="st-ring-wrap">' +
+        '<svg class="st-ring" viewBox="0 0 72 72" aria-hidden="true">' +
+          '<circle class="st-track" cx="36" cy="36" r="30"/>' +
+          '<circle class="st-fill" cx="36" cy="36" r="30"' +
+            ' stroke-dasharray="' + C + '"' +
+            ' stroke-dashoffset="' + offset.toFixed(1) + '"/>' +
+        '</svg>' +
+        '<div class="st-pct">' + pct + '%</div>' +
+      '</div>' +
+    '</div>';
+}
+
+/* Return topics (unique topic names) for stNotes, each with their notes. */
+function stGetTopics(){
+  var order = [], map = {};
+  stNotes.forEach(function(n){
+    var t = n.topic || 'General';
+    if(!map[t]){ map[t] = []; order.push(t); }
+    map[t].push(n);
+  });
+  return order.map(function(t){ return { name: t, notes: map[t] }; });
+}
+
+/* Render flat topic rows — click navigates to topic lessons directly. */
+function stPaintTopics(subj){
+  var el = document.getElementById('stTopics');
+  if(!el) return;
+  if(!subj){ el.innerHTML = ''; return; }
+  var topics = stGetTopics();
+  if(!topics.length){
+    el.innerHTML = '<p class="wt-none" style="margin:12px 14px">No lessons published for ' + esc(subj) + ' yet.</p>';
+    return;
+  }
+  /* Determine the "active" topic — first in-progress topic (has reads but not all done),
+     falling back to the first topic. */
+  var activeName = topics[0].name;
+  for(var ti = 0; ti < topics.length; ti++){
+    var t = topics[ti];
+    var hasRead = t.notes.some(function(n){ return !!stReads[String(n.id)]; });
+    var allDone = t.notes.length > 0 && t.notes.every(function(n){ return stReads[String(n.id)] && stReads[String(n.id)].done; });
+    if(hasRead && !allDone){ activeName = t.name; break; }
+  }
+  var html = '';
+  topics.forEach(function(t, i){
+    var totalN = t.notes.length;
+    var doneN  = t.notes.filter(function(n){ return stReads[String(n.id)] && stReads[String(n.id)].done; }).length;
+    var pctN   = totalN ? Math.round((doneN / totalN) * 100) : 0;
+    var allDone = totalN > 0 && doneN === totalN;
+    var isActive = t.name === activeName;
+    var cls = (allDone ? ' done' : '') + (isActive ? ' active' : '');
+    /* Navigate to topic: open first lesson of this topic */
+    var firstNoteId = t.notes.length ? t.notes[0].id : null;
+    var onclick = firstNoteId ? 'stOpenLesson(' + firstNoteId + ')' : '';
+    html += '<div class="st-topic' + cls + '" data-topic="' + esc(t.name) + '">';
+    html += '<button class="st-topic-hd"' + (onclick ? ' onclick="' + onclick + '"' : '') + '>';
+    html +=   '<span class="st-topic-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>';
+    html +=   '<span class="st-topic-info"><span class="st-topic-title">' + (i + 1) + '. ' + esc(t.name) + '</span><span class="st-topic-meta">' + totalN + ' Lesson' + (totalN !== 1 ? 's' : '') + ' &nbsp;&bull;&nbsp; ' + pctN + '%</span></span>';
+    html +=   '<svg class="st-topic-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    html += '</button>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+/* stToggleTopic no longer used (topics navigate directly), kept as no-op for safety. */
+function stToggleTopic(topicEl){ /* deprecated */ }
+
+/* Navigate to a lesson from the Study Hub. */
+function stOpenLesson(noteId){
+  /* rdSubj needs to be set so openNote() / renderLesson() have context. */
+  rdSubj = stSubject;
+  /* listNotes is cached in rdNotes; reuse stNotes as the pool. */
+  rdNotes = stNotes;
+  openNote(noteId);
+}
+
+/* Subject equation labels for the chalkboard thumbnail. */
+var ST_SUBJ_EQ = {
+  'Mathematics':    'ax²+bx+c=0',
+  'Physics':        'F = ma',
+  'Chemistry':      'H₂O + CO₂',
+  'Biology':        'DNA → RNA',
+  'Use of English': 'A · B · C'
+};
+
+/* "Continue Learning" — the most recently read lesson that is not yet done,
+   or (if all done) the last completed one. */
+function stPaintContinue(){
+  var el = document.getElementById('stContinue');
+  if(!el) return;
+  if(!stNotes.length){ el.innerHTML = ''; return; }
+  /* Pick the lesson with the latest `last` timestamp. */
+  var best = null, bestTime = '';
+  stNotes.forEach(function(n){
+    var rd = stReads[String(n.id)];
+    if(rd && rd.last > bestTime){ bestTime = rd.last; best = n; }
+  });
+  if(!best){ el.innerHTML = ''; return; }
+  var rd = stReads[String(best.id)];
+  var isDone = rd && rd.done;
+  var btnLabel = isDone ? 'Read Again' : 'Resume';
+  var eq = ST_SUBJ_EQ[stSubject] || stSubject;
+  /* chalkboard thumbnail — dark green bg with subject equation */
+  var thumb = '<div class="st-cl-thumb"><span class="st-cl-thumb-eq">' + esc(eq) + '</span></div>';
+  /* mobile-only play icon button */
+  var playBtn = '<button class="st-cl-play-btn" onclick="event.stopPropagation();stOpenLesson(' + best.id + ')" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l10 7-10 7V5z"/></svg></button>';
+  /* desktop resume pill */
+  var resumeBtn = '<div class="st-cl-resume"><button class="st-cl-resume-btn" onclick="event.stopPropagation();stOpenLesson(' + best.id + ')" tabindex="-1" aria-hidden="true">' + btnLabel + ' <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l10 7-10 7V5z"/></svg></button></div>';
+  el.innerHTML =
+    '<div class="st-sec">' +
+      '<div class="st-sec-hd"><span class="st-sec-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>Continue Learning</span></div>' +
+      '<button class="st-cl-card" onclick="stOpenLesson(' + best.id + ')">' +
+        thumb +
+        '<div class="st-cl-body">' +
+          '<div class="st-cl-subj">' + esc(best.topic || stSubject) + '</div>' +
+          '<div class="st-cl-title">' + esc(best.title) + '</div>' +
+        '</div>' +
+        playBtn +
+        resumeBtn +
+      '</button>' +
+    '</div>';
+}
+
+/* "Recent Lessons" — up to 5 latest reads sorted by `last` descending. */
+function stPaintRecent(){
+  var el = document.getElementById('stRecent');
+  if(!el) return;
+  if(!stNotes.length){ el.innerHTML = ''; return; }
+  var withReads = stNotes.filter(function(n){ return !!stReads[String(n.id)]; });
+  withReads.sort(function(a, b){
+    var ta = stReads[String(a.id)].last || '';
+    var tb = stReads[String(b.id)].last || '';
+    return ta < tb ? 1 : ta > tb ? -1 : 0;
+  });
+  var recent = withReads.slice(0, 5);
+  if(!recent.length){ el.innerHTML = ''; return; }
+  /* play icon SVG (outline circle) */
+  var playIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>';
+  /* green checkmark SVG */
+  var checkIcon = '<svg class="st-ri-check" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#15803D"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var rows = recent.map(function(n){
+    var rd = stReads[String(n.id)];
+    var isDone = rd && rd.done;
+    /* "Topic – Lesson title by subtitle" format matching mockup */
+    var topicPart = n.topic ? '<b>' + esc(n.topic) + '</b> – ' : '';
+    return '<button class="st-ri' + (isDone ? ' done' : '') + '" onclick="stOpenLesson(' + n.id + ')">' +
+             '<span class="st-ri-play">' + playIcon + '</span>' +
+             '<span class="st-ri-line">' + topicPart + esc(n.title) + '</span>' +
+             '<span class="st-ri-dot"></span>' +
+             checkIcon +
+           '</button>';
+  }).join('');
+  el.innerHTML =
+    '<div class="st-sec">' +
+      '<div class="st-sec-hd">' +
+        '<span class="st-sec-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14" stroke-linecap="round" stroke-linejoin="round"/></svg>Recent Lessons</span>' +
+        '<button class="st-sec-viewall" onclick="/* view all */" aria-label="View all lessons">View All &rarr;</button>' +
+      '</div>' +
+      '<div class="st-recent-list">' + rows + '</div>' +
+    '</div>';
+}
+
+/* Relative time helper (e.g. "2h ago", "yesterday"). */
+function stRelTime(iso){
+  if(!iso) return '';
+  var diff = Date.now() - new Date(iso).getTime();
+  if(diff < 60000) return 'just now';
+  if(diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if(diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  if(diff < 172800000) return 'yesterday';
+  return Math.floor(diff / 86400000) + 'd ago';
+}
+
+/* ================= STUDENT HOME DASHBOARD (Phase 3) =================
+   The redesigned Home reads only what the app already holds for this account:
+     - Overall Performance: the league's assessed performance (GOC.api.league),
+       the same figure the League screen shows; "Not assessed yet" when the
+       student has no assessed paper.
+     - Continue Learning: the newest practice/CBT run in the practice history
+       (pracHistCache / GOC.api.listPractice), resumed as a practice set-up for
+       the same subject.
+     - Announcements: the newest academy broadcast (GOC.api.listMyBroadcasts).
+     - Notifications: broadcasts and class notices. Which ones are new is
+       remembered per student on this device only (localStorage), because the
+       server keeps no read state for students; nothing is written to the
+       account. */
+var dbNotifFailed = false, dbAnnFailed = false, dbAnnLoaded = false;
+var dbContRun = null;
+var dbPopOpen = null, dbPopOpener = null;
+var dbSheetOpener = null;
+
+function dbEl(id){ return document.getElementById(id); }
+function dbSeenKey(){ return 'goc.notifSeen.' + (studentId || 'anon'); }
+function dbSeenAt(){
+  try { return Number(localStorage.getItem(dbSeenKey())) || 0; } catch(e) { return 0; }
+}
+function dbItemTime(x){
+  var t = x && x.at ? new Date(x.at).getTime() : 0;
+  return isFinite(t) ? t : 0;
+}
+function dbIsUnread(x){ return dbItemTime(x) > dbSeenAt(); }
+function dbAllNotifs(){ return (dashBroadcastsAll || []).concat(dashNoticesAll || []); }
+function dbMarkSeen(){
+  var latest = 0;
+  dbAllNotifs().forEach(function(x){ latest = Math.max(latest, dbItemTime(x)); });
+  if(latest){ try { localStorage.setItem(dbSeenKey(), String(latest)); } catch(e) {} }
+  dbPaintDots();
+}
+function dbPaintDots(){
+  var unread = dbAllNotifs().filter(dbIsUnread).length;
+  list(document.querySelectorAll('.db-bell')).forEach(function(b){
+    var dot = b.querySelector('.db-dot');
+    if(dot) dot.hidden = unread === 0;
+    b.setAttribute('aria-label', unread ? 'Notifications, ' + unread + ' new' : 'Notifications');
+  });
+}
+/* Called after either list is painted. */
+function dbNotifRefresh(){
+  var empty = dbEl('dbNotifEmpty');
+  if(empty){
+    var none = !dbAllNotifs().length;
+    empty.hidden = !none;
+    if(none) empty.textContent = (dbNotifFailed && dbAnnFailed)
+      ? 'Notifications could not be loaded right now. Please try again shortly.'
+      : 'You have no notifications yet. Messages from the academy and your subject tutors will appear here.';
+  }
+  dbPaintDots();
+  dbPaintAnnounce();
+}
+function dbPaintAnnounce(){
+  var t = dbEl('dbAnnText'), btn = dbEl('dbAnnBtn');
+  if(!t) return;
+  if(dbAnnFailed){ t.textContent = 'Announcements could not be loaded right now.'; if(btn) btn.hidden = true; return; }
+  if(!dbAnnLoaded) return;
+  var rows = (dashBroadcastsAll || []).slice().sort(function(a, b){ return dbItemTime(b) - dbItemTime(a); });
+  if(!rows.length){ t.textContent = 'No announcements from the academy yet.'; if(btn) btn.hidden = true; return; }
+  var a = rows[0];
+  t.textContent = a.title ? (a.body ? a.title + ' — ' + a.body : a.title) : (a.body || '');
+  if(btn) btn.hidden = false;
+}
+
+/* ---- popovers (notifications, account menu) ---- */
+function dbFocusables(root){
+  if(!root || !root.querySelectorAll) return [];
+  return Array.prototype.filter.call(root.querySelectorAll('button:not([disabled]),[href],[tabindex]:not([tabindex="-1"])'),
+    function(el){ return !el.hidden && el.getAttribute('aria-disabled') !== 'true'; });
+}
+function dbSetExpanded(id, on){
+  list(document.querySelectorAll('[aria-controls="' + id + '"]')).forEach(function(b){
+    if(b.hasAttribute('aria-expanded')) b.setAttribute('aria-expanded', on ? 'true' : 'false');
+  });
+}
+function dbPopShow(id, opener){
+  dbPopClose(true);
+  var el = dbEl(id); if(!el) return;
+  el.hidden = false;
+  dbPopOpen = id; dbPopOpener = opener || null;
+  dbSetExpanded(id, true);
+  /* Desktop and phone each have their own opener; the panel sits under whichever was used. */
+  el.classList.toggle('from-m', !!(opener && opener.closest && opener.closest('.db-mtop')));
+  var f = dbFocusables(el);
+  if(f.length && f[0].focus) setTimeout(function(){ try { f[0].focus(); } catch(e) {} }, 0);
+}
+function dbPopClose(silent){
+  if(!dbPopOpen) return;
+  var el = dbEl(dbPopOpen);
+  if(el) el.hidden = true;
+  dbSetExpanded(dbPopOpen, false);
+  var back = dbPopOpener;
+  dbPopOpen = null; dbPopOpener = null;
+  if(!silent && back && back.focus && back.offsetParent !== null){ try { back.focus(); } catch(e) {} }
+}
+function dbNotifToggle(btn){
+  if(dbPopOpen === 'dbNotif'){ dbPopClose(); return; }
+  dbPopShow('dbNotif', btn);
+  dbMarkSeen();
+}
+function dbAcctToggle(btn){
+  if(dbPopOpen === 'dbAcctMenu'){ dbPopClose(); return; }
+  dbPopShow('dbAcctMenu', btn);
+}
+/* Announcements "View": the full list of academy messages, in the notifications panel. */
+function dbAnnounceOpen(btn){
+  var home = dbEl('home'); if(home) home.scrollTop = 0;
+  dashBroadcastsOpen = true; dashBroadcastsRender();
+  dbPopShow('dbNotif', btn);
+  dbMarkSeen();
+}
+
+/* ---- full menu for phones and tablets ---- */
+function navSheetOpen(btn){
+  var sheet = dbEl('navSheet'), scrim = dbEl('navScrim'), host = dbEl('navSheetList');
+  if(!sheet || !host) return;
+  dbPopClose(true);
+  host.innerHTML = '';
+  list(document.querySelectorAll('#tabbar .tab')).forEach(function(t){
+    if(t.classList.contains('tb-more')) return;
+    var c = t.cloneNode(true);
+    c.removeAttribute('id');
+    c.classList.remove('tb-m');
+    c.classList.add('ns-item');
+    var tag = c.querySelector('.tb-tag');
+    if(tag){ var tid = 'ns-' + tag.id; tag.id = tid; c.setAttribute('aria-describedby', tid); }
+    host.appendChild(c);
+  });
+  dbSheetOpener = btn || null;
+  sheet.hidden = false; if(scrim) scrim.hidden = false;
+  dbSetExpanded('navSheet', true);
+  var f = dbFocusables(sheet);
+  if(f.length && f[0].focus) setTimeout(function(){ try { f[0].focus(); } catch(e) {} }, 0);
+}
+function navSheetClose(){
+  var sheet = dbEl('navSheet'), scrim = dbEl('navScrim');
+  if(!sheet || sheet.hidden) return;
+  sheet.hidden = true; if(scrim) scrim.hidden = true;
+  dbSetExpanded('navSheet', false);
+  var back = dbSheetOpener; dbSheetOpener = null;
+  if(back && back.focus && back.offsetParent !== null){ try { back.focus(); } catch(e) {} }
+}
+(function(){
+  if(typeof document === 'undefined' || !document.addEventListener) return;
+  /* A choice in the menu closes it; a not-yet-open item does nothing. */
+  document.addEventListener('click', function(ev){
+    var t = ev.target;
+    var host = dbEl('navSheetList');
+    if(host && t && t.closest){
+      var row = t.closest('.ns-item');
+      if(row && host.contains(row) && row.getAttribute('aria-disabled') !== 'true'){ navSheetClose(); }
+    }
+    /* Clicking outside an open popover closes it. */
+    if(dbPopOpen && t && t.closest){
+      var pop = dbEl(dbPopOpen);
+      var opener = t.closest('[aria-controls="' + dbPopOpen + '"]');
+      if(pop && !pop.contains(t) && !opener) dbPopClose(true);
+    }
+  });
+  document.addEventListener('keydown', function(ev){
+    var esc = ev.key === 'Escape' || ev.keyCode === 27;
+    var sheet = dbEl('navSheet');
+    var sheetOpen = sheet && !sheet.hidden;
+    if(esc && sheetOpen){ ev.preventDefault(); navSheetClose(); return; }
+    if(esc && dbPopOpen){ ev.preventDefault(); dbPopClose(); return; }
+    /* Tab stays inside the modal menu while it is open. */
+    if(sheetOpen && (ev.key === 'Tab' || ev.keyCode === 9)){
+      var f = dbFocusables(sheet); if(!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if(ev.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))){ ev.preventDefault(); last.focus(); }
+      else if(!ev.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))){ ev.preventDefault(); first.focus(); }
+    }
+  });
+})();
+
+/* ---- Overall Performance: the league's assessed figure ---- */
+function dbPaintPerformance(){
+  var v = dbEl('dashPerf'), note = dbEl('dashPerfNote');
+  if(!v || !GOC.api || typeof GOC.api.league !== 'function') return;
   GOC.api.league().then(function(d){
-    var me = d && d.me, n = ((d && d.rows) || []).length;
-    if(!me){
-      dashSet('dashStand', '<div class="wt-none">You are not in the standings yet. Sit a Test and the league places you as soon as your result is out.</div>');
-      return;
-    }
-    dashSet('dashStand',
-      dashStat('Position', '#' + me.rank + ' of ' + n)
-      + dashStat('League', d.league || 'Scholar League')
-      + dashStat('Performance', me.assessed ? lgPct(me.performance) : 'not assessed yet')
-      + dashStat('Papers counted', String(me.assessed || 0))
-      + dashStat('Academy XP', lgNum(me.xp) + ' · Lv ' + (me.level || 1)));
+    var me = d && d.me;
+    if(me && me.assessed){ v.textContent = lgPct(me.performance); if(note) note.textContent = ''; }
+    else { v.textContent = '—'; if(note) note.textContent = 'Not assessed yet'; }
   }, function(){
-    dashSet('dashStand', '<div class="wt-none">The standings are not available right now.</div>');
+    v.textContent = '—'; if(note) note.textContent = 'Unavailable right now';
   });
 }
-/* The most recent submission, openable straight into its own review. */
-function dashPaintLast(){
-  if(!GOC.api.myResults) return;
-  GOC.api.myResults().then(function(r){
-    var rows = (r && r.attempts) || [];
-    if(!rows.length){
-      dashSet('dashLast', '<div class="wt-none">You have not submitted a paper yet. Your results and their reviews appear here.</div>');
-      return;
-    }
-    var a = rows[0];
-    var marked = a.status === 'marked';
-    var pct = marked ? Math.round(Number(a.percent) || 0) : null;
-    var col = pct === null ? '#D97706' : (pct >= 70 ? '#15803D' : (pct >= 50 ? '#D97706' : '#DC2626'));
-    dashSet('dashLast',
-      '<button class="wt-his" onclick="wtOpenResult(&quot;' + esc(String(a.id)) + '&quot;)">'
-      + '<span class="score" style="background:' + col + '">' + (pct === null ? '⏳' : pct + '%') + '</span>'
-      + '<span class="nm"><b>' + esc(a.subject) + ' · ' + esc(wtSectionLabel(a.section)) + '</b>'
-      + '<span>' + esc(wtWhen(a.submittedAt)) + ' · '
-      + (marked ? (a.score + ' / ' + a.maxScore + ' marks') : 'result not released yet') + '</span></span>'
-      + '<svg class="icon arr" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>');
-  }, function(){
-    dashSet('dashLast', '<div class="wt-none">Your record is not available right now.</div>');
+
+/* ---- Continue Learning: the newest run in the practice history ---- */
+function dbTopTopic(run){
+  var n = {}, best = '', most = 0;
+  ((run && run.review) || []).forEach(function(r){
+    var t = r && r.topic ? String(r.topic) : '';
+    if(!t) return;
+    n[t] = (n[t] || 0) + 1;
+    if(n[t] > most){ most = n[t]; best = t; }
   });
+  return best;
+}
+function dbRenderContinue(){
+  var sub = dbEl('dbContSub'), lbl = dbEl('dbContLbl');
+  if(!sub) return;
+  var run = (pracHistCache || [])[0] || null;
+  dbContRun = run && run.subject ? run : null;
+  if(dbContRun){
+    var topic = dbTopTopic(dbContRun);
+    sub.textContent = 'Resume: ' + dbContRun.subject + (topic ? ' – ' + topic : '');
+    if(lbl) lbl.textContent = 'Continue Studying';
+  } else {
+    sub.textContent = 'You have not finished a practice run yet. Choose a subject to begin.';
+    if(lbl) lbl.textContent = 'Start Practising';
+  }
+}
+function dbPaintContinue(){
+  if(!studentId){ dbContRun = null; var s = dbEl('dbContSub'); if(s) s.textContent = 'Practice runs appear here for a signed-in scholar.'; return; }
+  if(!pracHistCache || !pracHistCache.length) pracHistCache = loadPracHistory();
+  dbRenderContinue();
+  if(typeof refreshPracHistory === 'function'){
+    refreshPracHistory().then(dbRenderContinue, dbRenderContinue);
+  }
+}
+function dbContinue(){
+  if(dbContRun && dbContRun.subject) openStudySet('practice', dbContRun.subject);
+  else openPractice();
+}
+
+/* A signed-out page never keeps the last scholar's dashboard state. */
+function dbReset(){
+  dbPopClose(true); navSheetClose();
+  dbContRun = null; dbNotifFailed = false; dbAnnFailed = false; dbAnnLoaded = false;
+  dashBroadcastsAll = []; dashNoticesAll = [];
+  var t = dbEl('dbAnnText'); if(t) t.textContent = 'Loading announcements…';
+  var b = dbEl('dbAnnBtn'); if(b) b.hidden = true;
+  var c = dbEl('dbContSub'); if(c) c.textContent = 'Looking for your last study run…';
+  var n = dbEl('dashPerfNote'); if(n) n.textContent = '';
+  dbPaintDots();
 }
 
 /* Help & tutorial (Stage 6): replay or resume the guided tour on demand. */
@@ -10598,7 +10158,7 @@ function paintMyStanding(d){
   if(!me){
     set('lgMineRank', '—');
     set('lgMineName', 'You are not in the standings yet');
-    set('lgMineNote', 'Sit a Web Test and the league will place you as soon as it is marked.');
+    set('lgMineNote', 'The league places you as soon as one of your assessed papers is marked.');
     ['lgMinePerf','lgMineXp','lgMineStreak','lgMineLvl'].forEach(function(x){ set(x, '—'); });
     if(tierIcon) tierIcon.textContent = '';
     return;
@@ -10647,7 +10207,7 @@ var cbtStudy = null;
    shows the shared result screen. */
 var cbtDemo = null;
 /* The subject papers inside the sitting in progress, in served order — the
-   same shape wtGroups uses for the objective/theory runner, so a candidate can
+   same shape the retired Objective/Theory runner used, so a candidate can
    move between English/Physics/Chemistry/Mathematics the way the real JAMB CBT
    lets them, instead of facing one flat 180-question list. Null (and the strip
    hidden) for a single-subject run such as a student-configured study CBT. */
@@ -10694,8 +10254,7 @@ function cbtOpenPaper(p){
   jambModeOn(p);
 }
 /* Built from the papers array the backend already serves alongside a
-   full-combination sitting (the same one the objective/theory runner reads —
-   see wtBuildGroups) so this never has to guess where one subject's block ends
+   full-combination sitting so this never has to guess where one subject's block ends
    and the next begins. */
 function cbtBuildGroups(){
   cbtGroups = null;
@@ -10794,8 +10353,7 @@ function startTimer(){
   },1000);
 }
 /* Inside a multi-subject sitting the numbered panel below only ever shows the
-   subject in view — the same "turn to your Chemistry paper" behaviour as the
-   objective/theory runner (wtBuildNav) — so a candidate is never asked to
+   subject in view — a "turn to your Chemistry paper" behaviour — so a candidate is never asked to
    scroll past 180 buttons to find question 3 of their own paper. */
 function buildCBTNav(){
   var nav=document.getElementById('cbtNav'); if(!nav) return;
@@ -10847,7 +10405,7 @@ function confirmExit(){
   if(cbtTimerId){ clearInterval(cbtTimerId); cbtTimerId = null; }
   /* The preview is abandoned cleanly: no token is spent and nothing is submitted. */
   if(cbtDemo){ cbtDemo = null; cbtAns = {}; cbtGroups = null; go('demo'); demoOpen(); return; }
-  if(cbtPaper){ cbtPaper = null; cbtAns = {}; cbtGroups = null; go('webtest'); toast('Paper closed — nothing was submitted'); return; }
+  if(cbtPaper){ cbtPaper = null; cbtAns = {}; cbtGroups = null; go('study'); toast('Paper closed — nothing was submitted'); return; }
   /* Leaving a study run submits nothing: it was never an attempt, so there is
      nothing to abandon. The set-up screen is where they came from. */
   if(cbtStudy){ cbtStudy = null; cbtAns = {}; cbtGroups = null; go('studySet'); renderStudySet(); return; }
@@ -10900,7 +10458,7 @@ function submitCBT(auto){
   cbtPaper = null;
   toast(auto ? 'Time up — submitting your paper' : 'Submitting your paper…');
   GOC.api.submitTest({ attemptId: paper.attemptId, responses: responses, timeUsedSec: used })
-    .then(function(res){ jambClearSession(); jambModeOff(); wtShowResult(res); wtLoadHistory(); refreshMe(); renderLeague(); },
+    .then(function(res){ jambClearSession(); jambModeOff(); wtShowResult(res); refreshMe(); renderLeague(); },
       function(err){ cbtPaper = paper; jambSubmitArmed = false; toast(err.message || 'Could not submit your paper'); });
 }
 
@@ -11364,7 +10922,7 @@ function rsPaintList(rows){
   if(!host) return;
   if(!rows.length){
     host.innerHTML = '<div class="wt-none">' + (rsFilter === 'all'
-      ? 'You have not sat a Web Test yet. Your papers and their reviews appear here.'
+      ? 'You have no assessed papers on your record yet. Your papers and their reviews appear here.'
       : 'No ' + wtSectionLabel(rsFilter) + ' paper yet.') + '</div>';
     return;
   }
@@ -11434,159 +10992,9 @@ function rsOpen(id){
 }
 
 /* ================= CLASSES / VIDEOS =================
-   No hardcoded demo rows here on purpose — this list is only ever filled by
-   loadPublishedVideos() (below), reading real published video records from
-   the server. An empty array is the honest state before that call resolves
-   or if the academy hasn't published anything yet; renderClasses() already
-   shows the right "Nothing yet" message for an empty list on its own. */
-var videos = [];
-var classFilter = 'all';
-var publishedVideosLoaded = false;
-
-/* Real video records don't carry their own thumbnail gradient the way the
-   old hardcoded demo rows did, so map the canonical subject onto one —
-   reusing the same brand colour per subject as SUBJECT_META, paired with a
-   slightly darker second stop. Unknown/blank subjects fall back to grey. */
-var VIDEO_GRADIENTS = {
-  'Use of English': ['#4F46E5', '#3730A3'],
-  'Physics':        ['#DC2626', '#7F1D1D'],
-  'Chemistry':      ['#0E7490', '#155e75'],
-  'Biology':        ['#15803D', '#106b34'],
-  'Mathematics':    ['#7F1D1D', '#5E1212']
-};
-var VIDEO_GRADIENT_FALLBACK = ['#475467', '#344054'];
-
-function videoGradient(subj){
-  return VIDEO_GRADIENTS[canonSubject(subj)] || VIDEO_GRADIENT_FALLBACK;
-}
-
-function setClassFilter(f){ classFilter = f; renderClasses(); }
-
-/* This is the one function that was missing end to end: the admin console
-   could already publish a video, but nothing on the student side ever
-   asked the server for the published list — the screen only ever showed
-   the fixed demo rows above (now removed). This mirrors
-   loadPublishedResources() function-for-function. */
-function loadPublishedVideos(){
-  if(!GOC.api || !GOC.api.listPublishedVideos) return;
-
-  GOC.api.listPublishedVideos().then(function(result){
-    var items = result && Array.isArray(result.videos) ? result.videos : [];
-    publishedVideosLoaded = true;
-    videosLocked = !!(result && result.locked);
-
-    /* Convert Appwrite video records into the {type, subj, title, tutor,
-       dur, date, c1, c2, videoId, storageFileId, externalUrl} shape the
-       existing renderClasses() / videoCard() functions already expect. */
-    videos = items.map(function(v){
-      var subj = canonSubject(v.subject || '');
-      var grad = videoGradient(subj);
-      var type = v.type === 'live' ? 'live' : 'lesson';
-
-      var when = '';
-      if(v.createdAt){
-        var d = new Date(v.createdAt);
-        if(!isNaN(d.getTime())){
-          when = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-        }
-      }
-      var date = when
-        ? (type === 'live' ? ('Recorded ' + when) : ('Added ' + when))
-        : (type === 'live' ? 'Recorded class' : 'Lesson video');
-
-      return {
-        type: type,
-        subj: subj,
-        title: v.title || 'Untitled video',
-        tutor: v.tutor || '',
-        dur: v.duration || '',
-        date: date,
-        c1: grad[0],
-        c2: grad[1],
-        videoId: v.videoId || '',
-        storageFileId: v.storageFileId || '',
-        externalUrl: v.externalUrl || ''
-      };
-    });
-
-    renderClasses();
-
-  }, function(err){
-    console.warn('[goc] Could not load published videos:', err && err.message);
-    publishedVideosLoaded = false;
-    videos = [];
-    renderClasses();
-  });
-}
-/* Set when the server held videos back from this student. */
-var videosLocked = false;
-function renderClasses(){
-  var cs = document.getElementById('classFilters');
-  if(cs){ cs.querySelectorAll('.fchip').forEach(function(ch){ var on = ch.getAttribute('data-f') === classFilter; ch.classList.toggle('on', on); ch.setAttribute('aria-pressed', String(on)); }); }
-  var les = document.getElementById('lessonList');
-  if(!les) return;
-  les.innerHTML = '';
-  var lesN = 0;
-  videos.forEach(function(v){
-    var subj = canonSubject(v.subj);
-    // A recording for a paper the student does not sit is not on their shelf.
-    if(!studiesSubject(subj)) return;
-    if(classFilter !== 'all' && subj !== canonSubject(classFilter)) return;
-    /* Recorded live-class replays were removed from the Classes screen with
-       the rest of the retired study features. The records are untouched; a
-       lesson video is the only kind this screen lists now. */
-    if(v.type !== 'live'){ les.appendChild(videoCard(v)); lesN++; }
-  });
-  document.getElementById('lessonEmpty').style.display = lesN ? 'none' : 'block';
-  /* Say which papers were looked in. An empty shelf is otherwise ambiguous: the
-     student cannot tell whether nothing has been published for their
-     combination or whether the app has forgotten what they sit. */
-  var scope = classFilter === 'all' ? orderedSubjects().join(', ') : canonSubject(classFilter);
-  var se = document.getElementById('lessonEmpty');
-  if(se) se.textContent = videosLocked ? 'Lesson videos are not available right now.' : 'No lesson videos yet for ' + scope + '.';
-}
-function videoCard(v){
-  var b = document.createElement('button');
-  b.className = 'vcard';
-  var badge = v.type === 'live'
-    ? '<span class="vbadge live"><svg width="7" height="7" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#fff"/></svg>Live replay</span>'
-    : '<span class="vbadge">Lesson</span>';
-  b.innerHTML =
-    '<div class="vthumb" style="background:linear-gradient(135deg,' + v.c1 + ',' + v.c2 + ')">' +
-      badge +
-      '<span class="vplay"><svg class="icon" viewBox="0 0 24 24" fill="#DC2626"><path d="M8 5v14l11-7z"/></svg></span>' +
-      '<span class="vdur">' + esc(v.dur) + '</span>' +
-    '</div>' +
-    '<div class="vmeta">' +
-      '<span class="vtag" style="background:' + hexA(v.c1) + ';color:' + v.c1 + '">' + esc(v.subj) + '</span>' +
-      '<h4>' + esc(v.title) + '</h4>' +
-      '<p>' + esc(v.tutor) + ' · ' + esc(v.date) + '</p>' +
-    '</div>';
-  b.onclick = function(){ playVideo(v); };
-  return b;
-}
-function playVideo(v){
-  /* External links (Zoom cloud / unlisted YouTube) are never embedded
-     inline — hand off to the browser/app that already knows how to play
-     them. File-backed videos stream through the same overlay viewer the
-     video-type resources already use, so no new player UI is needed. */
-  if(v.externalUrl){
-    window.open(v.externalUrl, '_blank');
-    return;
-  }
-
-  if(v.storageFileId){
-    toast('Opening “' + v.title + '”…');
-    GOC.api.getVideoFile(v.videoId).then(function(blob){
-      openResourceMediaViewer(blob, v.title, 'video', 'mp4');
-    }, function(err){
-      toast(err.message || 'Could not open this video.');
-    });
-    return;
-  }
-
-  toast('This video has no file or link attached.');
-}
+   The student Lesson-videos library (the "Classes" tab, #classes), its
+   subject filter, cards and player were retired in the clean sweep (Phase 2,
+   18 Nov 2026). Video records and files are preserved untouched. */
 
 /* ================= RESOURCES ================= */
 /* `subj` is what personalisation reads. 'all' means the item belongs to every
@@ -12630,12 +12038,11 @@ function restoreSession(){
       if(typeof animEnter === 'function') animEnter();
       applyIdentity(user);
       loadSettings();
-      [buildWeek, renderClasses, renderResources, loadPublishedResources, loadPublishedVideos, loadUpcomingClasses, refreshMe, renderLeague]
+      [renderResources, loadPublishedResources, refreshMe, renderLeague]
         .forEach(function(fn){
           try{ fn(); }
           catch(e){ console.warn('[restoreSession] dashboard widget failed to hydrate:', e); }
         });
-      wtCatalogue = null; wtPaper = null; wtResp = {};
       if(me && me.mustChangePassword){ go('change-password'); return; }
       go('home');
       ssStart();
@@ -12678,7 +12085,7 @@ GOC.api.ready.then(function(mode){
 
 /* ============================================================
    QUESTION PANEL — slide-up grid (shared by CBT + wtRun)
-   qPanelOpen('cbt') or qPanelOpen('wt')
+   qPanelOpen('cbt')
    ============================================================ */
 var qPanelCurrentMode = null;
 
@@ -12730,81 +12137,10 @@ function qPanelRefreshGrid(){
       })(i);
     }
 
-  } else if(qPanelCurrentMode === 'wt'){
-    /* Web Test — use wtPaper.questions */
-    if(!wtPaper) return;
-    var wg   = (typeof wtGroupAt === 'function') ? wtGroupAt(wtCur) : null;
-    var wfrom = wg ? wg.from : 0;
-    var wto   = wg ? wg.to   : wtPaper.questions.length - 1;
-    for(var j = wfrom; j <= wto; j++){
-      (function(j){
-        var b = document.createElement('button');
-        b.className = 'qn' +
-          (j === wtCur               ? ' cur' : '') +
-          (wtAnswered(j)             ? ' ans' : '');
-        b.textContent = j - wfrom + 1;
-        b.onclick = function(){ wtGo(j); qPanelClose(); };
-        grid.appendChild(b);
-      })(j);
-    }
   }
 }
 
 
-/* Admin Console -> Tutors -> Tutor Analytics */
-function admTutAnalyticsLoad() {
-  var host = document.getElementById('admTutAnalytics');
-  if (!host || !GOC.api.adminTutorAnalytics) return;
-
-  host.innerHTML = '<div class="ad-loading">Loading analytics…</div>';
-
-  GOC.api.adminTutorAnalytics().then(function (result) {
-    if (!host.isConnected) return;
-
-    var reports = result && Array.isArray(result.reports)
-      ? result.reports : [];
-
-    if (!reports.length) {
-      host.innerHTML = '<div class="ad-empty">No analytics data available yet.</div>';
-      return;
-    }
-
-    host.innerHTML = reports.map(function (report) {
-      var s = report.snapshot || {};
-
-      function value(obj, keys) {
-        for (var i = 0; obj && i < keys.length; i++) {
-          if (obj[keys[i]] != null &&
-              typeof obj[keys[i]] !== 'object') {
-            return obj[keys[i]];
-          }
-        }
-        return '—';
-      }
-
-      return '<div class="ad-cred" style="margin-bottom:12px">' +
-        '<div class="ac-top"><div class="ac-who">' +
-        '<b>' + esc(report.subject) + '</b>' +
-        '<span>Subject performance overview</span></div></div>' +
-        '<div class="ac-grid">' +
-        '<div class="ac-cell"><label>Students</label><code>' +
-        esc(String(value(s, ['students', 'studentCount', 'totalStudents']))) +
-        '</code></div>' +
-        '<div class="ac-cell"><label>Attempts</label><code>' +
-        esc(String(value(s, ['attempts', 'attemptCount', 'totalAttempts']))) +
-        '</code></div>' +
-        '<div class="ac-cell"><label>Average score</label><code>' +
-        esc(String(value(s, ['average', 'averageScore', 'avgScore']))) +
-        '</code></div></div></div>';
-    }).join('');
-  }, function (err) {
-    if (!host.isConnected) return;
-    host.innerHTML =
-      '<div class="ad-note warn">' +
-      esc(err.message || 'Could not load tutor analytics.') +
-      '</div>';
-  });
-}
 
 
 /* Boot: resolve the deployment id once, show the one-time notice if this build

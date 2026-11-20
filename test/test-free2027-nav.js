@@ -351,7 +351,7 @@ settle(w1).then(function () {
   ['free-home', 'free-register', 'free-login', 'free-portal', 'free-exam', 'free-result', 'free-leaderboard', 'free-admin'].forEach(function (id) {
     ok('the shell treats ' + id + ' as full-bleed, so no hub sidebar is drawn over it', listed.indexOf(id) > -1, listed.join(','));
   });
-  ['home', 'profile', 'results', 'league', 'timetable', 'study', 'classes', 'webtest', 'resources', 'cbt'].forEach(function (id) {
+  ['home', 'profile', 'results', 'league', 'study', 'classes', 'webtest', 'resources', 'cbt'].forEach(function (id) {
     ok('the hub screen ' + id + ' is NOT full-bleed, so it keeps its sidebar', listed.indexOf(id) < 0);
   });
   ok('the original public screens keep their full-bleed treatment', ['landing', 'login-v2', 'signup', 'updates', 'legal'].every(function (id) { return listed.indexOf(id) > -1; }));

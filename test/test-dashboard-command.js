@@ -46,19 +46,23 @@ ok('Review & saves is still on the Study hub', /Review &amp; saves/.test(index)
   && /id="sg-bookmarks"/.test(index) && /id="sg-mistakes"/.test(index) && /id="sg-review"/.test(index)
   && /onclick="atMyOpen\(\)"/.test(index));
 ok('Recent practice is still on the Study hub', />Recent practice</.test(index) && /id="pracHist"/.test(index));
-ok('Practice, Web Test, Results and Resources remain', /id="sg-practice"/.test(index)
-  && /id="sg-webtest"/.test(index) && /id="sg-results"/.test(index) && /id="sg-resources"/.test(index));
-ok('the live dashboard cards remain', /id="dashNext"/.test(index) && /id="dashStand"/.test(index) && /id="dashLast"/.test(index));
-ok('renderDash paints the surviving cards only',
-  /dashPaintNext\(\);\s*\n\s*dashPaintStanding\(\);\s*\n\s*dashPaintLast\(\);\s*\n\s*dashPaintBroadcasts\(\);\s*\n\s*dashPaintNotices\(\);/.test(app));
+ok('Practice, Results and Resources remain', /id="sg-practice"/.test(index)
+  && /id="sg-results"/.test(index) && /id="sg-resources"/.test(index));
+ok('the retired Web Test tile is gone (clean sweep)', !/id="sg-webtest"/.test(index) && !/openWebTest\(/.test(index));
+ok('the Phase 3 dashboard sections are present', ['tut-hero', 'dbStats', 'dbContinue', 'tut-jump', 'dbAnnounce', 'dbNotif'].every(function (x) { return index.indexOf('id="' + x + '"') > -1; }));
+ok('the standing and last-result panels left Home (Phase 3; League and Results keep them)', !/id="dashStand"/.test(index) && !/id="dashLast"/.test(index) && app.indexOf('function dashPaintStanding(') < 0 && app.indexOf('function dashPaintLast(') < 0);
+ok('the retired Next Activity card is gone (clean sweep)', !/id="dashNext"/.test(index) && !/id="tut-webtest"/.test(index) && app.indexOf('function dashPaintNext(') < 0 && app.indexOf('function dashRow(') < 0);
+ok('renderDash paints the Phase 3 sections only',
+  /dbPaintPerformance\(\);\s*\n\s*dbPaintContinue\(\);\s*\n\s*dashPaintBroadcasts\(\);\s*\n\s*dashPaintNotices\(\);/.test(app));
 ok('the formal CBT engine and screens are untouched', /function cbtOpenStudy\(/.test(app) && /id="cbt"/.test(index)
   && /function submitCBT\(/.test(app));
 
 head('Classes no longer offers recorded live classes');
 ok('the recorded-live section is gone from the Classes screen', !/Recorded live classes/.test(index)
   && !/id="liveList"/.test(index) && !/id="liveEmpty"/.test(index));
-ok('lesson videos still render', /id="lessonList"/.test(index) && /function loadPublishedVideos\(/.test(app)
-  && /function renderClasses\(/.test(app));
+ok('the Lesson-videos screen, its tab and its renderers are retired (clean sweep)', !/id="lessonList"/.test(index)
+  && !/id="classes"/.test(index) && !/data-t="classes"/.test(index) && !/function loadPublishedVideos\(/.test(app)
+  && !/function renderClasses\(/.test(app) && !/function playVideo\(/.test(app));
 
 head('the tutorial no longer points at removed elements');
 var onboarding = fs.readFileSync(path.join(APP, 'js', 'onboarding.js'), 'utf8');

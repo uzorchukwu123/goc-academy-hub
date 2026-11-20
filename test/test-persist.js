@@ -11,6 +11,7 @@
 
    No dependencies. Run:  node test/test-persist.js  (or via test/run.js) */
 'use strict';
+var legacy = require('./legacy-attempts.js');
 var activeStudent = require('./active-student.js');
 var http = require('http');
 var path = require('path');
@@ -278,15 +279,16 @@ function stop() {
   })();
   ok('the student enrolled', enrolled.status === 200 && !!(student && student.token), enrolled.status + ' ' + enrolled.raw);
 
-  var started = await call('POST', '/api/me/tests/start',
+  /* The Objective sitting is retired (clean sweep): the attempt is a
+     historical record from before the retirement — test/legacy-attempts.js —
+     and what this suite checks is that such a record survives the restart. */
+  var startRefused = await call('POST', '/api/me/tests/start',
     { period: 'weekly', section: 'objective', subject: 'Physics' }, student.token);
-  var responses = {};
-  (started.body.questions || []).forEach(function (q) { responses[q.id] = 0; });
-  var submitted = await call('POST', '/api/me/tests/submit',
-    { attemptId: started.body.attemptId, responses: responses }, student.token);
-  ok('the attempt was submitted before the restart',
-     submitted.status === 200 && submitted.body.status === 'marked',
-     submitted.status + ' ' + submitted.raw);
+  ok('a new Objective sitting can no longer be opened', startRefused.status === 410, startRefused.status + ' ' + startRefused.raw);
+  var submitted = legacy.sit(path.join(SANDBOX, 'server', 'data.json'), student.student.id,
+    { section: 'objective', answer: function () { return 0; } });
+  ok('the attempt was on the record before the restart',
+     submitted.status === 'marked', JSON.stringify(submitted).slice(0, 200));
 
   var beforeResults = await call('GET', '/api/me/results', undefined, student.token);
   var beforeCount2 = (beforeResults.body && beforeResults.body.attempts || []).length;
@@ -311,7 +313,8 @@ function stop() {
   ok('sessionMinutes survived the restart', after.body.sessionMinutes === 47, after.raw);
   ok('sessionWarnMinutes survived the restart', after.body.sessionWarnMinutes === 5, after.raw);
   ok('objectiveMinutes survived the restart', after.body.objectiveMinutes === 63, after.raw);
-  ok('the guardian PIN survived the restart', after.body.hasGuardianPin === true, after.raw);
+  ok('the retired Guardian PIN is neither accepted nor exposed by /api/settings',
+     after.body.hasGuardianPin === undefined && after.body.guardianPin === undefined, after.raw);
 
   var afterBp = await call('GET', '/api/objective/blueprint?period=weekly', undefined, adm2);
   var physicsRow = (afterBp.body.papers || []).filter(function (r) { return r.subject === 'Physics'; })[0];

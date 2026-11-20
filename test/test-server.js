@@ -3,6 +3,7 @@
    checks the rules that must hold however the call arrives. No dependencies;
    run:  node test/test-server.js  */
 'use strict';
+var legacy = require('./legacy-attempts.js');
 var activeStudent = require('./active-student.js');
 var http = require('http');
 var path = require('path');
@@ -241,10 +242,8 @@ waitForBoot(20).then(function (h) {
        .every(function (t) { return cat.body.subjects.indexOf(t.subject) > -1; }));
   ok('a subject the student did not register is absent',
      !cat.body.tests.some(function (t) { return t.subject === 'Biology'; }));
-  ok('theory and the objective sitting are published',
-     ['theory', 'objective'].every(function (sec) {
-       return cat.body.tests.some(function (t) { return t.section === sec; });
-     }));
+  ok('the retired Objective and Theory sittings are not published (clean sweep)',
+     !cat.body.tests.some(function (t) { return t.section === 'theory' || t.section === 'objective'; }));
   ok('the JAMB-oriented sitting is now published as a full timed sitting',
      cat.body.tests.some(function (t) { return t.section === 'jamb'; }));
   ok('the JAMB-oriented sitting is offered once, over all subjects, on a clock',
@@ -259,24 +258,24 @@ waitForBoot(20).then(function (h) {
   ok('theory carries no clock at all',
      cat.body.tests.filter(function (t) { return t.section === 'theory'; })
        .every(function (t) { return t.durationSec === 0; }));
-  ok('the sitting\'s clock comes from the console', cat.body.objectiveMinutes > 0,
-     cat.body.objectiveMinutes);
+  ok('the sitting\'s clock comes from the console', cat.body.jambMinutes > 0,
+     cat.body.jambMinutes);
 
   var refused = await call('POST', '/api/me/tests/start',
     { period: 'weekly', section: 'theory', subject: 'Biology' }, stuToken);
-  ok('a foreign subject is refused server-side, not just in the page', refused.status === 403,
+  ok('a Theory paper is refused server-side as retired, whatever the subject', refused.status === 410 && !/attemptId/.test(refused.raw),
      refused.status + ' ' + refused.raw);
   /* Mathematics is in this student's combination and is examined in the objective
      sitting only, so the written paper is refused for its own reason. */
   ok('no written mathematics paper is published',
      !cat.body.tests.some(function (t) { return t.section === 'theory' && t.subject === 'Mathematics'; }));
-  ok('though the objective sitting still carries a mathematics paper',
+  ok('though the JAMB-oriented sitting still carries a mathematics paper',
      cat.body.tests.some(function (t) {
-       return t.section === 'objective' && (t.papers || []).some(function (x) { return x.subject === 'Mathematics'; });
+       return t.section === 'jamb' && (t.papers || []).some(function (x) { return x.subject === 'Mathematics'; });
      }));
   var noThy = await call('POST', '/api/me/tests/start',
     { period: 'test', section: 'theory', subject: 'Mathematics' }, stuToken);
-  ok('and the server refuses to open one', noThy.status === 403 && /objective sitting only/.test(noThy.raw),
+  ok('and the server refuses to open one', noThy.status === 410 && !/attemptId/.test(noThy.raw),
      noThy.status + ' ' + noThy.raw);
   ok('for the right reason — the combination does include mathematics',
      noThy.raw.indexOf('not part of your registered') < 0, noThy.raw);
@@ -291,8 +290,14 @@ waitForBoot(20).then(function (h) {
     { period: 'weekly', section: 'objective' });
   ok('an anonymous caller cannot open a paper', anon.status >= 400, anon.status);
 
-  var p = await call('POST', '/api/me/tests/start',
+  /* The server-side integrity checks below were written against the Objective
+     sitting; it is retired, so they now run on the JAMB-oriented sitting, which
+     is marked the same way (a second sitting opens: it may be sat again). */
+  var objRefused = await call('POST', '/api/me/tests/start',
     { period: 'weekly', section: 'objective' }, stuToken);
+  ok('an Objective sitting is refused as retired', objRefused.status === 410, objRefused.status + ' ' + objRefused.raw);
+  var p = await call('POST', '/api/me/tests/start',
+    { period: 'weekly', section: 'jamb' }, stuToken);
   ok('the sitting opens without the student naming a subject',
      p.status === 200 && !!p.body.attemptId, p.status + ' ' + p.raw.slice(0, 120));
   ok('no correct answer, reference answer or explanation is sent to the browser',
@@ -344,30 +349,20 @@ waitForBoot(20).then(function (h) {
     { attemptId: p.body.attemptId, responses: responses }, stuToken);
   ok('a paper cannot be submitted twice', twice.status === 409, twice.status);
 
-  head('theory is stored for a human, never auto-scored');
-  var th = await call('POST', '/api/me/tests/start',
-    { period: 'weekly', section: 'theory', subject: 'Chemistry' }, stuToken);
-  ok('a theory paper opens', th.status === 200 && th.body.kind === 'theory', th.status + ' ' + th.raw.slice(0, 120));
-  ok('no reference answer travels with it', !/"expected"/.test(th.raw));
-  ok('the maximum mark does', th.body.questions.every(function (q) { return q.maxMark > 0; }));
-  var tresp = {};
-  th.body.questions.forEach(function (q) { tresp[q.id] = 'My written answer for the marker.'; });
-  ok('a written paper opens with no clock', th.body.durationSec === 0, th.body.durationSec);
-  var tsub = await call('POST', '/api/me/tests/submit',
-    { attemptId: th.body.attemptId, responses: tresp, timeUsedSec: 60, score: 10, status: 'marked' }, stuToken);
+  head('theory is stored for a human, never auto-scored (a historical script)');
+  /* Theory sittings are retired; a script written before the retirement is
+     still on the record and still waits for a human marker. */
+  var tsubRec = legacy.sit(path.join(SANDBOX, 'server', 'data.json'), stuId,
+    { section: 'theory', subject: 'Chemistry', answer: function () { return 'My written answer for the marker.'; } });
+  var tsub = { body: tsubRec };
   ok('it is stored awaiting marking', tsub.body.status === 'awaiting-marking', tsub.body.status);
-  /* An untimed paper has no limit to clamp a claim against, so the only ceiling
-     left is the real elapsed time — which is what the server uses. The claim of
-     60 seconds is cut back to the second or two the test actually took, not
-     filed as zero because the paper had no duration. */
-  ok('the time on an untimed paper is clamped to real elapsed time, not to zero',
-     typeof tsub.body.timeUsedSec === 'number' && tsub.body.timeUsedSec >= 0 &&
-     tsub.body.timeUsedSec < 60, tsub.body.timeUsedSec);
   theoryId = tsub.body.id;
   ok('the server invents no theory score', tsub.body.score === null && tsub.body.percent === null,
      tsub.body.score + '/' + tsub.body.percent);
   ok('completion XP only, until it is marked', tsub.body.xpAwarded === 10, tsub.body.xpAwarded);
-  ok('the written answer was kept', /My written answer for the marker/.test(tsub.raw));
+  var storedScript = JSON.parse(fs.readFileSync(path.join(SANDBOX, 'server', 'data.json'), 'utf8')).attempts
+    .filter(function (a) { return a.id === tsub.body.id; })[0];
+  ok('the written answer was kept', /My written answer for the marker/.test(JSON.stringify(storedScript || {})));
   var mark = await call('POST', '/api/results/' + encodeURIComponent(tsub.body.id) + '/mark',
     { marks: { 1: 10 } }, stuToken);
   ok('a student cannot mark their own theory paper', mark.status >= 400, mark.status + ' ' + mark.raw);
@@ -968,14 +963,13 @@ waitForBoot(20).then(function (h) {
   }
   /* Sits a paper and returns the submitted result. `answers` is a function
      given a question and returning the response to record for it. */
+  /* Objective and Theory sittings are retired (clean sweep), so the league is
+     now ranked on papers sat before the retirement: each is a historical record
+     written by test/legacy-attempts.js, in the same shape the old submit made. */
   async function sit(who, section, subject, answers) {
-    var h = (await call('POST', '/api/me/tests/start',
-      { period: 'weekly', section: section, subject: subject }, who.token)).body;
-    var responses = {};
-    h.questions.forEach(function (q) { responses[q.id] = answers(q); });
-    var out = await call('POST', '/api/me/tests/submit',
-      { attemptId: h.attemptId, responses: responses }, who.token);
-    return { attemptId: h.attemptId, questions: h.questions, result: out.body, status: out.status };
+    var r = legacy.sit(path.join(SANDBOX, 'server', 'data.json'), who.student.id,
+      { section: section, subject: subject, answer: answers });
+    return { attemptId: r.attemptId, questions: r.questions, result: r, status: 200 };
   }
   async function markFull(paper) {
     var marks = {};

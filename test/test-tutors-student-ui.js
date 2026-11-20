@@ -52,7 +52,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
       if (failAudit) { failAudit = false; return reply(500, { error: 'Your views are not available.' }); }
       return reply(200, { keptDays: 365, count: auditEntries.length, entries: auditEntries });
     }
-    if (/^api\/tutor\/analytics/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], snapshot: { gocStudents: 0, openStudents: 0, active: 0, activeDays: 7, practice: { answers: 0, correct: 0, average: null, small: false }, tests: { papers: 0, average: null, small: false } }, activity: { days: [], total: { answers: 0, tests: 0 } }, weakTopics: { items: [], hidden: 0, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } });
+    if (/^api\/tutor\/analytics/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], snapshot: { gocStudents: 0, active: 0, activeDays: 7, practice: { answers: 0, correct: 0, average: null, small: false }, tests: { papers: 0, average: null, small: false } }, activity: { days: [], total: { answers: 0, tests: 0 } }, weakTopics: { items: [], hidden: 0, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } });
     if (/^api\/tutor\/questions/.test(url)) return reply(200, { subject: 'Chemistry', counts: { live: 0, pending: 0, returned: 0 }, questions: [] });
     if (/^api\/tutor\/notes/.test(url)) return reply(200, { subject: 'Chemistry', counts: { live: 0, held: 0 }, notes: [] });
     if (/^api\/tutor\/notices/.test(url)) return reply(200, { subject: 'Chemistry', count: 0, notices: [] });

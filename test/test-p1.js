@@ -206,15 +206,15 @@ var home = doc.getElementById('home');
 run('animEnter(); go("home");');
 ok('the screen arrived at is marked for the richer entrance',
    home.classList.contains('enter-rich'));
-run('go("timetable"); go("home");');
+run('go("league"); go("home");');
 ok('an ordinary tab change afterwards does not repeat it',
    !home.classList.contains('enter-rich'));
 run('go("home");');
 ok('and it stays off until it is armed again', !home.classList.contains('enter-rich'));
 ok('arming it twice still only decorates one arrival', (function () {
-  run('animEnter(); go("home"); go("timetable");');
+  run('animEnter(); go("home"); go("league");');
   return !home.classList.contains('enter-rich') &&
-         !doc.getElementById('timetable').classList.contains('enter-rich');
+         !doc.getElementById('league').classList.contains('enter-rich');
 })());
 
 /* -------------------------------------------- 1.1 the connecting threads --- */
@@ -283,10 +283,12 @@ ok('the whole cascade is under half a second, so it reads as one arrival',
        .map(function (s) { return parseFloat(s.match(/([\d.]+)s/)[1]); });
      return ds.length > 0 && Math.max.apply(null, ds) <= 0.5;
    })());
-ok('1.3 reveals the Scholar ID last, and only on the sign-up arrival',
-   /\.enter-rich\.enter-id #idStrip\{animation:idLand/.test(rules));
-ok('that reveal is transform and opacity only',
-   /@keyframes idLand\{from\{opacity:0;transform:scale\([\d.]+\)\}to\{opacity:1;transform:none\}\}/.test(css));
+/* Phase 3 dashboard: the Scholar ID card left Home (it lives in Profile), and with it the
+   sign-up ID reveal, which nothing had triggered since sign-up became an application. */
+ok('1.3 the retired Home ID card leaves no reveal rule behind (Phase 3)',
+   !/#idStrip/.test(rules) && !/@keyframes idLand/.test(css));
+ok('the Scholar ID is still shown and copyable in Profile',
+   /id="profId"/.test(html) && /onclick="copyId\(\)"/.test(html));
 ok('sign-up no longer asks for the ID variant (no Scholar ID exists at application time)',
    !/animEnter\('id'\)/.test(appSrc));
 ok('and login asks for the plain one, so an ordinary login does not re-announce the ID',

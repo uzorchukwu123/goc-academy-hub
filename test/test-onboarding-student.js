@@ -159,7 +159,7 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 10); }
   tour4.register('mixed', [
     { go: 'home', target: 'dashHello', title: 'Real', body: 'exists' },
     { go: 'home', target: 'no-such-element', title: 'Ghost', body: 'missing' },
-    { go: 'home', target: 'tut-webtest', title: 'Real 2', body: 'exists' }
+    { go: 'home', target: 'dbStats', title: 'Real 2', body: 'exists' }
   ]);
   await tour4.start('mixed', { userId: 'u1' });
   await tour4.next(); await tick(5);

@@ -1662,9 +1662,8 @@
      everything a screen needs to draw the ring and decide whether to gate a
      Start button — shared so the server's enforcement and the client's display
      can never quietly disagree about what "used up" means. bonusMin is any
-     guardian-granted extra time for today (see EXTRA_TIME_GRANT_MIN below) —
-     optional and defaulting to zero, so every existing caller that doesn't
-     know about grants keeps behaving exactly as before. */
+     extra time already on today's record (granted by the retired Guardian
+     PIN extension) — optional and defaulting to zero. */
   function studyWindowStatus(limitMin, usedSec, bonusMin) {
     var limit = Math.max(0, Math.round(Number(limitMin) || 0));
     var bonus = Math.max(0, Math.round(Number(bonusMin) || 0));
@@ -1682,31 +1681,6 @@
       leftSec: leftSec, leftMin: Math.ceil(leftSec / 60),
       exhausted: leftSec <= 0, bonusMin: bonus
     };
-  }
-
-  /* -------------------------------------------- guardian "add time" grants
-     The old wind-down overlay had an "Add 15 min (guardian PIN)" button that
-     did nothing real — see DAILY-STUDY-WINDOW-STATUS.txt. This is the actual
-     feature: a single academy-wide PIN (set by management in Settings, never
-     shown to students) lets whoever holds it grant a fixed, capped amount of
-     extra time on top of today's window. Fixed size and a daily cap keep this
-     from ever becoming a way to lift the window indefinitely — it is a relief
-     valve for one closely-supervised paper, not a second daily allowance. */
-  var EXTRA_TIME_GRANT_MIN = 15;
-  var EXTRA_TIME_MAX_GRANTS_PER_DAY = 2;
-
-  /* A PIN is only ever compared, never displayed back, so the only shape rule
-     that matters is "plausible enough to be a PIN": 4 to 8 digits. Anything
-     else (blank, letters, absurdly long) is rejected before it is ever stored
-     or compared, the same way a passcode is validated elsewhere in this app. */
-  function normalizeGuardianPin(raw) {
-    var s = String(raw == null ? '' : raw).trim();
-    return (/^[0-9]{4,8}$/.test(s)) ? s : null;
-  }
-  function guardianPinMatches(stored, attempt) {
-    var a = normalizeGuardianPin(stored);
-    var b = normalizeGuardianPin(attempt);
-    return !!a && !!b && a === b;
   }
 
   /* -------------------------------------------------- self-directed study
@@ -3789,8 +3763,11 @@
     practice: true, mistakes: true, notes: true,
     pastQuestions: true, resourceDownload: true, news: true, reminders: true,
     league: true, bookmarks: true, spacedReview: true,
-    jambMock: true, webTestObjective: true, webTestTheory: true,
-    resourceView: true, videos: true, classRecordings: true, liveClassJoin: true,
+    /* Clean sweep (Phase 2): webTestObjective, webTestTheory, videos and
+       classRecordings are retired features, so they are no longer listed
+       and canUse() refuses them (fail closed). */
+    jambMock: true,
+    resourceView: true, liveClassJoin: true,
     streakFreezes: true, fullRecord: true, classNotices: true, askTutor: true
   };
 
@@ -3861,10 +3838,6 @@
     var f = WEB_TEST_FEATURE[section];
     return !!f && canUse(f);
   }
-  /* Videos: a recording of a live class (type 'live') is the classRecordings
-     feature, every other video is a lesson (the videos feature). Fails closed. */
-  function videoFeature(type) { return type === 'live' ? 'classRecordings' : 'videos'; }
-  function videoAllowed(type) { return canUse(videoFeature(type)); }
 
   /* The calendar day in Nigeria (UTC+1, no daylight saving), as YYYY-MM-DD.
      Daily allowances reset at midnight there, whatever time zone the server
@@ -3979,21 +3952,21 @@
     return out;
   }
 
-  /* ------------------------------------------------------- tutor question approval
-     Phase 3C slice 6, part 1: the approval rules as pure functions. Nothing is stored or
-     served here; the routes (part 2) and the console queue (part 3) feed these.
-     - A question has a status: 'live' (what every student sees), 'pending' (Awaiting
-       approval) or 'returned' (sent back with the admin's reason). A question with NO
-       status is live, so nothing that exists today disappears.
-     - Everything a tutor types or imports is saved pending, stamped with the tutor, the
-       tutor's name, the time and (for an import) a batch id. Students never see it.
-     - Only management reviews. A tutor never approves, and nobody approves their own.
-     - A tutor may edit only their OWN question in their OWN subject; editing sends it back
-       to pending, whatever it was. Admin-added questions are not a tutor's to edit.
-     - Owner decision (8 Oct 2026): tutor THEORY MARKS need no approval, so none of this
-       touches marking. */
+  /* ------------------------------------------------------- tutor question status
+     Final cleanup (18 Nov 2026): there is no approval step for tutor questions.
+     - A question has a status: 'live' (what every student sees), or one of the two
+       statuses the retired approval process stored — 'pending' and 'returned'. Those
+       are historical: nothing writes them any more, and records that carry them are
+       kept exactly as stored (no migration). A question with NO status is live, so
+       nothing that exists today disappears. An unknown status fails closed.
+     - A tutor's question that passes validation goes straight into the Question Bank,
+       live, stamped with the tutor, the tutor's name, the time and (for an import) a
+       batch id. Validation (core.validateQuestion and the route checks) still decides
+       what may be saved: nothing incomplete or invalid is stored.
+     - A tutor may edit only their OWN question in their OWN subject; a successful edit
+       is live. Admin-added questions are not a tutor's to edit.
+     - Owner decision (8 Oct 2026): tutor THEORY MARKS need no approval either. */
   var QUESTION_STATUSES = ['live', 'pending', 'returned'];
-  var RETURN_REASON_MIN = 3, RETURN_REASON_MAX = 300;
 
   function questionStatus(q) {
     var st = q && q.status ? String(q.status) : 'live';
@@ -4008,9 +3981,11 @@
     return isFinite(d.getTime()) ? d.toISOString() : new Date().toISOString();
   }
   function copyRec(r) { var c = {}, k; for (k in r) if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k]; return c; }
+  /* Marks the retired approval process wrote. A tutor can never set them; a record that
+     already carries them keeps them as historical metadata. */
   var REVIEW_FIELDS = ['reviewedBy', 'reviewedAt', 'returnReason'];
 
-  /* A validated question from a tutor, ready to store: pending and stamped. Returns
+  /* A validated question from a tutor, ready to store: live and stamped. Returns
      { rec } or { error }. o.batch is an import's batch id (blank for a typed question). */
   function stampTutorQuestion(rec, tutor, o, now) {
     if (!rec || typeof rec !== 'object') return { error: 'There is no question to save.' };
@@ -4018,7 +3993,7 @@
     if (!tutorCan(tutor, rec.subject)) return { error: 'You do not teach ' + String(rec.subject || 'that subject') + '.' };
     var out = copyRec(rec);
     REVIEW_FIELDS.forEach(function (k) { delete out[k]; });
-    out.status = 'pending';
+    out.status = 'live';
     out.addedBy = String(tutor.id || '');
     out.addedByName = String(tutor.name || '');
     out.addedAt = stampNow(now);
@@ -4033,62 +4008,20 @@
   }
 
   /* A tutor edits their own question: `changes` is a validated record. The result is the
-     stored question with the changes, back to pending, review marks cleared, author and
-     first-added time kept. A change of subject must still be one of the tutor's. */
+     stored question with the changes, live, with author, first-added time, batch and any
+     historical review marks kept as stored. A change of subject must still be one of the
+     tutor's. */
   function tutorEditQuestion(tutor, q, changes, now) {
     if (!tutorOwnsQuestion(tutor, q)) return { error: 'You can only change questions you added, in your own subjects.' };
     if (!changes || typeof changes !== 'object') return { error: 'There is nothing to change.' };
     if (changes.subject !== undefined && !tutorCan(tutor, changes.subject)) {
       return { error: 'You do not teach ' + String(changes.subject) + '.' };
     }
-    var out = copyRec(changes), keep = ['id', 'addedBy', 'addedByName', 'addedAt', 'batch'];
-    REVIEW_FIELDS.forEach(function (k) { delete out[k]; });
+    var out = copyRec(changes), keep = ['id', 'addedBy', 'addedByName', 'addedAt', 'batch'].concat(REVIEW_FIELDS);
     keep.forEach(function (k) { if (q[k] !== undefined) out[k] = q[k]; else delete out[k]; });
-    out.status = 'pending';
+    out.status = 'live';
     out.editedAt = stampNow(now);
     return { rec: out };
-  }
-
-  /* Management approves or returns a PENDING question. reviewer = { id, name, role }.
-     decision 'approve' | 'return'; a return needs a reason of 3-300 characters.
-     "Edit then approve" is: apply the admin's validated edit to the question, then approve it. */
-  function reviewQuestion(q, decision, reviewer, reason, now) {
-    if (!reviewer || reviewer.role === 'tutor' || !reviewer.name) return { error: 'Only the academy’s management can review questions.' };
-    if (!q || questionStatus(q) !== 'pending') return { error: 'Only a question awaiting approval can be reviewed.' };
-    if (q.addedBy && reviewer.id && q.addedBy === reviewer.id) return { error: 'Nobody can approve their own question.' };
-    var out = copyRec(q), why = String(reason == null ? '' : reason).trim();
-    if (decision === 'approve') {
-      out.status = 'live';
-      delete out.returnReason;
-    } else if (decision === 'return') {
-      if (why.length < RETURN_REASON_MIN) return { error: 'Say why the question is being returned (at least ' + RETURN_REASON_MIN + ' characters).' };
-      if (why.length > RETURN_REASON_MAX) return { error: 'Keep the reason under ' + RETURN_REASON_MAX + ' characters.' };
-      out.status = 'returned';
-      out.returnReason = why;
-    } else {
-      return { error: 'Choose approve or return.' };
-    }
-    out.reviewedBy = String(reviewer.name);
-    out.reviewedAt = stampNow(now);
-    return { rec: out };
-  }
-
-  /* Approve every pending question from one import in one go. Returns the questions to
-     store ({ recs }) and how many were left alone. The batch id must be given. */
-  function approveBatch(list, batch, reviewer, now) {
-    var id = String(batch == null ? '' : batch).trim();
-    if (!id) return { error: 'Say which import to approve.' };
-    var recs = [], skipped = 0, i, r;
-    for (i = 0; i < (list || []).length; i++) {
-      if (!list[i] || list[i].batch !== id) continue;
-      r = reviewQuestion(list[i], 'approve', reviewer, '', now);
-      if (r.error) {
-        if (!/Only the academy/.test(r.error)) { skipped++; continue; }
-        return { error: r.error };
-      }
-      recs.push(r.rec);
-    }
-    return { recs: recs, skipped: skipped };
   }
 
   /* A tutor's own questions (any status), newest first, for their dashboard. */
@@ -4097,16 +4030,6 @@
     return mine.sort(function (a, b) { return String(b.addedAt || '').localeCompare(String(a.addedAt || '')); });
   }
 
-  /* The console's Awaiting approval list: pending questions, every subject, oldest first
-     so nothing waits for ever. Optional subject filter. */
-  function approvalQueue(list, subject) {
-    var want = subject ? String(subject) : '';
-    var out = (list || []).filter(function (q) { return q && questionStatus(q) === 'pending' && (!want || q.subject === want); });
-    return out.sort(function (a, b) { return String(a.addedAt || '').localeCompare(String(b.addedAt || '')); });
-  }
-  function pendingCount(list) {
-    return (list || []).reduce(function (n, q) { return n + (q && questionStatus(q) === 'pending' ? 1 : 0); }, 0);
-  }
   /* The newest time a tutor added a question to this subject, or '' (for Subjects & tutors). */
   function lastTutorUpload(list, subject) {
     var best = '';
@@ -5688,7 +5611,6 @@
     notes: ['questions.manage'],
     passages: ['questions.manage'],
     'import': ['questions.manage'],
-    videos: ['resources.publish'],
     resources: ['resources.publish'],
     classes: ['classes.schedule'],
     broadcast: ['broadcast.send'],
@@ -5702,7 +5624,6 @@
     window: ['sittings.configure'],
     tutors: ['tutors.accounts'],
     managers: ['managers.accounts'],
-    approvals: ['approvals.review'],
     flags: ['approvals.review'],
     challenges: ['challenges.manage'],
     access: ['managers.accounts'],
@@ -5754,9 +5675,6 @@
     ['PUT',    new RegExp('^/api/staff/' + ID + '/password$'),         'staff-password-change',  'Changed a management password', null],
     ['PUT',    /^\/api\/settings\/passcode$/,                          'passcode-change',        'Changed the console passcode', null],
     ['POST',   /^\/api\/auth\/password$/,                              'own-password-change',    'Changed their own password', null],
-    ['POST',   new RegExp('^/api/approvals/' + ID + '/approve$'),      'content-approve',        'Approved tutor content', null],
-    ['POST',   new RegExp('^/api/approvals/' + ID + '/return$'),       'content-return',         'Returned tutor content', null],
-    ['POST',   /^\/api\/approvals\/batch\/approve$/,                   'content-approve-batch',  'Approved a batch of tutor content', null],
     ['DELETE', /^\/api\/questions\/bulk$/,                             'question-delete-bulk',   'Deleted questions in bulk', null],
     ['DELETE', new RegExp('^/api/questions/' + ID + '$'),              'question-delete',        'Deleted a question', null],
     ['DELETE', /^\/api\/notes\/bulk$/,                                 'note-delete-bulk',       'Deleted notes in bulk', null],
@@ -5766,7 +5684,6 @@
     ['DELETE', new RegExp('^/api/notices/' + ID + '$'),                'notice-delete',          'Removed a class notice', null],
     ['DELETE', new RegExp('^/api/broadcasts/' + ID + '$'),             'broadcast-delete',       'Removed a broadcast', null],
     ['DELETE', new RegExp('^/api/admin/resources/' + ID + '$'),        'resource-delete',        'Deleted a resource', null],
-    ['DELETE', new RegExp('^/api/admin/videos/' + ID + '$'),           'video-delete',           'Deleted a video', null],
     ['DELETE', new RegExp('^/api/admin/classes/' + ID + '$'),          'class-delete',           'Deleted a live class', null]
   ];
   /* Is this request one the log records? Returns { action, label, target, detail } or null.
@@ -6666,10 +6583,6 @@
     STUDY_PING_MAX_SEC: STUDY_PING_MAX_SEC,
     clampStudyPingSeconds: clampStudyPingSeconds,
     studyWindowStatus: studyWindowStatus,
-    EXTRA_TIME_GRANT_MIN: EXTRA_TIME_GRANT_MIN,
-    EXTRA_TIME_MAX_GRANTS_PER_DAY: EXTRA_TIME_MAX_GRANTS_PER_DAY,
-    normalizeGuardianPin: normalizeGuardianPin,
-    guardianPinMatches: guardianPinMatches,
     STUDY_MODES: STUDY_MODES.slice(),
     STUDY_MAX: STUDY_MAX,
     clampStudyCount: clampStudyCount,
@@ -6694,19 +6607,13 @@
     tutorSubjectFor: tutorSubjectFor,
     tutorPublic: tutorPublic,
     QUESTION_STATUSES: QUESTION_STATUSES,
-    RETURN_REASON_MIN: RETURN_REASON_MIN,
-    RETURN_REASON_MAX: RETURN_REASON_MAX,
     questionStatus: questionStatus,
     questionIsLive: questionIsLive,
     liveQuestions: liveQuestions,
     stampTutorQuestion: stampTutorQuestion,
     tutorOwnsQuestion: tutorOwnsQuestion,
     tutorEditQuestion: tutorEditQuestion,
-    reviewQuestion: reviewQuestion,
-    approveBatch: approveBatch,
     tutorQuestions: tutorQuestions,
-    approvalQueue: approvalQueue,
-    pendingCount: pendingCount,
     lastTutorUpload: lastTutorUpload,
     tutorOwnsNote: tutorOwnsNote,
     stampTutorNote: stampTutorNote,
@@ -6808,7 +6715,6 @@
     dailyAllowance: dailyAllowance,
     reviewAllowance: reviewAllowance,
     capPracticeRun: capPracticeRun,
-    videoAllowed: videoAllowed,
     webTestAllowed: webTestAllowed,
     lagosDay: lagosDay,
     bookmarkKey: bookmarkKey,

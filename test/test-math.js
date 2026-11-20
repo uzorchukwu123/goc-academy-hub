@@ -365,7 +365,6 @@ head('every screen a student reads a question on goes through the renderer');
 [['the practice stem', /pracQ'\)\.innerHTML = mth\(/],
  ['the practice options', /class="key">' \+ OPT_KEYS\[i\] \+ '<\/span>' \+ mth\(o\)/],
  ['the practice explanation', /mth\(d\.explanation/],
- ['the web-test stem', /txt\.innerHTML = mth\(q\.text/],
  ['the CBT stem', /cbtQ'\)\.innerHTML = mth\(/],
  ['the reading-mode note body', /mth\(x\.trim\(\), NOTE_MTH\)/],
  ['the console question card', /mth\(r\.text, \{breaks:true\}\)|mth\(q\.text, \{breaks:true\}\)/],

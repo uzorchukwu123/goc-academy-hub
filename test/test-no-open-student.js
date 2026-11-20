@@ -29,10 +29,13 @@ ok('no TIERS table is exported', core.TIERS === undefined);
 ok('no cleanTier is exported', core.cleanTier === undefined);
 ok('no tier message helpers are exported', core.TIER_LOCK_MESSAGE === undefined && core.TIER_UPGRADE_MESSAGE === undefined);
 ok('every known feature is available to every student',
-  ['practice', 'notes', 'pastQuestions', 'resourceView', 'resourceDownload', 'videos',
-   'classRecordings', 'liveClassJoin', 'streakFreezes', 'classNotices', 'askTutor',
-   'webTestObjective', 'webTestTheory', 'jambMock', 'bookmarks', 'spacedReview', 'fullRecord']
+  ['practice', 'notes', 'pastQuestions', 'resourceView', 'resourceDownload',
+   'liveClassJoin', 'streakFreezes', 'classNotices', 'askTutor',
+   'jambMock', 'bookmarks', 'spacedReview', 'fullRecord']
     .every(function (f) { return core.canUse(f) === true; }));
+ok('the features retired in the clean sweep are refused for everyone (fail closed)',
+  ['videos', 'classRecordings', 'webTestObjective', 'webTestTheory']
+    .every(function (f) { return core.canUse(f) === false; }));
 ok('an unknown feature is refused (fail closed)', core.canUse('noSuchFeature') === false);
 var lim = core.studentLimits();
 ok('limits are the former full set (no practice/note/review/bookmark caps, all past years)',
@@ -123,7 +126,7 @@ waitForBoot(30).then(async function (h) {
   ok('/api/me answers with no tier anywhere', me.status === 200 && !/"tier"/.test(me.raw), me.raw.slice(0, 200));
   var feats = (me.body && (me.body.features || (me.body.student && me.body.student.features))) || {};
   var lims = (me.body && (me.body.limits || (me.body.student && me.body.student.limits))) || {};
-  ok('/api/me carries the full feature set', feats.askTutor === true && feats.webTestObjective === true && feats.streakFreezes === true, JSON.stringify(feats).slice(0, 200));
+  ok('/api/me carries the full feature set', feats.askTutor === true && feats.jambMock === true && feats.streakFreezes === true, JSON.stringify(feats).slice(0, 200));
   ok('/api/me carries the full limits', lims.pastYears === 'all' && lims.bookmarks === null, JSON.stringify(lims).slice(0, 200));
   var notices = await call('GET', '/api/me/notices', null, tok);
   ok('class notices are readable (not locked)', notices.status === 200 && notices.body.locked === false, notices.raw.slice(0, 160));
@@ -149,7 +152,7 @@ waitForBoot(30).then(async function (h) {
   ok('the legacy student still signs in', login2.status === 200 && !!login2.body.token, login2.raw.slice(0, 160));
   var me2 = await call('GET', '/api/me', null, login2.body.token);
   var feats2 = (me2.body && (me2.body.features || (me2.body.student && me2.body.student.features))) || {};
-  ok('the stored open tier is ignored: full features', me2.status === 200 && feats2.askTutor === true && feats2.webTestObjective === true && feats2.classNotices === true, me2.raw.slice(0, 240));
+  ok('the stored open tier is ignored: full features', me2.status === 200 && feats2.askTutor === true && feats2.jambMock === true && feats2.classNotices === true, me2.raw.slice(0, 240));
   var notices2 = await call('GET', '/api/me/notices', null, login2.body.token);
   ok('the legacy student reads notices unlocked', notices2.status === 200 && notices2.body.locked === false, notices2.raw.slice(0, 160));
 

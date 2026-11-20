@@ -121,14 +121,13 @@ function call(method, url, body, token) {
   ok('status counts come from Appwrite, not the empty cache (1 live / 1 pending / 1 returned)',
     sc.live === 1 && sc.pending === 1 && sc.returned === 1, JSON.stringify(sc));
 
-  /* Admin analytics: the subject list must also come from Appwrite. */
+  /* The admin-side tutor analytics route was retired in the clean sweep (Phase 2);
+     the tutor's own analytics (GET /api/tutor/analytics) is untouched. */
   var fl = await call('POST', '/api/auth/login', { id: 'GOC-A-001', password: 'founder2027' });
   var ft = fl.body && fl.body.token;
   await call('POST', '/api/auth/unlock', { passcode: '2027' }, ft);
   var an = await call('GET', '/api/admin/tutors/analytics', undefined, ft);
-  ok('admin tutor analytics answers', an.status === 200, an.status + ' ' + an.raw);
-  var subjects = ((an.body && an.body.reports) || []).map(function (r) { return r.subject; });
-  ok('the analytics subject list comes from Appwrite (Physics present)', subjects.indexOf('Physics') > -1, JSON.stringify(subjects));
+  ok('the retired admin tutor analytics route is gone', an.status === 404, an.status + ' ' + an.raw);
 
   await halt();
   console.log('\n' + passes + ' passed, ' + fails + ' failed');

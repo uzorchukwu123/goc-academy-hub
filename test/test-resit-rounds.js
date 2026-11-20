@@ -42,24 +42,22 @@ ok('old two-argument calls are unchanged (round defaults to 1)',
 ok('an unknown section is still refused', core.canSit('practice', [], 1).reason === 'unknown');
 
 var stuId = null;
-console.log('\nthe demo-driver journey: sit, open a new round, sit again');
+/* Clean sweep (Phase 2): the Objective and Theory sittings that rounds gate are
+   retired for students, so the student half of this journey is now "no sitting
+   opens, in any round". The console's round management and every stored round
+   and attempt are kept (historical records), so the console half is unchanged. */
+console.log('\nthe demo-driver journey: no new sitting opens; the console still manages rounds');
 vm.runInContext('GOC.api._drivers.mock._setJambReadyMin(1)', ctx);
 activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Ada Round', password: 'secret123',
   goal: 'JAMB / UTME 2027', subjects: COMBO }).then(function (r) {
   stuId = r.student.id;
-  // every student now has full GOC access — no promotion step exists
-  return mock.startTest({ period: 'test', section: 'objective', subject: 'All subjects' });
-}).then(function (st) {
-  return mock.submitTest({ attemptId: st.attemptId, responses: {} });
-}).then(function () {
   return rejects(mock.startTest({ period: 'test', section: 'objective', subject: 'All subjects' }));
 }).then(function (m) {
-  ok('a second Objective sitting in the same round is refused', /cannot be sat again/.test(m || ''), m);
+  ok('an Objective sitting is refused as retired, in round 1', /have been retired/.test(m || ''), m);
   return mock.listMyTests();
 }).then(function (r) {
-  var o = row(r, 'objective');
-  ok('the catalogue shows Objective completed, 1 attempt, round 1', o.completed === true && o.attempts === 1 && o.round === 1, JSON.stringify(o));
-  /* The academy opens a new round from the console. */
+  ok('the catalogue lists no retired Objective row', !row(r, 'objective'), JSON.stringify(row(r, 'objective')));
+  /* The academy can still read and open rounds from the console. */
   return mock.login('GOC-A-001', 'founder2027');
 }).then(function () { return mock.unlockConsole('2027'); }).then(function () {
   return mock.getRound('objective');
@@ -68,30 +66,14 @@ activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Ada Round', password: '
   return mock.openRound('objective');
 }).then(function (r) {
   ok('opening advances to round 2 and reports what would be served', r.opened === true && r.round === 2 && r.section === 'objective' && r.subject === core.OBJECTIVE_SUBJECT, JSON.stringify(r));
-  ok('an unknown section cannot open a round', true);
   return rejects(mock.openRound('practice'));
 }).then(function (m) {
   ok('opening a round for a non-Web-Test section is refused', !!m, m);
-  /* Back to the student. */
   return mock.login(stuId, 'secret123');
 }).then(function () {
-  return mock.listMyTests();
-}).then(function (r) {
-  var o = row(r, 'objective');
-  ok('after the new round, Objective is open again with 0 attempts this round', o.completed === false && o.attempts === 0 && o.round === 2, JSON.stringify(o));
-  return mock.startTest({ period: 'test', section: 'objective', subject: 'All subjects' });
-}).then(function (st) {
-  ok('the student can start the newly opened round', !!st.attemptId, JSON.stringify(st).slice(0, 120));
-  return mock.submitTest({ attemptId: st.attemptId, responses: {} });
-}).then(function () {
-  return mock.myResults();
-}).then(function (r) {
-  var objs = (r.attempts || []).filter(function (a) { return a.section === 'objective'; });
-  ok('both rounds are kept on the record (performance/league unchanged)', objs.length === 2, 'objective attempts: ' + objs.length);
-  return mock.listMyTests();
-}).then(function (r) {
-  var o = row(r, 'objective');
-  ok('round 2 is now closed too, counting 1 attempt this round', o.completed === true && o.attempts === 1 && o.round === 2, JSON.stringify(o));
+  return rejects(mock.startTest({ period: 'test', section: 'objective', subject: 'All subjects' }));
+}).then(function (m) {
+  ok('a newly opened round does not bring the retired sitting back', /have been retired/.test(m || ''), m);
 }).then(function () {
   console.log('\n' + (fails ? fails + ' FAILED' : 'all passed'));
   process.exit(fails ? 1 : 0);

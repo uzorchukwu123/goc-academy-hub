@@ -59,9 +59,12 @@ function markup(x) { var e = id(x); return e ? e.innerHTML : ''; }
 
 head('markup the new code depends on');
 ['signGoal', 'examNote', 'examNoteBody', 'subjPick', 'subjGrid', 'subjCount', 'subjMsg',
- 'classFilters', 'resList', 'ttBlocks', 'pracSub'].forEach(function (x) {
+ 'resList', 'pracSub'].forEach(function (x) {
   ok('#' + x + ' exists', !!id(x));
 });
+ok('the standalone Timetable screen is retired (clean sweep)', !id('timetable') && !id('ttBlocks') && !id('weekStrip'));
+ok('the Lesson-videos screen is retired (clean sweep)', !id('classes') && !id('classFilters') && !id('lessonList'));
+function subjList() { return run('orderedSubjects()'); }
 /* The home screen was cut back to what is live and honest: the hero, the
    Scholar ID and the daily study window. The sections that promised progress
    the app was not yet measuring are gone, and so are the renderers behind
@@ -112,37 +115,25 @@ ok('the refusal is explained on screen', text('subjMsg').length > 0, text('subjM
 ok('still exactly three after the refusal', run('chosenSciences().length') === 3);
 
 head('Priority 6 — the stored combination drives every subject-aware surface');
-/* Priority 6 tests whether the *filtering logic* correctly narrows videos to
-   a student's combination — it has nothing to do with what real videos an
-   academy has published. Production js/app.js no longer ships hardcoded
-   placeholder rows (Priority: "clear the placeholder videos"), so this test
-   supplies its own small fixture directly, the same way a real published
-   video would arrive from loadPublishedVideos() once the server has one for
-   every subject under test. */
-run("videos = [" +
-  "{type:'lesson',subj:'Use of English',title:'Comprehension Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'lesson',subj:'Physics',title:'Newton Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'lesson',subj:'Chemistry',title:'Hydrocarbons Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'lesson',subj:'Biology',title:'Cell Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}," +
-  "{type:'lesson',subj:'Maths',title:'Quadratic Equations Fixture',tutor:'t',dur:'10:00',date:'d',c1:'#000',c2:'#000'}" +
-  "]");
+/* Priority 6 tests that every subject-aware surface narrows to the student's
+   combination. The Lesson-videos shelf and its filter were retired in the
+   clean sweep, so the surfaces checked are the subject list itself, the
+   resources library, the planner model and the study catalogue. */
 run("resources = [{resourceId:'FIXTURE-SYL',storageFileId:'',description:'',published:true,cat:'syllabus',type:'SYL',tcol:'#15803D',subj:'all',title:'JAMB 2027 Syllabus — Fixture',meta:'All subjects · test fixture',fileExt:'pdf'}]");
 run('applySubjects')(['Use of English', 'Physics', 'Chemistry', 'Mathematics']);
 ['Use of English', 'Physics', 'Chemistry', 'Mathematics'].forEach(function (s) {
-  ok('class filters show ' + s, markup('classFilters').indexOf(s) > -1);
+  ok('the subject list shows ' + s, subjList().indexOf(s) > -1);
 });
-ok('class filters = All + four papers', (markup('classFilters').match(/fchip/g) || []).length === 5,
-   (markup('classFilters').match(/fchip/g) || []).length);
-ok('no Biology filter', markup('classFilters').indexOf('Biology') < 0);
-ok('recordings exclude Biology', markup('liveList').indexOf('Biology') < 0 &&
-   markup('lessonList').indexOf('Biology') < 0);
-ok('recordings keep Mathematics (written "Maths")',
-   (markup('liveList') + markup('lessonList')).indexOf('Quadratic') > -1);
+ok('the subject list is the four papers', subjList().length === 4, subjList().join(','));
+ok('no Biology in the subject list', subjList().indexOf('Biology') < 0);
 ok('materials exclude Biology', markup('resList').indexOf('Biology') < 0);
 ok('materials keep the all-subject syllabus', markup('resList').indexOf('Syllabus') > -1);
-ok('timetable excludes Biology', markup('ttBlocks').indexOf('Biology') < 0, markup('ttBlocks'));
-ok('timetable keeps a shared CBT/Review block or says why not',
-   markup('ttBlocks').length > 0);
+/* The planner model kept for the future Study Plan still limits a day to the
+   student's own papers (dayBlocks), with shared Review/Revision slots allowed. */
+run("week.Mon.blocks = [{t:'9:00',subj:'Biology',topic:'b'},{t:'10:00',subj:'Mathematics',topic:'m'},{t:'11:00',subj:'Review',topic:'r'}];");
+function planSubjects() { return run("dayBlocks('Mon').map(function(b){ return b.subj; }).join(',')"); }
+ok('planner model excludes Biology', planSubjects().indexOf('Biology') < 0, planSubjects());
+ok('planner model keeps a shared Review block', planSubjects().indexOf('Review') > -1, planSubjects());
 ok('the study catalogue narrowed to the combination',
    run('studyCat') === null || run('studyCat').subjects.every(function (e) {
      return ['Use of English','Physics','Chemistry','Mathematics'].indexOf(e.subject) > -1;
@@ -150,24 +141,19 @@ ok('the study catalogue narrowed to the combination',
 
 head('Priority 6 — a different combination redraws everything');
 run('applySubjects')(['Use of English', 'Biology', 'Chemistry', 'Physics']);
-ok('class filters now show Biology', markup('classFilters').indexOf('Biology') > -1);
-ok('class filters drop Mathematics', markup('classFilters').indexOf('Mathematics') < 0);
-ok('recordings drop the Maths class', (markup('liveList') + markup('lessonList')).indexOf('Quadratic') < 0);
-ok('timetable drops Mathematics', markup('ttBlocks').indexOf('Mathematics') < 0);
+ok('the subject list now shows Biology', subjList().indexOf('Biology') > -1);
+ok('the subject list drops Mathematics', subjList().indexOf('Mathematics') < 0);
+ok('planner model drops Mathematics', planSubjects().indexOf('Mathematics') < 0, planSubjects());
+ok('planner model now admits Biology', planSubjects().indexOf('Biology') > -1, planSubjects());
 ok('the study catalogue drops Mathematics',
    run('studyCat') === null || run('studyCat').subjects.every(function (e) { return e.subject !== 'Mathematics'; }));
 
 head('Priority 6 — signed out shows all five papers');
 run('applySubjects')([]);
-ok('all five papers filterable', (markup('classFilters').match(/fchip/g) || []).length === 6,
-   (markup('classFilters').match(/fchip/g) || []).length);
+ok('all five papers are listed', subjList().length === 5, subjList().join(','));
 ok('mySubjects cleared', run('mySubjects') === null);
 
-head('a filter for a dropped paper cannot survive');
-run('setClassFilter')('Mathematics');
 run('applySubjects')(['Use of English', 'Biology', 'Chemistry', 'Physics']);
-ok('filter fell back to All', run('classFilter') === 'all', run('classFilter'));
-ok('the lesson shelf is not empty', markup('lessonList').length > 0);
 
 head('the account is the source of truth');
 run('applyIdentity')({ id: 'GOC-S-042', name: 'Ada Test', role: 'student',
@@ -175,10 +161,10 @@ run('applyIdentity')({ id: 'GOC-S-042', name: 'Ada Test', role: 'student',
 ok('login applied the account combination',
    run('orderedSubjects()').join(',') === 'Use of English,Physics,Chemistry,Biology',
    run('orderedSubjects()').join(','));
-ok('the subject surfaces redrew from it', markup('classFilters').indexOf('Mathematics') < 0);
+ok('the subject surfaces redrew from it', subjList().indexOf('Mathematics') < 0);
 run('applyIdentity')({ id: 'GOC-A-001', name: 'Ernest Uzorchukwu', role: 'staff',
   title: 'Founder', subjects: [], exam: null });
-ok('staff preview shows all five papers', (markup('classFilters').match(/fchip/g) || []).length === 6);
+ok('staff preview shows all five papers', subjList().length === 5, subjList().join(','));
 run('applyIdentity')({ id: 'GOC-S-042', name: 'Ada Test', role: 'student',
   subjects: ['Use of English', 'Biology', 'Chemistry', 'Physics'] });
 run('logout()');

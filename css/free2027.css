@@ -45,7 +45,6 @@ body.f27-mode #home.active,
 body.f27-mode #profile.active,
 body.f27-mode #results.active,
 body.f27-mode #league.active,
-body.f27-mode #timetable.active,
 body.f27-mode #study.active,
 body.f27-mode #studySet.active,
 body.f27-mode #reading.active,
@@ -56,11 +55,8 @@ body.f27-mode #studyRes.active,
 body.f27-mode #lesson.active,
 body.f27-mode #practice.active,
 body.f27-mode #cbt.active,
-body.f27-mode #webtest.active,
-body.f27-mode #wtRun.active,
 body.f27-mode #wtResult.active,
-body.f27-mode #resources.active,
-body.f27-mode #classes.active { display: flex !important; }
+body.f27-mode #resources.active{ display: flex !important; }
 
 /* While an ORIGINAL student screen is open the hub's own navigation chrome
    comes back, so a signed-in student can actually use their account. The class

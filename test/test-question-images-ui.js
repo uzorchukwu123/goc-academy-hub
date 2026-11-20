@@ -13,7 +13,7 @@ var fails = 0;
 function ok(name, cond, extra) { if (cond) console.log('  pass  ' + name); else { fails++; console.log('  FAIL  ' + name + (extra ? '   (' + extra + ')' : '')); } }
 
 console.log('\nMarkup: a hidden picture box sits between passage and question text');
-[['pracPassage', 'pracImage', 'pracQ'], ['cbtPassage', 'cbtImage', 'cbtQ'], ['wtPassage', 'wtImage', 'wtQ']].forEach(function (p) {
+[['pracPassage', 'pracImage', 'pracQ'], ['cbtPassage', 'cbtImage', 'cbtQ']].forEach(function (p) {
   var a = html.indexOf('id="' + p[0] + '"'), b = html.indexOf('id="' + p[1] + '"'), c = html.indexOf('id="' + p[2] + '"');
   ok(p[1] + ' is after the passage and before the question', a > -1 && b > a && c > b);
   ok(p[1] + ' starts hidden', new RegExp('id="' + p[1] + '"[^>]*hidden').test(html));
@@ -23,7 +23,7 @@ ok('the CSS sizes the picture to the screen', /\.q-image img\{[^}]*max-width:100
 console.log('\nWiring');
 ok('practice screen', /paintQImage\('pracImage', d\)/.test(app));
 ok('CBT screen', /paintQImage\('cbtImage', d\)/.test(app));
-ok('Web Test screen', /paintQImage\('wtImage', q\)/.test(app));
+ok('the retired Web Test runner no longer paints a picture (clean sweep)', !/paintQImage\('wtImage'/.test(app) && !/id="wtImage"/.test(html));
 
 function grab(name) {
   var i = app.indexOf('function ' + name + '(');

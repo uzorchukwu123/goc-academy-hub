@@ -52,7 +52,8 @@ ok('calculator panel exists and every key calls jambCalcKey',
 ok('submission prompt exists and only its buttons confirm or return',
    /id="jambSubmitOverlay"/.test(html) && /onclick="jambSubmitConfirm\(\)"/.test(html)
    && /onclick="jambSubmitReturn\(\)"/.test(html));
-ok('resume banner host sits on the Web Test screen', /id="jtResume"/.test(html));
+ok('resume banner host sits on the Study hub, independent of the retired Web Test screen',
+   /id="jtResume"/.test(html) && html.indexOf('id="jtResume"') > html.indexOf('id="study"') && !/id="webtest"/.test(html));
 ok('the exam palette CSS is scoped to JAMB mode only',
    /#cbt\.jamb-mode \.cbt-side/.test(css) && /#cbt\.jamb-mode \.cbt-candidate/.test(css));
 
@@ -69,8 +70,10 @@ ok('every rendered question refreshes the saved session',
    /function renderCBTQ[\s\S]{0,4000}?jambSaveSession\(\)/.test(appSrc));
 ok('every palette rebuild refreshes the side palette',
    /function buildCBTNav[\s\S]{0,6000}?jambPaintSide\(\);/.test(appSrc));
-ok('the Web Test screen paints the resume banner',
-   /function renderWebTest[\s\S]{0,1200}?jambPaintResume\(\)/.test(appSrc));
+ok('opening the Study hub paints the resume banner',
+   /id === 'study' && typeof jambPaintResume === 'function'\) jambPaintResume\(\)/.test(appSrc));
+ok('leaving an unsubmitted JAMB paper returns to Study, not the retired Web Test',
+   /if\(cbtPaper\)\{ cbtPaper = null; cbtAns = \{\}; cbtGroups = null; go\('study'\);/.test(appSrc) && !/go\('webtest'\)/.test(appSrc));
 ok('the candidate is told the examination keys before starting',
    /UTME examination room: A, B, C or D answers a question/.test(appSrc));
 
@@ -213,7 +216,7 @@ ok('the session is saved with answers, place and deadline',
    !!saved && saved.answers[0] === 2 && saved.cur === 1 && saved.deadline > Date.now());
 J.jambMode = false;
 J.jambPaintResume();
-ok('the Web Test screen offers the resume', els.jtResume.hidden === false && /Resume your sitting/.test(els.jtResume.innerHTML));
+ok('the Study hub offers the resume', els.jtResume.hidden === false && /Resume your sitting/.test(els.jtResume.innerHTML));
 calls.opened = 0;
 J.jambResume();
 ok('resume reopens the same paper, restores answers and place',

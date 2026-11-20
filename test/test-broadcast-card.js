@@ -48,7 +48,7 @@ function B(id, extra) { return Object.assign({ id: id, title: 'Message ' + id, b
   head('the page');
   ok('Home has a hidden "From the academy" card with a Show more button', /id="dashBroadcasts" style="display:none/.test(html) && /id="dashBroadcastsList"/.test(html) && /id="dashBroadcastsMore"/.test(html) && /From the academy/.test(html));
   ok('it sits above the Class notices card', html.indexOf('id="dashBroadcasts"') > -1 && html.indexOf('id="dashBroadcasts"') < html.indexOf('id="dashNotices"'));
-  ok('it is filled whenever Home is drawn', /dashPaintLast\(\);\s*dashPaintBroadcasts\(\);\s*dashPaintNotices\(\);\s*\}/.test(app));
+  ok('it is filled whenever Home is drawn', /dbPaintContinue\(\);\s*dashPaintBroadcasts\(\);\s*dashPaintNotices\(\);\s*\}/.test(app));
 
   head('the card');
   mine = { locked: false, broadcasts: [] };
@@ -66,7 +66,7 @@ function B(id, extra) { return Object.assign({ id: id, title: 'Message ' + id, b
   ok('the card shows, with the newest three', el('dashBroadcasts').style.display === '' && /Message 4/.test(h) && /Message 3/.test(h) && !/Message 2/.test(h) && !/Message 1/.test(h));
   ok('each says it is from the academy, and when', /G\.O\.C Academy/.test(h) && /WHEN\(2026-10-05T10:00:00Z\)/.test(h));
   ok('it never says "edited" (a broadcast cannot be edited)', !/edited/.test(h));
-  ok('text is escaped, with line breaks kept', /Mock &lt;b&gt;Friday&lt;\/b&gt;/.test(h) && !/<b>Friday<\/b>/.test(h) && /Line one\nLine &lt;i&gt;two&lt;\/i&gt;/.test(h) && /white-space:pre-wrap/.test(h));
+  ok('text is escaped, with line breaks kept', /Mock &lt;b&gt;Friday&lt;\/b&gt;/.test(h) && !/<b>Friday<\/b>/.test(h) && /Line one\nLine &lt;i&gt;two&lt;\/i&gt;/.test(h) && /class="db-nitem/.test(h) && /\.db-nitem p\{[^}]*white-space:pre-wrap/.test(fs.readFileSync(path.join(APP, 'css', 'styles.css'), 'utf8')));
   ok('"Show 2 more" is offered', el('dashBroadcastsMore').style.display === '' && el('dashBroadcastsMore').textContent === 'Show 2 more');
   run('dashBroadcastsToggle()');
   h = el('dashBroadcastsList').innerHTML;

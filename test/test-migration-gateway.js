@@ -47,7 +47,11 @@ function makeApp(overrides) {
 
   /* ---------------------------------------------------------- route accounting */
   console.log('\n— route accounting —');
-  check('inventory is the verified 266-route table after reconciliation and tutor entry removal', inventory.total === 266, String(inventory.total));
+  /* 266 before the clean sweep (Phase 2): - 1 study-time extend (Guardian PIN),
+     - 2 student video, - 4 admin video, - 3 approval queue, - 1 admin tutor
+     analytics, + 1 Question Bank publish = 256. Final cleanup: - 1 Question Bank
+     publish (tutor questions go straight into the bank) = 255. */
+  check('inventory is the verified 255-route table after the final cleanup', inventory.total === 255, String(inventory.total));
   check('router compiles every inventoried route', app.router.total === inventory.total);
   const coverage = app.router.coverage();
   check('coverage report accounts for every route', coverage.length === inventory.total);

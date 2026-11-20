@@ -178,8 +178,9 @@ function notCapRefused(r) {
   ok('Finance cannot read class notices (notices.manage)',        isCapRefused(finN),   finN.raw);
   var finRes = await call('GET',  '/api/results/export?from=2025-01-01&to=2025-12-31', undefined, finTok);
   ok('Finance cannot export results (results.export)',            isCapRefused(finRes), finRes.raw);
-  var finApp = await call('GET',  '/api/approvals',              undefined, finTok);
-  ok('Finance cannot open the approval queue (approvals.review)', isCapRefused(finApp), finApp.raw);
+  /* The approval queue is retired (clean sweep); approvals.review still guards Question flags. */
+  var finApp = await call('GET',  '/api/flags',                  undefined, finTok);
+  ok('Finance cannot open question flags (approvals.review)', isCapRefused(finApp), finApp.raw);
   var finCh  = await call('GET',  '/api/challenges',             undefined, finTok);
   ok('Finance cannot manage challenges (challenges.manage)',      isCapRefused(finCh),  finCh.raw);
   var finMgr = await call('GET',  '/api/managers',               undefined, finTok);
@@ -212,8 +213,8 @@ function notCapRefused(r) {
   ok('Publicity cannot list tutors (tutors.accounts)',          isCapRefused(pubT),   pubT.raw);
   var pubRes = await call('GET', '/api/results/export?from=2025-01-01&to=2025-12-31', undefined, pubTok);
   ok('Publicity cannot export results (results.export)',        isCapRefused(pubRes), pubRes.raw);
-  var pubApp = await call('GET', '/api/approvals',    undefined, pubTok);
-  ok('Publicity cannot open approval queue (approvals.review)', isCapRefused(pubApp), pubApp.raw);
+  var pubApp = await call('GET', '/api/flags',        undefined, pubTok);
+  ok('Publicity cannot open question flags (approvals.review)', isCapRefused(pubApp), pubApp.raw);
   var pubMgr = await call('GET', '/api/managers',     undefined, pubTok);
   ok('Publicity cannot list managers (managers.accounts)',      isCapRefused(pubMgr), pubMgr.raw);
   var pubAdd = await call('POST', '/api/admin/students',
@@ -256,8 +257,8 @@ function notCapRefused(r) {
     { cat: 'utme', date: '2026-01-01', title: 'Test', body: 'Test body text here for the update.' },
     saTok);
   ok('SA cannot write homepage updates (homepage.edit)',       isCapRefused(saHp),  saHp.raw);
-  var saApp = await call('GET',  '/api/approvals',             undefined, saTok);
-  ok('SA cannot open approval queue (approvals.review)',       isCapRefused(saApp), saApp.raw);
+  var saApp = await call('GET',  '/api/flags',                 undefined, saTok);
+  ok('SA cannot open question flags (approvals.review)',       isCapRefused(saApp), saApp.raw);
   var saMgr = await call('GET',  '/api/managers',              undefined, saTok);
   ok('SA cannot list managers (managers.accounts)',            isCapRefused(saMgr), saMgr.raw);
   var saAdd = await call('POST', '/api/admin/students',
@@ -287,8 +288,8 @@ function notCapRefused(r) {
   head('Academic Director manager: routes inside their capability');
   var adQ   = await call('GET', '/api/questions',       undefined, adTok);
   ok('AD reads question bank (questions.manage)',         notCapRefused(adQ),   adQ.raw);
-  var adApp = await call('GET', '/api/approvals',        undefined, adTok);
-  ok('AD opens the approval queue (approvals.review)',   notCapRefused(adApp), adApp.raw);
+  var adApp = await call('GET', '/api/flags',            undefined, adTok);
+  ok('AD opens question flags (approvals.review)',       notCapRefused(adApp), adApp.raw);
   var adN   = await call('GET', '/api/notices',          undefined, adTok);
   ok('AD reads class notices (notices.manage)',           notCapRefused(adN),   adN.raw);
   var adRes = await call('GET', '/api/results/export?from=2025-01-01&to=2025-12-31', undefined, adTok);

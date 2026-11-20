@@ -136,32 +136,17 @@ async function main() {
   ok('the second student gets the same class list (no tier)', oc.status === 200 && Array.isArray(ocj.classes) && ocj.classes.length === 1 && ocj.joinLocked === false, oc.buf.toString().slice(0, 160));
   ok('a stranger cannot list classes', (await call('GET', '/api/classes')).status === 401);
 
-  head('videos: seeking');
-  var vids = json(await call('GET', '/api/videos', null, tok)).videos || [];
-  ok('a student sees both published videos, lesson and live replay', vids.map(function (v) { return v.videoId; }).sort().join(',') === 'VID-1,VID-2', JSON.stringify(vids));
-  var full = await call('GET', '/api/videos/VID-1/file', null, tok);
-  ok('a video is served inline and advertises byte ranges', full.status === 200 && full.headers['accept-ranges'] === 'bytes' && full.headers['content-disposition'] === 'inline' && /^video\/mp4/.test(full.headers['content-type'] || ''), full.status);
-  ok('the full body is the whole file', full.buf.equals(mp4));
-  var part = await call('GET', '/api/videos/VID-1/file', null, tok, { Range: 'bytes=1000-1999' });
-  ok('a Range request returns 206 with exactly those bytes', part.status === 206 && part.buf.equals(mp4.slice(1000, 2000)) && part.headers['content-range'] === 'bytes 1000-1999/' + mp4.length, part.status + ' ' + part.headers['content-range']);
-  var tail = await call('GET', '/api/videos/VID-1/file', null, tok, { Range: 'bytes=' + (mp4.length - 500) + '-' });
-  ok('seeking to the end (open-ended range) works', tail.status === 206 && tail.buf.equals(mp4.slice(mp4.length - 500)), tail.status);
-  var bad = await call('GET', '/api/videos/VID-1/file', null, tok, { Range: 'bytes=' + (mp4.length + 5) + '-' + (mp4.length + 9) });
-  ok('a range past the end is refused with 416', bad.status === 416, bad.status);
-  ok('a stranger cannot stream a video', (await call('GET', '/api/videos/VID-1/file')).status === 401);
-  head('videos: every student can watch');
-  var ovl = await call('GET', '/api/videos', null, otok);
-  var ovj = json(ovl);
-  ok('the second student sees both videos, nothing locked', ovl.status === 200 && Array.isArray(ovj.videos) && ovj.videos.length === 2 && ovj.locked === false, ovl.buf.toString().slice(0, 150));
-  ok('titles are served to students (they are allowed to watch)', /Kinematics/.test(ovl.buf.toString()), ovl.buf.toString().slice(0, 150));
-  var ov1 = await call('GET', '/api/videos/VID-1/file', null, otok);
-  ok('a lesson file streams for the second student too', ov1.status === 200 && ov1.buf.equals(mp4), ov1.status + ' ' + ov1.buf.length);
-  var ov2 = await call('GET', '/api/videos/VID-2/file', null, otok);
-  ok('a live replay streams for the second student too', ov2.status === 200, ov2.status);
-  var ov3 = await call('GET', '/api/videos/VID-1/file', null, otok, { Range: 'bytes=0-99' });
-  ok('a Range request serves bytes normally', ov3.status === 206 && ov3.buf.equals(mp4.slice(0, 100)), ov3.status + ' ' + ov3.buf.length);
-  ok('the first student is told nothing is locked', json(await call('GET', '/api/videos', null, tok)).locked === false);
-
+  /* Clean sweep (Phase 2): student video playback and the video library are
+     retired. The two video records seeded above stay in the stand-in Appwrite
+     collection untouched; there is simply no route that serves them now. */
+  head('videos: retired — no route serves a video, and the records are untouched');
+  var gone = await call('GET', '/api/videos', null, tok);
+  ok('the student video list is gone (404)', gone.status === 404, gone.status + ' ' + gone.buf.toString().slice(0, 120));
+  var goneFile = await call('GET', '/api/videos/VID-1/file', null, tok);
+  ok('a video file is not served (404, no bytes of the recording)', goneFile.status === 404 && !goneFile.buf.equals(mp4), goneFile.status);
+  var goneRange = await call('GET', '/api/videos/VID-1/file', null, tok, { Range: 'bytes=0-99' });
+  ok('nor is any byte range of it', goneRange.status === 404, goneRange.status);
+  ok('the console video list is gone too (404)', (await call('GET', '/api/admin/videos', null, tok)).status === 404);
 
   head('verify-media.js (the check you run against your real project)');
   var v = spawnSync(process.execPath, [path.join(APP, 'server', 'verify-media.js')], { env: ENV, encoding: 'utf8' });

@@ -110,7 +110,7 @@ async function main() {
      preserve when one of them is closed and reopened below. */
   head('two students build up a record first');
   await api('login')(MINE, MPW);
-  var paper = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' });
+  var paper = await api('_drivers.mock._openLegacyPaper')('objective', 'Physics');
   var picks = {};
   paper.questions.forEach(function (q) { picks[q.id] = 0; });
   var sat = await api('submitTest')({ attemptId: paper.attemptId, responses: picks, secondsUsed: 240 });
@@ -124,7 +124,7 @@ async function main() {
   /* SID also needs a sitting of its own, so that closing its account below
      has real XP and a real result to preserve, not zeroes. */
   await api('login')(SID, SPW);
-  var sidPaper = await api('startTest')({ period: 'weekly', section: 'objective', subject: 'Physics' });
+  var sidPaper = await api('_drivers.mock._openLegacyPaper')('objective', 'Physics');
   var sidPicks = {};
   sidPaper.questions.forEach(function (q) { sidPicks[q.id] = 0; });
   await api('submitTest')({ attemptId: sidPaper.attemptId, responses: sidPicks, secondsUsed: 200 });

@@ -1,8 +1,8 @@
 {
   "generatedBy": "functions/goc-api/tools/coverage-report.js",
-  "total": 266,
+  "total": 255,
   "implemented": 1,
-  "notStarted": 265,
+  "notStarted": 254,
   "percent": 0.4,
   "byFamily": {
     "api/health": {
@@ -14,7 +14,7 @@
       "implemented": 0
     },
     "api/me": {
-      "total": 37,
+      "total": 36,
       "implemented": 0
     },
     "api/students": {
@@ -26,7 +26,7 @@
       "implemented": 0
     },
     "api/admin": {
-      "total": 21,
+      "total": 16,
       "implemented": 0
     },
     "api/staff": {
@@ -97,10 +97,6 @@
       "total": 2,
       "implemented": 0
     },
-    "api/approvals": {
-      "total": 3,
-      "implemented": 0
-    },
     "api/tutors": {
       "total": 6,
       "implemented": 0
@@ -143,10 +139,6 @@
     },
     "api/question-images": {
       "total": 1,
-      "implemented": 0
-    },
-    "api/videos": {
-      "total": 2,
       "implemented": 0
     },
     "api/classes": {
@@ -617,14 +609,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/admin/tutors/analytics",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "tutors.accounts",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
       "path": "/api/tutor/atrisk",
       "family": "api/tutor",
       "authTier": "tutor",
@@ -921,30 +905,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/approvals",
-      "family": "api/approvals",
-      "authTier": "console",
-      "capability": "approvals.review",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/approvals/batch/approve",
-      "family": "api/approvals",
-      "authTier": "console",
-      "capability": "approvals.review",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/approvals/(\\d+)/(approve|return)",
-      "family": "api/approvals",
-      "authTier": "console",
-      "capability": "approvals.review",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
       "path": "/api/tutors",
       "family": "api/tutors",
       "authTier": "console",
@@ -1210,14 +1170,6 @@
     {
       "method": "POST",
       "path": "/api/me/study-time/ping",
-      "family": "api/me",
-      "authTier": "student",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/me/study-time/extend",
       "family": "api/me",
       "authTier": "student",
       "capability": null,
@@ -1650,54 +1602,6 @@
     {
       "method": "DELETE",
       "path": "/api/admin/resources/([A-Za-z0-9._-]+)",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/videos",
-      "family": "api/videos",
-      "authTier": "student",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/videos/([A-Za-z0-9._-]+)/file",
-      "family": "api/videos",
-      "authTier": "student",
-      "capability": null,
-      "status": "not-started"
-    },
-    {
-      "method": "GET",
-      "path": "/api/admin/videos",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/admin/videos/([A-Za-z0-9._-]+)/published",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "POST",
-      "path": "/api/admin/videos/upload",
-      "family": "api/admin",
-      "authTier": "console",
-      "capability": "resources.publish",
-      "status": "not-started"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/admin/videos/([A-Za-z0-9._-]+)",
       "family": "api/admin",
       "authTier": "console",
       "capability": "resources.publish",

@@ -34,8 +34,9 @@ ok('the selector offers Tutors', /<option value="tutors">Tutors<\/option>/.test(
 var tutorsBranch = (app.match(/if\(section === 'tutors'\)\{[^}]*\}/) || [''])[0];
 ok('opening it loads the tutors (and the access log)',
    ['admTutLoad()', 'admAuditLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
-ok('and the two panels added since: Subjects & tutors, and Tutor Analytics',
-   ['admTutOverLoad()', 'admTutAnalyticsLoad()'].every(function (c) { return tutorsBranch.indexOf(c) > -1; }), tutorsBranch);
+ok('and the Subjects & tutors panel added since', tutorsBranch.indexOf('admTutOverLoad()') > -1, tutorsBranch);
+ok('the admin Tutor Analytics card is retired (clean sweep)', tutorsBranch.indexOf('admTutAnalyticsLoad()') < 0
+   && app.indexOf('function admTutAnalyticsLoad(') < 0 && !/id="admTutAnalytics"/.test(app), tutorsBranch);
 
 var calls = [], toasts = [], confirms = [], answer = true, tutors = [];
 var els = {};

@@ -34,7 +34,7 @@ function tick(n) { return new Promise(function (r) { setTimeout(r, n || 10); });
     var method = (opts && opts.method) || 'GET', body = opts && opts.body ? JSON.parse(opts.body) : null;
     calls.push({ url: url, method: method, body: body, auth: opts && opts.headers && opts.headers.Authorization });
     if (/^api\/tutor\/subject/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], depth: { objective: 1, theory: 0, jamb: 0, practice: 0, notes: notes.length } });
-    if (/^api\/tutor\/analytics/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], snapshot: { gocStudents: 0, openStudents: 0, active: 0, activeDays: 7, practice: { answers: 0, correct: 0, average: null, small: false }, tests: { papers: 0, average: null, small: false } }, weakTopics: { items: [], hidden: 0, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } });
+    if (/^api\/tutor\/analytics/.test(url)) return reply(200, { subject: 'Chemistry', subjects: [], snapshot: { gocStudents: 0, active: 0, activeDays: 7, practice: { answers: 0, correct: 0, average: null, small: false }, tests: { papers: 0, average: null, small: false } }, weakTopics: { items: [], hidden: 0, minAnswers: 10 }, hardestQuestions: { items: [], hidden: 0, minAnswers: 10 } });
     if (/^api\/tutor\/questions/.test(url)) return reply(200, { subject: 'Chemistry', subjects: ['Chemistry'], counts: { live: 0, pending: 0, returned: 0 }, questions: [] });
     if (nextError && /^api\/tutor\/notices/.test(url) && method !== 'GET') { var e = nextError; nextError = null; return reply(e.status, { error: e.error }); }
     if (/^api\/tutor\/notices/.test(url)) {

@@ -33,7 +33,7 @@ activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Ada Demo', password: 's
 }).then(function (r) {
   var j = row(r, 'jamb'), o = row(r, 'objective');
   ok('a fresh JAMB row is open, repeatable, 0 attempts', j && j.completed === false && j.repeatable === true && j.attempts === 0, JSON.stringify(j));
-  ok('a fresh Objective row is open, not repeatable', o && o.completed === false && o.repeatable === false && o.attempts === 0, JSON.stringify(o));
+  ok('no retired Objective row is listed (clean sweep)', !o, JSON.stringify(o));
   return sit('jamb');
 }).then(function () { return sit('jamb'); }).then(function () {
   ok('two JAMB sittings opened and submitted', true);
@@ -45,15 +45,12 @@ activeStudent.demo(mock, { signupCode: 'GOC2027', name: 'Ada Demo', password: 's
 }).then(function (r) {
   var js = (r.attempts || []).filter(function (a) { return a.section === 'jamb'; });
   ok('the demo results carry the /400 score on JAMB-oriented rows', js.length === 2 && js.every(function (a) { return a.jambScore && a.jambScore.max === 400; }), JSON.stringify(js.map(function (a) { return a.jambScore; })).slice(0, 160));
-  return sit('objective');
-}).then(function () {
   return rejects(mock.startTest({ period: 'test', section: 'objective', subject: 'All subjects' }));
 }).then(function (m) {
-  ok('a second Objective sitting is refused, in the server\'s words', /cannot be sat again/.test(m || ''), m);
-  return mock.listMyTests();
-}).then(function (r) {
-  var o = row(r, 'objective');
-  ok('Objective now reads completed with 1 attempt', o.completed === true && o.repeatable === false && o.attempts === 1, JSON.stringify(o));
+  ok('an Objective sitting is refused as retired, in the server\'s words', /have been retired/.test(m || ''), m);
+  return rejects(mock.startTest({ period: 'test', section: 'theory', subject: 'Physics' }));
+}).then(function (m) {
+  ok('a Theory sitting is refused as retired too', /have been retired/.test(m || ''), m);
   return mock.myResults();
 }).then(function (r) {
   var n = (r.attempts || []).filter(function (a) { return a.section === 'jamb'; }).length;

@@ -47,7 +47,7 @@ try { esbuild = require('esbuild'); } catch (e) {
   }
 }
 
-var TEST_HOOKS = ['_setJambReadyMin', '_setTier', '_grantXp', '_setupTokenFor'];
+var TEST_HOOKS = ['_setJambReadyMin', '_setTier', '_grantXp', '_setupTokenFor', '_openLegacyPaper'];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
 function write(rel, data) {

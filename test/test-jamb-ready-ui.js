@@ -86,42 +86,7 @@ tick().then(function () {
 }).then(function () {
   ok('a refusal shows the server\'s own message', toasts[toasts.length - 1] === 'Enter the access passcode first.', toasts.join('|'));
 
-  console.log('\nStudent Web Test card: JAMB-oriented sitting held back');
-  var host = fakeEl('div');
-  var made = [];
-  var sb2 = {
-    document: { getElementById: function (id) { return id === 'wtSections' ? host : null; },
-                createElement: function (t) { var e = fakeEl(t); made.push(e); return e; } },
-    esc: function (x) { return String(x); },
-    wtCatalogue: { subjects: ['Physics'], tests: [{ section: 'objective', subject: 'All subjects', questions: 40, durationSec: 3600, period: 'test' }] },
-    WT_SECTIONS: JSON.parse(JSON.stringify([{ key: 'objective', title: 'Objective session', note: 'n', colour: '#000', icon: '' },
-                                           { key: 'jamb', title: 'JAMB-oriented session', note: 'n', colour: '#000', icon: '' }])),
-    wtPeriodLabel: function () { return 'Test'; }, wtSectionLabel: function (s) { return s; },
-    wtNoTheorySubjects: function () { return []; },
-    wtRowEl: function (t) { var e = fakeEl('div'); e.className = 'row-' + t.section; return e; },
-    /* renderWebTest paints the JAMB resume banner first; there is no saved
-       sitting in this sandbox, so the stub simply stands in for it. */
-    jambPaintResume: function () {},
-    toast: function () {}
-  };
-  var c2 = vm.createContext(sb2);
-  vm.runInContext(grab('renderWebTest'), c2);
-  sb2.renderWebTest();
-  var cards = host.children;
-  ok('both sessions are drawn as cards', cards.length === 2, cards.length);
-  var jambCard = cards[1];
-  var msgs = jambCard.children.map(function (c) { return c.textContent; }).join(' | ');
-  ok('the held-back JAMB card says coming soon', /^Coming soon/.test(msgs), msgs);
-  ok('it points to the Objective session meanwhile', /Objective session/.test(msgs));
-  ok('it no longer claims nothing has been published', !/has been published/.test(msgs), msgs);
-  ok('and offers no Start row', !jambCard.children.some(function (c) { return /^row-/.test(c.className); }));
-  ok('the Objective card still lists its paper', cards[0].children.some(function (c) { return c.className === 'row-objective'; }));
-
-  host.children = []; made.length = 0;
-  sb2.wtCatalogue.tests.push({ section: 'jamb', subject: 'All subjects', questions: 40, durationSec: 7200, period: 'test' });
-  sb2.renderWebTest();
-  var jc = host.children[1];
-  ok('once the paper is offered the card lists it, with no coming-soon note',
-     jc.children.some(function (c) { return c.className === 'row-jamb'; }) && !jc.children.some(function (c) { return /Coming soon/.test(c.textContent); }));
+  console.log('\nStudent Web Test card: retired with the Web Test catalogue (clean sweep)');
+  ok('there is no student Web Test card renderer any more', app.indexOf('function renderWebTest(') < 0 && app.indexOf('var WT_SECTIONS') < 0);
 }).catch(function (e) { fails++; console.log('  FAIL  suite crashed   (' + (e && e.stack || e) + ')'); })
 .then(function () { console.log('\n' + (fails ? fails + ' FAILED' : 'all passed')); process.exit(fails ? 1 : 0); });

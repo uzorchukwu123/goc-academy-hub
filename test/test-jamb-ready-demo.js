@@ -88,7 +88,7 @@ mock.login('GOC-A-001', 'founder2027').then(function () {
   return mock.listMyTests();
 }).then(function (r) {
   ok('no JAMB-oriented paper is listed', jambRows(r).length === 0, JSON.stringify(jambRows(r)));
-  ok('the Objective sitting is unaffected', r.tests.some(function (t) { return t.section === 'objective'; }));
+  ok('the retired Objective and Theory sittings are not listed (clean sweep)', !r.tests.some(function (t) { return t.section === 'objective' || t.section === 'theory'; }));
   return rejects(mock.startTest({ period: 'test', section: 'jamb', subject: 'All subjects' }));
 }).then(function (m) {
   ok('starting it directly is refused, not just hidden', /not open yet/.test(m || ''), m);

@@ -57,7 +57,7 @@ function N(id, extra) { return Object.assign({ id: id, subject: 'Chemistry', tit
 (async function () {
   head('the pages carry the cards');
   ok('the Home screen has a hidden Class notices card with a Show more button', /id="dashNotices" style="display:none/.test(html) && /id="dashNoticesList"/.test(html) && /id="dashNoticesMore"/.test(html));
-  ok('the card is filled whenever Home is drawn', /dashPaintNotices\(\);\s*\}\s*function dashSet/.test(app));
+  ok('the card is filled whenever Home is drawn', /function renderDash\(\)\{[\s\S]*?dashPaintBroadcasts\(\);\s*dashPaintNotices\(\);\s*\}/.test(app));
   ok('the console overview has a hidden Class notices card and loads it on the way in', /id=\\"admNoCard\\" hidden|id="admNoCard" hidden/.test(app) && /if\(section === 'overview' && typeof admNoLoad === 'function'\) admNoLoad\(\);/.test(app));
 
   head('the student card');
@@ -75,7 +75,7 @@ function N(id, extra) { return Object.assign({ id: id, subject: 'Chemistry', tit
   var h = el('dashNoticesList').innerHTML;
   ok('the card shows, with the newest three', el('dashNotices').style.display === '' && /Notice 4/.test(h) && /Notice 3/.test(h) && !/Notice 2/.test(h) && !/Notice 1/.test(h));
   ok('each says which tutor it is from, when, and if it was edited', /Chemistry tutor/.test(h) && /WHEN\(2026-10-05T10:00:00Z\)/.test(h) && /· edited/.test(h));
-  ok('tutor text is escaped, with line breaks kept', /Lab &lt;b&gt;moved&lt;\/b&gt;/.test(h) && !/<b>moved<\/b>/.test(h) && /Line one\nLine &lt;i&gt;two&lt;\/i&gt;/.test(h) && /white-space:pre-wrap/.test(h));
+  ok('tutor text is escaped, with line breaks kept', /Lab &lt;b&gt;moved&lt;\/b&gt;/.test(h) && !/<b>moved<\/b>/.test(h) && /Line one\nLine &lt;i&gt;two&lt;\/i&gt;/.test(h) && /class="db-nitem/.test(h) && /\.db-nitem p\{[^}]*white-space:pre-wrap/.test(fs.readFileSync(path.join(APP, 'css', 'styles.css'), 'utf8')));
   ok('"Show 2 more" is offered', el('dashNoticesMore').style.display === '' && el('dashNoticesMore').textContent === 'Show 2 more');
   run('dashNoticesToggle()');
   h = el('dashNoticesList').innerHTML;

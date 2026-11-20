@@ -35,7 +35,8 @@ html.slice(selStart, selEnd).replace(/<option value="([a-z]+)">/g, function (m, 
    the rule and the tile grid to be updated together rather than drifting apart
    (which is exactly how Site Analytics and Scholarship went missing from the
    menu). Update it deliberately, and only with the matching markup. */
-var SECTIONS = 27;
+/* 27 before the clean sweep retired the Videos and Approvals sections (Phase 2, 18 Nov 2026). */
+var SECTIONS = 25;
 ok('the rule lists ' + SECTIONS + ' sections', core.allConsoleSections().length === SECTIONS, core.allConsoleSections().length);
 ok('the page offers ' + SECTIONS + ' sections', menuKeys.length === SECTIONS, menuKeys.length);
 ok('every section on the page is in the rule', menuKeys.every(function (k) { return core.allConsoleSections().indexOf(k) > -1; }));

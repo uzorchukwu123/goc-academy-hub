@@ -256,7 +256,7 @@ async function main() {
   head('9 — a paper still open when the clock runs out is reported, not lost quietly');
   run('ssStart')();
   await flush();
-  run('wtPaper = { attemptId: "unsent-paper" }');
+  run('cbtPaper = { attemptId: "unsent-paper", questions: [] }');   /* an open JAMB CBT paper (the Web Test runner is retired) */
   leaveSeconds(-2);
   run('ssTick')();
   await flush();

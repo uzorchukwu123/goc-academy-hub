@@ -104,12 +104,10 @@ async function main() {
   var setTo = await api('setDailyLimit')(30);
   ok('the window is now the minimum the admin screen allows, thirty minutes',
      setTo.dailyLimitMin === 30, setTo.dailyLimitMin);
-  /* A guardian PIN set before the student ever signs in — this is the
-     plumbing gap left open after Task 4/5: a real student session's
-     getMySettings() now has to carry the yes/no flag (never the digits)
-     so the wind-down overlay knows to show its PIN field. */
-  var pinSet = await api('setGuardianPin')('4321');
-  ok('the academy now has a guardian PIN set', pinSet.guardianPin === '4321', pinSet.guardianPin);
+  /* Clean sweep: the Guardian PIN extension is retired, so the API no longer
+     offers a way to set one or to extend today's window with it. */
+  ok('the Guardian PIN setter is retired from the API', typeof run('GOC.api.setGuardianPin') !== 'function');
+  ok('the study-time extension is retired from the API', typeof run('GOC.api.extendStudyTime') !== 'function');
   await api('logout')();
 
   var SID = await registerStudent('Ngozi Eze', 'ngozi#77', MINE);
@@ -120,11 +118,9 @@ async function main() {
   await flush();
   ok('nothing is exhausted yet', run('state.studyExhausted') === false);
   ok('and the wind-down overlay is not showing', shown('windOverlay') === false);
-  ok('a real student session now learns a guardian PIN is set, not just the console',
-     run('state.hasGuardianPin') === true, run('state.hasGuardianPin'));
-  ok('but never the digits themselves — those stay console-only',
-     run('state.guardianPin') === undefined || run('state.guardianPin') === '',
-     run('state.guardianPin'));
+  ok('the student session carries no Guardian PIN state at all',
+     run('state.hasGuardianPin') === undefined && run('state.guardianPin') === undefined,
+     String(run('state.hasGuardianPin')) + ' / ' + String(run('state.guardianPin')));
 
   /* Open the practice set-up screen first, the same way a student would
      before starting a run — this is the screen whose Start button
@@ -165,9 +161,8 @@ async function main() {
   ok('it is shown', shown('windOverlay') === true);
   ok('and it names the window that was just used up',
      /30-minute daily limit/.test(text('windMsg')), text('windMsg'));
-  ok('and, since the academy has a guardian PIN set, its extend-time field shows',
-     id('windExtendWrap') && id('windExtendWrap').style.display === 'block',
-     id('windExtendWrap') && id('windExtendWrap').style.display);
+  ok('and it offers no Guardian PIN extend-time field (retired)',
+     !id('windExtendWrap') && !id('windPinInput'));
 
   head('a Start button already on screen relabels itself, without a fresh navigation');
   ok('the practice screen is still what is on show', screenNow() === 'studySet', screenNow());
@@ -184,28 +179,12 @@ async function main() {
            .then(function () { return null; }, function (e) { return e.message || 'refused'; });
        })()));
 
-  head('the Web Test screen gates its own Start button the same way, not just Practice/CBT\u2019s');
-  run('openWebTest')();
-  await flush();
-  ok('the web test screen is now on show', screenNow() === 'webtest', screenNow());
-  var objRow = null;
-  doc.querySelectorAll('#wtSections .wt-row').forEach(function (row) {
-    if (!objRow && /All subjects/.test(row.textContent)) objRow = row;
-  });
-  ok('the objective session\u2019s row is on the page, already exhausted when it first renders',
-     !!objRow, 'no wt-row matched "All subjects"');
-  if (objRow) {
-    var wtBtn = objRow.querySelector('.wt-start');
-    ok('its Start button is disabled', !!wtBtn && wtBtn.disabled === true);
-    ok('and reads the same way Practice/CBT\u2019s does', !!wtBtn && wtBtn.textContent === 'Window used up',
-       wtBtn && wtBtn.textContent);
-    ok('and, being disabled with no handler attached, nothing here can open a paper',
-       !!wtBtn && wtBtn.onclick == null);
-  }
+  head('the retired Web Test screen is gone; the JAMB start is still gated by the window');
+  ok('there is no Web Test screen to open any more (clean sweep)', typeof run('this.openWebTest') === 'undefined' && !id('webtest'));
   ok('calling startTest() directly (as a stale handler from before exhaustion might) is also refused',
      /study window is used up/.test(
        await (function () {
-         return api('startTest')({ period: 'objective', section: 'objective', subject: run('GOC.api.rules.OBJECTIVE_SUBJECT') })
+         return api('startTest')({ period: 'test', section: 'jamb', subject: run('GOC.api.rules.OBJECTIVE_SUBJECT') })
            .then(function () { return null; }, function (e) { return e.message || 'refused'; });
        })()));
 

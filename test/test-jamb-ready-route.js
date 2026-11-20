@@ -104,7 +104,7 @@ waitForBoot(40).then(async function () {
   var cat = await call('GET', '/api/me/tests', undefined, tok);
   ok('the catalogue is served', cat.status === 200, cat.raw.slice(0, 100));
   ok('no JAMB-oriented paper is listed', jambRows(cat).length === 0, JSON.stringify(jambRows(cat)));
-  ok('the Objective sitting is unaffected', cat.body.tests.some(function (t) { return t.section === 'objective'; }));
+  ok('the retired Objective and Theory sittings are not listed (clean sweep)', !cat.body.tests.some(function (t) { return t.section === 'objective' || t.section === 'theory'; }));
   var st = await call('POST', '/api/me/tests/start', { period: 'test', section: 'jamb', subject: 'All subjects' }, tok);
   ok('starting it directly is refused, not just hidden', st.status === 403 && /not open yet/.test(st.raw), st.status + ' ' + st.raw);
   ok('and it says why in plain words', /question bank is still being built/.test(st.raw));

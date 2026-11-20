@@ -211,6 +211,7 @@ const APPWRITE_STUDENT_NOTES_COLLECTION_ID = 'studentnotes';
 const APPWRITE_VIDEOS_COLLECTION_ID = 'videos';
 const APPWRITE_LIVECLASSES_COLLECTION_ID = 'liveclasses';
 const APPWRITE_COHORTS_COLLECTION_ID = 'cohorts';
+const APPWRITE_PRACTICE_RUNS_COLLECTION_ID = 'practice_runs';
 let appwriteResourcesStorage = null;
 let appwriteDatabases = null;
 const TUTOR_LEDGER_ENABLED = process.env.APPWRITE_TUTOR_LEDGER === '1';
@@ -461,12 +462,14 @@ function appwriteQuery() {
 }
 
 /* ---- questions: record <-> Appwrite document ---- */
-const APPROVAL_KEYS = ['status', 'addedBy', 'addedByName', 'addedAt', 'editedAt', 'batch', 'returnReason', 'reviewedBy', 'reviewedAt'];
-/* A full patch for a reviewed or edited tutor question: every approval field is named, so one
-   the rules cleared (an old return reason) is cleared in storage too. */
-function approvalPatch(rec) {
+const QUESTION_META_KEYS = ['status', 'addedBy', 'addedByName', 'addedAt', 'editedAt', 'batch', 'returnReason', 'reviewedBy', 'reviewedAt'];
+/* Status and authorship metadata of a question (the Appwrite attributes are unchanged; the
+   review fields are historical marks from the retired approval process, kept as stored).
+   A full patch for an edited tutor question names every one of these fields, so a field the
+   rules cleared is cleared in storage too. */
+function questionMetaPatch(rec) {
   const p = Object.assign({}, rec);
-  APPROVAL_KEYS.forEach(k => { if (p[k] === undefined) p[k] = ''; });
+  QUESTION_META_KEYS.forEach(k => { if (p[k] === undefined) p[k] = ''; });
   return p;
 }
 function questionToDoc(rec) {
@@ -493,12 +496,12 @@ function questionToDoc(rec) {
   /* Same rule for the picture: written only when set, so a collection made
      before these optional attributes existed keeps working. */
   if (rec.imageId) { doc.imageId = String(rec.imageId); doc.imageAlt = String(rec.imageAlt || ''); }
-  /* Phase 3C slice 6: the approval fields. Written only once a question has a status (a tutor's
-     question, or one the admin has reviewed), so a collection made before these optional
+  /* Phase 3C slice 6: the status and authorship fields. Written only once a question has a
+     status (a tutor's question, or a historical reviewed one), so a collection made before these optional
      attributes existed keeps accepting every admin-added question. Blank means cleared. */
   if (rec.status !== undefined) {
     doc.status = String(rec.status || '');
-    APPROVAL_KEYS.slice(1).forEach(k => { doc[k] = String(rec[k] == null ? '' : rec[k]); });
+    QUESTION_META_KEYS.slice(1).forEach(k => { doc[k] = String(rec[k] == null ? '' : rec[k]); });
   }
   return doc;
 }
@@ -525,7 +528,7 @@ function docToQuestion(doc) {
     expected: doc.expected || '',
     maxMark: Number(doc.maxMark) || 0
   };
-  APPROVAL_KEYS.forEach(k => { if (doc[k]) out[k] = String(doc[k]); });
+  QUESTION_META_KEYS.forEach(k => { if (doc[k]) out[k] = String(doc[k]); });
   return out;
 }
 
@@ -589,10 +592,94 @@ function docToAttempt(doc) {
   };
 }
 
+/* ---- practice runs: record <-> Appwrite document ----
+   A practice run is the self-directed, ungraded exercise a student completes
+   from the Practice & Revision hub (as opposed to a formally sat `attempts`
+   record). The heavy per-question snapshot (`topics`, `review`) is kept as
+   JSON text — it is only ever read back whole, never queried by field, so a
+   typed Appwrite attribute per question field would buy nothing. */
+function practiceRunToDoc(scholarId, rec) {
+  return {
+    scholarId: String(scholarId || ''),
+    mode: rec.mode === 'cbt' ? 'cbt' : 'practice',
+    subject: String(rec.subject || ''),
+    topic: String((rec.topics && rec.topics[0] && rec.topics[0].topic) || ''),
+    total: Number(rec.total) || 0,
+    answered: Number(rec.answered) || 0,
+    correct: Number(rec.correct) || 0,
+    wrong: Number(rec.wrong) || 0,
+    percent: Number(rec.percent) || 0,
+    timeUsedSec: rec.timeUsedSec == null ? null : Number(rec.timeUsedSec),
+    xpAwarded: Number(rec.xpAwarded) || 0,
+    xpCapped: !!rec.xpCapped,
+    xpLeftToday: rec.xpLeftToday == null ? null : Number(rec.xpLeftToday),
+    topicsJson: JSON.stringify(rec.topics || []).slice(0, 20000),
+    reviewJson: JSON.stringify(rec.review || []).slice(0, 200000),
+    ts: Number(rec.ts) || Date.now()
+  };
+}
+
+function docToPracticeRun(doc) {
+  let topics = [], review = [];
+  try { topics = JSON.parse(doc.topicsJson || '[]'); } catch (_) { topics = []; }
+  try { review = JSON.parse(doc.reviewJson || '[]'); } catch (_) { review = []; }
+  return {
+    mode: doc.mode === 'cbt' ? 'cbt' : 'practice',
+    subject: doc.subject || '',
+    total: Number(doc.total) || 0,
+    answered: Number(doc.answered) || 0,
+    correct: Number(doc.correct) || 0,
+    wrong: Number(doc.wrong) || 0,
+    percent: Number(doc.percent) || 0,
+    timeUsedSec: (doc.timeUsedSec === null || doc.timeUsedSec === undefined) ? null : Number(doc.timeUsedSec),
+    xpAwarded: Number(doc.xpAwarded) || 0,
+    xpCapped: !!doc.xpCapped,
+    xpLeftToday: (doc.xpLeftToday === null || doc.xpLeftToday === undefined) ? null : Number(doc.xpLeftToday),
+    topics: topics, review: review,
+    ts: Number(doc.ts) || 0
+  };
+}
+
+/* ---- PRACTICE RUN accessors ----
+   Mirrors the attempts accessors above: local-file branch when Appwrite is
+   not configured, Appwrite Database branch (this student's own practice
+   history, newest first, capped) when it is. */
+async function getPracticeRunsForStudent(scholarId, localDb) {
+  if (!appwriteDatabases) {
+    const db = localDb || readData();
+    const list = (db.practiceRuns && db.practiceRuns[scholarId]) || [];
+    return Array.isArray(list) ? list : [];
+  }
+  const Query = appwriteQuery();
+  const keep = core.studentLimits().practiceHistory;
+  const result = await appwriteDatabases.listDocuments(
+    APPWRITE_DATABASE_ID, APPWRITE_PRACTICE_RUNS_COLLECTION_ID,
+    [Query.equal('scholarId', scholarId), Query.orderDesc('ts'), Query.limit(keep || 200)]);
+  return result.documents.map(docToPracticeRun);
+}
+
+async function createPracticeRun(scholarId, rec, localDb) {
+  if (!appwriteDatabases) {
+    if (localDb) {
+      if (!localDb.practiceRuns || typeof localDb.practiceRuns !== 'object') localDb.practiceRuns = {};
+      const list = Array.isArray(localDb.practiceRuns[scholarId]) ? localDb.practiceRuns[scholarId] : [];
+      if (!list.some(run => JSON.stringify(run) === JSON.stringify(rec))) list.unshift(rec);
+      const keep = core.studentLimits().practiceHistory;
+      localDb.practiceRuns[scholarId] = core.capList(core.dropOldRuns(list), keep);
+    }
+    return rec;
+  }
+  const ID = require('node-appwrite').ID;
+  await appwriteDatabases.createDocument(
+    APPWRITE_DATABASE_ID, APPWRITE_PRACTICE_RUNS_COLLECTION_ID,
+    ID.unique(), practiceRunToDoc(scholarId, rec));
+  return rec;
+}
+
 /* ---- QUESTION accessors ---- */
 /* Only LIVE questions unless the caller says { all: true }. Students, papers, blueprints and the
-   tutor numbers all read through here, so a question awaiting approval (or returned) can never
-   reach them by a route that forgot to ask. The console's bank, imports and approval queue ask
+   tutor numbers all read through here, so a historical pending or returned record can never
+   reach them by a route that forgot to ask. The console's bank and imports ask
    for all of them. A question with no status is live. */
 /* The same filtering the local branch has always done, extracted so the 2027
    Free Tutorial Edition can read the bank without ever asking Appwrite. */
@@ -605,7 +692,7 @@ function filterLocalQuestions(rows, filter, localDb) {
      unless the caller explicitly asks for them. Student pools, blueprint
      counts, and the normal admin bank never see archived questions.
      { all: true } still excludes archived unless showArchived is also set,
-     so even the approval queue does not resurface soft-deleted records. */
+     so even the console's full bank does not resurface soft-deleted records. */
   if (!filter.showArchived) list = list.filter(q => !q.archived);
   if (filter.subject) list = list.filter(q => q.subject === filter.subject);
   if (filter.section) list = list.filter(q => q.section === filter.section);
@@ -711,7 +798,7 @@ async function updateQuestion(id, patch, localDb) {
       const q = localDb.questions.find(x => String(x.id) === String(id));
       if (q) {
         Object.assign(q, patch);
-        APPROVAL_KEYS.forEach(k => { if (q[k] === '') delete q[k]; });
+        QUESTION_META_KEYS.forEach(k => { if (q[k] === '') delete q[k]; });
       }
       return q || null;
     }
@@ -1060,7 +1147,8 @@ const ACADEMY_ARRAY_FIELDS = [
 ];
 const ACADEMY_OBJECT_FIELDS = [
   'settings', 'challengeState', 'broadcastMail', 'answerStats', 'practiceRuns',
-  'consentLog', 'bookmarks', 'reviewState', 'reminderState', 'free2027'
+  'consentLog', 'bookmarks', 'reviewState', 'reminderState', 'free2027',
+  'noteReads'
 ];
 /* Presence of at least one of these proves the payload carries academy records
    rather than being an empty stub or an unrelated JSON object. */
@@ -1352,6 +1440,10 @@ if (!Array.isArray(db.questions)) db.questions = core.seedQuestions();
      written before reminders existed — start it empty; everyone then has the
      defaults (email on, SMS off) and nothing has been sent yet. */
   if (!db.reminderState || typeof db.reminderState !== 'object') db.reminderState = {};
+  /* Per-student reading progress: { ScholarID: { noteId: { first, last, done? } } }.
+     Missing on a data file written before reading progress existed — start it empty;
+     the first record is written when a student opens a lesson after deployment. */
+  if (!db.noteReads || typeof db.noteReads !== 'object') db.noteReads = {};
   /* Reading-mode notes. Seeded once so a fresh install has something to read,
      then owned by the academy: anything management adds or imports lives here
      beside the question bank and is never overwritten by a later release.
@@ -2079,6 +2171,10 @@ async function practiceRunsOf(db, id) {
     const docs = await tutorLedger.list('practice', id);
     return core.capList(core.dropOldRuns(docs.map(d => d.payload).sort((a, b) => Number(b.ts) - Number(a.ts))), cap);
   }
+  if (appwriteDatabases) {
+    const all = await getPracticeRunsForStudent(id, db);
+    return core.capList(core.dropOldRuns(all), cap);
+  }
   const all = Array.isArray(db.practiceRuns && db.practiceRuns[id]) ? db.practiceRuns[id] : [];
   const kept = core.capList(core.dropOldRuns(all), cap);
   if (kept.length !== all.length) { db.practiceRuns[id] = kept; writeData(db); }
@@ -2111,17 +2207,14 @@ function studySecToday(s) {
   if (!s || s.studyDay !== core.dayStamp()) return 0;
   return Number(s.studySecToday) || 0;
 }
-/* Same day-stamped-reset shape again, this time for a guardian's "add 15
-   min" grants (see core.EXTRA_TIME_GRANT_MIN): both the extra minutes and
-   how many grants have been used today reset together, the moment the day
-   stamp no longer matches today. */
+/* Same day-stamped-reset shape again, for bonus minutes already on a
+   student's record for today. They were granted by the Guardian PIN
+   "add 15 min" extension, which the clean sweep retired: no new grant can be
+   made, but stored studyBonusMin/studyBonusDay/studyExtendCount values are
+   preserved and today's existing bonus still counts toward the window. */
 function studyBonusMinToday(s) {
   if (!s || s.studyBonusDay !== core.dayStamp()) return 0;
   return Number(s.studyBonusMin) || 0;
-}
-function studyExtendCountToday(s) {
-  if (!s || s.studyBonusDay !== core.dayStamp()) return 0;
-  return Number(s.studyExtendCount) || 0;
 }
 /* GOC_RUN_TIMEOUT: max lifetime (seconds) for an untimed practice run in the
    in-memory openStudy map.  Default is 4 hours.  Tests may set a shorter value
@@ -2998,286 +3091,13 @@ async function storeNoteFile(state) {
   return storageFileId;
 }
 
-/* ------------------------------------------------------------------ videos */
-/*
- * Handles an admin video upload. Mirrors handleResourceUpload, with one
- * difference: the file is optional. A video can be backed by an uploaded
- * MP4 (stored the same way a resource file is) or by an external link
- * (a Zoom cloud recording or an unlisted YouTube URL) — at least one of
- * the two is required, but not both.
- */
-async function handleVideoUpload(req, res) {
-  if (!appwriteResourcesStorage || !appwriteDatabases) {
-    return errJson(res, 503, 'Video storage is not available.');
-  }
-
-  const os = require('os');
-  const { InputFile } = require(
-    path.join(path.dirname(require.resolve('node-appwrite')), 'inputFile.js')
-  );
-
-  const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goc-video-'));
-  let tempFilePath = null;
-  let uploadedFileName = '';
-  let uploadedBytes = 0;
-  let fileSeen = false;
-
-  const fields = {};
-
-  try {
-    await new Promise((resolve, reject) => {
-      const busboy = getBusboy()({
-        headers: req.headers,
-        limits: {
-          files: 1,
-          fileSize: MAX_FILE_SIZE,
-          fields: 10,
-          fieldSize: 10 * 1024
-        }
-      });
-
-      let fileWritePromise = Promise.resolve();
-
-      busboy.on('field', (name, value) => {
-        fields[name] = String(value || '').trim();
-      });
-
-      busboy.on('file', (name, file, info) => {
-        fileSeen = true;
-
-        uploadedFileName = String(info.filename || 'video');
-        const ext = path.extname(uploadedFileName).toLowerCase();
-
-        if (ext !== '.mp4') {
-          file.resume();
-          return reject(new ClientError('Only .mp4 video files are allowed.'));
-        }
-
-        tempFilePath = path.join(
-          tempDir,
-          crypto.randomUUID() + ext
-        );
-
-        const writeStream = fs.createWriteStream(tempFilePath);
-
-        file.on('data', chunk => {
-          uploadedBytes += chunk.length;
-        });
-
-        file.on('limit', () => {
-          reject(new ClientError('The video file is too large. Maximum size is 50 MB.'));
-        });
-
-        file.pipe(writeStream);
-
-        fileWritePromise = new Promise((resolveWrite, rejectWrite) => {
-          writeStream.on('finish', resolveWrite);
-          writeStream.on('error', rejectWrite);
-          file.on('error', rejectWrite);
-        });
-      });
-
-      busboy.on('error', reject);
-
-      busboy.on('finish', async () => {
-        try {
-          await fileWritePromise;
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
-
-      req.pipe(busboy);
-    });
-
-    if (!fields.title) {
-      return errJson(res, 400, 'Video title is required.');
-    }
-
-    if (!fields.subject) {
-      return errJson(res, 400, 'Video subject is required.');
-    }
-
-    if (fields.type !== 'live' && fields.type !== 'lesson') {
-      return errJson(res, 400, 'Video type must be "live" or "lesson".');
-    }
-
-    if (!fields.tutor) {
-      return errJson(res, 400, 'Tutor / instructor name is required.');
-    }
-
-    if (!fields.duration) {
-      return errJson(res, 400, 'Video duration is required.');
-    }
-
-    const externalUrl = clean(fields.externalUrl || '', 500);
-
-    if (fileSeen && uploadedBytes <= 0) {
-      return errJson(res, 400, 'The uploaded file is empty.');
-    }
-
-    if (!fileSeen && !externalUrl) {
-      return errJson(res, 400, 'Provide either a video file or a link.');
-    }
-
-    if (externalUrl && !/^https?:\/\//i.test(externalUrl)) {
-      return errJson(res, 400, 'The link must start with http:// or https://.');
-    }
-
-    const videoId = 'VID-' + crypto.randomUUID().replace(/-/g, '').slice(0, 32);
-    let storageFileId = '';
-
-    if (fileSeen && tempFilePath) {
-      storageFileId = crypto.randomUUID();
-      const inputFile = InputFile.fromPath(tempFilePath, uploadedFileName);
-      await appwriteResourcesStorage.createFile(
-        APPWRITE_BUCKET_ID,
-        storageFileId,
-        inputFile
-      );
-    }
-
-    const record = {
-      videoId,
-      title: clean(fields.title, 255),
-      subject: clean(fields.subject, 100),
-      type: fields.type,
-      tutor: clean(fields.tutor, 100),
-      duration: clean(fields.duration, 20),
-      storageFileId,
-      externalUrl,
-      published: false
-    };
-
-    await appwriteDatabases.createDocument(
-      APPWRITE_DATABASE_ID,
-      APPWRITE_VIDEOS_COLLECTION_ID,
-      videoId,
-      record
-    );
-
-    return okJson(res, { ok: true, video: record });
-  } catch (err) {
-    return errJson(
-      res,
-      400,
-      safeClientMessage(err, 'Video upload failed. Please try again.')
-    );
-  } finally {
-    try {
-      if (tempFilePath && fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
-    } catch (_) {}
-
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (_) {}
-  }
-}
-
-/* ------------------------------------------------------------- video cache
-   Every play used to re-download the whole file from Appwrite Storage into
-   server memory and forward it — on *every* watch, by every student, no
-   matter how many times the same recording had already been served. That
-   made a first play slow (a full round trip to Appwrite for a file that
-   can be tens of MB) and made a second play fragile: any Appwrite hiccup,
-   rate limit, or slow response on that particular request failed the whole
-   thing, with nothing to fall back on.
-
-   Fix: fetch a given storageFileId from Appwrite at most once per server
-   run, cache it to local disk, and serve every request — first or
-   hundredth — straight off disk with proper Range support, so seeking and
-   fast start work like a normal video file. */
-const VIDEO_CACHE_DIR = path.join(os.tmpdir(), 'goc-video-cache');
-try { fs.mkdirSync(VIDEO_CACHE_DIR, { recursive: true }); } catch (_) {}
-
-// Collapses concurrent first-time requests for the same file into a single
-// Appwrite fetch, so ten students opening a brand-new recording at once
-// don't trigger ten downloads.
-const videoCacheInFlight = new Map();
-
-function videoCachePath(storageFileId) {
-  return path.join(VIDEO_CACHE_DIR, storageFileId.replace(/[^A-Za-z0-9._-]/g, '_') + '.mp4');
-}
-
-function ensureVideoCached(storageFileId) {
-  const localPath = videoCachePath(storageFileId);
-
-  if (fs.existsSync(localPath)) {
-    return Promise.resolve(localPath);
-  }
-
-  if (videoCacheInFlight.has(storageFileId)) {
-    return videoCacheInFlight.get(storageFileId);
-  }
-
-  const fetchPromise = (async () => {
-    const fileData = await appwriteResourcesStorage.getFileView(APPWRITE_BUCKET_ID, storageFileId);
-    // Write to a temp path and rename into place — rename is atomic, so a
-    // request that arrives while the download is still in flight can never
-    // see (and serve) a half-written file.
-    const tmpPath = localPath + '.' + crypto.randomUUID() + '.tmp';
-    await fs.promises.writeFile(tmpPath, Buffer.from(fileData));
-    await fs.promises.rename(tmpPath, localPath);
-    return localPath;
-  })();
-
-  videoCacheInFlight.set(storageFileId, fetchPromise);
-  fetchPromise.finally(() => videoCacheInFlight.delete(storageFileId)).catch(() => {});
-  return fetchPromise;
-}
-
-function clearCachedVideo(storageFileId) {
-  try { fs.unlinkSync(videoCachePath(storageFileId)); } catch (_) {}
-}
-
-// Serves a cached video file with Range support, so the <video> element can
-// seek and start playback without waiting for the whole file to download.
-function streamVideoFile(req, res, filePath) {
-  let stat;
-  try {
-    stat = fs.statSync(filePath);
-  } catch (err) {
-    return errJson(res, 404, 'Could not open that video.');
-  }
-
-  const range = req.headers.range;
-
-  if (!range) {
-    res.writeHead(200, {
-      'Content-Type': 'video/mp4',
-      'Content-Length': stat.size,
-      'Accept-Ranges': 'bytes',
-      'Content-Disposition': 'inline',
-      'Cache-Control': 'private, no-store'
-    });
-    fs.createReadStream(filePath).pipe(res);
-    return;
-  }
-
-  const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-  const start = match && match[1] ? parseInt(match[1], 10) : 0;
-  const end = match && match[2] ? parseInt(match[2], 10) : stat.size - 1;
-
-  if (!match || isNaN(start) || isNaN(end) || start > end || end >= stat.size) {
-    res.writeHead(416, { 'Content-Range': 'bytes */' + stat.size });
-    return res.end();
-  }
-
-  res.writeHead(206, {
-    'Content-Type': 'video/mp4',
-    'Content-Range': 'bytes ' + start + '-' + end + '/' + stat.size,
-    'Content-Length': end - start + 1,
-    'Accept-Ranges': 'bytes',
-    'Content-Disposition': 'inline',
-    'Cache-Control': 'private, no-store'
-  });
-  fs.createReadStream(filePath, { start, end }).pipe(res);
-}
+/* ------------------------------------------------------------------ videos
+   The student video library (GET /api/videos, /api/videos/:id/file), its
+   on-disk playback cache and streaming, and the console video management
+   routes (/api/admin/videos*) with their upload handler were retired in the
+   clean sweep (Phase 2, 18 Nov 2026). Video records in the Appwrite 'videos'
+   collection and their files in Storage are preserved untouched; nothing here
+   deletes them. */
 
 /* ================================================================= API ROUTES
    Each handler receives (req, res, body, session, params).
@@ -3341,13 +3161,6 @@ function effectiveSettingsFor(db, cohort) {
     objectiveCounts: Object.assign({}, st.objectiveCounts || {}),
     jambMinutes: core.clampJambMinutes(st.jambMinutes),
     jambCounts: Object.assign({}, st.jambCounts || {}),
-    // The guardian PIN is academy-wide, not cohort-resolved (no cohort ever
-    // overrides it below), but a signed-in student still needs to know
-    // *whether* one is set so the wind-down overlay can decide whether to
-    // show its "enter the guardian PIN to keep going" field at all. Only
-    // the yes/no flag travels here — the digits themselves stay off every
-    // route but the console's own GET /api/settings.
-    hasGuardianPin: !!core.normalizeGuardianPin(st.guardianPin),
     cohortId: null, cohortName: null
   };
   if (!cohort) return base;
@@ -3523,12 +3336,6 @@ function tutorSubjectOr403(res, sess, requested) {
   const r = core.tutorSubjectFor(sess.tutor, requested);
   if (r.error) { errJson(res, 403, r.error); return null; }
   return r.subject;
-}
-
-/* Who is reviewing: the signed-in management account, by ID and name. */
-function reviewerOf(sess) {
-  const d = (sess && sess.data) || {};
-  return { id: d.id, name: d.name || d.id, role: d.role };
 }
 
 /* One read-mark-write cycle for a theory script, shared by the console and the tutor route.
@@ -4778,21 +4585,17 @@ const ROUTES = [
 
   { method: 'GET', path: /^\/api\/settings$/, need: null, handler: (req, res, body, sess) => {
       const st = readData().settings;
-      // Only the values the app needs to draw itself. No hashes, no secrets —
-      // and the guardian PIN is a secret, so it is never sent here at all.
-      // Everyone (including a logged-out visitor) may know a PIN feature
-      // exists; only console gets the digits back, to prefill the edit form.
-      const isConsole = !!(sess && sess.data && sess.data.role === 'admin' && sess.data.unlocked);
+      // Only the values the app needs to draw itself. No hashes, no secrets.
+      // (A stored settings.guardianPin from the retired Guardian PIN feature
+      // is preserved in the data but never sent anywhere.)
       const out = {
         dailyLimitMin: st.dailyLimitMin,
         sessionMinutes: st.sessionMinutes,
         sessionWarnMinutes: st.sessionWarnMinutes,
         objectiveMinutes: core.clampObjectiveMinutes(st.objectiveMinutes),
         jambMinutes: core.clampJambMinutes(st.jambMinutes),
-        jambReadyMin: core.clampJambReadyMin(st.jambReadyMin),
-        hasGuardianPin: !!core.normalizeGuardianPin(st.guardianPin)
+        jambReadyMin: core.clampJambReadyMin(st.jambReadyMin)
       };
-      if (isConsole) out.guardianPin = st.guardianPin || '';
       okJson(res, out);
     } },
 
@@ -4816,20 +4619,8 @@ const ROUTES = [
       if (body.jambReadyMin !== undefined) {
         db.settings.jambReadyMin = core.clampJambReadyMin(body.jambReadyMin);
       }
-      /* Sending an empty string clears the PIN back to "feature off", the same
-         {field: ''/null} convention cohorts use to mean "go back to unset".
-         A non-empty value that isn't 4-8 digits is refused outright, so a typo
-         can never lock the feature into an unusable PIN silently. */
-      if (body.guardianPin !== undefined) {
-        const raw = String(body.guardianPin == null ? '' : body.guardianPin).trim();
-        if (!raw) {
-          db.settings.guardianPin = null;
-        } else {
-          const norm = core.normalizeGuardianPin(raw);
-          if (!norm) return errJson(res, 400, 'A guardian PIN must be 4 to 8 digits.');
-          db.settings.guardianPin = norm;
-        }
-      }
+      /* body.guardianPin is ignored: the Guardian PIN feature is retired and
+         any stored settings.guardianPin is left exactly as it is. */
       /* Shortening the session can leave a warning longer than the session it
          warns about, so the pair is always settled together. */
       db.settings.sessionWarnMinutes =
@@ -4841,9 +4632,7 @@ const ROUTES = [
         sessionWarnMinutes: db.settings.sessionWarnMinutes,
         objectiveMinutes: core.clampObjectiveMinutes(db.settings.objectiveMinutes),
         jambMinutes: core.clampJambMinutes(db.settings.jambMinutes),
-        jambReadyMin: core.clampJambReadyMin(db.settings.jambReadyMin),
-        hasGuardianPin: !!core.normalizeGuardianPin(db.settings.guardianPin),
-        guardianPin: db.settings.guardianPin || ''
+        jambReadyMin: core.clampJambReadyMin(db.settings.jambReadyMin)
       });
     } },
 
@@ -5099,8 +4888,8 @@ const ROUTES = [
       const db = readData();
       const questions = await listQuestions({ subject, all: true }, db);
       const mine = core.subjectDepth(questions, db.notes).find(r => r.subject === subject);
-      /* Count all questions for this subject by status so the tutor sees pending/returned
-         questions, not only approved 'live' ones (subjectDepth skips non-live rows).
+      /* Count the tutor's questions in this subject by status: live, plus any historical
+         pending/returned records (subjectDepth skips non-live rows).
          Read from the SAME fetched list as the depth figures above — in Appwrite
          mode db.questions is only the local cache and can be empty or stale, which
          made these counts read zero while the bank actually held the tutor's rows. */
@@ -5141,55 +4930,6 @@ const ROUTES = [
     } },
 
 
-  /* Admin console tutor analytics.
-     Access requires an authenticated console session and the
-     existing tutors.accounts capability. */
-  {
-    method: 'GET',
-    path: /^\/api\/admin\/tutors\/analytics$/,
-    need: 'console',
-    cap: 'tutors.accounts',
-    handler: async (req, res) => {
-      const db = readData();
-      const students = appwriteDatabases
-        ? await listAppwriteStudents()
-        : (db.students || []);
-
-      const runsByStudent = await tutorRunsByStudent(db, students);
-
-      /* The subject list comes from the data-access layer, not the local blob:
-         in Appwrite mode db.questions is a cache that can be empty on a fresh
-         deploy, which used to make this report come back with no subjects at all. */
-      const bank = await listQuestions({ all: true }, db);
-      const subjects = Array.from(new Set(
-        bank
-          .filter(q => q && q.subject)
-          .map(q => q.subject)
-      ));
-
-      const reports = [];
-
-      for (const subject of subjects) {
-        const attempts = await tutorAttempts(subject, db);
-        const snapshot = core.tutorSnapshot(
-          subject, students, runsByStudent, attempts, Date.now()
-        );
-
-        const stats = await tutorRecordedStats(db, subject, attempts);
-
-        reports.push({
-          subject,
-          snapshot,
-          activity: core.tutorActivity(
-            subject, students, runsByStudent, attempts, Date.now()
-          ),
-          weakTopics: core.rankWeakTopics(core.tutorTheoryStats(subject, stats, students, attempts))
-        });
-      }
-
-      okJson(res, { reports });
-    }
-  },
 
   /* Phase 3C, at-risk list, slice 2: GET /api/tutor/atrisk?subject=[&sort=inactive|score]. The tutor's
      own subject only (same scope guard as every tutor route). GOC students taking the subject who have
@@ -5307,10 +5047,11 @@ const ROUTES = [
 
   /* ---- Phase 3C slice 6, part 2: tutor questions. Every route here is for the tutor's OWN
      questions in the tutor's OWN subjects, checked against the tutor record read on this
-     request. Whatever a tutor types or imports is saved as Awaiting approval; nothing a tutor
-     sends can set a status, an author or a review mark (core.stampTutorQuestion and
-     core.tutorEditQuestion overwrite them). Students never see a question until the admin
-     approves it (listQuestions serves live questions only). */
+     request. A question that passes validation is saved live, straight into the Question
+     Bank (no approval step); nothing a tutor sends can set a status, an author or a review
+     mark (core.stampTutorQuestion and core.tutorEditQuestion overwrite them). Records still
+     carrying a historical 'pending' or 'returned' status stay as stored and are not served
+     (listQuestions serves live questions only). */
   { method: 'GET', path: /^\/api\/tutor\/questions$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, new URL(req.url, 'http://x').searchParams.get('subject'));
       if (!subject) return;
@@ -5340,9 +5081,9 @@ const ROUTES = [
       okJson(res, { question: st.rec, created: true });
     } },
 
-  /* Bulk import: the same CSV reader and checks as the console, fixed to the tutor's subject,
-     every kept row saved as Awaiting approval under one batch id so the admin can approve the
-     whole import at once. */
+  /* Bulk import: the same CSV reader and checks as the console, fixed to the tutor's subject.
+     Every row that passes the checks is saved live under one batch id; rows that fail are
+     skipped and reported, never stored. */
   { method: 'POST', path: /^\/api\/tutor\/questions\/import$/, need: 'tutor', handler: async (req, res, body, sess) => {
       const subject = tutorSubjectOr403(res, sess, body && body.subject);
       if (!subject) return;
@@ -5366,9 +5107,6 @@ const ROUTES = [
         for (const rec of r.records) {
           const st = core.stampTutorQuestion(rec, sess.tutor, { batch }, now);
           if (st.error) { errors.push(st.error); continue; }
-          /* Leave status as 'pending' so imported questions sit in the approval
-             queue just like individually submitted tutor questions. The admin
-             approves the whole batch in one go via POST /api/approvals/batch/approve. */
           db.settings.questionSeq = (db.settings.questionSeq || 0) + 1;
           st.rec.id = db.settings.questionSeq;
           /* createQuestion pushes the record into db.questions before writeData
@@ -5381,7 +5119,7 @@ const ROUTES = [
                         target: subject + '/' + (section || 'any') + (stampSection ? ' (stamped)' : ''),
                         read: r.read, added: ids.length, skipped: errors.length, by: sess.tutor.id });
         writeData(db);
-        okJson(res, { read: r.read, added: ids.length, ids, skipped: errors.length, errors, batch, status: ids.length ? 'pending' : '' });
+        okJson(res, { read: r.read, added: ids.length, ids, skipped: errors.length, errors, batch, status: ids.length ? 'live' : '' });
       });
     } },
 
@@ -5398,26 +5136,26 @@ const ROUTES = [
       const ed = core.tutorEditQuestion(sess.tutor, cur, v.rec, Date.now());
       if (ed.error) return errJson(res, 403, ed.error);
       ed.rec.id = cur.id;
-      await updateQuestion(cur.id, approvalPatch(ed.rec), db);
+      await updateQuestion(cur.id, questionMetaPatch(ed.rec), db);
       writeData(db);
       okJson(res, { question: ed.rec, changed: true });
     } },
 
-  /* Withdraw (hide) or republish one's own APPROVED question. This only flips the question's
-     on/off switch: it can never make an unapproved question live. */
+  /* Withdraw (hide) or republish one's own LIVE question. This only flips the question's
+     on/off switch: it can never make a historical pending or returned record live. */
   { method: 'PUT', path: /^\/api\/tutor\/questions\/(\d+)\/active$/, need: 'tutor', handler: async (req, res, body, sess, params) => {
       if (typeof body.active !== 'boolean') return errJson(res, 400, 'Say whether the question is on or off.');
       const db = readData();
       const cur = await findQ(db, params[0]);
       if (!cur || !core.tutorOwnsQuestion(sess.tutor, cur)) return errJson(res, 404, 'That question is not one of yours.');
-      if (!core.questionIsLive(cur)) return errJson(res, 400, 'Only an approved question can be withdrawn or republished.');
+      if (!core.questionIsLive(cur)) return errJson(res, 400, 'Only a live question can be withdrawn or republished.');
       await updateQuestion(cur.id, { active: body.active }, db);
       writeData(db);
       okJson(res, { question: Object.assign({}, cur, { active: body.active }), changed: true });
     } },
 
-  /* Delete one's own question once it is not showing to students: awaiting approval, returned,
-     or withdrawn. (Same rule as the console: switch it off first.) */
+  /* Delete one's own question once it is not showing to students: withdrawn, or a historical
+     pending or returned record. (Same rule as the console: switch it off first.) */
   { method: 'DELETE', path: /^\/api\/tutor\/questions\/(\d+)$/, need: 'tutor', handler: async (req, res, body, sess, params) => {
       const db = readData();
       const cur = await findQ(db, params[0]);
@@ -5744,47 +5482,10 @@ const ROUTES = [
       });
     } },
 
-  /* ---- The admin side of the same rules (the console screen for these is the next part). ---- */
-  { method: 'GET', path: /^\/api\/approvals$/, need: 'console', cap: 'approvals.review', handler: async (req, res) => {
-      const db = readData();
-      const subject = new URL(req.url, 'http://x').searchParams.get('subject') || '';
-      const queue = core.approvalQueue(await listQuestions({ all: true }, db), subject);
-      okJson(res, { count: queue.length, queue });
-    } },
-
-  { method: 'POST', path: /^\/api\/approvals\/batch\/approve$/, need: 'console', cap: 'approvals.review', handler: async (req, res, body, sess) => {
-      const db = readData();
-      const r = core.approveBatch(await listQuestions({ all: true }, db), body && body.batch, reviewerOf(sess), Date.now());
-      if (r.error) return errJson(res, 400, r.error);
-      for (const rec of r.recs) await updateQuestion(rec.id, approvalPatch(rec), db);
-      writeData(db);
-      okJson(res, { approved: r.recs.length, skipped: r.skipped });
-    } },
-
-  { method: 'POST', path: /^\/api\/approvals\/(\d+)\/(approve|return)$/, need: 'console', cap: 'approvals.review', handler: async (req, res, body, sess, params) => {
-      const db = readData();
-      const cur = await findQ(db, params[0]);
-      if (!cur) return errJson(res, 404, 'That question no longer exists.');
-      /* "Edit then approve": the admin's changes go through the console's own validator, the
-         author and review marks stay exactly as the tutor left them, then the rules approve it. */
-      let target = cur, edited = false;
-      if (params[1] === 'approve' && body && body.edit && typeof body.edit === 'object') {
-        const v = core.validateQuestion(Object.assign({}, cur, body.edit));
-        if (v.error) return errJson(res, 400, v.error);
-        const pl = core.passageLinkError(v.rec, db.passages);
-        if (pl) return errJson(res, 400, pl);
-        const il = imageLinkError(v.rec);
-        if (il) return errJson(res, 400, il);
-        target = Object.assign({}, cur, v.rec, { id: cur.id });
-        APPROVAL_KEYS.forEach(k => { if (cur[k] !== undefined) target[k] = cur[k]; else delete target[k]; });
-        edited = true;
-      }
-      const r = core.reviewQuestion(target, params[1], reviewerOf(sess), body && body.reason, Date.now());
-      if (r.error) return errJson(res, 400, r.error);
-      await updateQuestion(cur.id, approvalPatch(r.rec), db);
-      writeData(db);
-      okJson(res, { question: r.rec, decision: params[1], edited });
-    } },
+  /* The Console approval queue (GET /api/approvals, batch approve, approve/return)
+     was retired in the clean sweep (Phase 2), and the Question Bank publish step
+     that briefly replaced it was retired in the final cleanup (18 Nov 2026): a
+     tutor's valid question is saved live, straight into the Question Bank. */
 
   {
     method: 'GET',
@@ -5920,7 +5621,6 @@ const ROUTES = [
       const rows = core.subjectDepth(db.questions, db.notes).map(r => {
         r.tutors = db.tutors.filter(t => t.active !== false && t.subjects.indexOf(r.subject) > -1)
                             .map(t => ({ id: t.id, name: t.name }));
-        r.pending = core.approvalQueue(db.questions, r.subject).length;
         r.lastUpload = core.lastTutorUpload(db.questions, r.subject);
         return r;
       });
@@ -6374,6 +6074,10 @@ const ROUTES = [
         await tutorLedger.append('practice', key, sess.data.id, '', rec.ts, rec);
         return okJson(res, { ok: true, saved: rec, runs: await practiceRunsOf(db, sess.data.id) });
       }
+      if (appwriteDatabases) {
+        await createPracticeRun(sess.data.id, rec, db);
+        return okJson(res, { ok: true, saved: rec, runs: await practiceRunsOf(db, sess.data.id) });
+      }
       if (!db.practiceRuns || typeof db.practiceRuns !== 'object') db.practiceRuns = {};
       const list = Array.isArray(db.practiceRuns[sess.data.id]) ? db.practiceRuns[sess.data.id] : [];
       if (!list.some(run => JSON.stringify(run) === JSON.stringify(rec))) list.unshift(rec);
@@ -6422,13 +6126,12 @@ const ROUTES = [
       okJson(res, { ok: true, removed: next.length !== list.length, bookmarks: next });
     } },
 
-  /* Priority 6 — the catalogue is built from the student's stored combination,
-     so their subjects are the single source of truth for what they can sit.
-     Theory is one paper per subject and carries no clock; objective is a single
-     sitting of the whole combination, so it appears once. There is one test, not
-     a weekly one and a monthly one, so each paper is listed exactly once. The
-     JAMB-oriented paper is a second full-combination timed sitting, listed once
-     alongside the Objective one. */
+  /* The student's sitting catalogue. The Web Test's Objective and Theory
+     sittings were retired in the clean sweep (Phase 2, 18 Nov 2026), so the
+     only sitting listed is the JAMB-oriented one — a full-combination timed
+     paper, held back until the bank is deep enough in every one of this
+     student's subjects. Earlier Objective/Theory attempts stay on the record
+     (GET /api/me/results). */
   { method: 'GET', path: /^\/api\/me\/tests$/, need: 'student', handler: async (req, res, body, sess) => {
       const db = readData();
       const s = appwriteDatabases
@@ -6438,23 +6141,9 @@ const ROUTES = [
       if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
 
       const subs = (s.subjects || []).slice();
-      const minutes = core.clampObjectiveMinutes(db.settings.objectiveMinutes);
       const jambMinutes = core.clampJambMinutes(db.settings.jambMinutes);
       const allQuestions = await listQuestions({}, db);
       const rows = [], period = core.PERIOD;
-      for (const sub of subs) {
-        const n = core.eligible(allQuestions, { section: 'theory', subject: sub }).length;
-        if (n) rows.push(Object.assign({ period, section: 'theory', subject: sub, questions: n, durationSec: 0 },
-                                       await sitStatus(s.id, 'theory', sub, db)));
-      }
-      const bp = core.objectiveBlueprint(allQuestions, subs, db.settings.objectiveCounts);
-      const total = core.objectiveTotal(bp);
-      if (total) {
-        rows.push(Object.assign({ period, section: 'objective', subject: core.OBJECTIVE_SUBJECT,
-                    questions: total, durationSec: minutes * 60,
-                    papers: bp.map(r => ({ subject: r.subject, questions: r.serving })) },
-                    await sitStatus(s.id, 'objective', core.OBJECTIVE_SUBJECT, db)));
-      }
       const jbp = core.jambBlueprint(allQuestions, subs, db.settings.jambCounts);
       const jTotal = core.objectiveTotal(jbp);
       /* Held back until the bank is deep enough in every one of this student's
@@ -6465,8 +6154,7 @@ const ROUTES = [
                     papers: jbp.map(r => ({ subject: r.subject, questions: r.serving })) },
                     await sitStatus(s.id, 'jamb', core.OBJECTIVE_SUBJECT, db)));
       }
-      okJson(res, { subjects: subs, tests: rows, objectiveMinutes: minutes,
-                    objectiveMinutesLabel: core.hoursLabel(minutes),
+      okJson(res, { subjects: subs, tests: rows,
                     jambMinutes: jambMinutes, jambMinutesLabel: core.hoursLabel(jambMinutes) });
     } },
 
@@ -6488,26 +6176,18 @@ const ROUTES = [
       const section = clean(body.section, 12);
       let subject = clean(body.subject, 40);
       if (core.SECTIONS.indexOf(section) === -1) return errJson(res, 400, 'Choose a test section.');
+      /* Clean sweep (Phase 2, 18 Nov 2026): the Web Test's Objective and Theory
+         sittings are retired. No new one can be opened; papers already open can
+         still be submitted, and every earlier attempt stays on the record. */
+      if (section !== 'jamb') {
+        return errJson(res, 410, 'The Objective and Theory sittings have been retired. Your earlier papers stay on your record.');
+      }
       const subs = (s.subjects || []).slice();
       /* A question whose passage is missing, switched off or from another subject is
          held back, so a paper never promises a question it cannot show. */
       const allQuestions = core.servablePool(await listQuestions({}, db), db.passages);
       let pool, dur, papers = null;
-      if (section === 'objective') {
-        /* One sitting of the whole combination: the student chooses nothing but
-           when to begin, exactly as in the hall. The clock and per-paper counts
-           come from the student's cohort where it overrides them, the academy
-           default otherwise — effectiveSettingsFor is the one place that merge
-           happens. */
-        const cohort = s.cohort ? await getCohortOrNull(s.cohort).catch(() => null) : null;
-        const eff = effectiveSettingsFor(db, cohort);
-        const bp = core.objectiveBlueprint(allQuestions, subs, eff.objectiveCounts);
-        pool = core.objectivePaper(allQuestions, subs, eff.objectiveCounts);
-        if (!pool.length) return errJson(res, 404, 'No questions have been published for that sitting yet.');
-        subject = core.OBJECTIVE_SUBJECT;
-        dur = eff.objectiveMinutes * 60;
-        papers = bp.filter(r => r.serving > 0).map(r => ({ subject: r.subject, questions: r.serving }));
-      } else if (section === 'jamb') {
+      {
         /* The JAMB-oriented sitting: a second full-combination timed paper,
            assembled exactly like the objective one but from its own exclusive
            jamb-tagged pool — never the objective bank, so a student never
@@ -6529,22 +6209,10 @@ const ROUTES = [
         subject = core.OBJECTIVE_SUBJECT;
         dur = eff.jambMinutes * 60;
         papers = bp.filter(r => r.serving > 0).map(r => ({ subject: r.subject, questions: r.serving }));
-      } else {
-        if (subs.indexOf(subject) === -1) {
-          return errJson(res, 403, subject + ' is not part of your registered subject combination.');
-        }
-        /* Some subjects are examined in the objective sitting only. `eligible`
-           would serve nothing anyway, but "nothing published yet" would be the
-           wrong reason to give — say the real one. */
-        if (!core.theoryAllowed(subject)) return errJson(res, 403, core.noTheoryMessage(subject));
-        pool = core.eligible(allQuestions, { section, subject });
-        if (!pool.length) return errJson(res, 404, 'No questions have been published for that test yet.');
-        dur = 0;   /* a written paper is sat without a clock */
       }
 
-      // SIT RULE: a Theory or Objective session that has been submitted is
-      // closed for good; only the JAMB-oriented session may be sat again, as a
-      // rehearsal (every attempt is kept, see core.canSit). Re-checked here
+      // SIT RULE: the JAMB-oriented session may be sat again, as a rehearsal
+      // (every attempt is kept, see core.canSit). Re-checked here
       // even though the catalogue already hides a finished session, because
       // the catalogue is only a courtesy; this is the gate that actually
       // enforces it against a stale page, a replayed request, or a client that
@@ -6761,66 +6429,6 @@ const ROUTES = [
       okJson(res, core.studyWindowStatus(eff.dailyLimitMin, studySecToday(stu), studyBonusMinToday(stu)));
     } },
 
-  /* "Add 15 min (guardian PIN)" — see DAILY-STUDY-WINDOW-STATUS.txt. A single
-     academy-wide PIN, checked here against db.settings.guardianPin, grants a
-     fixed EXTRA_TIME_GRANT_MIN on top of today's window, up to
-     EXTRA_TIME_MAX_GRANTS_PER_DAY times a day. Wrong-PIN guesses share the
-     same tooManyAttempts(ip)/noteFailure(ip) throttle already used on
-     login/signup, so this can't be brute-forced any more easily than a
-     password. */
-  { method: 'POST', path: /^\/api\/me\/study-time\/extend$/, need: 'student', handler: async (req, res, body, sess) => {
-      const ip = getClientIp(req);
-      if (tooManyAttempts(ip)) return errJson(res, 429, 'Too many attempts. Wait a few minutes and try again.');
-
-      const db = readData();
-      let stu = appwriteDatabases
-        ? await getAppwriteStudentOrNull(sess.data.id)
-        : db.students.find(x => x.id === sess.data.id);
-      if (!stu) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
-
-      if (!core.normalizeGuardianPin(db.settings.guardianPin)) {
-        return errJson(res, 403, 'No guardian PIN has been set for this academy.');
-      }
-      if (!core.guardianPinMatches(db.settings.guardianPin, body && body.pin)) {
-        noteFailure(ip);
-        return errJson(res, 401, 'That PIN is not correct.');
-      }
-      attempts.delete(ip);
-
-      if (studyExtendCountToday(stu) >= core.EXTRA_TIME_MAX_GRANTS_PER_DAY) {
-        return errJson(res, 403, "Today's extra time has already been used up.");
-      }
-
-      const today = core.dayStamp();
-      const afterBonus = studyBonusMinToday(stu) + core.EXTRA_TIME_GRANT_MIN;
-      const afterCount = studyExtendCountToday(stu) + 1;
-
-      if (appwriteDatabases) {
-        // studyBonusMin/studyBonusDay/studyExtendCount are new attributes that
-        // may not exist yet on a live Appwrite "students" collection — reads
-        // of an unmapped field are safe (undefined/0), but this write will
-        // throw until the academy adds them, so that case gets a clear
-        // message instead of a raw 500.
-        try {
-          const updated = await updateAppwriteStudent(sess.data.id, {
-            studyBonusDay: today, studyBonusMin: afterBonus, studyExtendCount: afterCount
-          });
-          stu = appwriteStudentToRecord(updated);
-        } catch (err) {
-          return errJson(res, 500, 'Could not save the extra time. Ask the academy to add the studyBonusMin, studyBonusDay and studyExtendCount attributes to the Appwrite students collection, then try again.');
-        }
-      } else {
-        stu.studyBonusDay = today;
-        stu.studyBonusMin = afterBonus;
-        stu.studyExtendCount = afterCount;
-        writeData(db);
-      }
-
-      const cohort = stu.cohort ? await getCohortOrNull(stu.cohort).catch(() => null) : null;
-      const eff = effectiveSettingsFor(db, cohort);
-      okJson(res, core.studyWindowStatus(eff.dailyLimitMin, studySecToday(stu), studyBonusMinToday(stu)));
-    } },
-
   /* A student reads only notes for a paper they sit, and only what management
      has left active. */
   { method: 'GET', path: /^\/api\/me\/notes$/, need: 'student', handler: async (req, res, body, sess) => {
@@ -6841,6 +6449,68 @@ const ROUTES = [
         return true;
       });
       okJson(res, { notes: rows.map(n => core.publicNote(n)) });
+    } },
+
+  /* ---- reading progress (Study page, Phase 4) --------------------------------
+     GET  /api/me/reading  — the signed-in student's own read records.
+     POST /api/me/reading  — record an open ({ noteId }) or a completion
+                             ({ noteId, done: true }). Idempotent: `done` is
+                             never unset and `first` never moved. The note must
+                             be active and belong to one of the student's papers.
+     Progress percentages are calculated from these records, never stored. */
+  { method: 'GET', path: /^\/api\/me\/reading$/, need: 'student', handler: async (req, res, body, sess) => {
+      const db = readData();
+      const reads = (db.noteReads && db.noteReads[sess.data.id]) || {};
+      okJson(res, { reads });
+    } },
+
+  { method: 'POST', path: /^\/api\/me\/reading$/, need: 'student', handler: async (req, res, body, sess) => {
+      const db = readData();
+      const sid = sess.data.id;
+      const s = appwriteDatabases
+        ? await getAppwriteStudent(sid).catch(() => null)
+        : db.students.find(x => x.id === sid);
+      if (!s) return errJson(res, 404, 'That Scholar ID is no longer on the roster.');
+
+      const noteId = String(body && body.noteId != null ? body.noteId : '').trim();
+      if (!noteId) return errJson(res, 400, 'noteId is required.');
+
+      /* The note must exist, be active, and belong to one of this student's subjects. */
+      const note = db.notes.find(n => String(n.id) === noteId && n.active);
+      if (!note) return errJson(res, 404, 'That lesson does not exist or has been withdrawn.');
+      if ((s.subjects || []).indexOf(note.subject) === -1) {
+        return errJson(res, 403, 'That lesson is not on your syllabus.');
+      }
+
+      if (!db.noteReads || typeof db.noteReads !== 'object') db.noteReads = {};
+      if (!db.noteReads[sid] || typeof db.noteReads[sid] !== 'object') db.noteReads[sid] = {};
+
+      const now = new Date().toISOString();
+      const existing = db.noteReads[sid][noteId] || null;
+      const rec = existing
+        ? Object.assign({}, existing, { last: now })
+        : { first: now, last: now };
+
+      /* `done` is set at most once: completed lessons stay completed. */
+      if (body && body.done && !rec.done) rec.done = now;
+
+      db.noteReads[sid][noteId] = rec;
+
+      /* Cap: at most as many records as there are published notes (belt-and-braces). */
+      const cap = db.notes.filter(n => n.active).length;
+      const keys = Object.keys(db.noteReads[sid]);
+      if (keys.length > cap) {
+        /* Drop the oldest-last records to get back under the cap. */
+        const sorted = keys.slice().sort((a, b) => {
+          const ta = db.noteReads[sid][a].last || '';
+          const tb = db.noteReads[sid][b].last || '';
+          return ta < tb ? -1 : ta > tb ? 1 : 0;
+        });
+        sorted.slice(0, keys.length - cap).forEach(k => delete db.noteReads[sid][k]);
+      }
+
+      writeData(db);
+      okJson(res, { ok: true, read: db.noteReads[sid][noteId] });
     } },
 
   /* Class notices (Phase 3C slice 7): students only, and only for a subject they take. A student
@@ -8754,220 +8424,6 @@ const ROUTES = [
       }
       console.error('[goc] Resource delete failed:', err.message);
       return errJson(res, 500, 'Could not delete the resource.');
-    }
-  } },
-
-  { method: 'GET', path: /^\/api\/videos$/, need: 'student', handler: async (req, res, body, sess) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    try {
-      const { Query } = require('node-appwrite');
-
-      const result = await appwriteDatabases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        [
-          Query.equal('published', true),
-          Query.limit(5000)
-        ]
-      );
-
-      const videos = result.documents.map(doc => ({
-        videoId: doc.videoId || doc.$id,
-        title: doc.title || '',
-        subject: doc.subject || '',
-        type: doc.type || 'lesson',
-        tutor: doc.tutor || '',
-        duration: doc.duration || '',
-        storageFileId: doc.storageFileId || '',
-        externalUrl: doc.externalUrl || '',
-        published: true,
-        createdAt: doc.$createdAt || null,
-        updatedAt: doc.$updatedAt || null
-      }));
-
-      videos.sort((a, b) =>
-        String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
-      );
-
-      const allowed = videos.filter(v => core.videoAllowed(v.type));
-      return okJson(res, { videos: allowed, locked: allowed.length < videos.length });
-    } catch (err) {
-      console.error('[goc] Student video list failed:', err.message);
-      return errJson(res, 500, 'Could not load videos.');
-    }
-  } },
-
-  { method: 'GET', path: /^\/api\/videos\/([A-Za-z0-9._-]+)\/file$/, need: 'student', handler: async (req, res, body, sess, params) => {
-    if (!appwriteDatabases || !appwriteResourcesStorage) {
-      return errJson(res, 503, 'Video storage is not available.');
-    }
-
-    const videoId = params[0];
-
-    try {
-      const doc = await appwriteDatabases.getDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId
-      );
-
-      if (!doc || !doc.published) {
-        return errJson(res, 404, 'That video is not available.');
-      }
-
-      if (!core.videoAllowed(doc.type)) {
-        return send(res, 403, { error: 'That video is not available.', reason: 'feature' });
-      }
-
-      if (!doc.storageFileId) {
-        return errJson(res, 404, 'This video has no stored file — it plays via its link instead.');
-      }
-
-      const localPath = await ensureVideoCached(doc.storageFileId);
-      return streamVideoFile(req, res, localPath);
-    } catch (err) {
-      console.error('[goc] Video file request failed:', err.message);
-      return errJson(res, 404, 'Could not open that video.');
-    }
-  } },
-
-  { method: 'GET', path: /^\/api\/admin\/videos$/, need: 'console', cap: 'resources.publish', handler: async (req, res) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    try {
-      const { Query } = require('node-appwrite');
-      const result = await appwriteDatabases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        [Query.limit(5000)]
-      );
-
-      const videos = result.documents.map(doc => ({
-        videoId: doc.videoId || doc.$id,
-        title: doc.title || '',
-        subject: doc.subject || '',
-        type: doc.type || 'lesson',
-        tutor: doc.tutor || '',
-        duration: doc.duration || '',
-        storageFileId: doc.storageFileId || '',
-        externalUrl: doc.externalUrl || '',
-        published: !!doc.published,
-        createdAt: doc.$createdAt || null,
-        updatedAt: doc.$updatedAt || null
-      }));
-
-      videos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-      return okJson(res, { videos });
-    } catch (err) {
-      console.error('[goc] Video list failed:', err.message);
-      return errJson(res, 500, 'Could not load videos.');
-    }
-  } },
-
-  { method: 'PUT', path: /^\/api\/admin\/videos\/([A-Za-z0-9._-]+)\/published$/, need: 'console', cap: 'resources.publish', handler: async (req, res, body, sess, params) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    const videoId = params[0];
-    const published = body && typeof body.published === 'boolean'
-      ? body.published
-      : null;
-
-    if (published === null) {
-      return errJson(res, 400, 'Published must be true or false.');
-    }
-
-    try {
-      const doc = await appwriteDatabases.updateDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId,
-        { published }
-      );
-
-      return okJson(res, {
-        video: {
-          videoId: doc.videoId || doc.$id,
-          title: doc.title || '',
-          subject: doc.subject || '',
-          type: doc.type || 'lesson',
-          tutor: doc.tutor || '',
-          duration: doc.duration || '',
-          storageFileId: doc.storageFileId || '',
-          externalUrl: doc.externalUrl || '',
-          published: !!doc.published,
-          createdAt: doc.$createdAt || null,
-          updatedAt: doc.$updatedAt || null
-        }
-      });
-    } catch (err) {
-      console.error('[goc] Video publish update failed:', err.message);
-      return errJson(res, 500, 'Could not update the video publication status.');
-    }
-  } },
-
-  { method: 'POST', path: /^\/api\/admin\/videos\/upload$/, need: 'console', cap: 'resources.publish', multipart: true, handler: (req, res, body, sess) => {
-    return handleVideoUpload(req, res, sess);
-  } },
-
-  /* Same rule as resource deletion: a published video must be unpublished
-     first, so a live student-facing recording can never be deleted by
-     accident. Best-effort removes the stored file (when there is one —
-     a link-only video has none) before clearing the database record. */
-  { method: 'DELETE', path: /^\/api\/admin\/videos\/([A-Za-z0-9._-]+)$/, need: 'console', cap: 'resources.publish', handler: async (req, res, body, sess, params) => {
-    if (!appwriteDatabases) {
-      return errJson(res, 503, 'Appwrite Database is not initialized.');
-    }
-
-    const videoId = params[0];
-    let doc = null;
-
-    try {
-      doc = await appwriteDatabases.getDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId
-      );
-    } catch (err) {
-      if (err && (err.code === 404 || err.status === 404)) {
-        return okJson(res, { ok: true, deleted: videoId, alreadyGone: true });
-      }
-      console.error('[goc] Video lookup before delete failed:', err.message);
-      return errJson(res, 500, 'Could not look up that video.');
-    }
-
-    if (doc && doc.published) {
-      return errJson(res, 400, 'Unpublish this video before deleting it.');
-    }
-
-    if (doc && doc.storageFileId && appwriteResourcesStorage) {
-      try {
-        await appwriteResourcesStorage.deleteFile(APPWRITE_BUCKET_ID, doc.storageFileId);
-      } catch (fileErr) {
-        console.error('[goc] Video file delete failed (continuing):', fileErr.message);
-      }
-      clearCachedVideo(doc.storageFileId);
-    }
-
-    try {
-      await appwriteDatabases.deleteDocument(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_VIDEOS_COLLECTION_ID,
-        videoId
-      );
-      return okJson(res, { ok: true, deleted: videoId });
-    } catch (err) {
-      if (err && (err.code === 404 || err.status === 404)) {
-        return okJson(res, { ok: true, deleted: videoId, alreadyGone: true });
-      }
-      console.error('[goc] Video delete failed:', err.message);
-      return errJson(res, 500, 'Could not delete the video.');
     }
   } },
 

@@ -113,7 +113,7 @@ function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 5); })
   ok('the tour completion event feeds the flyer', /goc:tour-done/.test(app) && /maybeOpenFlyer/.test(fs.readFileSync(path.join(APP, 'js', 'onboarding.js'), 'utf8')) === false);
 
   head('deployment id is one identifier, reported by health');
-  ok('the service worker cache is the id source', /const CACHE = 'goc-v224';/.test(sw) && /const DEPLOY_ID = \(\(\) =>/.test(server)
+  ok('the service worker cache is the id source', /const CACHE = 'goc-v227';/.test(sw) && /const DEPLOY_ID = \(\(\) =>/.test(server)
     && /deployId: DEPLOY_ID/.test(server));
 
   head('one-time redeployment notice');

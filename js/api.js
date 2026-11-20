@@ -142,22 +142,14 @@
       /* How many active JAMB-pool questions EVERY subject in a student's
          combination needs before the sitting is offered (see
          core.jambReadiness). Same default and clamp as the server. */
-      jambReadyMin: core.JAMB_READY_DEFAULT,
-      /* Academy-wide guardian PIN for the "add 15 min" grant (see
-         server.js's /me/study-time/extend) — kept on this same settings
-         object so the offline driver's rules mirror the live one. */
-      guardianPin: null
+      jambReadyMin: core.JAMB_READY_DEFAULT
     };
-    /* Mirrors server.js's studyBonusMinToday/studyExtendCountToday: the
-       bonus and grant count only count for today, so a stale stamp from a
-       previous day reads back as zero rather than carrying over. */
+    /* Mirrors server.js's studyBonusMinToday: bonus minutes already on today's
+       record still count; a stale stamp from a previous day reads as zero.
+       (The Guardian PIN extension that granted them is retired.) */
     function studyBonusMinToday(s) {
       if (!s || s.studyBonusDay !== core.dayStamp()) return 0;
       return Number(s.studyBonusMin) || 0;
-    }
-    function studyExtendCountToday(s) {
-      if (!s || s.studyBonusDay !== core.dayStamp()) return 0;
-      return Number(s.studyExtendCount) || 0;
     }
     var PASSCODE = '2027';
     /* Sign-ups per address. Demo mode has no network address to count, so it never refuses
@@ -245,6 +237,9 @@
     var bookmarks = {};
     /* Spaced-repetition schedule per Scholar ID (Phase 2) — in-memory, like the above. */
     var reviewState = {};
+    /* Reading progress per Scholar ID (Study page): { noteId: { first, last, done? } }.
+       In-memory like the rest of demo mode. */
+    var noteReads = {};
     /* Spaced reviews answered per student per Lagos day, { day, count }.
        In memory like the rest of demo mode. */
     var reviewCount = {};
@@ -871,23 +866,6 @@
         return ok(clone(settings));
       },
 
-      /* Mirrors server.js's PUT /api/settings guardianPin handling exactly:
-         an empty string clears the PIN back to "feature off"; anything else
-         must normalize to 4-8 digits or the change is refused outright, so a
-         typo can never lock the feature into an unusable PIN silently. */
-      setGuardianPin: function (pin) {
-        var e = requireUnlocked(); if (e) return e;
-        var raw = String(pin == null ? '' : pin).trim();
-        if (!raw) {
-          settings.guardianPin = null;
-        } else {
-          var norm = core.normalizeGuardianPin(raw);
-          if (!norm) return fail('A guardian PIN must be 4 to 8 digits.');
-          settings.guardianPin = norm;
-        }
-        return ok(clone(settings));
-      },
-
       /* Priority 9 — management sets how long a student may stay signed in.
          Shortening the session can leave the warning lead time longer than the
          session itself, so it is re-clamped in the same breath. */
@@ -968,6 +946,11 @@
          suite that sits the JAMB paper on the thin seed bank lower the bar
          without signing in as management. */
       _setJambReadyMin: function (min) { settings.jambReadyMin = core.clampJambReadyMin(min); },
+      /* Test-only (stripped from the production build like the hooks around it):
+         opens an Objective or Theory paper the way the retired Web Test did, so a
+         suite can create a HISTORICAL attempt through the real submitTest path. The
+         Objective and Theory sittings themselves are retired (startTest refuses them). */
+      _openLegacyPaper: function (section, subject) { var s = find(students, session.id); var bank = core.servablePool(questions, passages); var sub = section === 'objective' ? core.OBJECTIVE_SUBJECT : String(subject || ''); var pool = section === 'objective' ? core.objectivePaper(bank, (s.subjects || []).slice(), settings.objectiveCounts) : core.eligible(bank, { section: section, subject: sub }); if (!pool.length) return fail('No ' + section + ' questions for ' + sub + '.'); var rec = { id: 'A' + (++aSeq) + '-' + Date.now().toString(36), scholarId: s.id, studentName: s.name, period: core.PERIOD, section: section, subject: sub, roundId: currentRound(section, sub), questionIds: pool.map(function (r) { return r.id; }), startedAt: Date.now(), durationSec: section === 'objective' ? core.clampObjectiveMinutes(settings.objectiveMinutes) * 60 : 0 }; openAttempts[rec.id] = rec; return ok({ attemptId: rec.id, period: rec.period, section: section, subject: sub, kind: section === 'theory' ? 'theory' : 'objective', total: pool.length, durationSec: rec.durationSec, questions: core.attachPassages(pool, passages).map(core.forStudent) }); },
       /* Test-only: a public sign-up is Open, so a suite that sits Web Tests promotes its student, as the console would. */
       /* Test-only (stripped from the production build like the two above):
          grants an XP balance so a suite can test an XP purchase (e.g. a 500-XP
@@ -1038,32 +1021,14 @@
         });
       },
 
-      /* The catalogue a student may sit. Theory is one paper per subject, because
-         a written paper is marked subject by subject. Objective is a single
-         sitting of the whole combination, so it appears once however many
-         subjects it covers. There is one test, not a weekly and a monthly one,
-         so each paper appears exactly once. The JAMB-oriented paper is a second
-         full-combination timed sitting, listed once alongside the Objective one. */
+      /* The catalogue a student may sit — mirrors GET /api/me/tests. The Web
+         Test's Objective and Theory sittings are retired (clean sweep, Phase 2),
+         so only the JAMB-oriented sitting is listed. */
       listMyTests: function () {
         var e = requireStudent(); if (e) return e;
         var s = find(students, session.id);
         var subs = (s.subjects || []).slice();
         var rows = [], period = core.PERIOD;
-        subs.forEach(function (sub) {
-          var n = core.eligible(questions, { section: 'theory', subject: sub }).length;
-          if (n) {
-            rows.push(Object.assign({ period: period, section: 'theory', subject: sub,
-                        questions: n, durationSec: 0 }, sitStatus(s.id, 'theory', sub)));
-          }
-        });
-        var bp = core.objectiveBlueprint(questions, subs, settings.objectiveCounts);
-        var total = core.objectiveTotal(bp);
-        if (total) {
-          rows.push(Object.assign({ period: period, section: 'objective', subject: core.OBJECTIVE_SUBJECT,
-                      questions: total, durationSec: core.clampObjectiveMinutes(settings.objectiveMinutes) * 60,
-                      papers: bp.map(function (r) { return { subject: r.subject, questions: r.serving }; }) },
-                      sitStatus(s.id, 'objective', core.OBJECTIVE_SUBJECT)));
-        }
         var jbp = core.jambBlueprint(questions, subs, settings.jambCounts);
         var jTotal = core.objectiveTotal(jbp);
         /* Held back until the bank is deep enough in every one of this student's
@@ -1075,7 +1040,6 @@
                       sitStatus(s.id, 'jamb', core.OBJECTIVE_SUBJECT)));
         }
         return ok({ subjects: subs, tests: rows,
-                    objectiveMinutes: core.clampObjectiveMinutes(settings.objectiveMinutes),
                     jambMinutes: core.clampJambMinutes(settings.jambMinutes) });
       },
 
@@ -1091,20 +1055,12 @@
         var section = String((d && d.section) || '');
         var subject = String((d && d.subject) || '');
         if (core.SECTIONS.indexOf(section) === -1) return fail('Choose a test section.');
+        /* Same gate as server.js: the Objective and Theory sittings are retired. */
+        if (section !== 'jamb') return fail('The Objective and Theory sittings have been retired. Your earlier papers stay on your record.');
         var pool, dur, subs = (s.subjects || []).slice(), papers = null;
         /* A question whose passage cannot be shown is held back, as on the server. */
         var bank = core.servablePool(questions, passages);
-        if (section === 'objective') {
-          /* One sitting of the whole combination: the student chooses nothing but
-             when to begin, exactly as in the hall. */
-          var bp = core.objectiveBlueprint(bank, subs, settings.objectiveCounts);
-          pool = core.objectivePaper(bank, subs, settings.objectiveCounts);
-          if (!pool.length) return fail('No questions have been published for that sitting yet.');
-          subject = core.OBJECTIVE_SUBJECT;
-          dur = core.clampObjectiveMinutes(settings.objectiveMinutes) * 60;
-          papers = bp.filter(function (r) { return r.serving > 0; })
-                     .map(function (r) { return { subject: r.subject, questions: r.serving }; });
-        } else if (section === 'jamb') {
+        {
           /* The JAMB-oriented sitting: assembled like objective but from the jamb
              pool (jamb-tagged + objective questions), on its own clock/counts. */
           /* The catalogue hides a thin sitting; this is the gate that enforces
@@ -1121,17 +1077,6 @@
           dur = core.clampJambMinutes(settings.jambMinutes) * 60;
           papers = jbp.filter(function (r) { return r.serving > 0; })
                       .map(function (r) { return { subject: r.subject, questions: r.serving }; });
-        } else {
-          if (subs.indexOf(subject) === -1) {
-            return fail(subject + ' is not part of your registered subject combination.');
-          }
-          /* Some subjects are examined in the objective sitting only. `eligible`
-             would serve nothing anyway, but "nothing published yet" would be the
-             wrong reason to give — say the real one. */
-          if (!core.theoryAllowed(subject)) return fail(core.noTheoryMessage(subject));
-          pool = core.eligible(bank, { section: section, subject: subject });
-          if (!pool.length) return fail('No questions have been published for that test yet.');
-          dur = 0;   /* a written paper is sat without a clock */
         }
         // ONE-SIT RULE: same gate as server.js — checked here too, not just
         // in the catalogue, so a stale page or a replayed request can never
@@ -1241,29 +1186,6 @@
         return ok(core.studyWindowStatus(settings.dailyLimitMin, studySecToday(s), studyBonusMinToday(s)));
       },
 
-      /* Offline mirror of server.js's POST /me/study-time/extend: same
-         guardian-PIN check, same daily grant cap, same fixed grant size —
-         enforced locally so a file:// preview with no server behaves like
-         the live one instead of silently accepting or always refusing. */
-      extendStudyTime: function (pin) {
-        var e = requireStudent(); if (e) return e;
-        var s = find(students, session.id);
-        if (!core.normalizeGuardianPin(settings.guardianPin)) {
-          return fail('No guardian PIN has been set for this academy.');
-        }
-        if (!core.guardianPinMatches(settings.guardianPin, pin)) {
-          return fail('That PIN is not correct.');
-        }
-        if (studyExtendCountToday(s) >= core.EXTRA_TIME_MAX_GRANTS_PER_DAY) {
-          return fail("Today's extra time has already been used up.");
-        }
-        var today = core.dayStamp();
-        s.studyBonusDay = today;
-        s.studyBonusMin = studyBonusMinToday(s) + core.EXTRA_TIME_GRANT_MIN;
-        s.studyExtendCount = studyExtendCountToday(s) + 1;
-        return ok(core.studyWindowStatus(settings.dailyLimitMin, studySecToday(s), studyBonusMinToday(s)));
-      },
-
       /* Reading mode. A student may only read notes for a paper they sit, and
          only notes management has left active. */
       listNotes: function (filter) {
@@ -1278,6 +1200,42 @@
           return true;
         });
         return ok({ notes: clone(rows) });
+      },
+
+      /* Reading progress (Study page). */
+      getMyReading: function () {
+        var e = requireStudent(); if (e) return e;
+        return ok({ reads: clone(noteReads[session.id] || {}) });
+      },
+
+      recordReading: function (d) {
+        var e = requireStudent(); if (e) return e;
+        var s = find(students, session.id);
+        var body = d || {};
+        var noteId = String(body.noteId == null ? '' : body.noteId).trim();
+        if (!noteId) return fail('noteId is required.');
+        var note = null;
+        notes.forEach(function (n) { if (String(n.id) === noteId && n.active) note = n; });
+        if (!note) return fail('That lesson does not exist or has been withdrawn.');
+        if ((s.subjects || []).indexOf(note.subject) === -1) return fail('That lesson is not on your syllabus.');
+        if (!noteReads[session.id]) noteReads[session.id] = {};
+        var now = new Date().toISOString();
+        var existing = noteReads[session.id][noteId] || null;
+        var rec = existing ? Object.assign({}, existing, { last: now }) : { first: now, last: now };
+        if (body.done && !rec.done) rec.done = now;
+        noteReads[session.id][noteId] = rec;
+        /* Cap at the number of active notes. */
+        var cap = notes.filter(function (n) { return n.active; }).length;
+        var keys = Object.keys(noteReads[session.id]);
+        if (keys.length > cap) {
+          var sorted = keys.slice().sort(function (a, b) {
+            var ta = noteReads[session.id][a].last || '';
+            var tb = noteReads[session.id][b].last || '';
+            return ta < tb ? -1 : ta > tb ? 1 : 0;
+          });
+          sorted.slice(0, keys.length - cap).forEach(function (k) { delete noteReads[session.id][k]; });
+        }
+        return ok({ ok: true, read: clone(noteReads[session.id][noteId]) });
       },
 
       startStudy: function (d) {
@@ -2017,7 +1975,7 @@
          The four headline numbers, computed the same way the server route
          does. Demo mode has no lastSeenAt tracking (nothing persists between
          reloads to track it against), so activeToday is honestly 0, and
-         lessonsPublished is honestly 0 since listResources/listVideos are
+         lessonsPublished is honestly 0 since listResources is
          empty in demo mode too — not a bug to chase, matches those. */
       listOverview: function () {
         var e = requireUnlocked(); if (e) return e;
@@ -2205,61 +2163,6 @@
       tutorOverview: function () {
         var e = requireUnlocked(); if (e) return e;
         return ok({ subjects: core.subjectDepth(questions, notes).map(function (r) { r.tutors = []; return r; }), minimums: core.SUBJECT_DEPTH_MIN });
-      },
-      /* Console -> Tutors -> Tutor Analytics. Mirrors the server's
-         GET /api/admin/tutors/analytics one-for-one: one report per subject
-         that has questions, each carrying the same snapshot / activity /
-         weakTopics triple, built from the same core rules. Without this the
-         method existed on the http driver only, so GOC.api never forwarded it
-         and admTutAnalyticsLoad()'s `!GOC.api.adminTutorAnalytics` guard bailed
-         — leaving the card stuck on "Loading analytics…" even against a live
-         server. The offline demo keeps no per-answer counters, so weakTopics is
-         ranked from an empty stat map exactly as the server ranks a subject
-         that has none yet. */
-      adminTutorAnalytics: function () {
-        var e = requireUnlocked(); if (e) return e;
-        var runsByStudent = {};
-        students.forEach(function (st) {
-          if (!st || !st.id) return;
-          if (Array.isArray(practiceRuns[st.id])) runsByStudent[st.id] = core.dropOldRuns(practiceRuns[st.id]);
-        });
-        var subjects = [];
-        var seenSubject = {};
-        questions.forEach(function (r) {
-          if (!r || !r.subject || seenSubject[r.subject]) return;
-          seenSubject[r.subject] = true; subjects.push(r.subject);
-        });
-        var now = Date.now();
-        return ok({
-          reports: subjects.map(function (subject) {
-            var subjectAttempts = attempts.filter(function (a) { return a && a.subject === subject; });
-            return {
-              subject: subject,
-              snapshot: core.tutorSnapshot(subject, students, runsByStudent, subjectAttempts, now),
-              activity: core.tutorActivity(subject, students, runsByStudent, subjectAttempts, now),
-              weakTopics: core.rankWeakTopics({})
-            };
-          })
-        });
-      },
-      /* Tutor questions waiting for approval live on the server; offline there are none. */
-      listApprovals: function () {
-        var e = requireUnlocked(); if (e) return e;
-        return ok({ count: 0, queue: [] });
-      },
-      approveQuestion: function () {
-        var e = requireUnlocked(); if (e) return e;
-        return fail('Approvals need a server connection.');
-      },
-      returnQuestion: function (id, reason) {
-        var e = requireUnlocked(); if (e) return e;
-        var why = String(reason == null ? '' : reason).trim();
-        if (why.length < core.RETURN_REASON_MIN) return fail('Say why the question is being returned (at least ' + core.RETURN_REASON_MIN + ' characters).');
-        return fail('Approvals need a server connection.');
-      },
-      approveBatch: function () {
-        var e = requireUnlocked(); if (e) return e;
-        return fail('Approvals need a server connection.');
       },
       /* Class notices come from tutors, and the offline demo has no tutors: nothing to show. A student's
          answer follows the same student-access rule here too. */
@@ -2569,45 +2472,9 @@
         var e = requireUnlocked(); if (e) return e;
         return fail('Resource deletion requires a server connection.');
       },
-      uploadVideo: function (formData) {
-        var e = requireUnlocked(); if (e) return e;
-        return ok({
-          ok: true,
-          demo: true,
-          video: {
-            videoId: 'DEMO-VIDEO',
-            title: formData && formData.get ? String(formData.get('title') || 'Untitled video') : 'Untitled video',
-            subject: formData && formData.get ? String(formData.get('subject') || '') : '',
-            type: formData && formData.get ? String(formData.get('type') || 'lesson') : 'lesson',
-            tutor: formData && formData.get ? String(formData.get('tutor') || '') : '',
-            duration: formData && formData.get ? String(formData.get('duration') || '') : '',
-            published: false
-          }
-        });
-      },
-      listVideos: function () {
-        var e = requireUnlocked(); if (e) return e;
-        return ok({ videos: [] });   // no videos are persisted in demo mode
-      },
-      listPublishedVideos: function () {
-        var e = requireStudent(); if (e) return e;
-        return ok({ videos: [] });
-      },
-      getVideoFile: function () {
-        return fail('Video downloads require a server connection.');
-      },
-      setVideoPublished: function (id, published) {
-        var e = requireUnlocked(); if (e) return e;
-        return ok({ ok: true, demo: true, id: String(id), published: !!published });
-      },
-      deleteVideo: function () {
-        var e = requireUnlocked(); if (e) return e;
-        return fail('Video deletion requires a server connection.');
-      },
-
       /* ------------------------------------------------------------ classes
          Live classes (Zoom schedule). No classes persist in demo mode, same
-         convention as listResources/listVideos above. */
+         convention as listResources above. */
       listClasses: function () {
         var e = requireUnlocked(); if (e) return e;
         return ok({ classes: [] });
@@ -2689,11 +2556,7 @@
           dailyLimitMin: settings.dailyLimitMin, sessionMinutes: null, sessionWarnMinutes: null,
           objectiveMinutes: null, objectiveCounts: {},
           jambMinutes: null, jambCounts: {},
-          cohortId: null, cohortName: null,
-          // Matches the HTTP driver's effectiveSettingsFor(): a student gets
-          // the yes/no flag (for the wind-down overlay's PIN field), never
-          // the digits.
-          hasGuardianPin: !!core.normalizeGuardianPin(settings.guardianPin)
+          cohortId: null, cohortName: null
         }, core.studyWindowStatus(settings.dailyLimitMin, studySecToday(s), studyBonusMinToday(s))));
       },
       changePassword: function (newPassword) {
@@ -2932,7 +2795,6 @@
       setDailyLimit:  function (min)   { return req('PUT', '/settings', { dailyLimitMin: Number(min) }); },
       setSessionMinutes: function (m)  { return req('PUT', '/settings', { sessionMinutes: Number(m) }); },
       setSessionWarnMinutes: function (m) { return req('PUT', '/settings', { sessionWarnMinutes: Number(m) }); },
-      setGuardianPin: function (pin)   { return req('PUT', '/settings', { guardianPin: String(pin == null ? '' : pin) }); },
 
       /* --- session lifetime (Priority 9). The server owns the clock; the
          countdown on screen only reflects what the server reports. --- */
@@ -2948,8 +2810,9 @@
       startStudy:     function (d)     { return req('POST', '/me/study/start', d); },
       submitStudy:    function (d)     { return req('POST', '/me/study/submit', d); },
       pingStudyTime:  function (sec)   { return req('POST', '/me/study-time/ping', { seconds: Number(sec) || 0 }); },
-      extendStudyTime: function (pin)  { return req('POST', '/me/study-time/extend', { pin: String(pin) }); },
       listNotes:      function (f)     { return req('GET', '/me/notes' + qs(f)); },
+      getMyReading:   function ()      { return req('GET', '/me/reading'); },
+      recordReading:  function (d)     { return req('POST', '/me/reading', d || {}); },
       listMyNotices:  function ()      { return req('GET', '/me/notices'); },
       listMyBroadcasts: function ()    { return req('GET', '/me/broadcasts'); },
       listMyFlags:    function ()      { return req('GET', '/me/flags'); },
@@ -3148,46 +3011,6 @@
       uploadResource: function (formData) {
       return uploadReq('/admin/resources/upload', formData);
     },
-    listVideos: function () {
-      return req('GET', '/admin/videos');
-    },
-    getVideoFile: function (id) {
-  return fetch(base + '/videos/' + encodeURIComponent(String(id)) + '/file', {
-    method: 'GET',
-    headers: {
-      'Accept': '*/*',
-      'Authorization': token ? 'Bearer ' + token : ''
-    }
-  }).then(function (r) {
-    if (!r.ok) {
-      return r.text().then(function (txt) {
-        var data = null;
-        try { data = txt ? JSON.parse(txt) : null; } catch (e) {}
-        throw new Error(
-          (data && data.error) ||
-          'Could not open this video (' + r.status + ').'
-        );
-      });
-    }
-    return r.blob();
-  }, function () {
-    throw new Error('Cannot reach the server. Check that it is running.');
-  });
-},
-listPublishedVideos: function () {
-      return req('GET', '/videos');
-    },
-    setVideoPublished: function (id, published) {
-      return req('PUT', '/admin/videos/' + encodeURIComponent(String(id)) + '/published', {
-        published: !!published
-      });
-    },
-    deleteVideo: function (id) {
-      return req('DELETE', '/admin/videos/' + encodeURIComponent(String(id)));
-    },
-    uploadVideo: function (formData) {
-      return uploadReq('/admin/videos/upload', formData);
-    },
     listClasses: function () {
       return req('GET', '/admin/classes');
     },
@@ -3271,20 +3094,6 @@ listPublishedVideos: function () {
       }, function () { throw new Error('Cannot reach the server. Check that it is running.'); });
     },
     tutorOverview: function () { return req('GET', '/tutors/overview'); },
-    adminTutorAnalytics: function () { return req('GET', '/admin/tutors/analytics'); },
-    listApprovals: function (subject) {
-      return req('GET', '/approvals' + (subject ? '?subject=' + encodeURIComponent(String(subject)) : ''));
-    },
-    approveQuestion: function (id, edit) {
-      var b = {}; if (edit && typeof edit === 'object') b.edit = edit;
-      return req('POST', '/approvals/' + encodeURIComponent(String(id)) + '/approve', b);
-    },
-    returnQuestion: function (id, reason) {
-      return req('POST', '/approvals/' + encodeURIComponent(String(id)) + '/return', { reason: String(reason == null ? '' : reason) });
-    },
-    approveBatch: function (batch) {
-      return req('POST', '/approvals/batch/approve', { batch: String(batch == null ? '' : batch) });
-    },
     listNotices: function (subject) { return req('GET', '/notices' + (subject ? '?subject=' + encodeURIComponent(String(subject)) : '')); },
     removeNotice: function (id) { return req('DELETE', '/notices/' + encodeURIComponent(String(id))); },
     sendBroadcast: function (d) { return req('POST', '/broadcasts', d || {}); },
@@ -3385,14 +3194,12 @@ listPublishedVideos: function () {
     setDailyLimit:  function (m)      { return active.setDailyLimit(m); },
     setSessionMinutes: function (m)   { return active.setSessionMinutes(m); },
     setSessionWarnMinutes: function (m) { return active.setSessionWarnMinutes(m); },
-    setGuardianPin: function (pin)    { return active.setGuardianPin(pin); },
 
     /* Priority 9 — how much of the session is left, according to the driver. */
     sessionInfo:    function ()       { return active.sessionInfo(); },
 
     /* Daily study window — heartbeat ping, forwarded to whichever driver is active. */
     pingStudyTime:  function (sec)    { return active.pingStudyTime(sec); },
-    extendStudyTime: function (pin)   { return active.extendStudyTime(pin); },
 
     /* Priority 3 / 6 / 10-12 — the student's own subjects, papers and standing. */
     myProfile:      function ()       { return active.myProfile(); },
@@ -3404,6 +3211,8 @@ listPublishedVideos: function () {
     startStudy:     function (d)      { return active.startStudy(d); },
     submitStudy:    function (d)      { return active.submitStudy(d); },
     listNotes:      function (f)      { return active.listNotes(f); },
+    getMyReading:   function ()       { return active.getMyReading(); },
+    recordReading:  function (d)      { return active.recordReading(d); },
     listMyNotices:  function ()       { return active.listMyNotices(); },
     listMyBroadcasts: function ()     { return active.listMyBroadcasts(); },
     listMyFlags: function ()          { return active.listMyFlags(); },
@@ -3502,14 +3311,6 @@ listPublishedVideos: function () {
     uploadQuestionImage: function (formData) { return active.uploadQuestionImage(formData); },
     getQuestionImage: function (id) { return active.getQuestionImage(id); },
     uploadResource: function (formData) { return active.uploadResource(formData); },
-    listVideos: function () { return active.listVideos(); },
-    listPublishedVideos: function () { return active.listPublishedVideos(); },
-    getVideoFile: function (id) { return active.getVideoFile(id); },
-    setVideoPublished: function (id, published) {
-      return active.setVideoPublished(id, published);
-    },
-    deleteVideo: function (id) { return active.deleteVideo(id); },
-    uploadVideo: function (formData) { return active.uploadVideo(formData); },
     listClasses: function () { return active.listClasses(); },
     listUpcomingClasses: function () { return active.listUpcomingClasses(); },
     createClass: function (d) { return active.createClass(d); },
@@ -3531,11 +3332,6 @@ listPublishedVideos: function () {
     getResultsExport: function (f) { return active.getResultsExport(f); },
     getResultsPdf: function (f) { return active.getResultsPdf(f); },
     tutorOverview: function () { return active.tutorOverview(); },
-    adminTutorAnalytics: function () { return active.adminTutorAnalytics(); },
-    listApprovals: function (subject) { return active.listApprovals(subject); },
-    approveQuestion: function (id, edit) { return active.approveQuestion(id, edit); },
-    returnQuestion: function (id, reason) { return active.returnQuestion(id, reason); },
-    approveBatch: function (batch) { return active.approveBatch(batch); },
     listNotices: function (subject) { return active.listNotices(subject); },
     removeNotice: function (id) { return active.removeNotice(id); },
     sendBroadcast: function (d) { return active.sendBroadcast(d); },

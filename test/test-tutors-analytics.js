@@ -149,20 +149,15 @@ function total(stats, subject, which) {
   ok('the correct answer index never leaves in the question list', !/"answer"/.test(JSON.stringify(a2.body.hardestQuestions)));
 
 
-  console.log('\na Web Test counts too');
+  /* Clean sweep (Phase 2): the Objective/Theory Web Test is retired, so no new
+     paper can add to the counters (the JAMB-oriented sitting never did). The
+     counters already recorded stay exactly as they are. */
+  console.log('\nthe retired Web Test adds nothing new to the counters');
   function allAnswers() { var st = readDb().answerStats, n = 0; Object.keys(st).forEach(function (sj) { n += total(st, sj, 'q').n; }); return n; }
   var before = allAnswers();
   var ws = await call('POST', '/api/me/tests/start', { section: 'objective', subject: 'Physics' }, gTok);
-  if (ws.status === 200 && ws.body && ws.body.attemptId) {
-    var resp = {}; (ws.body.questions || []).forEach(function (q) { resp[q.id] = 0; });
-    var wsub = await call('POST', '/api/me/tests/submit', { attemptId: ws.body.attemptId, responses: resp }, gTok);
-    var after = allAnswers();
-    ok('a submitted objective paper adds its answered questions to the counters (each under its own subject)', wsub.status === 200 && after - before === Object.keys(resp).length, before + ' -> ' + after + ' ' + wsub.status);
-    var ow = await call('POST', '/api/me/tests/start', { section: 'objective', subject: 'Physics' }, oTok);
-    ok('a self-registered student can sit it too (a paper opens)', ow.status === 200, ow.status + ' ' + flat(ow).slice(0, 120));
-  } else {
-    console.log('  skip  Web Test counting: could not open an objective paper here (' + ws.status + ' ' + flat(ws).slice(0, 120) + ')');
-  }
+  ok('an Objective sitting is refused as retired', ws.status === 410 && !(ws.body && ws.body.attemptId), ws.status + ' ' + flat(ws).slice(0, 120));
+  ok('and the recorded counters are unchanged', allAnswers() === before, before + ' -> ' + allAnswers());
 
   console.log('\nthe tutor is switched off');
   await call('PUT', '/api/tutors/GOC-T-001/active', { active: false }, adm);

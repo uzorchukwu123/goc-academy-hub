@@ -18,7 +18,7 @@ function ok(name, cond, extra) {
 }
 
 console.log('\nMarkup: a hidden passage box sits above each question text');
-[['pracPassage', 'pracQ'], ['cbtPassage', 'cbtQ'], ['wtPassage', 'wtQ']].forEach(function (p) {
+[['pracPassage', 'pracQ'], ['cbtPassage', 'cbtQ']].forEach(function (p) {
   var a = html.indexOf('id="' + p[0] + '"'), b = html.indexOf('id="' + p[1] + '"');
   ok(p[0] + ' exists, above ' + p[1], a > -1 && b > a);
   ok(p[0] + ' starts hidden', new RegExp('id="' + p[0] + '"[^>]*hidden').test(html));
@@ -28,7 +28,7 @@ ok('the CSS styles the box and keeps it scrollable', /\.q-passage\{[^}]*overflow
 console.log('\nWiring: each screen paints its passage when it draws a question');
 ok('practice screen', /paintPassage\('pracPassage', d\)/.test(app));
 ok('CBT screen', /paintPassage\('cbtPassage', d\)/.test(app));
-ok('Web Test screen', /paintPassage\('wtPassage', q\)/.test(app));
+ok('the retired Web Test runner no longer paints a passage (clean sweep)', !/paintPassage\('wtPassage'/.test(app) && !/id="wtPassage"/.test(html));
 
 function grab(name) {
   var i = app.indexOf('function ' + name + '(');

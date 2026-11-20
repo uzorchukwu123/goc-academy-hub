@@ -1464,9 +1464,9 @@
      and the hub's own chrome is restored while one of them is open. */
   var ORIGINAL_ACCOUNT_SCREENS = [
     'login-v2', 'signup', 'signup-pending', 'change-password',
-    'home', 'profile', 'results', 'league', 'timetable',
+    'home', 'profile', 'results', 'league',
     'study', 'studySet', 'reading', 'bookmarks', 'mistakes', 'review', 'studyRes',
-    'lesson', 'practice', 'cbt', 'webtest', 'wtRun', 'wtResult', 'resources', 'classes'
+    'lesson', 'practice', 'cbt', 'wtResult', 'resources'
   ];
   /* The auth screens are full-page forms; the rest is the student's own area
      and needs the tab bar / sidebar back. */

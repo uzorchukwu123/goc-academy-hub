@@ -47,7 +47,12 @@ var srcText = fs.readFileSync(path.join(APP, 'server', 'server.js'), 'utf8');
    the hostname now — so the free2027 console family contributes one fewer. */
 /* Stage A removed the two tier routes (student tier, cohort tier): two fewer.
    Stage B adds eight registration routes (3 code + 5 application): eight more. */
-var CONSOLE_ROUTES = 110 + 27 + 7 - 2 + 8;
+/* Clean sweep (Phase 2): - 4 /api/admin/videos* routes, - 3 /api/approvals* routes,
+   + 1 POST /api/questions/:id/publish (the Question Bank replacement),
+   - 1 GET /api/admin/tutors/analytics.
+   Final cleanup: - 1 POST /api/questions/:id/publish (tutor questions go
+   straight into the Question Bank; no publish step). */
+var CONSOLE_ROUTES = 110 + 27 + 7 - 2 + 8 - 4 - 3 + 1 - 1 - 1;
 var tagged = (srcText.match(/need: 'console',\s*cap: '[^']+'/g) || []).map(function (m) { return m.match(/cap: '([^']+)'/)[1]; });
 ok('every one of the ' + CONSOLE_ROUTES + ' console routes carries a capability', tagged.length === CONSOLE_ROUTES, tagged.length);
 ok('every tag is a real capability in the map', tagged.length > 0 && tagged.every(function (c) { return core.allCapabilities().indexOf(c) > -1; }), tagged.join(','));
